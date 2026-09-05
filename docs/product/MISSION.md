@@ -29,14 +29,19 @@ Intel/Apple Silicon, and/or supporting older Macs.
 
 ## Compatibility tiers
 
-- **Legacy tier**: macOS ~10.13+ (subject to revision as research on old Xcode/macOS
-  behavior progresses — record findings in `COMPATIBILITY_MATRIX.md`).
-- **Modern tier**: current macOS/Xcode generations.
+**Minimum supported macOS is 14.0** — see `docs/adr/0001-minimum-macos-target.md` for
+the full reasoning. In short: App Store submission has required Xcode 26 (hence macOS
+15.6+) since April 2026; macOS 13 is the API floor for `SMAppService.daemon` and
+`NSXPCConnection.setCodeSigningRequirement`; supporting anything older means a second
+privileged-helper implementation we could not CI-test, since GitHub-hosted runners for
+macOS ≤14 are gone or going. The original "legacy tier ~10.13+" ambition is retired.
 
-If one binary can't reasonably serve both, prefer a shared core with separate
-legacy/modern build targets over compromising the modern architecture. Don't assume
-SwiftUI-only; evaluate AppKit if it's what legacy support needs. Isolate
-compatibility-sensitive code (e.g. privileged-helper registration) behind protocols.
+- **Supported**: macOS 14+, developed and tested primarily against macOS 15 and 26.
+- **Excluded but acknowledged**: pre-14 users get, at most, a **read-only diagnostic
+  mode** that reports reclaimable space without any privileged relocation.
+
+Isolate compatibility-sensitive code (privileged-helper registration, mount mechanics)
+behind protocols so a future tier — e.g. FSKit passthrough on macOS 26+ — can slot in.
 
 ## Operational profiles (see UX_AND_CLI.md for detail)
 
@@ -45,8 +50,23 @@ compatibility-sensitive code (e.g. privileged-helper registration) behind protoc
 - **Expert** — detailed CoreSimulator/CoreDevice/runtime diagnostics; still refuses
   unsafe protected-system modifications.
 
+## Strategy ordering (evidence-driven — see docs/adr/0002)
+
+1. **Supported mechanisms, done completely** — Xcode Locations (DerivedData, Archives,
+   Compilation Cache), `xcodebuild -downloadPlatform … -exportPath` + `-importPlatform`
+   for an external Runtime Library, `-architectureVariant arm64`, `simctl runtime
+   delete`, honest cleanup of regenerable data. No tool packages this today.
+2. **Own the disconnected-drive problem** — mount verification, shadow-data detection,
+   refusal under ambiguity, verified restore. This is the missing half of every
+   existing attempt and the real differentiator.
+3. **Canonical APFS mount** — experimental, opt-in, gated on the experiments in
+   `docs/architecture/EXPERIMENTS.md`.
+4. **FSKit passthrough (macOS 26+)** — R&D track, not v1.
+
 ## Prior art
 
-`Viniciuscarvalho/mac-ssd-rescue` is the closest prior art (rsync + symlink of
-user-level `~/Library/Developer/...` directories). Study it, don't copy its
-architecture wholesale — see `docs/process/PRIOR_ART.md` for what to reuse vs. rethink.
+Every mature tool in this space (DevCleaner, ClearDisk, CodePurge, CleanMyMac,
+DaisyDisk) **deletes**; none relocates. The only relocation tool,
+`Viniciuscarvalho/mac-ssd-rescue`, is a 3-commit script whose approach is contradicted
+by published failure reports. See `docs/process/PRIOR_ART.md` and
+`docs/research/FINDINGS-2026-09-05.md` §F9.

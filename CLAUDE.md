@@ -16,8 +16,13 @@ this file short and update it only when a pointer or non-negotiable changes.
   before writing any code that touches mounts, deletion, or the privileged helper.
 - `docs/product/STORAGE_CATALOG.md` — the data model for storage categories and strategies.
 - `docs/product/UX_AND_CLI.md` — GUI/CLI UX spec, `xcodevaultctl` command surface.
-- `docs/architecture/HYPOTHESES.md` — the open technical hypotheses and how each is
-  proven or falsified. Do not claim a technique "works" without updating this file.
+- `docs/research/FINDINGS-2026-09-05.md` — **read this early.** A sourced desk-research
+  pass done before any code, with confidence tags. It corrects several assumptions the
+  original brief made. Items tagged GATING/[UNKNOWN] are the research backlog.
+- `docs/architecture/HYPOTHESES.md` — the open technical hypotheses (H1–H9) and how each
+  is proven or falsified. Do not claim a technique "works" without updating this file.
+- `docs/architecture/EXPERIMENTS.md` — the gating experiment protocol (E1–E11). E1 and
+  E2 come before any implementation work; either can kill a strategy in an afternoon.
 - `docs/architecture/SECURITY_MODEL.md` — privileged-helper threat model and allowlisted API.
 - `docs/architecture/MIGRATION_ENGINE.md` — transactional migration state machine and journal.
 - `docs/architecture/COMPATIBILITY_MATRIX.md` — macOS/Xcode combinations, evidence, status.
@@ -39,7 +44,16 @@ this file short and update it only when a pointer or non-negotiable changes.
 5. Never auto-delete Archives or other non-regenerable artifacts without explicit user intent.
 6. Treat a disconnected/reconnected external volume as a first-class failure mode —
    never silently allow shadow/duplicate data to form.
-7. A storage strategy is not "supported" until `docs/architecture/HYPOTHESES.md` and
+7. `~/Library/Developer` stays a real directory and `~/Library/Developer/DeveloperDiskImages`
+   is never a symlink (FB12363725). Do not offer any symlink strategy for
+   `~/Library/Developer/CoreSimulator` — symlinking it breaks the Simulator even when
+   the target is on the same internal disk (H5).
+8. Minimum supported macOS is 14.0 (ADR-0001). Do not add pre-14 compatibility code
+   paths, and never a second SMJobBless privileged-helper implementation.
+9. Ship in the tier order of ADR-0002: supported Apple mechanisms and disconnect safety
+   first; canonical APFS mount only if the gating experiments pass, and labeled
+   experimental until the Definition of Done is met.
+10. A storage strategy is not "supported" until `docs/architecture/HYPOTHESES.md` and
    `COMPATIBILITY_MATRIX.md` show it meets the Definition of Done in
    `docs/process/EXECUTION_PHASES.md`. Until then, label it experimental everywhere
    (code comments, CLI help text, UI, docs).

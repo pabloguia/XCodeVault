@@ -51,3 +51,44 @@ storage (`ExternalDrive/XcodeVault/RuntimeLibrary/...`) without re-downloading
 multi-GB runtimes, install/offload on demand, and see which Xcode versions support
 each operation (`xcodebuild -downloadPlatform` / `-downloadAllPlatforms` /
 `-importPlatform`, feature-detected — never assumed present).
+
+---
+
+## Corrections from the 2026-09-05 research pass (read this before populating the catalog)
+
+The category list above was written from the original brief. Research
+(`../research/FINDINGS-2026-09-05.md`) corrects it in ways that matter:
+
+- **`/Library/Developer/CoreSimulator/Profiles/Runtimes` is mostly a mount graft, not
+  storage.** Measuring or moving it operates on a facade. The real bytes:
+  - `/Library/Developer/CoreSimulator/Cryptex/Images/bundle/SimRuntimeBundle-<UUID>`
+  - `/Library/Developer/CoreSimulator/Cryptex/Images/Inbox/<UUID>.dmg` (download staging;
+    stranded multi-GB files live here after failed installs)
+  - **`/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime/<sha1>.asset`** —
+    outside `/Library/Developer` entirely, on the Data volume behind a `/System` path.
+    A scanner that misses this **systematically under-reports** what Xcode consumes.
+  - `/Library/Developer/CoreSimulator/Volumes/<Platform>_<Build>` — mount points managed
+    by `simdiskimaged`, not storage.
+  - Directory is `Cryptex` **singular**; there is no `Cryptexes`, no `Images/Bundles`.
+- **Add `~/Library/Developer/Packages/`** — Apple-documented cache populated by
+  `xcodebuild -runFirstLaunch -checkForNewerComponents`; essentially no cleanup tool
+  knows about it.
+- **Sealed runtimes are a distinct class**: hash-verified cryptex images, mounted, not
+  copied. Strategy is `appleManaged` + `downloadRepository` (keep *installers* external
+  via `-exportPath`/`-importPlatform`, which is supported) — **not** file relocation,
+  until H9/E4 says otherwise.
+- **`-architectureVariant arm64`** materially shrinks runtime downloads on Apple
+  Silicon. Surface this as a first-class recommended action; it is free savings that
+  requires no relocation at all.
+- **CoreSimulator has no safe symlink strategy** — symlinking
+  `~/Library/Developer/CoreSimulator` breaks the Simulator's Files app even when the
+  target is on the same internal disk (H5). Do not offer `symlinkRelocation` for this
+  category at any risk level until E9 says otherwise.
+- **`~/Library/Developer/DeveloperDiskImages` is `neverMove`** — it must remain a real
+  directory (FB12363725). `~/Library/Developer` itself is `neverMove` as a whole.
+- **Staging space is a category concern**: installing a 9–12 GB runtime reportedly needs
+  ~40 GB free on the internal volume. Relocation does not fix the user's most acute
+  moment of pain unless the product accounts for staging (E11).
+- **Every entry needs an "evidence" field** pointing at the matrix entry or research
+  finding that justifies its strategy. A strategy with no evidence pointer is
+  `unverified` by definition and must render as experimental.

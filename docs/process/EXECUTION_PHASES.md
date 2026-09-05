@@ -9,6 +9,15 @@ Inspect repo/environment; establish this doc set (done as of the initial bootstr
 set up `.claude/agents/`, `.claude/skills/`, hooks per
 `AGENTIC_ENGINEERING_SETUP.md`; establish coding/testing/documentation conventions.
 
+## Phase 0.5 — Gating experiments (NEW — do this before Phase 2, and E1/E2 before anything else)
+
+Run `../architecture/EXPERIMENTS.md`. E1 (is the path even mountable / rootless?) and
+E2 (does the external-volume sandbox restriction follow the device or the path?) can
+each kill or reshape the canonical-mount strategy in an afternoon. Running them first
+avoids building on a hypothesis that a single command would have falsified. Record
+results in the matrix, update hypothesis statuses, write ADRs for anything that
+changes a decision.
+
 ## Phase 1 — Storage archaeology
 Map Apple developer storage across supported Xcode/macOS generations; inspect
 `mac-ssd-rescue` as prior art (`PRIOR_ART.md`); populate `STORAGE_CATALOG.md` with
@@ -30,6 +39,12 @@ rigorously as successes; turn results into version-aware rules in the storage ca
 Shared domain packages; CLI (`xcodevaultctl`); privileged helper; migration engine;
 doctor subsystem; GUI (calls the same domain layer as the CLI).
 
+Build in the tier order set by `../adr/0002-strategy-tiers-and-canonical-mount-as-rnd.md`:
+supported mechanisms first (Xcode Locations, `-exportPath`/`-importPlatform` Runtime
+Library, `-architectureVariant arm64`, `simctl runtime delete`, cleanup), then the
+disconnect-safety subsystem, then — only if the gating experiments passed — the
+experimental canonical mount. FSKit stays an R&D track.
+
 ## Phase 5 — Hardening
 Failure injection; external-drive removal tests; crash recovery tests;
 security/privilege review; compatibility tests; performance tests.
@@ -43,7 +58,9 @@ Cask; documentation; reproducible release process where possible.
 1. Inspect environment and repository.
 2. Initialize/refresh the project's Claude Code agentic structure
    (`AGENTIC_ENGINEERING_SETUP.md`).
-3. Fresh research pass on current Apple/Xcode storage architecture.
+3. Read `../research/FINDINGS-2026-09-05.md` first — a desk-research pass already
+   exists. Extend and correct it; do not redo it from scratch. Anything marked
+   [UNKNOWN] or GATING there is your research backlog.
 4. Inspect `Viniciuscarvalho/mac-ssd-rescue` as prior art.
 5. Build/refine the storage map and compatibility model.
 6. Tag each assumption in this doc set as verified / probable / experimental /

@@ -52,3 +52,35 @@ version/build, Xcode versions/builds, filesystem topology, mount state, relevant
 command exit codes, migration transaction IDs, compatibility-rule version — with
 private/sensitive data excluded automatically. No telemetry by default; local-first,
 privacy-preserving.
+
+---
+
+## Additions from the 2026-09-05 research pass
+
+- **Drive qualification must measure 4K random IOPS at QD1–4 and metadata latency, not
+  sequential MB/s.** Xcode startup reads ~207 MB dominated by 4 KB–64 KB operations;
+  these workloads are IOPS-bound. A cheap USB 3.1 enclosure measured ~210 MB/s
+  sequential will be far worse than that ratio suggests on a DerivedData workload. No
+  published Xcode-build-across-storage-tiers benchmark exists — producing one (E10) is
+  a cheap, real differentiator and the honest basis for the per-category "expected
+  performance impact" figure.
+- **Surface `-architectureVariant arm64`** as a recommended action on Apple Silicon:
+  smaller runtime downloads with no relocation and no risk at all.
+- **Surface the staging trap**: installing a 9–12 GB runtime reportedly needs ~40 GB
+  free on the internal volume. A user at 5 GB free cannot install a runtime *even if*
+  the destination is external. The product must explain this rather than let the
+  install fail cryptically.
+- **Be explicit about the three honest outcomes per category**: relocatable,
+  delete-only, or neither (sealed runtimes). "Neither" is a legitimate answer and
+  saying so plainly is a feature — every competing tool silently omits it.
+- **Known caveat to disclose up front**, not in a footnote: Apple's own supported
+  DerivedData relocation is reported to break framework tests when the target is on an
+  external volume (`xctest` cannot load the bundle). Until E2 resolves whether this is
+  device- or path-based, the UI must warn before pointing DerivedData at external
+  storage.
+- **Doctor additions**: detect stranded `Cryptex/Images/Inbox/<UUID>.dmg` downloads,
+  orphaned `NeverCollected` MobileAssets under
+  `/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime/`, runtimes
+  present as mounted volumes but absent from the registry (and the reverse), and any
+  pre-existing `~/Library/Developer/CoreSimulator` symlink (a known-broken
+  configuration, H5) including ones this tool did not create.
