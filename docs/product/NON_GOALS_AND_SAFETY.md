@@ -22,8 +22,17 @@ detailed version — expand on rationale here, keep CLAUDE.md as the terse check
 - Make a destructive action automatic purely to reclaim more space, or present a
   destructive action as if it were harmless cleanup in the UI.
 - Symlink the entirety of `~/Library/Developer` (known to break Xcode 15+ physical
-  device DDI discovery even where it worked pre-15). Treat every storage category as
-  an independent unit with its own strategy.
+  device DDI discovery even where it worked pre-15 — FB12363725). Treat every storage
+  category as an independent unit with its own strategy.
+- Symlink `~/Library/Developer/DeveloperDiskImages` — it must remain a real directory.
+- Symlink `~/Library/Developer/CoreSimulator` at **any** risk level, including with the
+  target on the same internal disk: this breaks Simulator subsystems (Files app cannot
+  share, save, or create folders). Reported Aug 2025; see H5 / research finding F3. The
+  prior art does exactly this — do not inherit it. Until E9 says otherwise,
+  CoreSimulator has **no** symlink-based strategy at all.
+- Ship pre-macOS-14 compatibility code paths, and in particular never add a second,
+  SMJobBless-based privileged-helper implementation (ADR-0001). An untestable
+  privileged code path is worse than an unsupported OS.
 - Mount or redirect `/Library/Developer` wholesale — only specific, empirically
   justified subpaths (see `architecture/HYPOTHESES.md`).
 
@@ -46,6 +55,19 @@ macOS/Xcode combination:
 
 Anything short of all ten stays labeled **experimental** in code, CLI help, UI copy,
 and docs — not just internally.
+
+## Disclose, don't bury
+
+Two known limitations must be surfaced to the user *before* they act, not in a
+footnote or a release note:
+
+- Apple's own supported DerivedData relocation is reported to break framework tests
+  when the target is on an external volume (`xctest` cannot load the bundle). Until E2
+  resolves whether the restriction follows the device or the path, warn before
+  pointing DerivedData at external storage.
+- Installing a 9–12 GB simulator runtime reportedly needs ~40 GB free on the internal
+  volume for staging. A user at 5 GB free cannot install one even if the destination is
+  external. Say so rather than letting the install fail cryptically.
 
 ## Precedence
 

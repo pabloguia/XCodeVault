@@ -5,10 +5,26 @@ Xcode version/build, architecture, storage-category strategy) combination actual
 tested. Do not list untested combinations as if they were verified — omit them, or
 list as "pending."
 
-Representative generations to prioritize (adjust as real testing capacity dictates —
-don't invent impossible OS/Xcode pairs): older Intel-era macOS/Xcode, Xcode 12,
-Xcode 14, Xcode 15, Xcode 16, Xcode 26, and current betas when practical. Cover both
-Intel and Apple Silicon where the OS/Xcode combination supports both.
+Scope is bounded by ADR-0001 (minimum macOS 14). Do not spend testing capacity below
+that floor, and do not invent impossible OS/Xcode pairs.
+
+Combinations to prioritize:
+
+| Priority | macOS | Xcode | Arch | Why |
+|---|---|---|---|---|
+| P0 | 26 (current) | 26.x | Apple Silicon | Where nearly all active developers are; CI runner `macos-26` exists |
+| P0 | 15.6+ | 26.x | Apple Silicon | Minimum combination that can still ship to the App Store; CI runner `macos-15` exists |
+| P1 | 15.6+ | 26.x | Intel | Last Intel-capable generation; different APFS/mount behavior is plausible |
+| P1 | 14.5+ | 16.x | Apple Silicon | The declared floor — must be exercised at least manually; no CI runner after 2026-11-02 |
+| P2 | 27 (when released) | 27.x betas | Apple Silicon | Forward-looking regression watch |
+
+Anything below macOS 14 is **out of scope** — pre-14 users get, at most, the read-only
+diagnostic mode (ADR-0001), which needs no matrix entry beyond "reports only, changes
+nothing."
+
+Because `macos-13` runners are gone and `macos-14` goes fully unsupported 2026-11-02,
+the macOS 14 row is **manual-only** from November 2026. Mark those entries
+"pending — manual" until someone runs them on real hardware and records the output.
 
 ## Entry template
 
