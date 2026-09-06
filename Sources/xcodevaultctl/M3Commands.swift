@@ -126,10 +126,16 @@ struct Migration: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let interrupted = try Journal().interrupted().filter { $0.kind == .migration }
-            try emit(interrupted, json: global.json) {
-                interrupted.isEmpty
+            let leftovers = try MigrationEngine().leftoverPartialCopies()
+            struct Out: Encodable { let interrupted: [JournalEntry]; let leftoverPartialCopies: [JournalEntry] }
+            try emit(Out(interrupted: interrupted, leftoverPartialCopies: leftovers), json: global.json) {
+                var o = interrupted.isEmpty
                     ? "No interrupted migrations.\n"
                     : interrupted.map { "INTERRUPTED \($0.id)  \($0.summary)  paths: \($0.paths.joined(separator: " → "))\n" }.joined()
+                for l in leftovers {
+                    o += "LEFTOVER PARTIAL COPY \(l.id)  \(l.paths[1])  (failed before verification; `migration abort \(l.id)` removes it)\n"
+                }
+                return o
             }
         }
     }
