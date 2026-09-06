@@ -70,9 +70,10 @@ Xcode in a worse way. Gate: E6, E7.
 **Status: probable → partially verified by documentation** (F2) **and by feature detection
 on Xcode 26.5 (E8, 2026-09-06):** every flag below is present in `xcodebuild -help`, plus
 `-deleteComponent`, `-prepareDeviceSupport`, and `simctl runtime add/delete/unmount/verify`.
-Behavioural verification (an actual `-exportPath` export and `-importPlatform` round trip,
-and whether `IDECustomDerivedDataLocation` is honoured) is still pending — the Mac used had
-3.7 GB free, which is itself the E11 staging problem. Confirmed by Apple
+`IDECustomDerivedDataLocation` **is honoured by xcodebuild on 26.5 (E8b, verified)** and the
+compilation cache lives inside DerivedData by default. The `-exportPath` export and
+`-importPlatform` round trip is still pending — the Mac used had 3.7 GB free, which is itself
+the E11 staging problem. Confirmed by Apple
 docs: `-downloadPlatform`/`-downloadAllPlatforms` with `-exportPath`, then
 `-importPlatform <dmg>` — i.e. the Runtime Library concept is **officially supported**;
 `-architectureVariant arm64` cuts image size; `-downloadComponent`/`-importComponent`

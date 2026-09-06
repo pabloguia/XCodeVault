@@ -1,0 +1,99 @@
+# Experiment: E2 external-volume xctest restriction: device vs path
+# Date: 2026-09-06T19:23:34Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+cases: A B E C D C2 D2 F C3
+
+==================== CASE A-internal ====================
+DerivedData: ~/.xcodevault-e2-scratch/DD-A
+volume-device: /dev/disk1s1
+Mount Point:               /System/Volumes/Data
+File System Personality:   APFS
+Owners:                    Enabled
+Protocol:                  PCI-Express
+Device Location:           Internal
+Removable Media:           Fixed
+xcodebuild exit=0 verdict=PASS
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: ~/.xcodevault-e2-scratch/DD-A/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: ~/.xcodevault-e2-scratch/DD-A/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+==================== CASE B-external-device-under-Volumes ====================
+DerivedData: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B
+volume-device: /dev/disk3s1
+Mount Point:               /Volumes/<vault>
+File System Personality:   Case-sensitive APFS
+Owners:                    Enabled
+Protocol:                  USB
+Device Location:           External
+Removable Media:           Fixed
+xcodebuild exit=65 verdict=FAIL
+	xctest (71144) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+** TEST FAILED **
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+==================== CASE E-internal-symlink-to-external ====================
+DerivedData: ~/.xcodevault-e2-scratch/E-link/DD-E
+volume-device: /dev/disk3s1
+Mount Point:               /Volumes/<vault>
+File System Personality:   Case-sensitive APFS
+Owners:                    Enabled
+Protocol:                  USB
+Device Location:           External
+Removable Media:           Fixed
+xcodebuild exit=65 verdict=FAIL
+	xctest (72260) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+** TEST FAILED **
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+!! could not attach ~/.xcodevault-e2-scratch/XCodeVault-E2.sparseimage at /Volumes
+==================== CASE D-same-diskimage-at-HOME-path ====================
+DerivedData: ~/XCodeVault-E2-Mount/DD-D
+volume-device: /dev/disk9s1
+Mount Point:               ~/XCodeVault-E2-Mount
+File System Personality:   APFS
+Owners:                    Disabled
+Protocol:                  Disk Image
+Device Location:           External
+Removable Media:           Removable
+xcodebuild exit=0 verdict=PASS
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: ~/XCodeVault-E2-Mount/DD-D/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: ~/XCodeVault-E2-Mount/DD-D/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+(owners on) apfs, local, nodev, nosuid, journaled, mounted by <user>)
+==================== CASE C3-diskimage-owners-enabled-under-Volumes ====================
+DerivedData: /Volumes/XCVE2IMG/DD-C3
+volume-device: /dev/disk9s1
+Mount Point:               /Volumes/XCVE2IMG
+File System Personality:   APFS
+Owners:                    Enabled
+Protocol:                  Disk Image
+Device Location:           External
+Removable Media:           Removable
+xcodebuild exit=0 verdict=PASS
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: /Volumes/XCVE2IMG/DD-C3/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: /Volumes/XCVE2IMG/DD-C3/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+!! could not attach case-sensitive image
+!! could not attach image on external
+==================== SUMMARY ====================
+A-internal | xcodebuild-test=PASS (exit 0) | swift-test=PASS | ~/.xcodevault-e2-scratch/DD-A
+B-external-device-under-Volumes | xcodebuild-test=FAIL (exit 65) | swift-test=PASS | /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B
+E-internal-symlink-to-external | xcodebuild-test=FAIL (exit 65) | swift-test=PASS | ~/.xcodevault-e2-scratch/E-link/DD-E
+D-same-diskimage-at-HOME-path | xcodebuild-test=PASS (exit 0) | swift-test=PASS | ~/XCodeVault-E2-Mount/DD-D
+C3-diskimage-owners-enabled-under-Volumes | xcodebuild-test=PASS (exit 0) | swift-test=PASS | /Volumes/XCVE2IMG/DD-C3

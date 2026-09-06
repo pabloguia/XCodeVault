@@ -79,10 +79,11 @@ public enum StorageCatalog {
             pathTemplates: ["~/Library/Developer/CoreSimulator/Devices"],
             description: "Per-device data containers (apps, user data, caches). Delete unwanted devices with `simctl delete`; never symlink this tree.",
             regenerability: .userRecreatable, deletionRisk: .medium, relocationRisk: .critical,
-            recommendedStrategy: .safeCleanup, allowedStrategies: [.safeCleanup],
+            recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
             evidence: "H5/F3 (symlinking ~/Library/Developer/CoreSimulator breaks the Simulator even same-disk)", evidenceStatus: .probable,
             notes: ["No relocation strategy at any risk level until E9 says otherwise (CLAUDE.md rule 7).",
-                    "`simctl delete unavailable` removes devices whose runtime is gone; `simctl erase` frees data without deleting the device."]),
+                    "Never deleted through the filesystem: `simctl delete unavailable` removes devices whose runtime is gone; `simctl delete <udid>` removes one; `simctl erase` frees data without deleting the device."],
+            cleanupCommand: "xcrun simctl delete unavailable"),
         StorageCategory(
             id: "simulatorUserCaches", name: "Simulator user caches", subsystem: .coreSimulator,
             pathTemplates: ["~/Library/Developer/CoreSimulator/Caches", "~/Library/Developer/CoreSimulator/Temp"],

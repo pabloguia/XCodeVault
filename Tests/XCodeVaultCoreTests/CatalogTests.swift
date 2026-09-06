@@ -50,6 +50,8 @@ final class CatalogTests: XCTestCase {
         XCTAssertEqual(StorageCatalog.category("deviceSupport")!.outcomeLabel, "delete-only")
         XCTAssertEqual(StorageCatalog.category("simulatorRuntimeAssets")!.outcomeLabel, "delete-only (official tool)")
         XCTAssertEqual(StorageCatalog.category("runtimeMounts")!.outcomeLabel, "must stay local")
+        XCTAssertEqual(StorageCatalog.category("simulatorDevices")!.outcomeLabel, "delete-only (official tool)")
+        XCTAssertFalse(StorageCatalog.category("simulatorDevices")!.allowedStrategies.contains(.safeCleanup), "devices go through simctl, never rm")
         XCTAssertEqual(StorageCatalog.category("archives")!.regenerability, .nonRegenerable)
         XCTAssertFalse(StorageCatalog.category("archives")!.isCleanable)
     }

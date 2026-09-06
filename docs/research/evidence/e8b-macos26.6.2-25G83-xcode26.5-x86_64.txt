@@ -1,0 +1,106 @@
+# Experiment: E8b IDECustomDerivedDataLocation honoured by xcodebuild? (reversible write-test)
+# Date: 2026-09-06T19:26:53Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+previous value: <unset>
+## baseline: where does a build land with the key unset?
+$ sh -c cd '~/projects/XCodeVault/fixtures/E2Fixture' && xcodebuild build -scheme E2Fixture -destination platform=macOS -quiet 2>&1 | grep -vE 'DVTProvisioning|^$' | tail -3; ls -d ~/Library/Developer/Xcode/DerivedData/E2Fixture-* 2>/dev/null
+{ platform:macOS, arch:x86_64, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+{ platform:macOS, arch:x86_64, variant:Mac Catalyst, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+{ platform:macOS, arch:x86_64, variant:DriverKit, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+~/Library/Developer/Xcode/DerivedData/E2Fixture-ffuqvahemhexjacqjphnexeqskvc
+[exit=0]
+
+## set key
+$ defaults write com.apple.dt.Xcode IDECustomDerivedDataLocation /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD
+[exit=0]
+
+## read back
+$ defaults read com.apple.dt.Xcode IDECustomDerivedDataLocation
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD
+[exit=0]
+
+## build with the key set
+$ sh -c cd '~/projects/XCodeVault/fixtures/E2Fixture' && xcodebuild build -scheme E2Fixture -destination platform=macOS -quiet 2>&1 | grep -vE 'DVTProvisioning|^$' | tail -3
+{ platform:macOS, arch:x86_64, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+{ platform:macOS, arch:x86_64, variant:Mac Catalyst, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+{ platform:macOS, arch:x86_64, variant:DriverKit, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+[exit=0]
+
+## what xcodebuild created under the custom location
+$ find /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD -maxdepth 4 -name Products -o -maxdepth 4 -name *.framework -o -maxdepth 1 -mindepth 1
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD/SDKStatCaches.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD/ModuleCache.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD/E2Fixture-ffuqvahemhexjacqjphnexeqskvc
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/DD/CompilationCache.noindex
+[exit=0]
+
+## -derivedDataPath still overrides the default
+$ sh -c cd '~/projects/XCodeVault/fixtures/E2Fixture' && xcodebuild build -scheme E2Fixture -destination platform=macOS -derivedDataPath '/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit' -quiet 2>&1 | grep -vE 'DVTProvisioning|^$' | tail -2; find '/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit' -maxdepth 2 -mindepth 1
+{ platform:macOS, arch:x86_64, variant:Mac Catalyst, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+{ platform:macOS, arch:x86_64, variant:DriverKit, id:19019823-78DE-5F3F-BAE8-0411EEB28407, name:My Mac }
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SDKStatCaches.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SDKStatCaches.noindex/macosx26.5-25F70-e082c4a02f00227109f4ed75e425c832.sdkstatcache
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Index.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Index.noindex/DataStore
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SourcePackages
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SourcePackages/artifacts
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SourcePackages/workspace-state.json
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SourcePackages/checkouts
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/SourcePackages/repositories
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs/Test
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs/Launch
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs/Build
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs/Package
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Logs/Localization
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/XPC-5FJSGZKJ3V9TWBMB4LHYPXFZ3.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_stdint-423FXG2LNP61UY6IZ4C7WJVQU.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_DarwinFoundation3-8POJ2RN992VX8FZ10UCTSNQHF.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/Session.modulevalidation
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_DarwinFoundation2-6LR0GNCVLRXZD039P5QRN82J6.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/CFNetwork-BVRWGBB1KHJEB9SHS8FQ5JRN2.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_limits-CHUNB9KWLS8T9UFUUKYMX19ZY.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/os_workgroup-83BPBGZM1OB18OYOOK6YC7T2U.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/libDER-1OVV1SD9KUFDOP3JA9FERYR8A.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_inttypes-92MOCN2Q9T1I54J3BTF22EU0W.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_intrinsics-9SQZ8BR8IKBXBO9UOAF3612O0.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/sys_types-CRR2J7GEVY8Y638PFZ7BKJ6PL.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_stdarg-F4YTMN5HKP3M9PFNEYOAX6IPM.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/ptrcheck-6XFEMSIX3Z7TD1WXRG4K1PRB3.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/MachO-3YH0994BQ1CVJBVS040H0S4E3.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/os_object-7WQ0QZIC3SZMS1P2WKFCHVG0Y.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/DiskArbitration-L3B5MP5F6YHQGUUK0ETKB25R.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_DarwinFoundation1-9PR3CEYAQQAWM8VVVCR645UDX.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/Security-75OT8FSOCDZYM105XWYQD6XW3.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/CoreFoundation-55K77MMNVBR0GWWOM0Z6AFH4A.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_AvailabilityInternal-6GSL69GB4M4GCPN9BQ4BY8G9H.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/Dispatch-BK8KLKJT2CV0HHUX84RP9B02V.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_float-6HF1BPHB20MJCCHEVSHTZS7.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/SwiftShims-6ZDXVHBUEX7AI2GQ9MUU7A20R.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/CoreServices-DL4EV1JWA2QE41T8B9LLP8PVU.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/libkern-9LXIZBF10EAFUHQGE7YU56LP9.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/ObjectiveC-C3I9C6S1B3OFN2P4LNDY3ZBLO.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/IOKit-AD7GR3H7NCDYN4K8VLKF24GYV.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/14E75GVZR2AV5
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/modules.timestamp
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/ptrauth-8X1QG68JHAATT0YB4R807XVCB.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/Darwin-BY8936DZ7LAUCHCW583KZQTKX.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_stdbool-98MPZ3B1K8DIGV63EXC54BK5R.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/launch-70BSF70EUL1F4HPFF03CG0K87.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_SwiftConcurrencyShims-4BIAN0UH4T8FYD6BDFTTUA6KY.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/Foundation-D9KK8AU4YWAXJF324MCQ9O5BJ.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/ModuleCache.noindex/_Builtin_stddef-EBFJMPMQEVYUVTTZ5VG09ZVRZ.pcm
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/CompilationCache.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/CompilationCache.noindex/generic
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Build
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Build/Intermediates.noindex
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/Build/Products
+/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e8b.PaoJ/Explicit/info.plist
+[exit=0]
+

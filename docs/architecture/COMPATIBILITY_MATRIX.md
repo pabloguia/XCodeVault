@@ -105,3 +105,22 @@ those entries "pending — manual" until someone actually runs and records the r
 - Functional checks: N/A (no download performed — 3.7 GB free on the test Mac)
 - Verdict: H4 probable (flag surface verified; export/import round trip pending)
 - Notes: `IDECustomDerivedDataLocation` unset on this machine → write-test pending — manual.
+
+### E8b IDECustomDerivedDataLocation honoured by xcodebuild — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-06
+- Hypothesis reference: H4
+- Test performed: `scripts/experiments/e8b-derived-data-key.sh` — reversible write-test: set the
+  key to a scratch directory, `xcodebuild build` the E2 fixture, inspect, delete the key.
+- Result: **pass.** With the key unset the build lands in `~/Library/Developer/Xcode/DerivedData/E2Fixture-<hash>`;
+  with the key set, xcodebuild creates `ModuleCache.noindex`, `CompilationCache.noindex`,
+  `SDKStatCaches.noindex` and `E2Fixture-<hash>` under the custom path; an explicit
+  `-derivedDataPath` still overrides it. Key restored to unset afterwards.
+- Evidence: `../research/evidence/e8b-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild ✓
+- Verdict: `derivedData` / `nativeConfiguration` **probable** (mechanism verified; the
+  Definition of Done still needs the E2 warning path, Xcode-IDE agreement after relaunch, and a
+  second macOS/Xcode combination). Note: the Xcode 26 *compilation cache* lives inside
+  DerivedData (`CompilationCache.noindex`) by default, so it moves with it.
+- Notes: Archives key (`IDECustomDistributionArchivesLocation` or `IDEArchivePathOverride`)
+  not yet write-tested — `xcodevaultctl locations` treats it as read-only until then.

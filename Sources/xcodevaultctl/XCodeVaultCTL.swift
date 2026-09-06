@@ -15,7 +15,8 @@ struct XCodeVaultCTL: ParsableCommand {
             docs/product/NON_GOALS_AND_SAFETY.md for your macOS/Xcode combination.
             """,
         version: XCodeVaultVersion.current,
-        subcommands: [Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self],
+        subcommands: [Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self,
+                      Clean.self, Locations.self, JournalCommand.self],
         defaultSubcommand: Status.self)
 }
 
@@ -101,7 +102,8 @@ struct Xcode: ParsableCommand {
 }
 
 struct Runtime: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Simulator runtimes as registered with CoreSimulator.", subcommands: [List.self], defaultSubcommand: List.self)
+    static let configuration = CommandConfiguration(abstract: "Simulator runtimes: list, delete, export/import installers (Runtime Library), offload.",
+                                                    subcommands: Runtime.extendedSubcommands, defaultSubcommand: List.self)
     struct List: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
