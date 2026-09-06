@@ -18,16 +18,17 @@ ARCH="$HOME/Library/Developer/Xcode/Archives"
 out="$XCV_EVIDENCE_DIR/e6-software-$(xcv_env_slug).txt"
 dev=$(df "$MP" | awk 'NR==2{print $1}')
 uuid=$(diskutil info "$dev" | awk -F': *' '/Volume UUID/{print $2}')
-created_fixture=0
+VDIR=$("$CTL" vault status --json | python3 -c 'import json,sys; print(next(c["volume"]["lastMountPoint"]+"/"+c["volume"]["relativeDirectory"] for c in json.load(sys.stdin) if c["volume"]["volumeUUID"]=="'"$uuid"'"))')
+[ -n "$VDIR" ] || { echo "vault for $uuid not registered"; exit 1; }
+[ -e "$ARCH" ] && { echo "!! $ARCH exists — refusing to use the user's real Archives as a fixture"; exit 1; }
 cleanup() {
-  [ "$created_fixture" = 1 ] && rm -rf "$ARCH" "$ARCH".xcodevault-removing-* 2>/dev/null
-  rm -rf "$MP/XcodeVault/archives" 2>/dev/null
+  rm -rf "$ARCH" "$ARCH".xcodevault-removing-* 2>/dev/null
+  rm -rf "$VDIR/archives" 2>/dev/null
 }
 trap cleanup EXIT
 {
   xcv_header "E6 software variant: vault volume unmounted during/between migrations ($MP, $dev, $uuid)"
-  if [ -e "$ARCH" ]; then echo "!! $ARCH exists — refusing to use the user's real Archives as a fixture"; exit 1; fi
-  created_fixture=1
+  echo "vault directory: $VDIR"
   mkdir -p "$ARCH/2026-09-06/XCVProbe.xcarchive/dSYMs/XCVProbe.app.dSYM/Contents/Resources/DWARF" "$ARCH/2026-09-06/XCVProbe.xcarchive/Products/Applications"
   head -c "$((MB*1024*1024))" /dev/urandom > "$ARCH/2026-09-06/XCVProbe.xcarchive/dSYMs/XCVProbe.app.dSYM/Contents/Resources/DWARF/XCVProbe"
   head -c 4096 /dev/urandom > "$ARCH/2026-09-06/XCVProbe.xcarchive/Info.plist"
@@ -39,9 +40,12 @@ trap cleanup EXIT
   echo "==================== PHASE 1: force-unmount during COPY ===================="
   ( "$CTL" externalize --category archives --vault "$uuid" --apply > /tmp/xcv-e6-ext.log 2>&1; echo "externalize exit=$?" >> /tmp/xcv-e6-ext.log ) &
   bg=$!
-  # wait until the copy has started writing, then pull the volume out from under it
-  for i in $(seq 1 60); do [ -d "$MP/XcodeVault/archives/Archives" ] && break; sleep 0.5; done
-  sleep 1
+  # wait until the copy has written a good chunk (≥ 25 % of the fixture), then pull the volume out from under it
+  target_kb=$((MB*1024/4))
+  for i in $(seq 1 600); do
+    cur=$(du -sk "$VDIR/archives/Archives" 2>/dev/null | cut -f1); [ "${cur:-0}" -ge "$target_kb" ] && break; sleep 0.2
+  done
+  echo "destination had ${cur:-0} KB when the volume was force-unmounted"
   echo "\$ diskutil unmount force $MP   (at $(date +%T))"; diskutil unmount force "$MP"; echo "[exit=$?]"
   wait $bg
   echo "--- externalize output ---"; cat /tmp/xcv-e6-ext.log
@@ -57,13 +61,13 @@ trap cleanup EXIT
   xcv_run "vault status after remount" "$CTL" vault status
   op=$("$CTL" migration status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')
   if [ -n "$op" ]; then xcv_run "abort interrupted migration $op" "$CTL" migration abort "$op"; fi
-  xcv_run "partial copy gone?" sh -c "ls -la '$MP/XcodeVault/archives' 2>&1"
+  xcv_run "partial copy gone?" sh -c "ls -la '$VDIR/archives' 2>&1"
 
   echo "==================== PHASE 2: full round trip, then clean unmount between operations ===================="
   xcv_run "externalize (plan)" "$CTL" externalize --category archives --vault "$uuid"
   xcv_run "externalize --apply --remove-source-after-verify" "$CTL" externalize --category archives --vault "$uuid" --apply --remove-source-after-verify --i-confirm-deleting-non-regenerable-data
   xcv_run "source removed?" sh -c "ls -la '$ARCH' 2>&1 | head -2"
-  xcv_run "vault copy" sh -c "find '$MP/XcodeVault/archives' -maxdepth 4 | head; du -sk '$MP/XcodeVault/archives'"
+  xcv_run "vault copy" sh -c "find '$VDIR/archives' -maxdepth 4 | head; du -sk '$VDIR/archives'"
   echo "\$ diskutil unmount $MP (clean eject)"; diskutil unmount "$MP"; echo "[exit=$?]"
   xcv_run "restore while the vault is absent (must refuse)" "$CTL" restore --category archives --vault "$uuid" --name Archives --apply
   xcv_run "vault status (absent)" "$CTL" vault status

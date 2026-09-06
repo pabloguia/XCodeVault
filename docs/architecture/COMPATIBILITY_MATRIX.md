@@ -149,6 +149,27 @@ those entries "pending — manual" until someone actually runs and records the r
   names — mark pending until a macOS 15 / Xcode 16 run records it (CI `macos-15` job can).
 - Notes: XCodeVault writes absolute POSIX paths only, via `defaults`, with Xcode closed.
 
+### E8 behavioural (export) + E11 staging — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-06
+- Hypothesis reference: H4 (Runtime Library), E11 (staging space)
+- Test performed: `scripts/experiments/e11-staging-monitor.sh tvOS <USB dir>` — real
+  `xcodebuild -downloadPlatform tvOS -exportPath` through `xcodevaultctl runtime export`, with
+  internal free space sampled every 5 s; then `xcodevaultctl runtime delete` of the result.
+- Result: **pass with a behavioural surprise** — the export downloads (5.03 GB), **installs the
+  runtime internally** (tvOS 26.5 Ready, 4.9 GB in `…AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime`),
+  then writes `appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg`
+  to the external directory. Peak internal consumption during the run: **6.96 GB** (≈1.4× the
+  image); nothing user-visible in any Inbox. `runtime delete` freed the store; the auto-created
+  tvOS devices became unavailable and were removed with `simctl delete unavailable` (doctor flagged them).
+- Evidence: `../research/evidence/e11-tvOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild ✓ (export), simctl ✓ (registry showed the runtime Ready), boot N/A
+- Verdict: Runtime Library **probable** with corrected semantics: export = install + copy out;
+  offload (delete after export) is mandatory to reclaim internal space. Import half recorded
+  separately below when run.
+- Notes: single platform (tvOS, smallest); the "~40 GB" community figure was not reproduced for
+  a 5 GB image. Re-run for iOS (10.6 GB) once ≥ 20 GB are free.
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |
@@ -156,6 +177,6 @@ those entries "pending — manual" until someone actually runs and records the r
 | E1 mount half | H8 | pending — manual (root) |
 | E6 surprise removal | H3, disconnect safety DoD | pending — manual (hardware); harness = `vault`/`externalize`/`migration` commands + fault-injection unit tests |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
-| E8 export/import round trip | H4 | pending — manual (needs ≥ 40 GB free) |
+| E8 export/import round trip | H4 | export done (tvOS, see entry above); import half + iOS-size run pending (needs ≥ 20 GB free) |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
 | E11 staging space | Runtime Library UX | pending — manual |
