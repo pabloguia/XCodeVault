@@ -1,0 +1,104 @@
+# Experiment: E8c: -importPlatform from an exported installer + functional probe + delete
+# Date: 2026-09-06T21:02:11Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+installer: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg (4906444 KB)
+## registry before
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+== import (monitored) ==
+$ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime import /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg --preflight
+preflight OK
+internal free at start: 10297 MB; library volume free: 339697 MB
+t=  20s internal_free=   4480 MB (Δ  -5816 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
+Error: `/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -importPlatform /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg` exited 70: Import platform failed with error Error Domain=com.apple.CoreSimulator.simdiskimaged.SimDiskImageError Code=14 "Cannot copy the image because the disk is almost full" UserInfo={NSLocalizedDescription=Cannot copy the image because the disk is almost full}
+peak internal consumption during export: 5816 MB; killed=0
+$ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'
+$ sh -c xcrun simctl runtime list; du -sk /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime
+$ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
+wrote ~/projects/XCodeVault/docs/research/evidence/e11-import-AppleTVOSSimulatorRuntime_Cryptex-macos26.6.2-25G83-xcode26.5-x86_64.txt
+## registry after import
+$ xcrun simctl runtime list -j
+{
+  "90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE" : {
+    "build" : "23F77",
+    "deletable" : true,
+    "identifier" : "90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE",
+    "kind" : "Patchable Cryptex Disk Image",
+    "lastUsedAt" : "2026-09-06T15:45:20Z",
+    "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/iOS_23F77",
+    "parentMountPath" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_iOSSimulatorRuntime\/af14d04fa4f5b29c2471951b01491c6403eab68f.asset\/AssetData",
+    "path" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_iOSSimulatorRuntime\/af14d04fa4f5b29c2471951b01491c6403eab68f.asset\/AssetData\/Restore\/iOSSimulatorRuntime_Cryptex.dmg",
+    "platformIdentifier" : "com.apple.platform.iphonesimulator",
+    "runtimeBundlePath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/iOS_23F77\/Library\/Developer\/CoreSimulator\/Profiles\/Runtimes\/iOS 26.5.simruntime",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+    "signatureState" : "Verified",
+    "sizeBytes" : 10597197700,
+    "state" : "Ready",
+    "supportedArchitectures" : [
+      "x86_64",
+      "arm64"
+    ],
+    "version" : "26.5"
+  },
+  "FC8D06B4-B87E-42BE-8DF3-AD0A2020571F" : {
+    "build" : "23T570",
+    "deletable" : true,
+    "identifier" : "FC8D06B4-B87E-42BE-8DF3-AD0A2020571F",
+    "kind" : "Patchable Cryptex Disk Image",
+    "lastUsedAt" : "2026-09-06T15:39:27Z",
+    "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/watchOS_23T570",
+    "parentMountPath" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_watchOSSimulatorRuntime\/9abbe617b29829bb37df4be2a5bfd67f9af757e1.asset\/AssetData",
+    "path" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_watchOSSimulatorRuntime\/9abbe617b29829bb37df4be2a5bfd67f9af757e1.asset\/AssetData\/Restore\/WatchOSSimulatorRuntime_Cryptex.dmg",
+    "platformIdentifier" : "com.apple.platform.watchsimulator",
+    "runtimeBundlePath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/watchOS_23T570\/Library\/Developer\/CoreSimulator\/Profiles\/Runtimes\/watchOS 26.5.simruntime",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+    "signatureState" : "Verified",
+    "sizeBytes" : 5242171072,
+    "state" : "Ready",
+    "supportedArchitectures" : [
+      "x86_64",
+      "arm64"
+    ],
+    "version" : "26.5"
+  }
+}
+[exit=0]
+
+tvOS runtime id: 
+## registry after
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## asset stores
+$ du -sk /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime /System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime /System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
+4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+10348880	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
+5119360	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
+[exit=0]
+
+## internal free
+$ df -h /System/Volumes/Data
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk1s1   466Gi   435Gi   4.4Gi   100%    4.2M   46M    8%   /System/Volumes/Data
+[exit=0]
+

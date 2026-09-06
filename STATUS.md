@@ -59,16 +59,36 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   Journal) on the same Core; `scripts/bundle-app.sh` assembles `dist/XCodeVault.app`
   (unsigned) — launches.
 
+## Session 2 (2026-09-06, user authorised experiments on the Kingston USB volume)
+
+- **E6 (software variant): pass** after 4 runs; found and fixed the "failed op leaves an
+  unremovable partial copy" gap (`migration status`/`doctor` list leftovers, `abort` removes them,
+  retry error names the command). Force unmount removes `/Volumes/<name>` outright (no shadow dir).
+- **E8 export: pass with a surprise** — `-downloadPlatform -exportPath` downloads, **installs the
+  runtime internally** (tvOS 26.5, 4.9 GB), then writes an `.exportedBundle` (dir with
+  `Restore/*_Cryptex.dmg`). Peak internal use 7 GB for a 5 GB image. Library scanner understands
+  `.exportedBundle`; export warns; offload is the workflow.
+- **E8 import: environmental fail** — `-importPlatform` copies the image internally first
+  (5.8 GB in 20 s) and CoreSimulator refused at 10.3 GB free ("disk is almost full"). Preflight now
+  requires 2× image + 3 GB. Functional boot probe not reached.
+- **Real-world `clean --apply`:** freed 8.86 GB of DerivedData, journaled.
+- **Stranded 5.02 GB Inbox dmg** left behind by Apple's export (after `runtime delete`) — `doctor`
+  flags it; removal needs root: `sudo rm /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/85D24F59-8A6C-40FD-B663-440AF721202A.dmg`.
+- `vault init --directory` added (volume roots are root-owned; helper not shipped).
+- Everything created on the USB volume and in the home directory was removed; the temporary vault
+  registration was forgotten. Machine state vs. session start: DerivedData cleaned (−8.9 GB),
+  the stranded Inbox dmg (+5 GB, needs root), tvOS devices/runtime removed again.
+
 ## In flight
 
-- Nothing. Reviews done: migration-safety (10 findings → fixed; re-review: 2 required fixes →
-  fixed; 65 tests green), helper-security (3 findings → fixed; guard hook self-tested).
-  E2 complete (9 cases). Repo is clean at commit 35524ef.
+- Nothing running. 67 tests green.
 
 ## Blocked / pending — manual (ask the user)
 
-- E1 mount half, E7 shadow-data defense, E6 surprise removal, E9 CoreSimulator symlink
-  reproduction: need root and/or physical hardware manipulation on the user's Mac.
+- E1 mount half (root), E7, E9 (scratch account), physical yank for E6: need root and/or
+  hands on the Mac. `scripts/experiments/e1b-mount-probe.sh` is ready to run with sudo.
+- Removing the stranded 5 GB Inbox dmg (root). After that, re-run
+  `scripts/experiments/e8c-import-roundtrip.sh` to finish the import half + boot probe.
 - E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
   (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
   write-test needs a moment when Xcode is closed.

@@ -189,6 +189,22 @@ those entries "pending — manual" until someone actually runs and records the r
   reboot mid-migration and a second macOS/Xcode combination still needed for the DoD.
 - Notes: found and fixed the "failed op leaves an unremovable partial copy" gap during the run.
 
+### E8 import half — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-06
+- Hypothesis reference: H4, E11
+- Test performed: `scripts/experiments/e8c-import-roundtrip.sh` — `xcodebuild -importPlatform`
+  of the exported tvOS Cryptex dmg from the USB volume, monitored; 10.3 GB free internally.
+- Result: **fail (environmental, informative)** — 5.8 GB consumed internally in 20 s, then
+  `SimDiskImageError 14 "Cannot copy the image because the disk is almost full"`; space released.
+  A 5.02 GB stranded download left in `Cryptex/Images/Inbox` by the earlier export (flagged by
+  `doctor`, root needed to remove) had eaten the headroom.
+- Evidence: `../research/evidence/e8c-import-*.txt`, `../research/evidence/e11-import-*.txt`
+- Functional checks: not reached
+- Verdict: import mechanism **unverified** on this machine (needs ≥ 2× image + headroom free);
+  re-run after the Inbox file is removed with root.
+- Notes: the `runtime import` preflight's 2× rule matches the observed shape.
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |
@@ -196,6 +212,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E1 mount half | H8 | pending — manual (root) |
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
-| E8 export/import round trip | H4 | export done (tvOS, see entry above); import half + iOS-size run pending (needs ≥ 20 GB free) |
+| E8 export/import round trip | H4 | export done; import attempted and refused by CoreSimulator for space (see entry); retry after `sudo rm` of the stranded Inbox dmg |
+| Stranded Inbox cleanup | F1 | needs root: `sudo rm /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/<uuid>.dmg` (helper verb exists, unsigned) |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
 | E11 staging space | Runtime Library UX | pending — manual |

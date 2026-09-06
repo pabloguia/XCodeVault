@@ -150,16 +150,18 @@ public struct RuntimeOperations: Sendable {
         }
         guard dmg.lowercased().hasSuffix(".dmg") else { throw RuntimeOperationError("\(dmg) is not a .dmg installer.") }
         var w: [String] = []
-        // E11: installation stages on the internal volume. Require headroom of at least 2× the image (reported need ~40 GB for a 9–12 GB runtime).
-        let need = size * 2
+        // E11 (observed 2026-09-06, Xcode 26.5): -importPlatform first COPIES the image into CoreSimulator's
+        // internal staging area, then installs it; with 10.3 GB free a 4.9 GB image consumed 5.8 GB and
+        // CoreSimulator refused with SimDiskImageError 14 "disk is almost full". Require 2× + 3 GB headroom.
+        let need = size * 2 + 3_000_000_000
         if host.dataVolumeFreeBytes < need {
             throw RuntimeOperationError(
-                "Installing needs internal staging space: image is \(ByteCount.format(size)), only \(ByteCount.format(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.format(need))). Free space first (`xcodevaultctl clean`)."
+                "Installing needs internal staging space: image is \(ByteCount.format(size)), only \(ByteCount.format(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.format(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
             )
         }
-        if host.dataVolumeFreeBytes < size * 4 {
+        if host.dataVolumeFreeBytes < size * 3 + 3_000_000_000 {
             w.append(
-                "Internal free space is tight for staging (\(ByteCount.format(host.dataVolumeFreeBytes))); the reported requirement is ~40 GB for a 9–12 GB runtime (E11, unverified)."
+                "Internal free space is tight: the import copies the whole image internally before installing (E11 measured 1.2× the image during the copy phase), and CoreSimulator refuses when the disk is 'almost full'."
             )
         }
         return w
