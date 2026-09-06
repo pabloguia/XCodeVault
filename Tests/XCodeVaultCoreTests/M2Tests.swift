@@ -176,7 +176,7 @@ final class RuntimeOperationsTests: XCTestCase {
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
         let tight = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_001_500_000, arm: true))
         XCTAssertThrowsError(try tight.preflightImport(dmg: dmg))
-        let ok = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_003_000_000, arm: true))
+        let ok = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_002_500_000, arm: true))
         XCTAssertFalse(try ok.preflightImport(dmg: dmg).isEmpty, "tight-but-allowed should warn")
         XCTAssertThrowsError(try ok.preflightImport(dmg: t.path + "/nope.dmg"))
     }
