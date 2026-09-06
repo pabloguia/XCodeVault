@@ -5,15 +5,34 @@ import XCodeVaultHelperProtocol
 // Every verb is a fixed operation on a fixed resource. There is no Process/shell anywhere in this
 // target on purpose: .claude/hooks/helper-guard.sh blocks it, and the security review checks it.
 
+/// All privileged work runs on one serial queue: connections never race each other, and the
+/// per-connection caller identity (uid/gid from the audit token) is captured at accept time.
+let privilegedWork = DispatchQueue(label: "com.xcodevault.helper.work")
+
 final class HelperService: NSObject, XCodeVaultHelperXPC {
+    let callerUID: uid_t
+    let callerGID: gid_t
+    init(callerUID: uid_t, callerGID: gid_t) { self.callerUID = callerUID; self.callerGID = callerGID }
+
     func version(reply: @escaping (String) -> Void) { reply(HelperIdentity.version) }
 
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping (HelperResult) -> Void) {
-        guard let t = HelperCleanupTarget(rawValue: target) else { reply(HelperResult(ok: false, message: "unknown target")); return }
+        privilegedWork.async { reply(self.doRemoveRegenerableSystemDirectoryContents(target: target)) }
+    }
+    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping (HelperResult) -> Void) {
+        privilegedWork.async { reply(self.doRemoveStrandedRuntimeDownload(fileName: fileName)) }
+    }
+    func createVaultDirectory(volumeUUID: String, reply: @escaping (HelperResult) -> Void) {
+        privilegedWork.async { reply(self.doCreateVaultDirectory(volumeUUID: volumeUUID)) }
+    }
+
+    private func doRemoveRegenerableSystemDirectoryContents(target: String) -> HelperResult {
+        guard let t = HelperCleanupTarget(rawValue: target) else { return HelperResult(ok: false, message: "unknown target") }
         let dir = t.path
         var st = stat()
-        guard lstat(dir, &st) == 0, (st.st_mode & S_IFMT) == S_IFDIR else { reply(HelperResult(ok: true, message: "nothing to do", bytesFreed: 0)); return }
-        guard !Self.isMountPoint(dir) else { reply(HelperResult(ok: false, message: "target is a mount point")); return }
+        guard lstat(dir, &st) == 0, (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: true, message: "nothing to do", bytesFreed: 0) }
+        guard st.st_uid == 0 else { return HelperResult(ok: false, message: "target is not root-owned; refusing") }
+        guard !Self.isMountPoint(dir) else { return HelperResult(ok: false, message: "target is a mount point") }
         var freed: UInt64 = 0
         var failures = 0
         // Remove children, never the directory itself (CoreSimulator recreates the caches in place).
@@ -26,43 +45,52 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
                 do { try FileManager.default.removeItem(atPath: p) } catch { failures += 1 }
             }
         }
-        reply(HelperResult(ok: failures == 0, message: failures == 0 ? "cleaned \(dir)" : "\(failures) item(s) could not be removed", bytesFreed: freed))
+        return HelperResult(ok: failures == 0, message: failures == 0 ? "cleaned \(dir)" : "\(failures) item(s) could not be removed", bytesFreed: freed)
     }
 
-    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping (HelperResult) -> Void) {
-        // Single component, .dmg, no traversal.
-        guard !fileName.isEmpty, !fileName.contains("/"), !fileName.hasPrefix("."), fileName.lowercased().hasSuffix(".dmg") else {
-            reply(HelperResult(ok: false, message: "invalid file name")); return
+    private func doRemoveStrandedRuntimeDownload(fileName: String) -> HelperResult {
+        // Single component, plain ASCII, .dmg, no traversal, no leading dot, no whitespace tricks.
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_. "))
+        guard !fileName.isEmpty, fileName.count <= 128, fileName.unicodeScalars.allSatisfy({ $0.isASCII && allowed.contains($0) }),
+              !fileName.hasPrefix("."), !fileName.hasSuffix(" "), fileName.lowercased().hasSuffix(".dmg"), fileName != ".dmg" else {
+            return HelperResult(ok: false, message: "invalid file name")
         }
         for inbox in HelperInboxDirectory.allCases {
             let p = inbox.rawValue + "/" + fileName
             var st = stat()
             guard lstat(p, &st) == 0 else { continue }
-            guard (st.st_mode & S_IFMT) == S_IFREG else { reply(HelperResult(ok: false, message: "not a regular file")); return }
+            guard (st.st_mode & S_IFMT) == S_IFREG else { return HelperResult(ok: false, message: "not a regular file") }
             let bytes = UInt64(st.st_blocks) * 512
-            do { try FileManager.default.removeItem(atPath: p); reply(HelperResult(ok: true, message: "removed \(p)", bytesFreed: bytes)) }
-            catch { reply(HelperResult(ok: false, message: "\(error)")) }
-            return
+            // unlink(2) on the lstat'ed path: a symlink swapped in after lstat would be unlinked itself, never followed.
+            guard unlink(p) == 0 else { return HelperResult(ok: false, message: "unlink failed: \(String(cString: strerror(errno)))") }
+            return HelperResult(ok: true, message: "removed \(p)", bytesFreed: bytes)
         }
-        reply(HelperResult(ok: false, message: "no such stranded download"))
+        return HelperResult(ok: false, message: "no such stranded download")
     }
 
-    func createVaultDirectory(volumeUUID: String, ownerUID: UInt32, ownerGID: UInt32, reply: @escaping (HelperResult) -> Void) {
-        guard UUID(uuidString: volumeUUID) != nil else { reply(HelperResult(ok: false, message: "invalid UUID")); return }
-        guard ownerUID >= 500 else { reply(HelperResult(ok: false, message: "owner must be a regular user")); return }
-        // Resolve the UUID to a mount point ourselves: enumerate mounted filesystems and match the
-        // volume UUID via getattrlist(ATTR_VOL_UUID) — no client-supplied path, no diskutil parsing.
-        guard let mp = Self.mountPoint(forVolumeUUID: volumeUUID) else { reply(HelperResult(ok: false, message: "volume not mounted")); return }
-        guard mp.hasPrefix("/Volumes/") else { reply(HelperResult(ok: false, message: "only volumes under /Volumes are eligible")); return }
+    private func doCreateVaultDirectory(volumeUUID: String) -> HelperResult {
+        guard UUID(uuidString: volumeUUID) != nil else { return HelperResult(ok: false, message: "invalid UUID") }
+        guard callerUID >= 500, callerGID >= 20 else { return HelperResult(ok: false, message: "caller must be a regular user") }
+        // Resolve the UUID to a mount point ourselves (getattrlist ATTR_VOL_UUID over getmntinfo_r_np):
+        // no client-supplied path, no diskutil parsing, no shared static buffer.
+        guard let mp = Self.mountPoint(forVolumeUUID: volumeUUID) else { return HelperResult(ok: false, message: "volume not mounted") }
+        guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2, Self.isMountPoint(mp) else { return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible") }
         let dir = mp + "/XcodeVault"
+        // O_NOFOLLOW|O_DIRECTORY open of a freshly created (or existing, non-symlink) directory, then
+        // fchown on the descriptor: no path-based TOCTOU between check and chown.
         var st = stat()
         if lstat(dir, &st) == 0 {
-            guard (st.st_mode & S_IFMT) == S_IFDIR else { reply(HelperResult(ok: false, message: "XcodeVault exists and is not a directory")); return }
+            guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "XcodeVault exists and is not a directory") }
         } else if mkdir(dir, 0o755) != 0 {
-            reply(HelperResult(ok: false, message: "mkdir failed: \(String(cString: strerror(errno)))")); return
+            return HelperResult(ok: false, message: "mkdir failed: \(String(cString: strerror(errno)))")
         }
-        guard lchown(dir, ownerUID, ownerGID) == 0 else { reply(HelperResult(ok: false, message: "chown failed: \(String(cString: strerror(errno)))")); return }
-        reply(HelperResult(ok: true, message: dir))
+        let fd = open(dir, O_RDONLY | O_NOFOLLOW | O_DIRECTORY)
+        guard fd >= 0 else { return HelperResult(ok: false, message: "open failed: \(String(cString: strerror(errno)))") }
+        defer { close(fd) }
+        var fst = stat()
+        guard fstat(fd, &fst) == 0, (fst.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "not a directory") }
+        guard fchown(fd, callerUID, callerGID) == 0 else { return HelperResult(ok: false, message: "chown failed: \(String(cString: strerror(errno)))") }
+        return HelperResult(ok: true, message: dir)
     }
 
     // MARK: helpers (no shell, no Process)
@@ -92,8 +120,9 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
 
     static func mountPoint(forVolumeUUID uuid: String) -> String? {
         var mounts: UnsafeMutablePointer<statfs>?
-        let n = getmntinfo(&mounts, MNT_NOWAIT)
+        let n = getmntinfo_r_np(&mounts, MNT_NOWAIT)   // reentrant: caller-owned buffer, no shared static state
         guard n > 0, let mounts else { return nil }
+        defer { free(mounts) }
         for i in 0..<Int(n) {
             var fs = mounts[i]
             let mp = withUnsafePointer(to: &fs.f_mntonname) { $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) } }
@@ -119,8 +148,10 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         // Code-signing requirement is enforced by the kernel/XPC layer for this connection — set
         // BEFORE resume(), never validated by PID (SECURITY_MODEL.md).
         do { try connection.setCodeSigningRequirement(requirement) } catch { return false }
+        // Caller identity comes from the connection's audit credentials, never from request payloads.
+        let uid = connection.effectiveUserIdentifier, gid = connection.effectiveGroupIdentifier
         connection.exportedInterface = NSXPCInterface(with: XCodeVaultHelperXPC.self)
-        connection.exportedObject = HelperService()
+        connection.exportedObject = HelperService(callerUID: uid, callerGID: gid)
         connection.resume()
         return true
     }

@@ -5,8 +5,9 @@ post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
 
-**M3 — disconnect safety: implemented, under independent review.** M1 and M2 are committed.
-M4 GUI first slice builds and launches; M5 (signing/notarization/release) not started.
+**M3 — disconnect safety: implemented, reviewed, review fixes committed (re-review in flight).**
+M1, M2, M3 committed. M4 GUI first slice builds and launches (read-only + clean flow). M5:
+release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## Done
 
@@ -41,7 +42,7 @@ M4 GUI first slice builds and launches; M5 (signing/notarization/release) not st
   never filesystem-deleted), `runtime delete/export/import/library/offload` (feature-detected,
   E11 staging preflight), `locations show/set-*/reset-*` for DerivedData, Archives (verified),
   compilation cache (Xcode 26, experimental). E8b + Locations-keys evidence in the matrix.
-- **M3 (uncommitted, review in flight):** `VaultRegistry`/`VaultVerifier` (UUID + sentinel;
+- **M3 (committed):** `VaultRegistry`/`VaultVerifier` (UUID + sentinel;
   states verified/absent/movedMountPoint/foreign/ambiguous/sentinelMissing), `TreeVerifier`
   (topology, mode, symlink targets, xattrs, SHA-256), `MigrationEngine` (plan → copy via ditto
   → verify → explicit re-verified source removal; abort; refuses while an interrupted migration
@@ -50,7 +51,7 @@ M4 GUI first slice builds and launches; M5 (signing/notarization/release) not st
   `restore`, `migration status/abort`, `bench` (E10, heuristic verdicts). 55 unit tests incl.
   fault injection (source mutation mid-copy, destination vanishing, corrupted copy, crash
   between COPY and VERIFY).
-- **Helper skeleton (uncommitted, security review in flight):** `XCodeVaultHelperProtocol`
+- **Helper skeleton (committed; security review in flight, not reachable from clients):** `XCodeVaultHelperProtocol`
   (three allowlisted verbs, fixed paths, NSSecureCoding result), `xcodevault-helper` daemon
   (code-signing requirement set before resume; refuses to serve without a baked team id),
   launchd plist for `SMAppService.daemon`. Not yet wired into the CLI/GUI (needs a signed bundle).
@@ -60,11 +61,10 @@ M4 GUI first slice builds and launches; M5 (signing/notarization/release) not st
 
 ## In flight
 
-- Independent reviews (migration-safety on M2/M3; helper-security on the daemon skeleton) —
-  address findings, then commit with Reviewed-by trailers.
-- E2 full rerun (adds C3 owners-on and F image-on-USB cases; both passed in partial runs, so
-  ownership and the physical I/O path are also excluded as discriminators). Unified-log queries
-  for TCC/sandbox denials returned nothing — mechanism still unnamed.
+- Migration-safety re-review of the fixes (first review: 10 findings, all addressed with
+  regression tests). Helper-security review of the daemon skeleton.
+- E2 is complete (9 cases): only the physical USB volume fails; the mechanism is still unnamed
+  (no TCC/sandbox denials in the unified log). Recorded in FINDINGS + matrix.
 
 ## Blocked / pending — manual (ask the user)
 

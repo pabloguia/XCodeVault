@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <!-- SMAppService.daemon(plistName: "com.xcodevault.helper.plist"). BundleProgram is relative to
-         the app bundle; no SMPrivilegedExecutables / SMAuthorizedClients (SMJobBless-era keys). -->
+         the app bundle. Only SMAppService-era keys belong here (see SECURITY_MODEL.md §Registration). -->
     <key>Label</key>
     <string>com.xcodevault.helper</string>
     <key>BundleProgram</key>

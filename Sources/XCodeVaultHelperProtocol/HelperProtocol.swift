@@ -17,9 +17,10 @@ import Foundation
     func removeStrandedRuntimeDownload(fileName: String, reply: @escaping (HelperResult) -> Void)
 
     /// Creates `<mount point>/XcodeVault` on a mounted external volume identified by UUID and
-    /// hands ownership to the given uid/gid, so the unprivileged app can use it. The helper resolves
-    /// the UUID through diskutil itself; the client cannot pass a path.
-    func createVaultDirectory(volumeUUID: String, ownerUID: UInt32, ownerGID: UInt32, reply: @escaping (HelperResult) -> Void)
+    /// hands ownership to the *calling* user (uid/gid taken from the XPC connection's audit
+    /// credentials, never from the request). The helper resolves the UUID to a mount point itself;
+    /// the client cannot pass a path.
+    func createVaultDirectory(volumeUUID: String, reply: @escaping (HelperResult) -> Void)
 }
 
 /// Allowlisted cleanup targets. The helper owns the path mapping; the enum exists so clients cannot
@@ -65,11 +66,13 @@ public enum HelperIdentity {
     public static let machServiceName = "com.xcodevault.helper"
     public static let plistName = "com.xcodevault.helper.plist"
     public static let bundleIdentifier = "com.xcodevault.helper"
-    /// Code-signing requirement the daemon enforces on every client (Developer ID team + bundle id).
-    /// `TEAMID` is substituted at bundle time by scripts/bundle-app.sh; unsigned dev builds use
-    /// the ad-hoc fallback and are refused by a release helper.
+    /// Code-signing requirement the daemon enforces on every client: Apple-anchored Developer ID
+    /// chain (leaf + intermediate marker OIDs), our team, and one of our two client identifiers.
+    /// `TEAMID` is substituted at bundle time by scripts/bundle-app.sh; a helper built without it
+    /// refuses every connection. TODO(M5): add a minimum-version predicate once versions ship.
     public static func clientRequirement(teamID: String) -> String {
-        "anchor apple generic and certificate leaf[subject.OU] = \"\(teamID)\" and (identifier \"com.xcodevault.app\" or identifier \"com.xcodevault.xcodevaultctl\")"
+        "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] "
+        + "and certificate leaf[subject.OU] = \"\(teamID)\" and (identifier \"com.xcodevault.app\" or identifier \"com.xcodevault.xcodevaultctl\")"
     }
     public static let version = "0.1.0-dev"
 }
