@@ -111,6 +111,8 @@ public struct RuntimeOperations: Sendable {
         if let free = freeBytesAtDestination, free < 12_000_000_000 {
             w.append("Only \(ByteCount.format(free)) free at the destination; runtime images are 5–25 GB.")
         }
+        w.append(
+            "Observed on Xcode 26.5 (E11): `-downloadPlatform -exportPath` downloads, INSTALLS the runtime on the internal volume, then exports a copy. Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`.")
         if host.dataVolumeFreeBytes < 15_000_000_000 {
             w.append(
                 "Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume. Downloads may stage internally before export (E11 — unverified); watch for ENOSPC."
@@ -178,18 +180,37 @@ public struct RuntimeOperations: Sendable {
 
     // MARK: library
 
+    /// Lists installers: bare `.dmg` files and Xcode 26's `<sdk>_<version>_<build>.exportedBundle`
+    /// directories (observed 2026-09-06: `-exportPath` writes a bundle whose
+    /// `Restore/<Platform>SimulatorRuntime_Cryptex.dmg` is the image `-importPlatform` takes).
     public static func library(at dir: String) throws -> [RuntimeInstaller] {
         let names = try FileManager.default.contentsOfDirectory(atPath: dir)
         var out: [RuntimeInstaller] = []
-        for n in names where n.lowercased().hasSuffix(".dmg") {
+        for n in names {
             let p = dir + "/" + n
-            guard let attrs = try? FileManager.default.attributesOfItem(atPath: p) else { continue }
-            let parsed = RuntimeInstaller.parse(fileName: n)
-            out.append(
-                RuntimeInstaller(
-                    path: p, fileName: n, sizeBytes: (attrs[.size] as? UInt64) ?? 0,
-                    modifiedAt: (attrs[.modificationDate] as? Date) ?? .distantPast,
-                    platform: parsed.platform, version: parsed.version, build: parsed.build))
+            if n.lowercased().hasSuffix(".dmg") {
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: p) else { continue }
+                let parsed = RuntimeInstaller.parse(fileName: n)
+                out.append(
+                    RuntimeInstaller(
+                        path: p, fileName: n, sizeBytes: (attrs[.size] as? UInt64) ?? 0,
+                        modifiedAt: (attrs[.modificationDate] as? Date) ?? .distantPast,
+                        platform: parsed.platform, version: parsed.version, build: parsed.build))
+            } else if n.hasSuffix(".exportedBundle") {
+                let base = String(n.dropLast(".exportedBundle".count))
+                let parts = base.split(separator: "_").map(String.init)
+                let sdkToPlatform = ["iphonesimulator": "iOS", "appletvsimulator": "tvOS", "watchsimulator": "watchOS", "xrsimulator": "visionOS"]
+                let platform = parts.first.flatMap { sdkToPlatform[$0.lowercased()] }
+                let restore = p + "/Restore"
+                guard let dmg = (try? FileManager.default.contentsOfDirectory(atPath: restore))?.first(where: { $0.hasSuffix("_Cryptex.dmg") }) else { continue }
+                let dmgPath = restore + "/" + dmg
+                let attrs = try? FileManager.default.attributesOfItem(atPath: dmgPath)
+                out.append(
+                    RuntimeInstaller(
+                        path: dmgPath, fileName: n, sizeBytes: DiskUsage.measure(p)?.allocatedBytes ?? 0,
+                        modifiedAt: (attrs?[.modificationDate] as? Date) ?? .distantPast,
+                        platform: platform, version: parts.count > 1 ? parts[1] : nil, build: parts.count > 2 ? parts[2] : nil))
+            }
         }
         return out.sorted { ($0.platform ?? "", $0.version ?? "") < ($1.platform ?? "", $1.version ?? "") }
     }
