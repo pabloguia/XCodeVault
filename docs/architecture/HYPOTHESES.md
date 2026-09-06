@@ -35,6 +35,16 @@ behavior and physical-device debugging.
 **Verdict gate:** E1 → E2 → E4 → E6 in `EXPERIMENTS.md`, in that order. E1 or E2
 failing kills this hypothesis outright.
 
+**Status update 2026-09-06 (E1 read-only half + E2, macOS 26.6.2 / Xcode 26.5 / Intel):
+still unverified, and reframed as low-value on Xcode 26.** The path is mountable (H8), but
+`Cryptex/Images/bundle` is empty and **every installed-runtime byte lives in
+`/System/Library/AssetsV2/…`**, which no mount under `/Library/Developer` can capture. The only
+regular storage a canonical mount would move is `Caches/dyld` (7.4 GB, regenerable — i.e.
+deletable). E2 additionally shows the external-device test restriction follows the physical
+volume, not the path, so a canonical mount would not buy DerivedData anything either. The
+mount attempt itself (root required) is **pending — manual**; see ADR-0004 for the
+consequence: canonical mount drops from "gated headline" to "R&D curiosity" for v1.
+
 ## H2 — Whole-`~/Library/Developer` symlink breaks Xcode 15+ DDI discovery
 
 **Status: probable, and treated as true regardless.** FB12363725, reproduced on Xcode
@@ -57,7 +67,12 @@ Xcode in a worse way. Gate: E6, E7.
 
 ## H4 — Official Apple mechanisms cover more than assumed
 
-**Status: probable → partially verified by documentation** (F2). Confirmed by Apple
+**Status: probable → partially verified by documentation** (F2) **and by feature detection
+on Xcode 26.5 (E8, 2026-09-06):** every flag below is present in `xcodebuild -help`, plus
+`-deleteComponent`, `-prepareDeviceSupport`, and `simctl runtime add/delete/unmount/verify`.
+Behavioural verification (an actual `-exportPath` export and `-importPlatform` round trip,
+and whether `IDECustomDerivedDataLocation` is honoured) is still pending — the Mac used had
+3.7 GB free, which is itself the E11 staging problem. Confirmed by Apple
 docs: `-downloadPlatform`/`-downloadAllPlatforms` with `-exportPath`, then
 `-importPlatform <dmg>` — i.e. the Runtime Library concept is **officially supported**;
 `-architectureVariant arm64` cuts image size; `-downloadComponent`/`-importComponent`
@@ -84,7 +99,19 @@ narrows to canonical mount (H1), official mechanisms (H4), or cleanup only. Gate
 `/Volumes/...` — which hit even Apple's *supported* DerivedData relocation (F4) —
 classify by **device removability**, not by path.
 
-**Status: unverified.** If true, mounting at a canonical path does **not** escape the
+**Status: probable — device-based (E2, 2026-09-06, macOS 26.6.2 / Xcode 26.5 / Intel).**
+The F4 failure reproduced verbatim (`xctest … Failed to create a bundle instance`) with
+DerivedData on a real USB APFS SSD, both under `/Volumes/…` and through an internal-path
+symlink; it did **not** reproduce on APFS disk images (case-insensitive or case-sensitive,
+at `/Volumes` or at a `$HOME` mount point, even under an identical hidden path), and
+`swift test`'s own `xctest` loads the same bundle from the USB volume fine. The discriminator
+is the physical external device (TCC "Removable Volumes" is the prime suspect; log capture in
+`evidence/e2-*.txt`). Canonical mount therefore buys nothing here; the product warns before
+placing DerivedData on external storage, exactly as `NON_GOALS_AND_SAFETY.md` requires.
+Remaining unknowns: Apple Silicon, Thunderbolt NVMe, and whether the Xcode IDE's own test
+runner behaves like `xcodebuild`. Original framing kept below for the record.
+
+If true, mounting at a canonical path does **not** escape the
 problem and a large part of the canonical-mount thesis collapses; the product would
 have to warn that test execution against externally-located build products is
 degraded, whatever the mechanism. If false (path-based), canonical mount gains a
@@ -110,10 +137,12 @@ not as a v1 mechanism.
 **Claim:** `/Library/Developer/CoreSimulator` is not SIP-protected
 (`com.apple.rootless`) and root can mount a volume over it.
 
-**Status: unverified — and it gates H1 entirely.** If the path carries
-`com.apple.rootless`, the whole canonical-mount approach dies immediately and the
-project should reallocate effort to H4 + cleanup + disconnect safety. This is a
-one-command check (E1). **Do it before anything else.**
+**Status: probable — read-only half verified (E1, 2026-09-06).** No `restricted`/`sunlnk`
+flag, no `com.apple.rootless` xattr on `/Library/Developer` or `…/CoreSimulator`;
+`rootless.conf` protects only `/System/Developer`. The actual mount attempt over a throwaway
+path needs root and is **pending — manual** (`scripts/experiments/e1-mountability.sh` records
+the read-only half; the mount step is documented in `COMPATIBILITY_MATRIX.md`). Note that H8
+being true no longer rescues H1 — see H1's 2026-09-06 update.
 
 ## H9 — Byte-identical relocation preserves runtime seal validation *(new)*
 
@@ -124,6 +153,20 @@ volume still passes cryptex seal/trust-cache verification and mounts.
 `-67061 invalid signature` (F1). Nobody has published such a test. Gate: E4.
 
 ---
+
+## H10 — The MobileAsset runtime store is the real relocation target on Xcode 26 *(new, 2026-09-06)*
+
+**Claim:** on Xcode 26 the only way to move installed-runtime bytes off the internal disk
+would be to relocate `/System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime/`
+(or make `mobileassetd`/`simdiskimaged` accept an image elsewhere via `simctl runtime add`).
+
+**Status: unverified and, for v1, out of bounds.** The path is under `/System` (CLAUDE.md
+rule 2 forbids modifying it, even though it is physically on the Data volume), is owned by
+`mobileassetd`, and orphaned `NeverCollected` assets there are a documented failure mode
+(F1). `simctl runtime add` clones the image into the store when possible and copies
+otherwise, so an image kept on an external volume costs a full copy on install. The
+supported answer remains: keep *installers* external (Runtime Library) and keep at most the
+runtimes you use installed. Revisit only with an Apple-supported mechanism.
 
 ## Evidence discipline
 

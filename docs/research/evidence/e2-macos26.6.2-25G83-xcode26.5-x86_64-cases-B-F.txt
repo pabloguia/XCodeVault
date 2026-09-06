@@ -1,0 +1,45 @@
+# Experiment: E2 external-volume xctest restriction: device vs path
+# Date: 2026-09-06T19:16:47Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+cases: B F
+
+==================== CASE B-external-device-under-Volumes ====================
+DerivedData: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B
+volume-device: /dev/disk3s1
+Mount Point:               /Volumes/<vault>
+File System Personality:   Case-sensitive APFS
+Owners:                    Enabled
+Protocol:                  USB
+Device Location:           External
+Removable Media:           Fixed
+xcodebuild exit=65 verdict=FAIL
+	xctest (67497) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+** TEST FAILED **
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+==================== CASE F-diskimage-backed-by-external-device ====================
+DerivedData: /Volumes/XCVE2ONEXT 1/DD-F
+volume-device: /dev/disk11s1
+Mount Point:               /Volumes/XCVE2ONEXT 1
+File System Personality:   APFS
+Owners:                    Disabled
+Protocol:                  Disk Image
+Device Location:           External
+Removable Media:           Removable
+xcodebuild exit=0 verdict=PASS
+--- swift test --scratch-path (second runner) ---
+E2-EVIDENCE framework-loaded-from: /Volumes/XCVE2ONEXT 1/DD-F/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+E2-EVIDENCE test-bundle: /Volumes/XCVE2ONEXT 1/DD-F/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
+swift-test verdict=PASS
+
+==================== SUMMARY ====================
+B-external-device-under-Volumes | xcodebuild-test=FAIL (exit 65) | swift-test=PASS | /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B
+F-diskimage-backed-by-external-device | xcodebuild-test=PASS (exit 0) | swift-test=PASS | /Volumes/XCVE2ONEXT 1/DD-F
