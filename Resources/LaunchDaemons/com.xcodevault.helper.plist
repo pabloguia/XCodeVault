@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- SMAppService.daemon(plistName: "com.xcodevault.helper.plist"). BundleProgram is relative to
+         the app bundle; no SMPrivilegedExecutables / SMAuthorizedClients (SMJobBless-era keys). -->
+    <key>Label</key>
+    <string>com.xcodevault.helper</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/xcodevault-helper</string>
+    <key>MachServices</key>
+    <dict>
+        <key>com.xcodevault.helper</key>
+        <true/>
+    </dict>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.xcodevault.app</string>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

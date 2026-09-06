@@ -27,12 +27,25 @@ Design the CLI as a first-class citizen — the GUI calls the same shared domain
 it does not reimplement CLI logic. Provide `--json` output for automation on every
 read command.
 
-Candidate command surface (adjust as the domain model solidifies; keep this list in
-sync with actual `--help` output):
+Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep in sync):
 
-`scan`, `status`, `plan`, `externalize`, `restore`, `clean`, `doctor`, `verify`,
-`mount status`, `runtime list`, `runtime download`, `runtime install`,
-`runtime offload`, `xcode list`, `compatibility`, `report`.
+- Read-only (all `--json`): `scan`, `status`, `report`, `doctor`, `xcode list`,
+  `runtime list`, `runtime library --dir`, `volumes`, `compatibility`, `locations show`,
+  `journal`, `vault status`, `migration status`, `bench <dir>`.
+- Changing (each journaled; dry-run/plan by default where meaningful):
+  `clean [--category …] [--apply] [--trash] [--force]`,
+  `runtime delete <id> [--keep-asset] [--dry-run] --yes`,
+  `runtime export <platform> --to <dir> [--build-version] [--arch]`,
+  `runtime import <dmg>`, `runtime offload <id> --library <dir> --yes`,
+  `locations set-derived-data|set-archives|set-compilation-cache <path>` and `reset-*`,
+  `vault init <mount>`, `vault forget <uuid>`,
+  `externalize --category archives --vault <ref> [--apply] [--remove-source-after-verify
+  --i-confirm-deleting-non-regenerable-data]`, `restore --category … --vault … --name … [--to …] --apply`,
+  `migration abort <id>`.
+- Not implemented (from the original candidate list): `plan` (folded into each command's
+  dry run), `verify` (folded into externalize/restore; a standalone re-verify is a follow-up),
+  `mount status` (no canonical-mount strategy in v1, ADR-0004), `runtime install`
+  (= `runtime import`).
 
 ## Doctor subsystem
 

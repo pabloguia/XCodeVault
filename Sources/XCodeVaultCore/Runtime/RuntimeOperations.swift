@@ -162,6 +162,6 @@ public struct RuntimeOperations: Sendable {
     public static func installer(for runtime: SimulatorRuntime, in library: [RuntimeInstaller]) -> RuntimeInstaller? {
         let platformMap = ["iphone": "iOS", "watch": "watchOS", "appletv": "tvOS", "xr": "visionOS", "vision": "visionOS"]
         guard let plat = platformMap[runtime.platformName], let ver = runtime.version else { return nil }
-        return library.first { $0.platform?.caseInsensitiveCompare(plat) == .orderedSame && $0.version == ver && $0.sizeBytes > 500_000_000 }
+        return library.first { $0.platform?.caseInsensitiveCompare(plat) == .orderedSame && $0.version == ver && $0.sizeBytes > 500_000_000 && ($0.build == nil || runtime.build == nil || $0.build == runtime.build) }
     }
 }

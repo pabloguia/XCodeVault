@@ -3,7 +3,12 @@ import Foundation
 
 /// One deletion the cleaner proposes. Always a whole path; never a shell command.
 public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
+    public enum Method: String, Sendable, Codable {
+        case removePath                 // FileManager.removeItem / trash
+        case simctlDeleteAllInDeviceSet // `xcrun simctl --set <path> delete all` (the path is the catalog path, never client input)
+    }
     public var id: String { path }
+    public var method: Method = .removePath
     public var categoryID: String
     public var categoryName: String
     public var path: String
@@ -18,6 +23,7 @@ public struct CleanPlan: Sendable, Codable, Equatable {
     public var actions: [CleanAction]
     public var skipped: [String]          // human-readable reasons for things not planned
     public var warnings: [String]
+    public init(actions: [CleanAction], skipped: [String], warnings: [String]) { self.actions = actions; self.skipped = skipped; self.warnings = warnings }
     public var totalBytes: UInt64 { actions.reduce(0) { $0 + $1.bytes } }
     public var userActions: [CleanAction] { actions.filter { !$0.requiresRoot } }
     public var rootActions: [CleanAction] { actions.filter { $0.requiresRoot } }
@@ -30,6 +36,8 @@ public struct CleanPlan: Sendable, Codable, Equatable {
 public struct CleanPlanner: Sendable {
     public var home: String
     public init(home: String = NSHomeDirectory()) { self.home = home }
+    /// Categories that are CoreSimulator device sets: emptied with `simctl --set <path> delete all`, not rm.
+    public static let deviceSetCategories: Set<String> = ["xctestDevices", "playgroundDevices", "previews"]
 
     /// - Parameters:
     ///   - report: a scan with sizes measured.
@@ -47,11 +55,13 @@ public struct CleanPlanner: Sendable {
             if item.isSymlink { skipped.append("\(item.path): is a symlink (→ \(item.symlinkTarget ?? "?")) — fix with doctor first, nothing is deleted through symlinks"); continue }
             if item.isMountPoint { skipped.append("\(item.path): is a mount point — never cleaned"); continue }
             guard item.allocatedBytes > 0 else { continue }
+            if let mounts = item.usage?.skippedMountPoints, !mounts.isEmpty { skipped.append("\(item.path): contains mount points (\(mounts.joined(separator: ", "))) — never cleaned"); continue }
             let children = granular && ["derivedData", "deviceSupport"].contains(c.id) ? childActions(of: item, category: c) : nil
             if let children, !children.isEmpty {
                 actions += children
             } else {
-                actions.append(CleanAction(categoryID: c.id, categoryName: c.name, path: item.path, bytes: item.allocatedBytes,
+                let method: CleanAction.Method = CleanPlanner.deviceSetCategories.contains(c.id) ? .simctlDeleteAllInDeviceSet : .removePath
+                actions.append(CleanAction(method: method, categoryID: c.id, categoryName: c.name, path: item.path, bytes: item.allocatedBytes,
                                            isExperimental: c.isExperimental, risk: c.deletionRisk, requiresRoot: c.privilege == .root,
                                            notes: c.notes))
             }
@@ -107,10 +117,11 @@ public struct CleanExecutor: Sendable {
     public var home: String
     public var useTrash: Bool
     public var isXcodeRunning: @Sendable () -> Bool
+    public var runner: CommandRunning
 
     public init(journal: Journal = Journal(), home: String = NSHomeDirectory(), useTrash: Bool = false,
-                isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning) {
-        self.journal = journal; self.home = home; self.useTrash = useTrash; self.isXcodeRunning = isXcodeRunning
+                isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning, runner: CommandRunning = ProcessCommandRunner()) {
+        self.journal = journal; self.home = home; self.useTrash = useTrash; self.isXcodeRunning = isXcodeRunning; self.runner = runner
     }
 
     public static func xcodeIsRunning() -> Bool {
@@ -130,8 +141,15 @@ public struct CleanExecutor: Sendable {
                 try preflight(a)
                 try journal.record(id: opID, kind: .clean, state: .started, summary: "delete \(a.path)", paths: [a.path], bytes: a.bytes)
                 let url = URL(fileURLWithPath: a.path)
-                if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
-                else { try FileManager.default.removeItem(at: url) }
+                switch a.method {
+                case .simctlDeleteAllInDeviceSet:
+                    // Device sets are CoreSimulator state: let simctl shut down and delete the devices, then remove leftovers.
+                    try runner.check(Tools.xcrun, ["simctl", "--set", a.path, "delete", "all"])
+                    if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) } else { try FileManager.default.removeItem(at: url) }
+                case .removePath:
+                    if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+                    else { try FileManager.default.removeItem(at: url) }
+                }
                 deleted.append(a)
             } catch {
                 failed.append(.init(path: a.path, error: "\(error)"))
@@ -150,11 +168,12 @@ public struct CleanExecutor: Sendable {
         guard (st.st_mode & S_IFMT) != S_IFLNK else { throw CleanError("\(a.path) is a symlink — refusing") }
         guard !MountStatus.isMountPoint(a.path) else { throw CleanError("\(a.path) is a mount point — refusing") }
         guard st.st_uid == getuid() else { throw CleanError("\(a.path) is not owned by the current user — refusing") }
-        // The path must be inside a catalog template for its category (defense in depth against a corrupted plan).
-        guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup),
-              c.pathTemplates.map({ $0.expandingTilde(home: home) }).contains(where: { a.path == $0 || a.path.hasPrefix($0 + "/") })
-        else { throw CleanError("\(a.path) is not inside an approved cleanup category path — refusing") }
-        let forbidden = CatalogRules.neverSymlink.map { $0.expandingTilde(home: home) }
-        guard !forbidden.contains(a.path) else { throw CleanError("\(a.path) is a protected directory — refusing") }
+        // The path must be inside a catalog template for its category, by canonical path (no `..`, no interior symlinks).
+        guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup) else { throw CleanError("\(a.path): category is not cleanable — refusing") }
+        do { try PathSafety.requireContained(a.path, in: c.pathTemplates, home: home, what: "cleanup category") } catch { throw CleanError("\(error) — refusing") }
+        let canonical = try PathSafety.canonicalize(a.path)
+        let forbidden = CatalogRules.neverSymlink.compactMap { try? PathSafety.canonicalize($0.expandingTilde(home: home)) }
+        guard !forbidden.contains(canonical) else { throw CleanError("\(a.path) is a protected directory — refusing") }
+        if let u = DiskUsage.measure(a.path), !u.skippedMountPoints.isEmpty { throw CleanError("\(a.path) contains mount points (\(u.skippedMountPoints.joined(separator: ", "))) — refusing") }
     }
 }

@@ -16,7 +16,7 @@ struct XCodeVaultCTL: ParsableCommand {
             """,
         version: XCodeVaultVersion.current,
         subcommands: [Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self,
-                      Clean.self, Locations.self, JournalCommand.self],
+                      Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self],
         defaultSubcommand: Status.self)
 }
 
@@ -61,7 +61,8 @@ struct Report: ParsableCommand {
     struct Bundle: Encodable { let scan: ScanReport; let findings: [Finding] }
     func run() throws {
         let report = XCodeVaultCore.Scanner().scan()
-        let findings = XCodeVaultCore.Doctor().diagnose(report: report)
+        let doctor = XCodeVaultCore.Doctor()
+        let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
         let home = report.host.homeDirectory
         let user = report.host.userName
         func redact(_ s: String) -> String { s.replacingOccurrences(of: home, with: "~").replacingOccurrences(of: user, with: "<user>") }
@@ -75,7 +76,8 @@ struct DoctorCommand: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: false).scan()
-        let findings = XCodeVaultCore.Doctor().diagnose(report: report)
+        let doctor = XCodeVaultCore.Doctor()
+        let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
         try emit(findings, json: global.json) { TextRenderer.findings(findings) }
         if findings.contains(where: { $0.severity >= .error }) { throw ExitCode(2) }
     }

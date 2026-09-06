@@ -41,9 +41,16 @@ public struct Journal: Sendable {
         if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
         let fh = try FileHandle(forWritingTo: url)
         defer { try? fh.close() }
+        // Cross-process exclusion (CLI and GUI may both append).
+        guard flock(fh.fileDescriptor, LOCK_EX) == 0 else { throw CommandError(executable: "flock", arguments: [url.path], result: nil, underlying: String(cString: strerror(errno))) }
+        defer { flock(fh.fileDescriptor, LOCK_UN) }
+        e.sequence = (try? entries().last?.sequence).flatMap { $0 }.map { $0 + 1 } ?? 1
+        let enc2 = JSONEncoder(); enc2.dateEncodingStrategy = .iso8601; enc2.outputFormatting = [.sortedKeys]
+        var line2 = try enc2.encode(e); line2.append(0x0A)
         try fh.seekToEnd()
-        try fh.write(contentsOf: line)
+        try fh.write(contentsOf: line2)
         try fh.synchronize()
+        _ = line
         return e
     }
 

@@ -1,26 +1,34 @@
 import Foundation
 
-/// Xcode ▸ Settings ▸ Locations as user defaults. Verified on Xcode 26.5 (E8b evidence):
-/// `IDECustomDerivedDataLocation` is honoured by `xcodebuild` (it creates ModuleCache.noindex,
-/// CompilationCache.noindex, SDKStatCaches.noindex and per-project folders under it), and an
-/// explicit `-derivedDataPath` still overrides it. Archive/compilation-cache keys are recorded
-/// as they are verified; unverified keys are refused rather than guessed.
+/// Xcode ▸ Settings ▸ Locations as user defaults. Mechanism reproduced on Xcode 26.5 — status
+/// per COMPATIBILITY_MATRIX.md: DerivedData and Archives *probable*, compilation cache
+/// *experimental*; none has met the Definition of Done yet
+/// (docs/research/evidence/e8b-*.txt and docs/research/LOCATIONS-KEYS-2026-09-06.md):
+/// - `IDECustomDerivedDataLocation`: honoured by xcodebuild; absolute = "Custom", a relative
+///   value silently means "Relative to project", so we only ever write absolute paths.
+/// - `IDECustomDistributionArchivesLocation`: honoured by `xcodebuild archive` (adds
+///   `YYYY-MM-DD/<Scheme> <date>.xcarchive` under it).
+/// - `IDECustomCompilationCacheLocation` (Xcode ≥ 26): honoured (`-cas-path <dir>/builtin`).
+/// `IDEDerivedDataPathOverride` / `IDEArchivePathOverride` are per-invocation overrides and are
+/// never persisted.
 public struct XcodeLocations: Sendable, Codable, Equatable {
     public var derivedData: String?          // nil = default (~/Library/Developer/Xcode/DerivedData)
-    public var buildLocationStyle: String?   // Shared | Unique | Custom | … (informational)
+    public var buildLocationStyle: String?   // Unique (default) | Shared | Custom | DeterminedByTargets
     public var archives: String?             // nil = default (~/Library/Developer/Xcode/Archives)
+    public var compilationCache: String?     // nil = default (<DerivedData>/CompilationCache.noindex), Xcode 26+
 
     public static let domain = "com.apple.dt.Xcode"
-    public static let derivedDataKey = "IDECustomDerivedDataLocation"       // verified E8b
-    public static let buildLocationStyleKey = "IDEBuildLocationStyle"       // observed E8
-    public static let archivesKey = "IDECustomDistributionArchivesLocation" // unverified — read-only until proven
+    public static let derivedDataKey = "IDECustomDerivedDataLocation"            // reproduced E8b (probable)
+    public static let buildLocationStyleKey = "IDEBuildLocationStyle"            // observed E8
+    public static let archivesKey = "IDECustomDistributionArchivesLocation"      // reproduced (LOCATIONS-KEYS report; probable)
+    public static let compilationCacheKey = "IDECustomCompilationCacheLocation"  // reproduced (LOCATIONS-KEYS report); Xcode 26+, experimental
 
     public static func read(runner: CommandRunning = ProcessCommandRunner()) -> XcodeLocations {
         func get(_ k: String) -> String? {
             guard let r = try? runner.run(Tools.defaults, ["read", domain, k]), r.succeeded else { return nil }
             let v = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines); return v.isEmpty ? nil : v
         }
-        return XcodeLocations(derivedData: get(derivedDataKey), buildLocationStyle: get(buildLocationStyleKey), archives: get(archivesKey))
+        return XcodeLocations(derivedData: get(derivedDataKey), buildLocationStyle: get(buildLocationStyleKey), archives: get(archivesKey), compilationCache: get(compilationCacheKey))
     }
 
     public struct Change: Sendable, Equatable {
@@ -31,6 +39,16 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
 
     /// Preflight for pointing DerivedData at `path`. Returns warnings; throws on blockers.
     public static func preflightDerivedData(path: String?, volumes: [Volume], xcodeRunning: Bool, acknowledgeExternalTests: Bool) throws -> [String] {
+        try preflightLocation(path: path, volumes: volumes, xcodeRunning: xcodeRunning, acknowledgeExternalTests: acknowledgeExternalTests, warnsAboutTests: true)
+    }
+
+    /// Preflight for the Archives root. Archives are non-regenerable: an absent volume means Xcode
+    /// cannot archive, but nothing is lost; the E2 test restriction does not apply.
+    public static func preflightArchives(path: String?, volumes: [Volume], xcodeRunning: Bool) throws -> [String] {
+        try preflightLocation(path: path, volumes: volumes, xcodeRunning: xcodeRunning, acknowledgeExternalTests: true, warnsAboutTests: false)
+    }
+
+    static func preflightLocation(path: String?, volumes: [Volume], xcodeRunning: Bool, acknowledgeExternalTests: Bool, warnsAboutTests: Bool) throws -> [String] {
         if xcodeRunning { throw RuntimeOperationError("Xcode.app is running; it caches Locations and may overwrite the change. Quit Xcode first.") }
         guard let path else { return [] }
         var isDir: ObjCBool = false
@@ -38,15 +56,20 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { throw RuntimeOperationError("\(path) is not an existing directory.") }
         guard FileManager.default.isWritableFile(atPath: path) else { throw RuntimeOperationError("\(path) is not writable.") }
         var w: [String] = []
+        if path.hasPrefix("/Volumes/") {
+            let top = "/Volumes/" + path.split(separator: "/", omittingEmptySubsequences: true).dropFirst().first.map(String.init)!
+            guard MountStatus.isMountPoint(top) else { throw RuntimeOperationError("\(top) is a plain directory, not a mounted volume — pointing Xcode there would write shadow data to the internal disk. Connect the volume (and check `doctor`) first.") }
+        }
         let fs = MountStatus.filesystem(containing: path)
         if let fs, fs.typeName != "apfs" { w.append("\(path) is on a \(fs.typeName) filesystem; Xcode expects APFS/HFS+ semantics.") }
         let vol = volumes.first { $0.mountPoint == fs?.mountPoint }
         let external = (vol?.isExternal ?? false) || path.hasPrefix("/Volumes/")
-        if external {
+        if external && warnsAboutTests {
             let msg = "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (E2, reproduced) — unit tests will break for projects built here. Disk images and internal volumes are unaffected."
             guard acknowledgeExternalTests else { throw RuntimeOperationError(msg + " Re-run with --i-understand-tests-may-fail to proceed anyway.") }
             w.append(msg)
         }
+        if external { w.append("If this volume is disconnected, Xcode's behaviour is not yet verified (E6 pending): it may fail or recreate data locally. Run `xcodevaultctl doctor` after reconnecting to detect shadow data.") }
         if let vol, !vol.ownersEnabled { w.append("Ownership is ignored on \(vol.volumeName); enable it with `diskutil enableOwnership`.") }
         return w
     }

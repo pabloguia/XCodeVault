@@ -56,7 +56,7 @@ run_case() {  # run_case <label> <derivedDataPath>
 }
 
 attach_image() {  # attach_image <img> [<mountpoint>] [extra hdiutil flags…] → echoes mount point
-  local img="$1" mp="${2:-}"; shift 2 2>/dev/null; local extra=("$@")
+  local img="$1" mp="${2:-}"; if [ $# -ge 2 ]; then shift 2; else shift; fi; local extra=("$@")
   if [ -n "$mp" ]; then mkdir -p "$mp"; hdiutil attach -quiet -nobrowse -mountpoint "$mp" "${extra[@]}" "$img" || return 1
   else mp=$(hdiutil attach -plist "${extra[@]}" "$img" 2>/dev/null | python3 -c 'import plistlib,sys; d=plistlib.loads(sys.stdin.buffer.read()); print(next(e["mount-point"] for e in d["system-entities"] if e.get("mount-point")))' 2>/dev/null); [ -n "$mp" ] || return 1; fi
   sleep 1; echo "$mp"

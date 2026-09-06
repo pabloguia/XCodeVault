@@ -5,7 +5,8 @@ post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
 
-**M1 — honest accounting: done (first cut, committed).** M2 (supported mechanisms) is next.
+**M3 — disconnect safety: implemented, under independent review.** M1 and M2 are committed.
+M4 GUI first slice builds and launches; M5 (signing/notarization/release) not started.
 
 ## Done
 
@@ -36,11 +37,34 @@ post-compaction continuation. Update it as milestones move._
   MobileAssets, unavailable devices, DerivedData-on-external warning, xcode-select, OS floor.
   31 unit tests green; `scan` on the dev Mac ≈ 22 s.
 
+- **M2 (committed):** journaled `clean` (granular, safeCleanup-only, Apple-tool categories
+  never filesystem-deleted), `runtime delete/export/import/library/offload` (feature-detected,
+  E11 staging preflight), `locations show/set-*/reset-*` for DerivedData, Archives (verified),
+  compilation cache (Xcode 26, experimental). E8b + Locations-keys evidence in the matrix.
+- **M3 (uncommitted, review in flight):** `VaultRegistry`/`VaultVerifier` (UUID + sentinel;
+  states verified/absent/movedMountPoint/foreign/ambiguous/sentinelMissing), `TreeVerifier`
+  (topology, mode, symlink targets, xattrs, SHA-256), `MigrationEngine` (plan → copy via ditto
+  → verify → explicit re-verified source removal; abort; refuses while an interrupted migration
+  exists), doctor rules for shadow `/Volumes/<name>` dirs, absent/foreign vaults, interrupted
+  journal ops, Locations pointing at absent volumes. `vault init/status/forget`, `externalize`,
+  `restore`, `migration status/abort`, `bench` (E10, heuristic verdicts). 55 unit tests incl.
+  fault injection (source mutation mid-copy, destination vanishing, corrupted copy, crash
+  between COPY and VERIFY).
+- **Helper skeleton (uncommitted, security review in flight):** `XCodeVaultHelperProtocol`
+  (three allowlisted verbs, fixed paths, NSSecureCoding result), `xcodevault-helper` daemon
+  (code-signing requirement set before resume; refuses to serve without a baked team id),
+  launchd plist for `SMAppService.daemon`. Not yet wired into the CLI/GUI (needs a signed bundle).
+- **M4 first slice:** SwiftUI app (Overview / Storage / Doctor / Clean / Volumes / Runtimes /
+  Journal) on the same Core; `scripts/bundle-app.sh` assembles `dist/XCodeVault.app`
+  (unsigned) — launches.
+
 ## In flight
 
-- E2 follow-up: `log show` capture of TCC/sandbox denials during the failing USB case
-  (`XCV_E2_CASES="B F"` rerun) to name the mechanism; case F (disk image backed by the USB
-  device) had a harness bug in the first run, fixed.
+- Independent reviews (migration-safety on M2/M3; helper-security on the daemon skeleton) —
+  address findings, then commit with Reviewed-by trailers.
+- E2 full rerun (adds C3 owners-on and F image-on-USB cases; both passed in partial runs, so
+  ownership and the physical I/O path are also excluded as discriminators). Unified-log queries
+  for TCC/sandbox denials returned nothing — mechanism still unnamed.
 
 ## Blocked / pending — manual (ask the user)
 
@@ -53,12 +77,10 @@ post-compaction continuation. Update it as milestones move._
 
 ## Next three actions
 
-1. **M2:** `xcodevaultctl clean --plan/--apply` for user-domain regenerable categories with a
-   dry-run default and journaled deletion; `runtime list/download/offload` wrapping
-   `-downloadPlatform -exportPath` / `-importPlatform` / `simctl runtime delete` with
-   feature-detection and the E11 staging-space check; `locations` to read/write Xcode's
-   DerivedData/Archives settings with the E2 warning.
-2. Test the `IDECustomDerivedDataLocation` write path against `xcodebuild -showBuildSettings`
-   (E8 remainder) and record in the matrix.
-3. **M3 groundwork:** volume identity (UUID + sentinel), journal format, and the fault-injection
-   test harness on scratch disk images.
+1. Land review findings; commit M3 + helper skeleton + GUI slice; run `swift test` on CI once a
+   remote exists (user decision: repo creation is public — ask first).
+2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
+   the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
+   signed bundle — cannot be tested unsigned.
+3. **M5:** Developer ID signing + notarization + stapling in `scripts/release.sh`, Homebrew Cask
+   formula draft, in-app uninstall (`unregister()`), diagnostic bundle (`report --json`).

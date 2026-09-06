@@ -53,3 +53,17 @@ journals, `.claude/`), not in any one conversation.
   inertia.
 - Keep the repo buildable at every commit; run tests continuously; commit logical,
   reviewed increments rather than large unreviewed dumps.
+
+
+## Observations from the first implementation session (2026-09-06)
+
+- Project-level `.claude/agents/*.md` are picked up at session start; agents created mid-session
+  are not offered to the Agent tool until the next session. Until then, dispatch a
+  `general-purpose` agent with the agent file's instructions pasted in — that is how the M2/M3
+  migration-safety and helper-security reviews were run.
+- Writing files through shell heredocs bypasses the `Edit|Write` hooks. When a file under
+  `Sources/XCodeVaultHelper*` is produced that way, run `.claude/hooks/helper-guard.sh`
+  manually (see the M3 commit) — or use the Write tool.
+- Long experiments (E2 ≈ 15 min) should run in the background with output redirected to a
+  file; the evidence file name must include the case list when a subset is run, or a rerun
+  overwrites the full-run evidence (fixed in `e2-external-xctest.sh`).

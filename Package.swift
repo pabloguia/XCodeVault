@@ -8,6 +8,8 @@ let package = Package(
     products: [
         .library(name: "XCodeVaultCore", targets: ["XCodeVaultCore"]),
         .executable(name: "xcodevaultctl", targets: ["xcodevaultctl"]),
+        .executable(name: "xcodevault-helper", targets: ["XCodeVaultHelper"]),
+        .executable(name: "XCodeVault", targets: ["XCodeVault"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -16,6 +18,24 @@ let package = Package(
         // The single shared domain layer. No UI, no privileged calls, no shell.
         .target(
             name: "XCodeVaultCore",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // XPC protocol shared by client and daemon. Nothing else crosses the boundary.
+        .target(
+            name: "XCodeVaultHelperProtocol",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Root LaunchDaemon (SMAppService.daemon). Allowlisted verbs only; no Process, no shell —
+        // enforced by .claude/hooks/helper-guard.sh and the helper-security-reviewer.
+        .executableTarget(
+            name: "XCodeVaultHelper",
+            dependencies: ["XCodeVaultHelperProtocol"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // SwiftUI app — a projection of XCodeVaultCore; bundled by scripts/bundle-app.sh.
+        .executableTarget(
+            name: "XCodeVault",
+            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(

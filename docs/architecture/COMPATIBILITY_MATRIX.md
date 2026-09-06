@@ -80,15 +80,17 @@ those entries "pending — manual" until someone actually runs and records the r
 - Result: **fail on the physical USB APFS SSD** (under `/Volumes` and via an internal symlink):
   `xctest … Failed to create a bundle instance representing '…/E2LibTests.xctest'`;
   **pass** on the internal disk and on every APFS disk image (case-insensitive and
-  case-sensitive, at `/Volumes` and at `$HOME/...`, including a hidden `.TemporaryItems/…`
-  path). `swift test` passed everywhere, including on the USB SSD.
+  case-sensitive, at `/Volumes` and at `$HOME/...`, hidden `.TemporaryItems/…` path, attached
+  with `-owners on`, and with the image file itself stored on the USB SSD). `swift test`
+  passed everywhere, including on the USB SSD. Nine cases total, two runs.
 - Evidence: `../research/evidence/e2-macos26.6.2-25G83-xcode26.5-x86_64.txt`
 - Functional checks: xcodebuild ✓ (the probe itself); simulator N/A; physical device N/A
 - Verdict: H6 **probable, device-based**. DerivedData-on-external is `nativeConfiguration`
   with a mandatory pre-action warning; canonical mount gains no advantage for this category.
 - Notes: only one physical device tested (USB, Case-sensitive APFS, owners enabled,
-  DiskArbitration External/Fixed). Pending: Thunderbolt NVMe, Apple Silicon, the Xcode IDE
-  runner, and the `log show` TCC/sandbox capture (see evidence file tail).
+  DiskArbitration External/Fixed). Unified-log queries (TCC subsystem, sandboxd, kernel deny,
+  xctest process) during the failing run returned nothing — mechanism unnamed. Pending:
+  Thunderbolt NVMe, Apple Silicon, the Xcode IDE runner, a second physical device.
 
 ### E8 official mechanisms feature detection — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
 
@@ -124,3 +126,36 @@ those entries "pending — manual" until someone actually runs and records the r
   DerivedData (`CompilationCache.noindex`) by default, so it moves with it.
 - Notes: Archives key (`IDECustomDistributionArchivesLocation` or `IDEArchivePathOverride`)
   not yet write-tested — `xcodevaultctl locations` treats it as read-only until then.
+
+### Xcode Locations keys (E8c) — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-06
+- Hypothesis reference: H4
+- Test performed: `strings` over IDEFoundation/IDEKit/DVTFoundation to enumerate real key
+  names, then `xcodebuild -Key=value` probes on a throwaway package (no defaults written).
+  Report: `../research/LOCATIONS-KEYS-2026-09-06.md`.
+- Result: pass — `IDECustomDerivedDataLocation` (absolute = Custom; relative = "Relative to
+  project", tilde expanded), `IDECustomDistributionArchivesLocation` (`xcodebuild archive`
+  lands under `<root>/YYYY-MM-DD/`), `IDECustomCompilationCacheLocation` (Xcode 26;
+  swiftc receives `-cas-path <root>/builtin`), `IDEBuildLocationStyle` ∈ Unique/Shared/Custom/
+  DeterminedByTargets, `IDECustomBuildLocationType`, `IDECustomBuildProductsPath`,
+  `IDECustomBuildIntermediatesPath`, `IDESharedBuildFolderName`. `IDEDerivedDataPathOverride` /
+  `IDEArchivePathOverride` are per-invocation only. Xcode 26 also has
+  `IDEDerivedDataDisappeared*` keys — it detects a vanished DerivedData folder itself.
+- Evidence: `../research/LOCATIONS-KEYS-2026-09-06.md` (§2 raw strings, §3 probes)
+- Functional checks: xcodebuild ✓ (build, archive, compilation cache)
+- Verdict: `archives` / `nativeConfiguration` **probable**; compilation cache **experimental**
+  (Xcode 26 only, size-key unit unknown). Xcode 16 agreement is inferred from unchanged key
+  names — mark pending until a macOS 15 / Xcode 16 run records it (CI `macos-15` job can).
+- Notes: XCodeVault writes absolute POSIX paths only, via `defaults`, with Xcode closed.
+
+### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
+
+| Experiment | Gates | Status |
+|---|---|---|
+| E1 mount half | H8 | pending — manual (root) |
+| E6 surprise removal | H3, disconnect safety DoD | pending — manual (hardware); harness = `vault`/`externalize`/`migration` commands + fault-injection unit tests |
+| E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
+| E8 export/import round trip | H4 | pending — manual (needs ≥ 40 GB free) |
+| E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
+| E11 staging space | Runtime Library UX | pending — manual |
