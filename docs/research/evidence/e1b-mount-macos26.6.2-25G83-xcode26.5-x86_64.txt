@@ -1,0 +1,9 @@
+# Experiment: E1 mount half: root mounts a scratch APFS volume over /Library/Developer/xcv-probe (admin prompt via osascript)
+# Date: 2026-09-06T20:20:44Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# scratch device: disk9s1 (2 GB sparse image, attached -nomount)

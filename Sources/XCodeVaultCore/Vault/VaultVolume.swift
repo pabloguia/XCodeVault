@@ -3,16 +3,31 @@ import Foundation
 /// A registered external volume. Identity is the APFS volume UUID plus a sentinel file we wrote;
 /// the mount point is only where we last saw it (MIGRATION_ENGINE.md §Split-brain safety).
 public struct VaultVolume: Sendable, Codable, Equatable, Identifiable {
+    public init(volumeUUID: String, volumeName: String, lastMountPoint: String, registeredAt: Date, sentinelID: String, relativeDirectory: String = VaultVolume.directoryName) {
+        self.volumeUUID = volumeUUID; self.volumeName = volumeName; self.lastMountPoint = lastMountPoint; self.registeredAt = registeredAt
+        self.sentinelID = sentinelID; self.relativeDirectory = relativeDirectory
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        volumeUUID = try c.decode(String.self, forKey: .volumeUUID); volumeName = try c.decode(String.self, forKey: .volumeName)
+        lastMountPoint = try c.decode(String.self, forKey: .lastMountPoint); registeredAt = try c.decode(Date.self, forKey: .registeredAt)
+        sentinelID = try c.decode(String.self, forKey: .sentinelID)
+        relativeDirectory = try c.decodeIfPresent(String.self, forKey: .relativeDirectory) ?? VaultVolume.directoryName
+    }
     public var id: String { volumeUUID }
     public var volumeUUID: String
     public var volumeName: String
     public var lastMountPoint: String
     public var registeredAt: Date
     public var sentinelID: String  // random token stored in the sentinel file
+    /// Vault directory relative to the volume root. Default "XcodeVault"; volume roots are usually
+    /// root-owned, so users without the privileged helper may register a subdirectory they can write.
+    public var relativeDirectory: String
 
     public static let directoryName = "XcodeVault"
     public static let sentinelName = ".xcodevault-volume.json"
-    public var lastVaultDirectory: String { lastMountPoint + "/" + VaultVolume.directoryName }
+    public var lastVaultDirectory: String { lastMountPoint + "/" + relativeDirectory }
+    public func vaultDirectory(atMountPoint mp: String) -> String { mp + "/" + relativeDirectory }
 }
 
 public struct VaultSentinel: Sendable, Codable, Equatable {
@@ -65,15 +80,20 @@ public struct VaultRegistry: Sendable {
         try enc.encode(volumes).write(to: url, options: .atomic)
     }
 
-    /// Registers a mounted, qualified volume: creates `<mount>/XcodeVault/` and the sentinel.
-    /// Refuses unsuitable volumes and the boot volume.
+    /// Registers a mounted, qualified volume: creates `<mount>/<relativeDirectory>/` (default
+    /// `XcodeVault`) and the sentinel. Refuses unsuitable volumes, the boot volume, and any
+    /// directory that escapes the volume.
     @discardableResult
-    public func register(_ v: Volume, journal: Journal = Journal()) throws -> VaultVolume {
+    public func register(_ v: Volume, relativeDirectory: String = VaultVolume.directoryName, journal: Journal = Journal()) throws -> VaultVolume {
         guard let mp = v.mountPoint, let uuid = v.volumeUUID else { throw VaultError("Volume has no mount point or UUID.") }
         let q = VolumeQualification.evaluate(v)
         guard q.verdict != .unsuitable else { throw VaultError("Volume \(v.volumeName) is not suitable: \(q.blockers.joined(separator: " "))") }
         guard MountStatus.isMountPoint(mp) else { throw VaultError("\(mp) is not a mount point.") }
-        let dir = mp + "/" + VaultVolume.directoryName
+        let rel = relativeDirectory.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !rel.isEmpty, !rel.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { throw VaultError("Invalid vault directory '\(relativeDirectory)'.") }
+        let dir = mp + "/" + rel
+        guard PathSafety.isContained(dir, in: mp) else { throw VaultError("\(dir) is not inside \(mp).") }
+        if rel.hasPrefix(".TemporaryItems") { try journal.record(kind: .migration, state: .planned, summary: "warning: vault directory under .TemporaryItems is not durable (macOS may purge it)", paths: [dir]) }
         let sentinelPath = dir + "/" + VaultVolume.sentinelName
         var existing = try volumes()
         if let already = existing.first(where: { $0.volumeUUID == uuid }) {
@@ -91,7 +111,7 @@ public struct VaultRegistry: Sendable {
         let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)
-        let vv = VaultVolume(volumeUUID: uuid, volumeName: v.volumeName, lastMountPoint: mp, registeredAt: Date(), sentinelID: sentinel.sentinelID)
+        let vv = VaultVolume(volumeUUID: uuid, volumeName: v.volumeName, lastMountPoint: mp, registeredAt: Date(), sentinelID: sentinel.sentinelID, relativeDirectory: rel)
         existing.append(vv)
         try save(existing)
         try journal.record(kind: .migration, state: .completed, summary: "registered vault volume \(v.volumeName) (\(uuid))", paths: [dir])
@@ -128,11 +148,11 @@ public struct VaultVerifier: Sendable {
         let mounted = mountedVolumes()
         // 1. Is the volume (by UUID) mounted anywhere?
         if let live = mounted.first(where: { $0.volumeUUID == v.volumeUUID }), let mp = live.mountPoint, isMountPoint(mp) {
-            let sentinel = VaultVerifier.readSentinel(at: mp + "/" + VaultVolume.directoryName)
+            let sentinel = VaultVerifier.readSentinel(at: v.vaultDirectory(atMountPoint: mp))
             guard let sentinel else {
                 return VaultVolumeCheck(
                     volume: v, state: .sentinelMissing, currentMountPoint: mp, shadowBytes: nil,
-                    detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(VaultVolume.directoryName)/\(VaultVolume.sentinelName) is missing.")
+                    detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(v.relativeDirectory)/\(VaultVolume.sentinelName) is missing.")
             }
             guard sentinel.sentinelID == v.sentinelID, sentinel.volumeUUID == v.volumeUUID else {
                 return VaultVolumeCheck(
@@ -180,6 +200,6 @@ public struct VaultVerifier: Sendable {
         }
         let c = check(v)
         guard c.isUsable, let mp = c.currentMountPoint else { throw VaultError("Vault volume \(v.volumeName) is \(c.state.rawValue): \(c.detail)") }
-        return (v, mp + "/" + VaultVolume.directoryName)
+        return (v, v.vaultDirectory(atMountPoint: mp))
     }
 }

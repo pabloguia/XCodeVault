@@ -1,0 +1,215 @@
+# Experiment: E8b/E11: runtime export of tvOS to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary with internal staging monitor (floor 1536 MB)
+# Date: 2026-09-06T20:28:12Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+## preflight
+$ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime export tvOS --to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary --preflight
+! Only 13,16 GB free on the internal volume. Downloads may stage internally before export (E11 — unverified); watch for ENOSPC.
+preflight OK
+[exit=0]
+
+internal free at start: 12547 MB; library volume free: 344489 MB
+t=   5s internal_free=  12545 MB (Δ     -2 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  10s internal_free=  12542 MB (Δ     -5 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  15s internal_free=  12525 MB (Δ    -22 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  20s internal_free=  12476 MB (Δ    -71 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  25s internal_free=  12427 MB (Δ   -120 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  30s internal_free=  12393 MB (Δ   -154 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  35s internal_free=  12377 MB (Δ   -170 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  40s internal_free=  12344 MB (Δ   -202 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  45s internal_free=  12297 MB (Δ   -250 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  50s internal_free=  12249 MB (Δ   -298 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  55s internal_free=  12216 MB (Δ   -331 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  60s internal_free=  12168 MB (Δ   -379 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  65s internal_free=  12136 MB (Δ   -411 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  70s internal_free=  12104 MB (Δ   -443 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  75s internal_free=  12070 MB (Δ   -477 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  80s internal_free=  12036 MB (Δ   -510 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  85s internal_free=  11989 MB (Δ   -558 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  90s internal_free=  11953 MB (Δ   -594 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t=  95s internal_free=  12946 MB (Δ   +399 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 100s internal_free=  12897 MB (Δ   +349 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 105s internal_free=  11856 MB (Δ   -691 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 110s internal_free=   9791 MB (Δ  -2756 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 115s internal_free=   9776 MB (Δ  -2771 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 120s internal_free=   9739 MB (Δ  -2807 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 125s internal_free=   9703 MB (Δ  -2844 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 130s internal_free=   9659 MB (Δ  -2888 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 135s internal_free=  10634 MB (Δ  -1913 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 140s internal_free=  10605 MB (Δ  -1942 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 145s internal_free=  10573 MB (Δ  -1974 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 150s internal_free=  10540 MB (Δ  -2007 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 155s internal_free=  10508 MB (Δ  -2039 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 160s internal_free=  10460 MB (Δ  -2087 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 165s internal_free=  10411 MB (Δ  -2136 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 170s internal_free=  10394 MB (Δ  -2153 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 175s internal_free=  10377 MB (Δ  -2170 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 180s internal_free=  10346 MB (Δ  -2201 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 185s internal_free=  10297 MB (Δ  -2250 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 190s internal_free=  10264 MB (Δ  -2283 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 195s internal_free=  10257 MB (Δ  -2289 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 200s internal_free=  10224 MB (Δ  -2323 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 205s internal_free=  10191 MB (Δ  -2356 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 210s internal_free=  10146 MB (Δ  -2401 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 215s internal_free=  10114 MB (Δ  -2433 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 220s internal_free=  10071 MB (Δ  -2476 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 225s internal_free=  10019 MB (Δ  -2528 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 230s internal_free=   9987 MB (Δ  -2560 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 235s internal_free=   9946 MB (Δ  -2601 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 240s internal_free=   9911 MB (Δ  -2636 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 245s internal_free=   9859 MB (Δ  -2688 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 250s internal_free=   9814 MB (Δ  -2733 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 255s internal_free=   9778 MB (Δ  -2768 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 260s internal_free=   9734 MB (Δ  -2813 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 265s internal_free=   9694 MB (Δ  -2853 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 270s internal_free=   9658 MB (Δ  -2889 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 275s internal_free=   9613 MB (Δ  -2934 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 280s internal_free=   9577 MB (Δ  -2970 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 285s internal_free=   9535 MB (Δ  -3012 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 290s internal_free=   9498 MB (Δ  -3049 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 295s internal_free=   9448 MB (Δ  -3099 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 300s internal_free=  10431 MB (Δ  -2116 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 305s internal_free=  10383 MB (Δ  -2164 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 310s internal_free=  10335 MB (Δ  -2212 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 315s internal_free=  10303 MB (Δ  -2244 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 320s internal_free=  10271 MB (Δ  -2276 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 325s internal_free=  10230 MB (Δ  -2317 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 330s internal_free=  10198 MB (Δ  -2349 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 335s internal_free=  10158 MB (Δ  -2389 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 340s internal_free=  10105 MB (Δ  -2441 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 345s internal_free=  10074 MB (Δ  -2472 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 350s internal_free=  10021 MB (Δ  -2525 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 355s internal_free=   9949 MB (Δ  -2598 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 360s internal_free=   9896 MB (Δ  -2651 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 365s internal_free=   9849 MB (Δ  -2698 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 370s internal_free=   9821 MB (Δ  -2726 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 375s internal_free=   9785 MB (Δ  -2762 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 380s internal_free=   9749 MB (Δ  -2798 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 385s internal_free=   9708 MB (Δ  -2839 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 390s internal_free=   9672 MB (Δ  -2875 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 395s internal_free=   9622 MB (Δ  -2925 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 400s internal_free=   9604 MB (Δ  -2943 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 405s internal_free=   9576 MB (Δ  -2971 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 410s internal_free=   9536 MB (Δ  -3011 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 415s internal_free=   9504 MB (Δ  -3042 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 420s internal_free=   9467 MB (Δ  -3080 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 425s internal_free=   9419 MB (Δ  -3128 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 430s internal_free=   9383 MB (Δ  -3164 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 435s internal_free=   9343 MB (Δ  -3204 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 440s internal_free=   9310 MB (Δ  -3237 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 445s internal_free=   9271 MB (Δ  -3276 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 450s internal_free=   9238 MB (Δ  -3309 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 455s internal_free=   9202 MB (Δ  -3345 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 460s internal_free=   9162 MB (Δ  -3385 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 465s internal_free=   9128 MB (Δ  -3419 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 470s internal_free=   9098 MB (Δ  -3449 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 475s internal_free=   9061 MB (Δ  -3486 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 480s internal_free=   9026 MB (Δ  -3521 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 485s internal_free=   8983 MB (Δ  -3564 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 490s internal_free=   8942 MB (Δ  -3605 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 495s internal_free=   8896 MB (Δ  -3651 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 500s internal_free=   8864 MB (Δ  -3683 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 505s internal_free=   8821 MB (Δ  -3726 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 510s internal_free=   8776 MB (Δ  -3771 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 515s internal_free=   7722 MB (Δ  -4825 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 520s internal_free=   7695 MB (Δ  -4852 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 525s internal_free=   6656 MB (Δ  -5891 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 530s internal_free=   6618 MB (Δ  -5929 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 535s internal_free=   6582 MB (Δ  -5965 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 540s internal_free=   6530 MB (Δ  -6017 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 545s internal_free=   6486 MB (Δ  -6061 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 550s internal_free=   6449 MB (Δ  -6098 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 555s internal_free=   6401 MB (Δ  -6146 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 560s internal_free=   6361 MB (Δ  -6186 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 565s internal_free=   6326 MB (Δ  -6221 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 570s internal_free=   6296 MB (Δ  -6250 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 575s internal_free=   6248 MB (Δ  -6299 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 580s internal_free=   6208 MB (Δ  -6339 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 585s internal_free=   6164 MB (Δ  -6383 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 590s internal_free=   6128 MB (Δ  -6419 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 595s internal_free=   6092 MB (Δ  -6455 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 600s internal_free=   6055 MB (Δ  -6492 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 605s internal_free=   6014 MB (Δ  -6533 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 610s internal_free=   5999 MB (Δ  -6548 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 615s internal_free=   5982 MB (Δ  -6565 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 620s internal_free=   5966 MB (Δ  -6581 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 625s internal_free=   5952 MB (Δ  -6595 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 630s internal_free=   5934 MB (Δ  -6612 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 635s internal_free=   5902 MB (Δ  -6645 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 640s internal_free=   5888 MB (Δ  -6659 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 645s internal_free=   5872 MB (Δ  -6675 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 650s internal_free=   5836 MB (Δ  -6711 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 655s internal_free=   5808 MB (Δ  -6739 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 660s internal_free=   5767 MB (Δ  -6780 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 665s internal_free=   6747 MB (Δ  -5800 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 670s internal_free=   6711 MB (Δ  -5836 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 675s internal_free=   6667 MB (Δ  -5880 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 680s internal_free=   6631 MB (Δ  -5916 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 685s internal_free=   6615 MB (Δ  -5932 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 690s internal_free=   6615 MB (Δ  -5932 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 695s internal_free=   6621 MB (Δ  -5926 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 700s internal_free=   6621 MB (Δ  -5926 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 705s internal_free=   6621 MB (Δ  -5926 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 710s internal_free=   6620 MB (Δ  -5927 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 715s internal_free=   7656 MB (Δ  -4891 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 720s internal_free=   7656 MB (Δ  -4891 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 725s internal_free=   7656 MB (Δ  -4891 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 730s internal_free=   7644 MB (Δ  -4903 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 735s internal_free=   6619 MB (Δ  -5927 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 740s internal_free=   6619 MB (Δ  -5928 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 745s internal_free=   5593 MB (Δ  -6953 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 750s internal_free=   5593 MB (Δ  -6954 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 755s internal_free=   5593 MB (Δ  -6954 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 760s internal_free=   5593 MB (Δ  -6954 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 765s internal_free=   5593 MB (Δ  -6954 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 770s internal_free=   5592 MB (Δ  -6955 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 775s internal_free=   5591 MB (Δ  -6956 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 780s internal_free=   5592 MB (Δ  -6955 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 785s internal_free=   5602 MB (Δ  -6945 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 790s internal_free=   5662 MB (Δ  -6884 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 795s internal_free=   5661 MB (Δ  -6886 MB)  library_free=  344489 MB (Δ     +0 MB)  staging dirs: 0
+t= 800s internal_free=   5655 MB (Δ  -6892 MB)  library_free=  339697 MB (Δ  -4791 MB)  staging dirs: 0
+t= 805s internal_free=   5661 MB (Δ  -6886 MB)  library_free=  339697 MB (Δ  -4791 MB)  staging dirs: 0
+--- export log ---
+! Only 13,16 GB free on the internal volume. Downloads may stage internally before export (E11 — unverified); watch for ENOSPC.
+Downloading tvOS runtime installer to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary … (this can take a long time; output appears when xcodebuild finishes)
+): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): 99,8% (5,02 GB of 5,03 GB)Downloading tvOS 26.5 Universal Simulator (23L470) (universal): Installing...             Downloading tvOS 26.5 Universal Simulator (23L470) (universal): Done.        
+Exported 'com.apple.CoreSimulator.SimRuntime.tvOS-26-5' to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle
+tvOS 26.5 (23L470) - E6149A54-04D7-4F56-8E94-6B1AC99A8E6A
+
+Done. Installers now in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary:
+export exit=0
+peak internal consumption during export: 6956 MB; killed=0
+## library afterwards
+$ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary'
+total 0
+drwxr-xr-x@   3 <user>  staff    96 Sep  6 17:41 .
+drwx------  179 <user>  staff  5728 Sep  6 17:28 ..
+drwxr-xr-x@   4 <user>  staff   128 Sep  6 17:41 appletvsimulator_26.5_23L470.exportedBundle
+Installers in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary:
+  (none)
+
+Installed runtimes:
+  appletv   26.5    5,02 GB  NO installer in library — export first
+  iphone    26.5    10,6 GB  NO installer in library — export first
+  watch     26.5    5,24 GB  NO installer in library — export first
+[exit=0]
+
+## any stranded downloads?
+$ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
+ls: ~/Library/Caches/com.apple.dt.Xcode/Downloads: No such file or directory
+/Library/Developer/CoreSimulator/Cryptex/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Jul 27 06:41 .
+drwxr-xr-x@ 5 root  admin  160 Jul 23  2025 ..
+
+/Library/Developer/CoreSimulator/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Jul 26 23:09 .
+drwxr-xr-x@ 5 root  admin  160 Sep  6 17:41 ..
+[exit=1]
+

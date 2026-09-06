@@ -8,8 +8,10 @@ struct Vault: ParsableCommand {
         subcommands: [Init.self, Status.self, Forget.self], defaultSubcommand: Status.self)
     struct Init: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Register a mounted external APFS volume as a vault (creates <mount>/XcodeVault and a sentinel).")
+            abstract: "Register a mounted external APFS volume as a vault (creates <mount>/XcodeVault and a sentinel).",
+            discussion: "Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> to use a folder you can write (e.g. one you created in Finder).")
         @Argument(help: "Mount point, e.g. /Volumes/MyDrive") var mountPoint: String
+        @Option(name: .long, help: "Vault directory relative to the volume root (default: XcodeVault).") var directory: String = VaultVolume.directoryName
         func run() throws {
             let vols = try VolumeDiscovery.mountedVolumes()
             guard let v = vols.first(where: { $0.mountPoint == mountPoint }) else {
@@ -17,7 +19,8 @@ struct Vault: ParsableCommand {
             }
             let q = VolumeQualification.evaluate(v)
             for w in q.warnings { print("! \(w)") }
-            let vv = try VaultRegistry().register(v)
+            if directory.hasPrefix(".TemporaryItems") { print("! .TemporaryItems is purged by macOS — fine for experiments, not for durable storage.") }
+            let vv = try VaultRegistry().register(v, relativeDirectory: directory)
             print("Registered \(vv.volumeName) (\(vv.volumeUUID)) at \(vv.lastVaultDirectory).")
         }
     }

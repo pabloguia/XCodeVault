@@ -141,8 +141,13 @@ final class RuntimeOperationsTests: XCTestCase {
         t.file("iOS 26.5 Simulator Runtime.dmg", bytes: 600_000_000)
         t.file("notes.txt", bytes: 3)
         t.file("tvOS 26.0 Simulator Runtime.dmg", bytes: 10)  // too small to be real
+        t.file("appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg", bytes: 600_000_000)
+        t.file("appletvsimulator_26.5_23L470.exportedBundle/ExportedMetadata.plist", bytes: 10)
         let lib = try RuntimeOperations.library(at: t.path)
-        XCTAssertEqual(lib.map(\.fileName).sorted(), ["iOS 26.5 Simulator Runtime.dmg", "tvOS 26.0 Simulator Runtime.dmg"])
+        XCTAssertEqual(lib.map(\.fileName).sorted(), ["appletvsimulator_26.5_23L470.exportedBundle", "iOS 26.5 Simulator Runtime.dmg", "tvOS 26.0 Simulator Runtime.dmg"])
+        let bundle = lib.first { $0.fileName.hasSuffix(".exportedBundle") }!
+        XCTAssertEqual(bundle.platform, "tvOS"); XCTAssertEqual(bundle.version, "26.5"); XCTAssertEqual(bundle.build, "23L470")
+        XCTAssertTrue(bundle.path.hasSuffix("/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg"))
         let rts = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
         let ios = rts.first { $0.platformName == "iphone" }!
         XCTAssertEqual(RuntimeOperations.installer(for: ios, in: lib)?.fileName, "iOS 26.5 Simulator Runtime.dmg")

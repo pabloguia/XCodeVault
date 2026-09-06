@@ -69,6 +69,22 @@ final class VaultTests: XCTestCase {
         _ = vol
     }
 
+    func testRegisterWithRelativeDirectoryAndRegistryBackCompat() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        // Old registry entries without relativeDirectory decode to the default.
+        try Data("""
+        [{"volumeUUID":"U","volumeName":"N","lastMountPoint":"/Volumes/N","registeredAt":"2026-09-06T00:00:00Z","sentinelID":"s"}]
+        """.utf8).write(to: reg.url)
+        XCTAssertEqual(try reg.volumes().first?.relativeDirectory, "XcodeVault")
+        XCTAssertEqual(try reg.volumes().first?.lastVaultDirectory, "/Volumes/N/XcodeVault")
+        // Escapes are refused at registration.
+        let mp = t.dir("mp")
+        let vol = fakeVolume(uuid: "U2", mountPoint: mp)
+        let verifierFriendly = VaultRegistry(url: URL(fileURLWithPath: t.path + "/v2.json"))
+        XCTAssertThrowsError(try verifierFriendly.register(vol, relativeDirectory: "../outside", journal: Journal(url: URL(fileURLWithPath: t.path + "/j"))))
+    }
+
     func testSentinelRoundTrip() throws {
         let t = TempDir()
         let dir = t.dir(VaultVolume.directoryName)
