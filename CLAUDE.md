@@ -32,6 +32,22 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `docs/process/PRIOR_ART.md` — notes on `Viniciuscarvalho/mac-ssd-rescue` and other prior art.
 - `docs/adr/` — architecture decision records. Add one for every meaningful
   architectural choice or reversal; don't silently overwrite past reasoning.
+  ADR-0003 fixes the stack (Swift 6 / SwiftPM, one domain layer); ADR-0004 records the
+  E1/E2 outcome (canonical mount demoted to R&D; v1 = accounting + official mechanisms +
+  cleanup + disconnect safety).
+- `STATUS.md` — current milestone, what is done / in flight / blocked, next three actions.
+  Read it first in a new session; update it as you go.
+- `scripts/experiments/` — the experiment harness (`common.sh` header/redaction, `e1`, `e2`,
+  `e8`); evidence lands in `docs/research/evidence/`. `.claude/skills/run-experiment` has the
+  procedure.
+
+## Layout
+
+`Package.swift` (Swift 6, macOS 14+) · `Sources/XCodeVaultCore` (the only domain layer:
+Discovery, Catalog, Scan, Doctor, Report, Support) · `Sources/xcodevaultctl` (CLI) ·
+`Tests/XCodeVaultCoreTests` (+ redacted fixtures) · `fixtures/E2Fixture` (experiment fixture)
+· `.github/workflows/ci.yml` (macos-15 + macos-26). Build with `swift build`, test with
+`swift test`. Helper and GUI targets arrive in M3/M4 per ADR-0003.
 
 ## Non-negotiable safety rules (also in NON_GOALS_AND_SAFETY.md — kept here because they must never be missed)
 

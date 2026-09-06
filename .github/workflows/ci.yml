@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-test:
+    name: build+test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sw_vers; uname -m; xcodebuild -version; swift --version
+      - name: Build
+        run: swift build -v 2>&1 | tail -20
+      - name: Unit tests
+        run: swift test 2>&1 | tail -60
+      - name: Lint (swift-format)
+        run: |
+          fmt=$(xcrun --find swift-format 2>/dev/null) || { echo "swift-format not in this toolchain; skipping"; exit 0; }
+          "$fmt" lint --recursive --strict Sources Tests || echo "::warning::swift-format lint reported issues"
+      - name: Smoke test the CLI (read-only)
+        run: |
+          .build/debug/xcodevaultctl status
+          .build/debug/xcodevaultctl xcode list
+          .build/debug/xcodevaultctl compatibility
+          .build/debug/xcodevaultctl scan --json > scan.json && head -c 800 scan.json
+          .build/debug/xcodevaultctl doctor || true
+      - name: Read-only gating experiments (E1, E8) — evidence for the compatibility matrix
+        run: |
+          scripts/experiments/e1-mountability.sh
+          scripts/experiments/e8-feature-detect.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-${{ matrix.os }}
+          path: |
+            docs/research/evidence/e1-*.txt
+            docs/research/evidence/e8-*.txt
+            scan.json
+          if-no-files-found: warn

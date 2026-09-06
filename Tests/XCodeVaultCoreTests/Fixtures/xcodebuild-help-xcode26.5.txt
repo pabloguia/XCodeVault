@@ -1,0 +1,45 @@
+Usage: xcodebuild [-project <projectname>] [[-target <targetname>]...|-alltargets] [-configuration <configurationname>] [-arch <architecture>]... [-sdk [<sdkname>|<sdkpath>]] [-showBuildSettings [-json]] [<buildsetting>=<value>]... [<buildaction>]...
+       xcodebuild [-project <projectname>] -scheme <schemeName> [-destination <destinationspecifier>]... [-configuration <configurationname>] [-arch <architecture>]... [-sdk [<sdkname>|<sdkpath>]] [-showBuildSettings [-json]] [-showdestinations] [<buildsetting>=<value>]... [<buildaction>]...
+       xcodebuild -workspace <workspacename> -scheme <schemeName> [-destination <destinationspecifier>]... [-configuration <configurationname>] [-arch <architecture>]... [-sdk [<sdkname>|<sdkpath>]] [-showBuildSettings] [-showdestinations] [<buildsetting>=<value>]... [<buildaction>]...
+       xcodebuild -version [-sdk [<sdkfullpath>|<sdkname>] [-json] [<infoitem>] ]
+       xcodebuild -list [[-project <projectname>]|[-workspace <workspacename>]] [-json]
+       xcodebuild -showsdks [-json]
+       xcodebuild -exportArchive -archivePath <xcarchivepath> [-exportPath <destinationpath>] -exportOptionsPlist <plistpath>
+       xcodebuild -exportNotarizedApp -archivePath <xcarchivepath> -exportPath <destinationpath>
+       xcodebuild -exportLocalizations -localizationPath <path> -project <projectname> [-defaultLanguage <language>] [-exportLanguage <targetlanguage>... [-includeScreenshots]]
+       xcodebuild -importLocalizations -localizationPath <path> -project <projectname> [-mergeImport]
+       xcodebuild -resolvePackageDependencies [-project <projectname>|-workspace <workspacename>] -clonedSourcePackagesDirPath <path>
+       xcodebuild -create-xcframework [-help] [-framework <path>] [-library <path> [-headers <path>]] -output <path>
+       xcodebuild -downloadPlatform <iOS|watchOS|tvOS|visionOS>  [-exportPath <destinationpath> -buildVersion <osversion> -architectureVariant <universal|arm64>]
+       xcodebuild -downloadAllPlatforms [-exportPath <destinationpath> -architectureVariant <universal|arm64>]
+       xcodebuild -importPlatform <simruntimedmgpath>
+       xcodebuild -downloadComponent <componenttype> [-exportPath <destinationpath> -buildVersion <assetversion>]
+       xcodebuild -importComponent <componenttype> -importPath <bundlepath>
+       xcodebuild -deleteComponent <componenttype>
+       xcodebuild -showComponent <componenttype> [-json]
+
+Options:
+    -usage                                                   print brief usage
+    -help                                                    print complete usage
+    -verbose                                                 provide additional status output
+    -license                                                 show the Xcode and SDK license agreements
+    -checkFirstLaunchStatus                                  Check if any First Launch tasks need to be performed
+    -runFirstLaunch                                          install packages and agree to the license. Add an `-checkForNewerComponents` flag to check for any additional Xcode Device support components.
+    -downloadAllPlatforms                                    downloads a matching simulator runtime for every platform in this Xcode
+    -prepareDeviceSupport                                    prepares the Device Support symbols folder for the device
+    -platform PLATFORM                                       specify the platform for device support (e.g. iOS, macOS)
+    -osVersion VERSION                                       specify the OS version for device support (e.g. 26.0, 26.2)
+    -modelCode CODE                                          specify the model code for device support - optional (e.g. 'iPhone16,1', 'iMac20,1')
+    -architecture ARCH                                       specify the architecture for device support - optional (e.g. arm64e)
+    -downloadPlatform NAME                                   download the platform NAME
+    -importPlatform DMG_Path                                 import the platform NAME
+    -downloadComponent NAME                                  downloads the specified component. Supported component: MetalToolchain.
+    -importComponent NAME                                    import the component NAME
+    -deleteComponent NAME                                    delete the component NAME
+    -showComponent NAME                                      show details for the specified component NAME
+    -project NAME                                            build the project NAME
+    -target NAME                                             build the target NAME
+    -alltargets                                              build all targets
+    -workspace NAME                                          build the workspace NAME
+    -scheme NAME                                             build the scheme NAME
+    -configuration NAME                                      use the build configuration NAME for building each target

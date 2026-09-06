@@ -1,0 +1,40 @@
+Perform operations on runtimes
+Usage: simctl runtime <operation> <arguments>
+
+Supported Operations:
+	add <path> [-ma]
+	     Add a runtime disk image to the secure storage area. The image will be staged, verified, and mounted.
+	     When possible the image file will be cloned so no additional disk space will be used.
+	     If stdout is a terminal and a copy is required then progress will be reported.
+
+	     --move | -m
+	          Remove the original file if the image is added successfully. If the image cannot be staged
+	          or the add fails the original is not removed.
+	     --async | -a
+	          Print the UUID of the new image then exit, do not wait on the results of the add operation.
+
+	delete (<identifier>|--notUsedSinceDays <days>) [--dry-run] [--keep-asset]
+	     Delete a simulator runtime from the secure storage area. If runtime is a disk image
+	     any booted simulators are shutdown and the disk is unmounted first.
+	     Use the alias 'all' to delete all images.
+
+	     --notUsedSinceDays <days> | -d <days>
+	          Delete images not used within the past <days> days.
+	     --dry-run | -n
+	          Print what images would be deleted without actually deleting anything.
+	     --keep-asset | -k
+	          Keep the associated mobile asset when deleting the runtime.
+
+	unmount <identifier>
+	     Unmount a simulator runtime disk image without deleting it. Any booted simulators
+	     using this runtime are shutdown and the disk is unmounted. The runtime remains
+	     in the system and can be remounted later.
+
+	verify <identifier>
+	     Re-verify the signature of a given runtime.
+
+	list [-v] [-j | --json] [--json-fd=<fd>] [--json-output=<file path>]
+	     List runtime disk images, optionally outputting JSON to stdout.
+	     -v
+	          Print more verbose output
+	     -j

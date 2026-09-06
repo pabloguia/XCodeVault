@@ -1,0 +1,44 @@
+{
+  "devices" : {
+    "com.apple.CoreSimulator.SimRuntime.watchOS-26-5" : [
+      {
+        "lastBootedAt" : "2026-09-05T14:19:26Z",
+        "dataPath" : "\/Users\/tester\/Library\/Developer\/CoreSimulator\/Devices\/0F29E552-3BA3-413D-96ED-B810CD690DC4\/data",
+        "dataPathSize" : 1296855040,
+        "logPath" : "\/Users\/tester\/Library\/Logs\/CoreSimulator\/0F29E552-3BA3-413D-96ED-B810CD690DC4",
+        "udid" : "0F29E552-3BA3-413D-96ED-B810CD690DC4",
+        "isAvailable" : true,
+        "logPathSize" : 303104,
+        "deviceTypeIdentifier" : "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-3-49mm",
+        "state" : "Shutdown",
+        "name" : "Apple Watch Ultra 3 (49mm)"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-26-5" : [
+      {
+        "lastBootedAt" : "2026-09-06T15:45:19Z",
+        "dataPath" : "\/Users\/tester\/Library\/Developer\/CoreSimulator\/Devices\/15EA64C9-8286-40CC-881A-B19C606C7F88\/data",
+        "dataPathSize" : 1893445632,
+        "logPath" : "\/Users\/tester\/Library\/Logs\/CoreSimulator\/15EA64C9-8286-40CC-881A-B19C606C7F88",
+        "udid" : "15EA64C9-8286-40CC-881A-B19C606C7F88",
+        "isAvailable" : true,
+        "logPathSize" : 462848,
+        "deviceTypeIdentifier" : "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+        "state" : "Shutdown",
+        "name" : "iPhone 17 Pro Max"
+      },
+      {
+        "lastBootedAt" : "2026-09-05T22:27:50Z",
+        "dataPath" : "\/Users\/tester\/Library\/Developer\/CoreSimulator\/Devices\/855CCF05-5E74-4372-ADB5-7ADE52900AE8\/data",
+        "dataPathSize" : 4456837120,
+        "logPath" : "\/Users\/tester\/Library\/Logs\/CoreSimulator\/855CCF05-5E74-4372-ADB5-7ADE52900AE8",
+        "udid" : "855CCF05-5E74-4372-ADB5-7ADE52900AE8",
+        "isAvailable" : true,
+        "logPathSize" : 229376,
+        "deviceTypeIdentifier" : "com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation",
+        "state" : "Booted",
+        "name" : "iPhone SE (3rd generation)"
+      }
+    ]
+  }
+}
