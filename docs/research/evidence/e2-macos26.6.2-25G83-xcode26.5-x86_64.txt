@@ -1,0 +1,62 @@
+# Experiment: E2 external-volume xctest restriction: device vs path
+# Date: 2026-09-06T18:35:08Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+==================== CASE A-internal ====================
+DerivedData: ~/.xcodevault-e2-scratch/DD-A
+volume-device: /dev/disk1s1
+Mount Point:               /System/Volumes/Data
+File System Personality:   APFS
+Owners:                    Enabled
+Protocol:                  PCI-Express
+Device Location:           Internal
+Removable Media:           Fixed
+xcodebuild exit=65 verdict=FAIL
+** TEST FAILED **
+~/projects/XCodeVault/fixtures/E2Fixture/Sources/E2Lib/E2Lib.swift:8:9: error: cannot find 'Bundle' in scope
+2026-09-06 15:35:10.558 xcodebuild[36804:12288237]  DVTProvisioningProfileManager: Failed to load profile "~/Library/Developer/Xcode/UserData/Provisioning Profiles/-" (Error Domain=DVTProvisioningProfileSourceErrorDomain Code=0 "No provisioning profile provider found for profile "~/Library/Developer/Xcode/UserData/Provisioning Profiles/-"." UserInfo={NSLocalizedDescription=No provisioning profile provider found for profile "~/Library/Developer/Xcode/UserData/Provisioning Profiles/-".})
+--- swift test --scratch-path (second runner) ---
+~/projects/XCodeVault/fixtures/E2Fixture/Sources/E2Lib/E2Lib.swift:8:9: error: cannot find 'Bundle' in scope
+   |         `- error: cannot find 'Bundle' in scope
+error: fatalError
+swift-test verdict=FAIL
+
+mkdir: /Volumes/<vault>/XCodeVault-experiments: Permission denied
+==================== CASE B-external-device-under-Volumes ====================
+DerivedData: /Volumes/<vault>/XCodeVault-experiments/E2/DD-B
+df: /Volumes/<vault>/XCodeVault-experiments/E2: No such file or directory
+volume-device: 
+mkdir: /Volumes/<vault>/XCodeVault-experiments: Permission denied
+scripts/experiments/e2-external-xctest.sh: line 35: /Volumes/<vault>/XCodeVault-experiments/E2/DD-B.xcodebuild.log: No such file or directory
+grep: /Volumes/<vault>/XCodeVault-experiments/E2/DD-B.xcodebuild.log: No such file or directory
+xcodebuild exit=1 verdict=FAIL
+grep: /Volumes/<vault>/XCodeVault-experiments/E2/DD-B.xcodebuild.log: No such file or directory
+--- swift test --scratch-path (second runner) ---
+mkdir: /Volumes/<vault>/XCodeVault-experiments: Permission denied
+error: You don’t have permission to save the file “repositories” in the folder “spm”.
+swift-test verdict=FAIL
+
+==================== CASE E-internal-symlink-to-external ====================
+DerivedData: ~/.xcodevault-e2-scratch/E-link/DD-E
+df: ~/.xcodevault-e2-scratch/E-link: No such file or directory
+volume-device: 
+mkdir: ~/.xcodevault-e2-scratch/E-link: No such file or directory
+scripts/experiments/e2-external-xctest.sh: line 35: ~/.xcodevault-e2-scratch/E-link/DD-E.xcodebuild.log: No such file or directory
+grep: ~/.xcodevault-e2-scratch/E-link/DD-E.xcodebuild.log: No such file or directory
+xcodebuild exit=1 verdict=FAIL
+grep: ~/.xcodevault-e2-scratch/E-link/DD-E.xcodebuild.log: No such file or directory
+--- swift test --scratch-path (second runner) ---
+mkdir: ~/.xcodevault-e2-scratch/E-link: No such file or directory
+error: The file “.xcodevault-e2-scratch” couldn’t be saved in the folder “<user>”.
+swift-test verdict=FAIL
+
+!! disk image did not appear at /Volumes/XCVE2IMG
+!! disk image did not mount at ~/XCodeVault-E2-Mount
+==================== SUMMARY ====================
+A-internal | xcodebuild-test=FAIL | swift-test=FAIL | ~/.xcodevault-e2-scratch/DD-A
+B-external-device-under-Volumes | xcodebuild-test=FAIL | swift-test=FAIL | /Volumes/<vault>/XCodeVault-experiments/E2/DD-B
+E-internal-symlink-to-external | xcodebuild-test=FAIL | swift-test=FAIL | ~/.xcodevault-e2-scratch/E-link/DD-E

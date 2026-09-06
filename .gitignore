@@ -1,0 +1,10 @@
+.build/
+*.xcodeproj
+xcuserdata/
+DerivedData/
+.swiftpm/
+*.sparseimage
+.DS_Store
+/dist/
+.token-pilot/
+*.tmp
