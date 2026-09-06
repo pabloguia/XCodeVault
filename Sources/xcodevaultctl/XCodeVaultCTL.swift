@@ -15,8 +15,10 @@ struct XCodeVaultCTL: ParsableCommand {
             docs/product/NON_GOALS_AND_SAFETY.md for your macOS/Xcode combination.
             """,
         version: XCodeVaultVersion.current,
-        subcommands: [Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self,
-                      Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self],
+        subcommands: [
+            Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self,
+            Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self,
+        ],
         defaultSubcommand: Status.self)
 }
 
@@ -66,8 +68,11 @@ struct Report: ParsableCommand {
         let home = report.host.homeDirectory
         let user = report.host.userName
         func redact(_ s: String) -> String { s.replacingOccurrences(of: home, with: "~").replacingOccurrences(of: user, with: "<user>") }
-        if global.json { print(redact(try JSONOutput.encode(Bundle(scan: report, findings: findings)))) }
-        else { print(redact(TextRenderer.scan(report) + "\n" + TextRenderer.findings(findings)), terminator: "") }
+        if global.json {
+            print(redact(try JSONOutput.encode(Bundle(scan: report, findings: findings))))
+        } else {
+            print(redact(TextRenderer.scan(report) + "\n" + TextRenderer.findings(findings)), terminator: "")
+        }
     }
 }
 
@@ -84,7 +89,8 @@ struct DoctorCommand: ParsableCommand {
 }
 
 struct Xcode: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Installed Xcodes and their feature-detected capabilities.", subcommands: [List.self], defaultSubcommand: List.self)
+    static let configuration = CommandConfiguration(
+        abstract: "Installed Xcodes and their feature-detected capabilities.", subcommands: [List.self], defaultSubcommand: List.self)
     struct List: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
@@ -94,7 +100,14 @@ struct Xcode: ParsableCommand {
                 for x in xcodes {
                     o += "\(x.isSelected ? "*" : " ") Xcode \(x.version) (\(x.build)) — \(x.path)\n"
                     let c = x.capabilities
-                    let rows: [(String, Bool)] = [("downloadPlatform", c.downloadPlatform), ("downloadAllPlatforms", c.downloadAllPlatforms), ("-exportPath (Runtime Library export)", c.exportPath), ("-buildVersion", c.buildVersion), ("-architectureVariant", c.architectureVariant), ("importPlatform", c.importPlatform), ("downloadComponent / importComponent / deleteComponent", c.downloadComponent && c.importComponent), ("showComponent", c.showComponent), ("checkForNewerComponents", c.checkForNewerComponents), ("prepareDeviceSupport", c.prepareDeviceSupport), ("simctl runtime add / delete / unmount / verify", c.simctlRuntimeAdd && c.simctlRuntimeDelete)]
+                    let rows: [(String, Bool)] = [
+                        ("downloadPlatform", c.downloadPlatform), ("downloadAllPlatforms", c.downloadAllPlatforms),
+                        ("-exportPath (Runtime Library export)", c.exportPath), ("-buildVersion", c.buildVersion),
+                        ("-architectureVariant", c.architectureVariant), ("importPlatform", c.importPlatform),
+                        ("downloadComponent / importComponent / deleteComponent", c.downloadComponent && c.importComponent), ("showComponent", c.showComponent),
+                        ("checkForNewerComponents", c.checkForNewerComponents), ("prepareDeviceSupport", c.prepareDeviceSupport),
+                        ("simctl runtime add / delete / unmount / verify", c.simctlRuntimeAdd && c.simctlRuntimeDelete),
+                    ]
                     for (n, v) in rows { o += "    \(v ? "✓" : "✗") \(n)\n" }
                 }
                 return o
@@ -104,8 +117,9 @@ struct Xcode: ParsableCommand {
 }
 
 struct Runtime: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Simulator runtimes: list, delete, export/import installers (Runtime Library), offload.",
-                                                    subcommands: Runtime.extendedSubcommands, defaultSubcommand: List.self)
+    static let configuration = CommandConfiguration(
+        abstract: "Simulator runtimes: list, delete, export/import installers (Runtime Library), offload.",
+        subcommands: Runtime.extendedSubcommands, defaultSubcommand: List.self)
     struct List: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
@@ -113,7 +127,8 @@ struct Runtime: ParsableCommand {
             try emit(rts, json: global.json) {
                 var o = ""
                 for r in rts {
-                    o += "\(r.platformName) \(r.version ?? "?") (\(r.build ?? "?"))  \(r.state ?? "?")  \(ByteCount.format(r.sizeBytes ?? 0))  \(r.kind ?? "")  sig=\(r.signatureState ?? "?")  \(r.isMounted ? "mounted at \(r.mountPath ?? "")" : "NOT mounted")\n"
+                    o +=
+                        "\(r.platformName) \(r.version ?? "?") (\(r.build ?? "?"))  \(r.state ?? "?")  \(ByteCount.format(r.sizeBytes ?? 0))  \(r.kind ?? "")  sig=\(r.signatureState ?? "?")  \(r.isMounted ? "mounted at \(r.mountPath ?? "")" : "NOT mounted")\n"
                     o += "    image: \(r.path ?? "?")\n"
                 }
                 return o
@@ -133,7 +148,8 @@ struct Volumes: ParsableCommand {
             var o = ""
             for r in rows {
                 let v = r.volume
-                o += "\(v.volumeName)  \(v.mountPoint ?? "-")  \(v.filesystemPersonality)  \(v.busProtocol)  \(v.isInternal ? "internal" : "external")  uuid=\(v.volumeUUID ?? "-")  free \(ByteCount.format(v.freeBytes)) / \(ByteCount.format(v.totalBytes))  owners=\(v.ownersEnabled ? "on" : "OFF")\n"
+                o +=
+                    "\(v.volumeName)  \(v.mountPoint ?? "-")  \(v.filesystemPersonality)  \(v.busProtocol)  \(v.isInternal ? "internal" : "external")  uuid=\(v.volumeUUID ?? "-")  free \(ByteCount.format(v.freeBytes)) / \(ByteCount.format(v.totalBytes))  owners=\(v.ownersEnabled ? "on" : "OFF")\n"
                 o += "    verdict: \(v.isBootVolume ? "boot volume" : r.qualification.verdict.rawValue)\n"
                 for b in r.qualification.blockers { o += "    ✗ \(b)\n" }
                 for w in r.qualification.warnings { o += "    ! \(w)\n" }

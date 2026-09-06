@@ -40,7 +40,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
             for n in names {
                 let p = dir + "/" + n
                 var cst = stat(); guard lstat(p, &cst) == 0 else { continue }
-                if (cst.st_mode & S_IFMT) == S_IFLNK { failures += 1; continue }   // never follow/delete through symlinks
+                if (cst.st_mode & S_IFMT) == S_IFLNK { failures += 1; continue }  // never follow/delete through symlinks
                 freed += Self.allocatedBytes(p)
                 do { try FileManager.default.removeItem(atPath: p) } catch { failures += 1 }
             }
@@ -52,7 +52,8 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
         // Single component, plain ASCII, .dmg, no traversal, no leading dot, no whitespace tricks.
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_. "))
         guard !fileName.isEmpty, fileName.count <= 128, fileName.unicodeScalars.allSatisfy({ $0.isASCII && allowed.contains($0) }),
-              !fileName.hasPrefix("."), !fileName.hasSuffix(" "), fileName.lowercased().hasSuffix(".dmg"), fileName != ".dmg" else {
+            !fileName.hasPrefix("."), !fileName.hasSuffix(" "), fileName.lowercased().hasSuffix(".dmg"), fileName != ".dmg"
+        else {
             return HelperResult(ok: false, message: "invalid file name")
         }
         for inbox in HelperInboxDirectory.allCases {
@@ -74,7 +75,9 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
         // Resolve the UUID to a mount point ourselves (getattrlist ATTR_VOL_UUID over getmntinfo_r_np):
         // no client-supplied path, no diskutil parsing, no shared static buffer.
         guard let mp = Self.mountPoint(forVolumeUUID: volumeUUID) else { return HelperResult(ok: false, message: "volume not mounted") }
-        guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2, Self.isMountPoint(mp) else { return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible") }
+        guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2, Self.isMountPoint(mp) else {
+            return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible")
+        }
         let dir = mp + "/XcodeVault"
         // O_NOFOLLOW|O_DIRECTORY open of a freshly created (or existing, non-symlink) directory, then
         // fchown on the descriptor: no path-based TOCTOU between check and chown.
@@ -120,7 +123,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
 
     static func mountPoint(forVolumeUUID uuid: String) -> String? {
         var mounts: UnsafeMutablePointer<statfs>?
-        let n = getmntinfo_r_np(&mounts, MNT_NOWAIT)   // reentrant: caller-owned buffer, no shared static state
+        let n = getmntinfo_r_np(&mounts, MNT_NOWAIT)  // reentrant: caller-owned buffer, no shared static state
         guard n > 0, let mounts else { return nil }
         defer { free(mounts) }
         for i in 0..<Int(n) {
@@ -134,7 +137,11 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
             guard rc == 0 else { continue }
             // Layout: u_int32 length, then uuid_t (16 bytes)
             let bytes = Array(buffer[4..<20])
-            let volUUID = UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+            let volUUID = UUID(
+                uuid: (
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12],
+                    bytes[13], bytes[14], bytes[15]
+                ))
             if volUUID.uuidString.caseInsensitiveCompare(uuid) == .orderedSame { return mp }
         }
         return nil

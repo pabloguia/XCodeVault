@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import XCodeVaultCore
 
 /// A `CommandRunning` that replays canned results keyed by executable basename + first args.

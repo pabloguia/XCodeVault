@@ -5,7 +5,8 @@ public enum TextRenderer {
     public static func status(_ r: ScanReport) -> String {
         var o = ""
         o += "XCodeVault \(r.toolVersion) · catalog \(r.catalogVersion) · \(iso(r.generatedAt))\n"
-        o += "macOS \(r.host.macOSVersion) (\(r.host.macOSBuild)) · \(r.host.architecture) · internal free \(ByteCount.format(r.host.dataVolumeFreeBytes)) of \(ByteCount.format(r.host.dataVolumeTotalBytes))\n"
+        o +=
+            "macOS \(r.host.macOSVersion) (\(r.host.macOSBuild)) · \(r.host.architecture) · internal free \(ByteCount.format(r.host.dataVolumeFreeBytes)) of \(ByteCount.format(r.host.dataVolumeTotalBytes))\n"
         o += "\nXcode installations:\n"
         if r.xcodes.isEmpty { o += "  (none found)\n" }
         for x in r.xcodes {
@@ -19,13 +20,16 @@ public enum TextRenderer {
         }
         o += "\nSimulator runtimes (\(r.runtimes.count), \(ByteCount.format(r.summary.runtimeImageBytes))):\n"
         for rt in r.runtimes {
-            o += "  \(pad(rt.platformName, 9)) \(pad(rt.version ?? "?", 7)) \(pad(rt.build ?? "?", 8)) \(pad(rt.state ?? "?", 8)) \(pad(ByteCount.format(rt.sizeBytes ?? 0), 9)) \(rt.isMounted ? "mounted" : "NOT mounted")  \(rt.isMobileAssetBacked ? "MobileAsset store" : rt.path ?? "")\n"
+            o +=
+                "  \(pad(rt.platformName, 9)) \(pad(rt.version ?? "?", 7)) \(pad(rt.build ?? "?", 8)) \(pad(rt.state ?? "?", 8)) \(pad(ByteCount.format(rt.sizeBytes ?? 0), 9)) \(rt.isMounted ? "mounted" : "NOT mounted")  \(rt.isMobileAssetBacked ? "MobileAsset store" : rt.path ?? "")\n"
         }
-        o += "\nSimulator devices: \(r.devices.count) (\(r.devices.filter { !$0.isAvailable }.count) unavailable), \(ByteCount.format(r.devices.reduce(0) { $0 + ($1.dataPathSize ?? 0) }))\n"
+        o +=
+            "\nSimulator devices: \(r.devices.count) (\(r.devices.filter { !$0.isAvailable }.count) unavailable), \(ByteCount.format(r.devices.reduce(0) { $0 + ($1.dataPathSize ?? 0) }))\n"
         o += "\nVolumes:\n"
         for v in r.volumes {
             let q = VolumeQualification.evaluate(v)
-            o += "  \(pad(v.volumeName, 18)) \(pad(v.filesystemPersonality, 20)) \(pad(v.busProtocol, 12)) \(v.isInternal ? "internal" : "external") free \(pad(ByteCount.format(v.freeBytes), 10)) \(v.isBootVolume ? "boot" : q.verdict.rawValue)\n"
+            o +=
+                "  \(pad(v.volumeName, 18)) \(pad(v.filesystemPersonality, 20)) \(pad(v.busProtocol, 12)) \(v.isInternal ? "internal" : "external") free \(pad(ByteCount.format(v.freeBytes), 10)) \(v.isBootVolume ? "boot" : q.verdict.rawValue)\n"
         }
         return o
     }
@@ -38,13 +42,18 @@ public enum TextRenderer {
         for it in items {
             guard let c = r.category(for: it) else { continue }
             let label = c.isExperimental ? c.recommendedStrategy.rawValue + " (exp.)" : c.recommendedStrategy.rawValue
-            let extra = it.isSymlink ? "  → SYMLINK to \(it.symlinkTarget ?? "?")" : (it.isMountPoint ? "  [mount point]" : "") + (it.onBootVolume ? "" : "  [not on boot volume]") + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
+            let extra =
+                it.isSymlink
+                ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
+                : (it.isMountPoint ? "  [mount point]" : "") + (it.onBootVolume ? "" : "  [not on boot volume]")
+                    + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
             o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
         }
         let s = r.summary
         o += "\nSummary:\n"
         o += "  Internal developer storage found:   \(ByteCount.format(s.internalDeveloperBytes))\(s.lowerBound ? " (lower bound)" : "")\n"
-        o += "    of which simulator runtime images: \(ByteCount.format(s.runtimeImageBytes))  (delete with `simctl runtime delete`, keep installers externally)\n"
+        o +=
+            "    of which simulator runtime images: \(ByteCount.format(s.runtimeImageBytes))  (delete with `simctl runtime delete`, keep installers externally)\n"
         o += "  Safely cleanable:                   \(ByteCount.format(s.cleanableBytes))\n"
         o += "  Relocatable (supported mechanisms): \(ByteCount.format(s.relocatableBytes))\n"
         o += "  Cold-storage eligible:              \(ByteCount.format(s.coldStorageEligibleBytes))\n"
@@ -74,7 +83,8 @@ public enum TextRenderer {
     public static func compatibility(_ catalog: [StorageCategory]) -> String {
         var o = "\(pad("CATEGORY", 34)) \(pad("STRATEGY", 21)) \(pad("STATUS", 13)) \(pad("PRIV", 5)) EVIDENCE\n"
         for c in catalog {
-            o += "\(pad(c.name, 34)) \(pad(c.recommendedStrategy.rawValue, 21)) \(pad(c.isExperimental ? "experimental" : c.evidenceStatus.rawValue, 13)) \(pad(c.privilege.rawValue, 5)) \(c.evidence ?? "(none — unverified)")\n"
+            o +=
+                "\(pad(c.name, 34)) \(pad(c.recommendedStrategy.rawValue, 21)) \(pad(c.isExperimental ? "experimental" : c.evidenceStatus.rawValue, 13)) \(pad(c.privilege.rawValue, 5)) \(c.evidence ?? "(none — unverified)")\n"
         }
         return o
     }

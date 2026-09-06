@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import XCodeVaultCore
 
 final class XcodeCapabilitiesTests: XCTestCase {
@@ -16,11 +17,11 @@ final class XcodeCapabilitiesTests: XCTestCase {
     func testOlderHelpWithoutRuntimeFlagsIsNotMisdetected() {
         // A synthetic Xcode 13-style usage: -exportPath exists only for -exportArchive.
         let help = """
-        Usage: xcodebuild [-project <projectname>] ...
-               xcodebuild -exportArchive -archivePath <xcarchivepath> [-exportPath <destinationpath>] -exportOptionsPlist <plistpath>
-        Options:
-            -runFirstLaunch    install packages and agree to the license
-        """
+            Usage: xcodebuild [-project <projectname>] ...
+                   xcodebuild -exportArchive -archivePath <xcarchivepath> [-exportPath <destinationpath>] -exportOptionsPlist <plistpath>
+            Options:
+                -runFirstLaunch    install packages and agree to the license
+            """
         let c = XcodeCapabilities.parse(xcodebuildHelp: help)
         XCTAssertFalse(c.downloadPlatform); XCTAssertFalse(c.exportPath); XCTAssertFalse(c.importPlatform)
         XCTAssertFalse(c.supportsRuntimeLibrary); XCTAssertFalse(c.prepareDeviceSupport)
@@ -28,10 +29,10 @@ final class XcodeCapabilitiesTests: XCTestCase {
 
     func testXcode15StyleHelpDetectsPlatformButNotComponents() {
         let help = """
-               xcodebuild -downloadPlatform <iOS|watchOS|tvOS|visionOS>  [-exportPath <destinationpath> -buildVersion <osversion>]
-               xcodebuild -downloadAllPlatforms [-exportPath <destinationpath>]
-               xcodebuild -importPlatform <simruntimedmgpath>
-        """
+                   xcodebuild -downloadPlatform <iOS|watchOS|tvOS|visionOS>  [-exportPath <destinationpath> -buildVersion <osversion>]
+                   xcodebuild -downloadAllPlatforms [-exportPath <destinationpath>]
+                   xcodebuild -importPlatform <simruntimedmgpath>
+            """
         let c = XcodeCapabilities.parse(xcodebuildHelp: help)
         XCTAssertTrue(c.supportsRuntimeLibrary); XCTAssertTrue(c.buildVersion)
         XCTAssertFalse(c.architectureVariant); XCTAssertFalse(c.downloadComponent); XCTAssertFalse(c.showComponent)
@@ -60,7 +61,9 @@ final class SimulatorDiscoveryTests: XCTestCase {
     }
 
     func testRuntimesUseInjectedRunner() throws {
-        let runner = FakeRunner(responses: ["xcrun simctl runtime list -j": CommandResult(status: 0, stdout: Fixtures.string("simctl-runtime-list-xcode26.5.json"), stderr: "")])
+        let runner = FakeRunner(responses: [
+            "xcrun simctl runtime list -j": CommandResult(status: 0, stdout: Fixtures.string("simctl-runtime-list-xcode26.5.json"), stderr: "")
+        ])
         XCTAssertEqual(try SimulatorDiscovery.runtimes(runner: runner).count, 2)
         let failing = FakeRunner(responses: [:])
         XCTAssertThrowsError(try SimulatorDiscovery.runtimes(runner: failing))
@@ -87,10 +90,11 @@ final class VolumeTests: XCTestCase {
     }
 
     func testQualificationBlockers() {
-        var v = Volume(deviceNode: "/dev/disk9s1", volumeName: "STICK", volumeUUID: "X", mountPoint: "/Volumes/STICK",
-                       filesystemPersonality: "ExFAT", filesystemType: "exfat", isInternal: false, isRemovableMedia: true,
-                       isEjectable: true, busProtocol: "USB", isSolidState: nil, isWritable: true, ownersEnabled: false,
-                       totalBytes: 64_000_000_000, freeBytes: 60_000_000_000, isBootVolume: false)
+        var v = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "STICK", volumeUUID: "X", mountPoint: "/Volumes/STICK",
+            filesystemPersonality: "ExFAT", filesystemType: "exfat", isInternal: false, isRemovableMedia: true,
+            isEjectable: true, busProtocol: "USB", isSolidState: nil, isWritable: true, ownersEnabled: false,
+            totalBytes: 64_000_000_000, freeBytes: 60_000_000_000, isBootVolume: false)
         var q = VolumeQualification.evaluate(v)
         XCTAssertEqual(q.verdict, .unsuitable)
         XCTAssertTrue(q.blockers.contains { $0.contains("APFS") })
@@ -105,8 +109,10 @@ final class VolumeTests: XCTestCase {
 
 final class HostEnvironmentTests: XCTestCase {
     func testMinimumOSRule() {
-        let runner = FakeRunner(responses: ["sw_vers -productVersion": .init(status: 0, stdout: "13.6.1\n", stderr: ""),
-                                            "sw_vers -buildVersion": .init(status: 0, stdout: "22G313\n", stderr: "")])
+        let runner = FakeRunner(responses: [
+            "sw_vers -productVersion": .init(status: 0, stdout: "13.6.1\n", stderr: ""),
+            "sw_vers -buildVersion": .init(status: 0, stdout: "22G313\n", stderr: ""),
+        ])
         let h = HostEnvironment.discover(runner: runner, home: NSTemporaryDirectory())
         XCTAssertEqual(h.macOSVersion, "13.6.1"); XCTAssertFalse(h.meetsMinimumOS)
         XCTAssertGreaterThan(h.dataVolumeTotalBytes, 0)

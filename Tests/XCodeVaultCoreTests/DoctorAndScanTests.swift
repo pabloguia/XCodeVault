@@ -1,12 +1,17 @@
 import XCTest
+
 @testable import XCodeVaultCore
 
 final class DoctorTests: XCTestCase {
-    private func fakeReport(home: String, volumes: [Volume] = [], runtimes: [SimulatorRuntime] = [], devices: [SimulatorDevice] = [], free: UInt64 = 100_000_000_000) -> ScanReport {
-        let host = HostEnvironment(macOSVersion: "26.6", macOSBuild: "25G83", architecture: "arm64", homeDirectory: home,
-                                   dataVolumeFreeBytes: free, dataVolumeTotalBytes: 500_000_000_000, userName: "tester", isRoot: false)
-        return ScanReport(generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: runtimes,
-                          devices: devices, volumes: volumes, items: [], summary: ScanSummary(), warnings: [])
+    private func fakeReport(
+        home: String, volumes: [Volume] = [], runtimes: [SimulatorRuntime] = [], devices: [SimulatorDevice] = [], free: UInt64 = 100_000_000_000
+    ) -> ScanReport {
+        let host = HostEnvironment(
+            macOSVersion: "26.6", macOSBuild: "25G83", architecture: "arm64", homeDirectory: home,
+            dataVolumeFreeBytes: free, dataVolumeTotalBytes: 500_000_000_000, userName: "tester", isRoot: false)
+        return ScanReport(
+            generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: runtimes,
+            devices: devices, volumes: volumes, items: [], summary: ScanSummary(), warnings: [])
     }
     private let quiet = FakeRunner(responses: [:])
 
@@ -35,10 +40,11 @@ final class DoctorTests: XCTestCase {
         let t = TempDir()
         t.dir("Library/Developer")
         t.dir("ext/mac-ssd-rescue/DerivedData")
-        let vol = Volume(deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
-                         filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
-                         isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
-                         totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
         XCTAssertTrue(f.contains { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") && $0.detail.contains("DerivedData") })
     }
@@ -64,8 +70,9 @@ final class DoctorTests: XCTestCase {
 
     func testUnavailableDevices() {
         let t = TempDir(); t.dir("Library/Developer")
-        let dev = SimulatorDevice(udid: "U", name: "iPhone X", runtimeIdentifier: "r", state: "Shutdown", isAvailable: false,
-                                  availabilityError: "runtime profile not found", dataPath: nil, dataPathSize: 123, logPath: nil, lastBootedAt: nil)
+        let dev = SimulatorDevice(
+            udid: "U", name: "iPhone X", runtimeIdentifier: "r", state: "Shutdown", isAvailable: false,
+            availabilityError: "runtime profile not found", dataPath: nil, dataPathSize: 123, logPath: nil, lastBootedAt: nil)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, devices: [dev]))
         XCTAssertTrue(f.contains { $0.id == "unavailable-devices" && $0.remediation?.contains("simctl delete unavailable") == true })
     }
@@ -95,7 +102,7 @@ final class ScannerTests: XCTestCase {
         let pv = try XCTUnwrap(items.first { $0.categoryID == "previews" })
         XCTAssertFalse(pv.exists); XCTAssertNil(pv.usage)
         let summary = scanner.summarize(items: items, runtimes: [])
-        XCTAssertEqual(summary.relocatableBytes, dd.allocatedBytes)   // symlinked archives are not counted
+        XCTAssertEqual(summary.relocatableBytes, dd.allocatedBytes)  // symlinked archives are not counted
         XCTAssertEqual(summary.cleanableBytes, dd.allocatedBytes)
         XCTAssertEqual(summary.estimatedInternalSavingsBytes, dd.allocatedBytes)
     }
@@ -107,10 +114,13 @@ final class ScannerTests: XCTestCase {
             "sw_vers -buildVersion": .init(status: 0, stdout: "25G83\n", stderr: ""),
             "xcrun simctl runtime list -j": .init(status: 0, stdout: Fixtures.string("simctl-runtime-list-xcode26.5.json"), stderr: ""),
             "xcrun simctl list devices -j": .init(status: 0, stdout: Fixtures.string("simctl-list-devices-xcode26.5.json"), stderr: ""),
-            "diskutil list -plist": .init(status: 0, stdout: "<plist version=\"1.0\"><dict><key>AllDisksAndPartitions</key><array/></dict></plist>", stderr: ""),
+            "diskutil list -plist": .init(
+                status: 0, stdout: "<plist version=\"1.0\"><dict><key>AllDisksAndPartitions</key><array/></dict></plist>", stderr: ""),
             "xcode-select -p": .init(status: 0, stdout: "/nonexistent/Xcode.app/Contents/Developer\n", stderr: ""),
         ])
-        let report = XCodeVaultCore.Scanner(runner: runner, home: t.path, catalog: [StorageCatalog.category("derivedData")!], measureSizes: false, detectXcodeCapabilities: false).scan()
+        let report = XCodeVaultCore.Scanner(
+            runner: runner, home: t.path, catalog: [StorageCatalog.category("derivedData")!], measureSizes: false, detectXcodeCapabilities: false
+        ).scan()
         XCTAssertEqual(report.runtimes.count, 2)
         XCTAssertEqual(report.devices.count, 3)
         let json = try JSONOutput.encode(report)

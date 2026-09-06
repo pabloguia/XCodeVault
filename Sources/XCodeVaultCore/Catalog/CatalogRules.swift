@@ -26,7 +26,9 @@ public enum CatalogRules {
             if neverSymlink.contains(t) && category.allowedStrategies.contains(where: { $0 == .symlinkRelocation || $0 == .userDirectoryRelocation }) {
                 v.append(Violation(categoryID: category.id, message: "\(t) may never be symlinked/relocated (CLAUDE.md rule 7)"))
             }
-            if neverModifyPrefixes.contains(where: { t.hasPrefix($0) }) && category.allowedStrategies.contains(where: { $0 != .appleManaged && $0 != .neverMove }) {
+            if neverModifyPrefixes.contains(where: { t.hasPrefix($0) })
+                && category.allowedStrategies.contains(where: { $0 != .appleManaged && $0 != .neverMove })
+            {
                 v.append(Violation(categoryID: category.id, message: "\(t) is under /System: only appleManaged/neverMove allowed (CLAUDE.md rule 2)"))
             }
         }

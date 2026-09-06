@@ -2,15 +2,15 @@ import Foundation
 
 /// How a storage category may be handled. Mirrors docs/product/STORAGE_CATALOG.md.
 public enum Strategy: String, Sendable, Codable, CaseIterable {
-    case nativeConfiguration     // Xcode's own Locations setting
-    case safeCleanup             // regenerable; delete via official commands
-    case coldStorage             // archive to external, off the live path
+    case nativeConfiguration  // Xcode's own Locations setting
+    case safeCleanup  // regenerable; delete via official commands
+    case coldStorage  // archive to external, off the live path
     case userDirectoryRelocation
-    case symlinkRelocation       // per-category only; forbidden for some paths
-    case canonicalMount          // experimental, gated on E1/E2/E4/E6
-    case downloadRepository      // keep installers externally (Runtime Library)
+    case symlinkRelocation  // per-category only; forbidden for some paths
+    case canonicalMount  // experimental, gated on E1/E2/E4/E6
+    case downloadRepository  // keep installers externally (Runtime Library)
     case restoreOnDemand
-    case appleManaged            // info only
+    case appleManaged  // info only
     case neverMove
 }
 
@@ -21,16 +21,24 @@ public enum EvidenceStatus: String, Sendable, Codable {
 }
 
 public enum Regenerability: String, Sendable, Codable {
-    case regenerable            // rebuilt automatically by Xcode/tools
-    case redownloadable         // Apple will download it again on demand
-    case userRecreatable        // user can recreate with effort (e.g. simulator devices)
-    case nonRegenerable         // Archives, custom data — never auto-delete
+    case regenerable  // rebuilt automatically by Xcode/tools
+    case redownloadable  // Apple will download it again on demand
+    case userRecreatable  // user can recreate with effort (e.g. simulator devices)
+    case nonRegenerable  // Archives, custom data — never auto-delete
 }
 
 public enum RiskLevel: String, Sendable, Codable, Comparable {
     case none, low, medium, high, critical
     public static func < (a: RiskLevel, b: RiskLevel) -> Bool { a.rank < b.rank }
-    private var rank: Int { switch self { case .none: 0; case .low: 1; case .medium: 2; case .high: 3; case .critical: 4 } }
+    private var rank: Int {
+        switch self {
+        case .none: 0;
+        case .low: 1;
+        case .medium: 2;
+        case .high: 3;
+        case .critical: 4
+        }
+    }
 }
 
 public enum PrivilegeLevel: String, Sendable, Codable { case user, root }
@@ -53,7 +61,7 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
     public var recommendedStrategy: Strategy
     public var allowedStrategies: [Strategy]
     public var privilege: PrivilegeLevel
-    public var evidence: String?             // matrix entry, F#, H#, or Apple URL — nil ⇒ unverified
+    public var evidence: String?  // matrix entry, F#, H#, or Apple URL — nil ⇒ unverified
     public var evidenceStatus: EvidenceStatus
     public var minimumXcodeMajor: Int?
     public var notes: [String]
@@ -62,11 +70,13 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
     /// Official command that reclaims this category (when deletion must go through Apple's tool).
     public var cleanupCommand: String?
 
-    public init(id: String, name: String, subsystem: Subsystem, pathTemplates: [String], description: String,
-                regenerability: Regenerability, deletionRisk: RiskLevel, relocationRisk: RiskLevel,
-                recommendedStrategy: Strategy, allowedStrategies: [Strategy], privilege: PrivilegeLevel = .user,
-                evidence: String? = nil, evidenceStatus: EvidenceStatus = .unverified, minimumXcodeMajor: Int? = nil,
-                notes: [String] = [], isMountGraft: Bool = false, cleanupCommand: String? = nil) {
+    public init(
+        id: String, name: String, subsystem: Subsystem, pathTemplates: [String], description: String,
+        regenerability: Regenerability, deletionRisk: RiskLevel, relocationRisk: RiskLevel,
+        recommendedStrategy: Strategy, allowedStrategies: [Strategy], privilege: PrivilegeLevel = .user,
+        evidence: String? = nil, evidenceStatus: EvidenceStatus = .unverified, minimumXcodeMajor: Int? = nil,
+        notes: [String] = [], isMountGraft: Bool = false, cleanupCommand: String? = nil
+    ) {
         self.id = id; self.name = name; self.subsystem = subsystem; self.pathTemplates = pathTemplates
         self.description = description; self.regenerability = regenerability; self.deletionRisk = deletionRisk
         self.relocationRisk = relocationRisk; self.recommendedStrategy = recommendedStrategy
@@ -79,7 +89,9 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
     /// Rule 10 of CLAUDE.md: not supported until verified. Everything else is labeled experimental.
     public var isExperimental: Bool { evidenceStatus != .verified && recommendedStrategy != .appleManaged && recommendedStrategy != .neverMove }
     public var isRelocatable: Bool {
-        allowedStrategies.contains { [.nativeConfiguration, .userDirectoryRelocation, .symlinkRelocation, .canonicalMount, .coldStorage, .downloadRepository].contains($0) }
+        allowedStrategies.contains {
+            [.nativeConfiguration, .userDirectoryRelocation, .symlinkRelocation, .canonicalMount, .coldStorage, .downloadRepository].contains($0)
+        }
     }
     public var isCleanable: Bool { allowedStrategies.contains(.safeCleanup) || cleanupCommand != nil }
     public var mustStayLocal: Bool { recommendedStrategy == .neverMove || recommendedStrategy == .appleManaged }

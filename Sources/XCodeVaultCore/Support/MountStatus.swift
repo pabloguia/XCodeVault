@@ -21,8 +21,8 @@ public enum MountStatus {
 
     public struct FilesystemInfo: Sendable, Equatable {
         public let mountPoint: String
-        public let device: String       // f_mntfromname
-        public let typeName: String     // f_fstypename
+        public let device: String  // f_mntfromname
+        public let typeName: String  // f_fstypename
         public let flags: UInt32
         public var isReadOnly: Bool { flags & UInt32(MNT_RDONLY) != 0 }
         public var isLocal: Bool { flags & UInt32(MNT_LOCAL) != 0 }

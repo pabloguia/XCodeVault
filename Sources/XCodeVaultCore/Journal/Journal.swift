@@ -10,8 +10,8 @@ public struct JournalEntry: Sendable, Codable, Equatable, Identifiable {
         case clean, runtimeDelete, runtimeExport, runtimeImport, runtimeOffload, xcodeLocationChange, migration
     }
     public enum State: String, Sendable, Codable { case planned, started, completed, failed, rolledBack, skipped }
-    public var id: String                 // operation id shared across its state transitions
-    public var sequence: Int              // monotonically increasing per file
+    public var id: String  // operation id shared across its state transitions
+    public var sequence: Int  // monotonically increasing per file
     public var timestamp: Date
     public var kind: Kind
     public var state: State
@@ -42,7 +42,9 @@ public struct Journal: Sendable {
         let fh = try FileHandle(forWritingTo: url)
         defer { try? fh.close() }
         // Cross-process exclusion (CLI and GUI may both append).
-        guard flock(fh.fileDescriptor, LOCK_EX) == 0 else { throw CommandError(executable: "flock", arguments: [url.path], result: nil, underlying: String(cString: strerror(errno))) }
+        guard flock(fh.fileDescriptor, LOCK_EX) == 0 else {
+            throw CommandError(executable: "flock", arguments: [url.path], result: nil, underlying: String(cString: strerror(errno)))
+        }
         defer { flock(fh.fileDescriptor, LOCK_UN) }
         e.sequence = (try? entries().last?.sequence).flatMap { $0 }.map { $0 + 1 } ?? 1
         let enc2 = JSONEncoder(); enc2.dateEncodingStrategy = .iso8601; enc2.outputFormatting = [.sortedKeys]
@@ -69,9 +71,13 @@ public struct Journal: Sendable {
 
     /// Convenience: record a transition for an operation.
     @discardableResult
-    public func record(id: String = UUID().uuidString, kind: JournalEntry.Kind, state: JournalEntry.State, summary: String,
-                       paths: [String] = [], bytes: UInt64? = nil, detail: [String: String] = [:]) throws -> JournalEntry {
-        try append(JournalEntry(id: id, sequence: 0, timestamp: Date(), kind: kind, state: state, summary: summary,
-                                paths: paths, bytes: bytes, detail: detail, toolVersion: XCodeVaultVersion.current))
+    public func record(
+        id: String = UUID().uuidString, kind: JournalEntry.Kind, state: JournalEntry.State, summary: String,
+        paths: [String] = [], bytes: UInt64? = nil, detail: [String: String] = [:]
+    ) throws -> JournalEntry {
+        try append(
+            JournalEntry(
+                id: id, sequence: 0, timestamp: Date(), kind: kind, state: state, summary: summary,
+                paths: paths, bytes: bytes, detail: detail, toolVersion: XCodeVaultVersion.current))
     }
 }

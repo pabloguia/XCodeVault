@@ -65,8 +65,14 @@ public struct ProcessCommandRunner: CommandRunning {
         let group = DispatchGroup()
         nonisolated(unsafe) var outData = Data()
         nonisolated(unsafe) var errData = Data()
-        group.enter(); DispatchQueue.global().async { outData = outPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
-        group.enter(); DispatchQueue.global().async { errData = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+        group.enter();
+        DispatchQueue.global().async {
+            outData = outPipe.fileHandleForReading.readDataToEndOfFile(); group.leave()
+        }
+        group.enter();
+        DispatchQueue.global().async {
+            errData = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave()
+        }
         process.waitUntilExit()
         group.wait()
         return CommandResult(

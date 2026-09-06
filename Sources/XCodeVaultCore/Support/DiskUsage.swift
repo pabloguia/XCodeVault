@@ -21,7 +21,8 @@ public struct DiskUsage: Sendable, Equatable, Codable {
     /// Paths that could not be read (permission denied etc.). Non-empty means the total is a lower bound.
     public var unreadable: [String]
 
-    public static let zero = DiskUsage(allocatedBytes: 0, logicalBytes: 0, fileCount: 0, directoryCount: 0, symlinkCount: 0, skippedMountPoints: [], unreadable: [])
+    public static let zero = DiskUsage(
+        allocatedBytes: 0, logicalBytes: 0, fileCount: 0, directoryCount: 0, symlinkCount: 0, skippedMountPoints: [], unreadable: [])
 
     public var isLowerBound: Bool { !unreadable.isEmpty }
 

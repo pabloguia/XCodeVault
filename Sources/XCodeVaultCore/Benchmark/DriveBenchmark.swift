@@ -9,9 +9,9 @@ public struct DriveBenchmark: Sendable {
         public var fileSizeBytes: UInt64
         public var random4KReadIOPS: Double
         public var random4KWriteIOPS: Double
-        public var random4KReadLatencyMicros: Double     // median
+        public var random4KReadLatencyMicros: Double  // median
         public var sequentialWriteMBps: Double
-        public var createDeleteFilesPerSecond: Double     // 1 KiB files: create+write+fsync+delete
+        public var createDeleteFilesPerSecond: Double  // 1 KiB files: create+write+fsync+delete
         public var seconds: Double
         public var verdict: String
     }
@@ -27,7 +27,7 @@ public struct DriveBenchmark: Sendable {
         let fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0o600)
         guard fd >= 0 else { throw CleanError("cannot create benchmark file in \(dir): \(String(cString: strerror(errno)))") }
         defer { close(fd); unlink(path) }
-        fcntl(fd, F_NOCACHE, 1)   // bypass the unified buffer cache so we measure the device
+        fcntl(fd, F_NOCACHE, 1)  // bypass the unified buffer cache so we measure the device
 
         // Sequential write to size the file.
         let chunk = 1 << 20
@@ -93,11 +93,13 @@ public struct DriveBenchmark: Sendable {
         switch (readIOPS, mdRate) {
         case (20_000..., 2_000...): verdict = "internal-class (heuristic thresholds, E10 pending): fine for DerivedData, simulators, everything"
         case (5_000..., 500...): verdict = "fast (heuristic thresholds, E10 pending): usable for DerivedData; expect slower incremental builds than internal"
-        case (1_000..., 100...): verdict = "moderate (heuristic thresholds, E10 pending): fine for Archives, Runtime Library and cold storage; DerivedData will feel slow"
+        case (1_000..., 100...):
+            verdict = "moderate (heuristic thresholds, E10 pending): fine for Archives, Runtime Library and cold storage; DerivedData will feel slow"
         default: verdict = "slow (heuristic thresholds, E10 pending): use only for cold storage and installers"
         }
-        return Result(directory: dir, fileSizeBytes: written, random4KReadIOPS: readIOPS, random4KWriteIOPS: writeIOPS,
-                      random4KReadLatencyMicros: medianLat, sequentialWriteMBps: seqMBps, createDeleteFilesPerSecond: mdRate,
-                      seconds: Date().timeIntervalSince(start), verdict: verdict)
+        return Result(
+            directory: dir, fileSizeBytes: written, random4KReadIOPS: readIOPS, random4KWriteIOPS: writeIOPS,
+            random4KReadLatencyMicros: medianLat, sequentialWriteMBps: seqMBps, createDeleteFilesPerSecond: mdRate,
+            seconds: Date().timeIntervalSince(start), verdict: verdict)
     }
 }

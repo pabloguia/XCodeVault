@@ -4,8 +4,8 @@ import Foundation
 /// One deletion the cleaner proposes. Always a whole path; never a shell command.
 public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
     public enum Method: String, Sendable, Codable {
-        case removePath                 // FileManager.removeItem / trash
-        case simctlDeleteAllInDeviceSet // `xcrun simctl --set <path> delete all` (the path is the catalog path, never client input)
+        case removePath  // FileManager.removeItem / trash
+        case simctlDeleteAllInDeviceSet  // `xcrun simctl --set <path> delete all` (the path is the catalog path, never client input)
     }
     public var id: String { path }
     public var method: Method = .removePath
@@ -21,7 +21,7 @@ public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
 
 public struct CleanPlan: Sendable, Codable, Equatable {
     public var actions: [CleanAction]
-    public var skipped: [String]          // human-readable reasons for things not planned
+    public var skipped: [String]  // human-readable reasons for things not planned
     public var warnings: [String]
     public init(actions: [CleanAction], skipped: [String], warnings: [String]) { self.actions = actions; self.skipped = skipped; self.warnings = warnings }
     public var totalBytes: UInt64 { actions.reduce(0) { $0 + $1.bytes } }
@@ -52,25 +52,33 @@ public struct CleanPlanner: Sendable {
             guard c.allowedStrategies.contains(.safeCleanup) else { continue }
             guard c.regenerability != .nonRegenerable else { skipped.append("\(c.name): non-regenerable, never cleaned automatically"); continue }
             guard item.exists else { continue }
-            if item.isSymlink { skipped.append("\(item.path): is a symlink (→ \(item.symlinkTarget ?? "?")) — fix with doctor first, nothing is deleted through symlinks"); continue }
+            if item.isSymlink {
+                skipped.append("\(item.path): is a symlink (→ \(item.symlinkTarget ?? "?")) — fix with doctor first, nothing is deleted through symlinks");
+                continue
+            }
             if item.isMountPoint { skipped.append("\(item.path): is a mount point — never cleaned"); continue }
             guard item.allocatedBytes > 0 else { continue }
-            if let mounts = item.usage?.skippedMountPoints, !mounts.isEmpty { skipped.append("\(item.path): contains mount points (\(mounts.joined(separator: ", "))) — never cleaned"); continue }
+            if let mounts = item.usage?.skippedMountPoints, !mounts.isEmpty {
+                skipped.append("\(item.path): contains mount points (\(mounts.joined(separator: ", "))) — never cleaned"); continue
+            }
             let children = granular && ["derivedData", "deviceSupport"].contains(c.id) ? childActions(of: item, category: c) : nil
             if let children, !children.isEmpty {
                 actions += children
             } else {
                 let method: CleanAction.Method = CleanPlanner.deviceSetCategories.contains(c.id) ? .simctlDeleteAllInDeviceSet : .removePath
-                actions.append(CleanAction(method: method, categoryID: c.id, categoryName: c.name, path: item.path, bytes: item.allocatedBytes,
-                                           isExperimental: c.isExperimental, risk: c.deletionRisk, requiresRoot: c.privilege == .root,
-                                           notes: c.notes))
+                actions.append(
+                    CleanAction(
+                        method: method, categoryID: c.id, categoryName: c.name, path: item.path, bytes: item.allocatedBytes,
+                        isExperimental: c.isExperimental, risk: c.deletionRisk, requiresRoot: c.privilege == .root,
+                        notes: c.notes))
             }
         }
         if actions.contains(where: { $0.categoryID == "derivedData" }) {
             warnings.append("DerivedData is rebuilt on the next build; the first build of each project will be a full build.")
         }
         if actions.contains(where: { $0.categoryID == "deviceSupport" }) {
-            warnings.append("Device Support symbols are re-copied (minutes) the next time a device with that OS build connects; keep the builds you still debug.")
+            warnings.append(
+                "Device Support symbols are re-copied (minutes) the next time a device with that OS build connects; keep the builds you still debug.")
         }
         if actions.contains(where: { $0.categoryID == "coreSimulatorSystemCaches" }) {
             warnings.append("CoreSimulator dyld caches are root-owned: listed for accounting, executable only through the privileged helper (M3).")
@@ -88,9 +96,11 @@ public struct CleanPlanner: Sendable {
             // Keep DerivedData's shared module cache & symbol cache out of granular lists (they are cheap and shared).
             let u = DiskUsage.measure(p)?.allocatedBytes ?? 0
             guard u > 0 else { continue }
-            out.append(CleanAction(categoryID: category.id, categoryName: category.name, path: p, bytes: u,
-                                   isExperimental: category.isExperimental, risk: category.deletionRisk,
-                                   requiresRoot: category.privilege == .root, notes: []))
+            out.append(
+                CleanAction(
+                    categoryID: category.id, categoryName: category.name, path: p, bytes: u,
+                    isExperimental: category.isExperimental, risk: category.deletionRisk,
+                    requiresRoot: category.privilege == .root, notes: []))
         }
         return out
     }
@@ -119,8 +129,10 @@ public struct CleanExecutor: Sendable {
     public var isXcodeRunning: @Sendable () -> Bool
     public var runner: CommandRunning
 
-    public init(journal: Journal = Journal(), home: String = NSHomeDirectory(), useTrash: Bool = false,
-                isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning, runner: CommandRunning = ProcessCommandRunner()) {
+    public init(
+        journal: Journal = Journal(), home: String = NSHomeDirectory(), useTrash: Bool = false,
+        isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning, runner: CommandRunning = ProcessCommandRunner()
+    ) {
         self.journal = journal; self.home = home; self.useTrash = useTrash; self.isXcodeRunning = isXcodeRunning; self.runner = runner
     }
 
@@ -134,7 +146,8 @@ public struct CleanExecutor: Sendable {
             throw CleanError("Xcode.app is running. Quit Xcode before cleaning DerivedData/previews, or pass --force.")
         }
         let opID = UUID().uuidString
-        try journal.record(id: opID, kind: .clean, state: .planned, summary: "clean \(actions.count) path(s)", paths: actions.map(\.path), bytes: plan.totalBytes)
+        try journal.record(
+            id: opID, kind: .clean, state: .planned, summary: "clean \(actions.count) path(s)", paths: actions.map(\.path), bytes: plan.totalBytes)
         var deleted: [CleanAction] = [], failed: [CleanResult.FailedAction] = []
         for a in actions {
             do {
@@ -147,8 +160,7 @@ public struct CleanExecutor: Sendable {
                     try runner.check(Tools.xcrun, ["simctl", "--set", a.path, "delete", "all"])
                     if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) } else { try FileManager.default.removeItem(at: url) }
                 case .removePath:
-                    if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
-                    else { try FileManager.default.removeItem(at: url) }
+                    if useTrash { try FileManager.default.trashItem(at: url, resultingItemURL: nil) } else { try FileManager.default.removeItem(at: url) }
                 }
                 deleted.append(a)
             } catch {
@@ -156,8 +168,9 @@ public struct CleanExecutor: Sendable {
                 try journal.record(id: opID, kind: .clean, state: .failed, summary: "delete \(a.path): \(error)", paths: [a.path])
             }
         }
-        try journal.record(id: opID, kind: .clean, state: .completed, summary: "freed \(ByteCount.format(deleted.reduce(0) { $0 + $1.bytes })), \(failed.count) failure(s)",
-                           paths: deleted.map(\.path), bytes: deleted.reduce(0) { $0 + $1.bytes })
+        try journal.record(
+            id: opID, kind: .clean, state: .completed, summary: "freed \(ByteCount.format(deleted.reduce(0) { $0 + $1.bytes })), \(failed.count) failure(s)",
+            paths: deleted.map(\.path), bytes: deleted.reduce(0) { $0 + $1.bytes })
         return CleanResult(deleted: deleted, failedPairs: failed)
     }
 
@@ -169,11 +182,17 @@ public struct CleanExecutor: Sendable {
         guard !MountStatus.isMountPoint(a.path) else { throw CleanError("\(a.path) is a mount point — refusing") }
         guard st.st_uid == getuid() else { throw CleanError("\(a.path) is not owned by the current user — refusing") }
         // The path must be inside a catalog template for its category, by canonical path (no `..`, no interior symlinks).
-        guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup) else { throw CleanError("\(a.path): category is not cleanable — refusing") }
-        do { try PathSafety.requireContained(a.path, in: c.pathTemplates, home: home, what: "cleanup category") } catch { throw CleanError("\(error) — refusing") }
+        guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup) else {
+            throw CleanError("\(a.path): category is not cleanable — refusing")
+        }
+        do { try PathSafety.requireContained(a.path, in: c.pathTemplates, home: home, what: "cleanup category") } catch {
+            throw CleanError("\(error) — refusing")
+        }
         let canonical = try PathSafety.canonicalize(a.path)
         let forbidden = CatalogRules.neverSymlink.compactMap { try? PathSafety.canonicalize($0.expandingTilde(home: home)) }
         guard !forbidden.contains(canonical) else { throw CleanError("\(a.path) is a protected directory — refusing") }
-        if let u = DiskUsage.measure(a.path), !u.skippedMountPoints.isEmpty { throw CleanError("\(a.path) contains mount points (\(u.skippedMountPoints.joined(separator: ", "))) — refusing") }
+        if let u = DiskUsage.measure(a.path), !u.skippedMountPoints.isEmpty {
+            throw CleanError("\(a.path) contains mount points (\(u.skippedMountPoints.joined(separator: ", "))) — refusing")
+        }
     }
 }

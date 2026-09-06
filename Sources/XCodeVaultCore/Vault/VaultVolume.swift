@@ -8,7 +8,7 @@ public struct VaultVolume: Sendable, Codable, Equatable, Identifiable {
     public var volumeName: String
     public var lastMountPoint: String
     public var registeredAt: Date
-    public var sentinelID: String          // random token stored in the sentinel file
+    public var sentinelID: String  // random token stored in the sentinel file
 
     public static let directoryName = "XcodeVault"
     public static let sentinelName = ".xcodevault-volume.json"
@@ -19,25 +19,25 @@ public struct VaultSentinel: Sendable, Codable, Equatable {
     public var volumeUUID: String
     public var sentinelID: String
     public var createdAt: Date
-    public var createdBy: String           // tool version
+    public var createdBy: String  // tool version
 }
 
 /// What we can say about a registered volume right now. `ambiguous` and `foreign` are refusal
 /// states: nothing that depends on the volume may run.
 public enum VaultVolumeState: String, Sendable, Codable {
-    case verified        // mounted at a real mount point, UUID and sentinel match
-    case absent          // nothing mounted at the last mount point and the volume is not mounted elsewhere
-    case movedMountPoint // mounted, verified, but at a different path than last time (e.g. "Name 1")
-    case foreign         // something is mounted at the path but UUID/sentinel do not match
-    case ambiguous       // not mounted, but the last mount point exists as a local directory with content (shadow data)
-    case sentinelMissing // right UUID but our sentinel is gone (reformatted? restored from backup?)
+    case verified  // mounted at a real mount point, UUID and sentinel match
+    case absent  // nothing mounted at the last mount point and the volume is not mounted elsewhere
+    case movedMountPoint  // mounted, verified, but at a different path than last time (e.g. "Name 1")
+    case foreign  // something is mounted at the path but UUID/sentinel do not match
+    case ambiguous  // not mounted, but the last mount point exists as a local directory with content (shadow data)
+    case sentinelMissing  // right UUID but our sentinel is gone (reformatted? restored from backup?)
 }
 
 public struct VaultVolumeCheck: Sendable, Codable, Equatable {
     public var volume: VaultVolume
     public var state: VaultVolumeState
     public var currentMountPoint: String?
-    public var shadowBytes: UInt64?        // bytes found at the local path when ambiguous
+    public var shadowBytes: UInt64?  // bytes found at the local path when ambiguous
     public var detail: String
     public var isUsable: Bool { state == .verified || state == .movedMountPoint }
 }
@@ -80,10 +80,14 @@ public struct VaultRegistry: Sendable {
             // Re-registration: verify the sentinel instead of overwriting it.
             let check = VaultVerifier(registry: self).check(already)
             if check.state == .verified || check.state == .movedMountPoint { return already }
-            throw VaultError("Volume \(uuid) is already registered but in state \(check.state.rawValue): \(check.detail). Use `vault forget` first if this is intentional.")
+            throw VaultError(
+                "Volume \(uuid) is already registered but in state \(check.state.rawValue): \(check.detail). Use `vault forget` first if this is intentional.")
         }
-        do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) }
-        catch { throw VaultError("Cannot create \(dir): \(error.localizedDescription). The volume root is usually root-owned — create the folder once with Finder, or grant write access.") }
+        do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch {
+            throw VaultError(
+                "Cannot create \(dir): \(error.localizedDescription). The volume root is usually root-owned — create the folder once with Finder, or grant write access."
+            )
+        }
         let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)
@@ -107,8 +111,10 @@ public struct VaultVerifier: Sendable {
     public var mountedVolumes: @Sendable () -> [Volume]
     /// Mount-point predicate; defaults to `ATTR_DIR_MOUNTSTATUS`. Injectable so tests can stand in a directory for a volume.
     public var isMountPoint: @Sendable (String) -> Bool
-    public init(registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
-                isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) }) {
+    public init(
+        registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
+        isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) }
+    ) {
         self.registry = registry; self.mountedVolumes = mountedVolumes; self.isMountPoint = isMountPoint
     }
 
@@ -124,23 +130,27 @@ public struct VaultVerifier: Sendable {
         if let live = mounted.first(where: { $0.volumeUUID == v.volumeUUID }), let mp = live.mountPoint, isMountPoint(mp) {
             let sentinel = VaultVerifier.readSentinel(at: mp + "/" + VaultVolume.directoryName)
             guard let sentinel else {
-                return VaultVolumeCheck(volume: v, state: .sentinelMissing, currentMountPoint: mp, shadowBytes: nil,
-                                        detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(VaultVolume.directoryName)/\(VaultVolume.sentinelName) is missing.")
+                return VaultVolumeCheck(
+                    volume: v, state: .sentinelMissing, currentMountPoint: mp, shadowBytes: nil,
+                    detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(VaultVolume.directoryName)/\(VaultVolume.sentinelName) is missing.")
             }
             guard sentinel.sentinelID == v.sentinelID, sentinel.volumeUUID == v.volumeUUID else {
-                return VaultVolumeCheck(volume: v, state: .foreign, currentMountPoint: mp, shadowBytes: nil,
-                                        detail: "Sentinel at \(mp) does not match the registry (expected \(v.sentinelID), found \(sentinel.sentinelID)).")
+                return VaultVolumeCheck(
+                    volume: v, state: .foreign, currentMountPoint: mp, shadowBytes: nil,
+                    detail: "Sentinel at \(mp) does not match the registry (expected \(v.sentinelID), found \(sentinel.sentinelID)).")
             }
             if mp != v.lastMountPoint {
-                return VaultVolumeCheck(volume: v, state: .movedMountPoint, currentMountPoint: mp, shadowBytes: nil,
-                                        detail: "Verified, but mounted at \(mp) instead of \(v.lastMountPoint). Absolute paths recorded earlier will not resolve.")
+                return VaultVolumeCheck(
+                    volume: v, state: .movedMountPoint, currentMountPoint: mp, shadowBytes: nil,
+                    detail: "Verified, but mounted at \(mp) instead of \(v.lastMountPoint). Absolute paths recorded earlier will not resolve.")
             }
             return VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: mp, shadowBytes: nil, detail: "Mounted at \(mp); UUID and sentinel match.")
         }
         // 2. Not mounted. Is something else mounted at our last path?
         if isMountPoint(v.lastMountPoint) {
-            return VaultVolumeCheck(volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
-                                    detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
+            return VaultVolumeCheck(
+                volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
+                detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
         }
         // 3. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data.
         var isDir: ObjCBool = false
@@ -149,11 +159,15 @@ public struct VaultVerifier: Sendable {
             let bytes = usage?.allocatedBytes ?? 0
             let files = usage?.fileCount ?? 0
             if files > 0 {
-                return VaultVolumeCheck(volume: v, state: .ambiguous, currentMountPoint: nil, shadowBytes: bytes,
-                                        detail: "\(v.lastMountPoint) exists as a local directory containing \(files) file(s), \(ByteCount.format(bytes)) — written while the volume was absent (shadow data). Refusing to proceed until reconciled.")
+                return VaultVolumeCheck(
+                    volume: v, state: .ambiguous, currentMountPoint: nil, shadowBytes: bytes,
+                    detail:
+                        "\(v.lastMountPoint) exists as a local directory containing \(files) file(s), \(ByteCount.format(bytes)) — written while the volume was absent (shadow data). Refusing to proceed until reconciled."
+                )
             }
         }
-        return VaultVolumeCheck(volume: v, state: .absent, currentMountPoint: nil, shadowBytes: nil, detail: "Volume \(v.volumeName) (\(v.volumeUUID)) is not connected.")
+        return VaultVolumeCheck(
+            volume: v, state: .absent, currentMountPoint: nil, shadowBytes: nil, detail: "Volume \(v.volumeName) (\(v.volumeUUID)) is not connected.")
     }
 
     public func checkAll() throws -> [VaultVolumeCheck] { try registry.volumes().map(check) }

@@ -46,8 +46,11 @@ this file short and update it only when a pointer or non-negotiable changes.
 `Package.swift` (Swift 6, macOS 14+) · `Sources/XCodeVaultCore` (the only domain layer:
 Discovery, Catalog, Scan, Doctor, Report, Support) · `Sources/xcodevaultctl` (CLI) ·
 `Tests/XCodeVaultCoreTests` (+ redacted fixtures) · `fixtures/E2Fixture` (experiment fixture)
-· `.github/workflows/ci.yml` (macos-15 + macos-26). Build with `swift build`, test with
-`swift test`. Helper and GUI targets arrive in M3/M4 per ADR-0003.
+· `Sources/XCodeVaultHelperProtocol` + `Sources/XCodeVaultHelper` (root daemon, allowlisted
+verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
+`Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
+`packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) · `.swift-format`
+(4-space indent, 160 cols). Build with `swift build`, test with `swift test`.
 
 ## Non-negotiable safety rules (also in NON_GOALS_AND_SAFETY.md — kept here because they must never be missed)
 

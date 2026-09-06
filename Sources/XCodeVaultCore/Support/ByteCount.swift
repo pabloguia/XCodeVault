@@ -3,7 +3,7 @@ import Foundation
 public enum ByteCount {
     private static func makeFormatter() -> ByteCountFormatter {
         let f = ByteCountFormatter()
-        f.countStyle = .file   // decimal (GB), matching Finder and diskutil
+        f.countStyle = .file  // decimal (GB), matching Finder and diskutil
         f.allowsNonnumericFormatting = false
         return f
     }

@@ -4,18 +4,18 @@ import Foundation
 /// are sealed cryptex disk images whose bytes live under `/System/Library/AssetsV2/…` (E1).
 public struct SimulatorRuntime: Sendable, Codable, Equatable, Identifiable {
     public var id: String { identifier }
-    public var identifier: String          // image UUID
+    public var identifier: String  // image UUID
     public var runtimeIdentifier: String?  // com.apple.CoreSimulator.SimRuntime.iOS-26-5
     public var platformIdentifier: String?
     public var version: String?
     public var build: String?
-    public var kind: String?               // "Patchable Cryptex Disk Image", "Disk Image", …
-    public var state: String?              // Ready / Unusable / …
+    public var kind: String?  // "Patchable Cryptex Disk Image", "Disk Image", …
+    public var state: String?  // Ready / Unusable / …
     public var signatureState: String?
     public var deletable: Bool?
     public var sizeBytes: UInt64?
-    public var path: String?               // the .dmg inside the MobileAsset store
-    public var mountPath: String?          // /Library/Developer/CoreSimulator/Volumes/<Platform>_<Build>
+    public var path: String?  // the .dmg inside the MobileAsset store
+    public var mountPath: String?  // /Library/Developer/CoreSimulator/Volumes/<Platform>_<Build>
     public var parentMountPath: String?
     public var runtimeBundlePath: String?
     public var lastUsedAt: String?
@@ -75,10 +75,12 @@ public enum SimulatorDiscovery {
         var out: [SimulatorDevice] = []
         for (runtime, devs) in raw.devices {
             for d in devs {
-                out.append(SimulatorDevice(udid: d.udid, name: d.name, runtimeIdentifier: runtime, state: d.state,
-                                           isAvailable: d.isAvailable ?? true, availabilityError: d.availabilityError,
-                                           dataPath: d.dataPath, dataPathSize: d.dataPathSize, logPath: d.logPath,
-                                           lastBootedAt: d.lastBootedAt))
+                out.append(
+                    SimulatorDevice(
+                        udid: d.udid, name: d.name, runtimeIdentifier: runtime, state: d.state,
+                        isAvailable: d.isAvailable ?? true, availabilityError: d.availabilityError,
+                        dataPath: d.dataPath, dataPathSize: d.dataPathSize, logPath: d.logPath,
+                        lastBootedAt: d.lastBootedAt))
             }
         }
         return out.sorted { ($0.runtimeIdentifier, $0.name) < ($1.runtimeIdentifier, $1.name) }

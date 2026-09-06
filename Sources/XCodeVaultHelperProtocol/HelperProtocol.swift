@@ -26,8 +26,8 @@ import Foundation
 /// Allowlisted cleanup targets. The helper owns the path mapping; the enum exists so clients cannot
 /// even express another path.
 public enum HelperCleanupTarget: String, CaseIterable, Sendable {
-    case coreSimulatorDyldCache = "coreSimulatorDyldCache"   // /Library/Developer/CoreSimulator/Caches/dyld
-    case cryptexCaches = "cryptexCaches"                     // /Library/Developer/CoreSimulator/Cryptex/Caches
+    case coreSimulatorDyldCache = "coreSimulatorDyldCache"  // /Library/Developer/CoreSimulator/Caches/dyld
+    case cryptexCaches = "cryptexCaches"  // /Library/Developer/CoreSimulator/Cryptex/Caches
 
     public var path: String {
         switch self {
@@ -72,7 +72,7 @@ public enum HelperIdentity {
     /// refuses every connection. TODO(M5): add a minimum-version predicate once versions ship.
     public static func clientRequirement(teamID: String) -> String {
         "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] "
-        + "and certificate leaf[subject.OU] = \"\(teamID)\" and (identifier \"com.xcodevault.app\" or identifier \"com.xcodevault.xcodevaultctl\")"
+            + "and certificate leaf[subject.OU] = \"\(teamID)\" and (identifier \"com.xcodevault.app\" or identifier \"com.xcodevault.xcodevaultctl\")"
     }
     public static let version = "0.1.0-dev"
 }

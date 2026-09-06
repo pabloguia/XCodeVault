@@ -6,16 +6,16 @@ import Foundation
 public struct XcodeCapabilities: Sendable, Codable, Equatable {
     public var downloadPlatform = false
     public var downloadAllPlatforms = false
-    public var exportPath = false          // -downloadPlatform … -exportPath (Runtime Library export)
-    public var buildVersion = false        // -downloadPlatform … -buildVersion
-    public var architectureVariant = false // -architectureVariant <universal|arm64>
+    public var exportPath = false  // -downloadPlatform … -exportPath (Runtime Library export)
+    public var buildVersion = false  // -downloadPlatform … -buildVersion
+    public var architectureVariant = false  // -architectureVariant <universal|arm64>
     public var importPlatform = false
-    public var downloadComponent = false   // Xcode 26: Metal toolchain
+    public var downloadComponent = false  // Xcode 26: Metal toolchain
     public var importComponent = false
     public var deleteComponent = false
     public var showComponent = false
     public var checkForNewerComponents = false
-    public var prepareDeviceSupport = false // Xcode 26.5: pre-download device support symbols
+    public var prepareDeviceSupport = false  // Xcode 26.5: pre-download device support symbols
     public var simctlRuntimeAdd = false
     public var simctlRuntimeDelete = false
     public var simctlRuntimeUnmount = false
@@ -50,7 +50,9 @@ public struct XcodeCapabilities: Sendable, Codable, Equatable {
     /// Parses `xcrun simctl runtime` (no operation) usage text.
     public mutating func apply(simctlRuntimeHelp: String) {
         func has(_ verb: String) -> Bool {
-            simctlRuntimeHelp.split(separator: "\n").contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix(verb + " ") || $0.trimmingCharacters(in: .whitespaces) == verb }
+            simctlRuntimeHelp.split(separator: "\n").contains {
+                $0.trimmingCharacters(in: .whitespaces).hasPrefix(verb + " ") || $0.trimmingCharacters(in: .whitespaces) == verb
+            }
         }
         simctlRuntimeAdd = has("add")
         simctlRuntimeDelete = has("delete")
@@ -65,11 +67,11 @@ public struct XcodeCapabilities: Sendable, Codable, Equatable {
 
 public struct XcodeInstallation: Sendable, Codable, Equatable, Identifiable {
     public var id: String { path }
-    public var path: String            // /Applications/Xcode.app
+    public var path: String  // /Applications/Xcode.app
     public var developerDirectory: String
-    public var version: String         // 26.5
-    public var build: String           // 17F42
-    public var isSelected: Bool        // xcode-select -p points here
+    public var version: String  // 26.5
+    public var build: String  // 17F42
+    public var isSelected: Bool  // xcode-select -p points here
     public var capabilities: XcodeCapabilities
 
     public var majorVersion: Int { Int(version.split(separator: ".").first ?? "0") ?? 0 }
@@ -77,9 +79,11 @@ public struct XcodeInstallation: Sendable, Codable, Equatable, Identifiable {
 
 public enum XcodeDiscovery {
     /// Finds Xcode bundles in the standard locations plus the `xcode-select`ed one.
-    public static func discover(runner: CommandRunning = ProcessCommandRunner(),
-                                searchRoots: [String] = ["/Applications", NSHomeDirectory() + "/Applications"],
-                                detectCapabilities: Bool = true) -> [XcodeInstallation] {
+    public static func discover(
+        runner: CommandRunning = ProcessCommandRunner(),
+        searchRoots: [String] = ["/Applications", NSHomeDirectory() + "/Applications"],
+        detectCapabilities: Bool = true
+    ) -> [XcodeInstallation] {
         let fm = FileManager.default
         var candidates = Set<String>()
         for root in searchRoots {
@@ -108,7 +112,8 @@ public enum XcodeDiscovery {
         let infoPlist = appPath + "/Contents/Info.plist"
         let versionPlist = appPath + "/Contents/version.plist"
         guard let info = NSDictionary(contentsOfFile: infoPlist),
-              (info["CFBundleIdentifier"] as? String)?.hasPrefix("com.apple.dt.Xcode") == true else { return nil }
+            (info["CFBundleIdentifier"] as? String)?.hasPrefix("com.apple.dt.Xcode") == true
+        else { return nil }
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = (NSDictionary(contentsOfFile: versionPlist)?["ProductBuildVersion"] as? String) ?? "unknown"
         var caps = XcodeCapabilities()
@@ -119,7 +124,8 @@ public enum XcodeDiscovery {
                 caps.apply(simctlRuntimeHelp: r.stdout + r.stderr)
             }
         }
-        return XcodeInstallation(path: appPath, developerDirectory: dev, version: version, build: build,
-                                 isSelected: dev == selectedDeveloperDir, capabilities: caps)
+        return XcodeInstallation(
+            path: appPath, developerDirectory: dev, version: version, build: build,
+            isSelected: dev == selectedDeveloperDir, capabilities: caps)
     }
 }

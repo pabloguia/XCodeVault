@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import XCodeVaultCore
 
 final class JournalTests: XCTestCase {
@@ -21,10 +22,12 @@ final class JournalTests: XCTestCase {
 
 final class CleanTests: XCTestCase {
     private func report(home: String, items: [StorageItem]) -> ScanReport {
-        let host = HostEnvironment(macOSVersion: "26.6", macOSBuild: "x", architecture: "arm64", homeDirectory: home,
-                                   dataVolumeFreeBytes: 1, dataVolumeTotalBytes: 2, userName: "t", isRoot: false)
-        return ScanReport(generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: [],
-                          devices: [], volumes: [], items: items, summary: ScanSummary(), warnings: [])
+        let host = HostEnvironment(
+            macOSVersion: "26.6", macOSBuild: "x", architecture: "arm64", homeDirectory: home,
+            dataVolumeFreeBytes: 1, dataVolumeTotalBytes: 2, userName: "t", isRoot: false)
+        return ScanReport(
+            generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: [],
+            devices: [], volumes: [], items: items, summary: ScanSummary(), warnings: [])
     }
 
     func testPlanIsGranularForDerivedDataAndSkipsSymlinksAndArchives() throws {
@@ -32,9 +35,10 @@ final class CleanTests: XCTestCase {
         t.file("Library/Developer/Xcode/DerivedData/ProjA-abc/Build/a.o", bytes: 8192)
         t.file("Library/Developer/Xcode/DerivedData/ProjB-def/Index/b", bytes: 4096)
         t.file("Library/Developer/Xcode/Archives/2026/x.xcarchive/Info.plist", bytes: 10)
-        t.dir("elsewhere"); t.symlink("Library/Developer/Xcode/UserData/Previews", to: t.path + "/elsewhere")
-        let scanner = XCodeVaultCore.Scanner(runner: FakeRunner(responses: [:]), home: t.path,
-                                             catalog: ["derivedData", "archives", "previews"].compactMap(StorageCatalog.category))
+        t.dir("elsewhere"); t.symlink("Library/Developer/Xcode/UserData/Previews/Simulator Devices", to: t.path + "/elsewhere")
+        let scanner = XCodeVaultCore.Scanner(
+            runner: FakeRunner(responses: [:]), home: t.path,
+            catalog: ["derivedData", "archives", "previews"].compactMap(StorageCatalog.category))
         let items = scanner.resolveItems()
         let plan = CleanPlanner(home: t.path).plan(report: report(home: t.path, items: items))
         XCTAssertEqual(plan.actions.count, 2, "\(plan.actions.map(\.path))")
@@ -58,10 +62,13 @@ final class CleanTests: XCTestCase {
         let cat = ["deviceSupport", "xcodeCaches"].compactMap(StorageCatalog.category)
         var items = XCodeVaultCore.Scanner(runner: FakeRunner(responses: [:]), home: t.path, catalog: cat).resolveItems()
         // Pretend the root-owned dyld cache exists with a size.
-        items.append(StorageItem(categoryID: "coreSimulatorSystemCaches", path: "/Library/Developer/CoreSimulator/Caches/dyld", exists: true,
-                                 isSymlink: false, symlinkTarget: nil, isMountPoint: false,
-                                 usage: DiskUsage(allocatedBytes: 999, logicalBytes: 999, fileCount: 1, directoryCount: 1, symlinkCount: 0, skippedMountPoints: [], unreadable: []),
-                                 volumeMountPoint: "/System/Volumes/Data", onBootVolume: true))
+        items.append(
+            StorageItem(
+                categoryID: "coreSimulatorSystemCaches", path: "/Library/Developer/CoreSimulator/Caches/dyld", exists: true,
+                isSymlink: false, symlinkTarget: nil, isMountPoint: false,
+                usage: DiskUsage(
+                    allocatedBytes: 999, logicalBytes: 999, fileCount: 1, directoryCount: 1, symlinkCount: 0, skippedMountPoints: [], unreadable: []),
+                volumeMountPoint: "/System/Volumes/Data", onBootVolume: true))
         let all = CleanPlanner(home: t.path).plan(report: report(home: t.path, items: items))
         XCTAssertEqual(all.rootActions.map(\.categoryID), ["coreSimulatorSystemCaches"])
         XCTAssertEqual(Set(all.userActions.map(\.categoryID)), ["deviceSupport", "xcodeCaches"])
@@ -76,9 +83,14 @@ final class CleanTests: XCTestCase {
         let ddDir = (dd as NSString).deletingLastPathComponent.replacingOccurrences(of: "/Build", with: "")
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl"))
         let executor = CleanExecutor(journal: journal, home: t.path, useTrash: false, isXcodeRunning: { false })
-        let good = CleanAction(categoryID: "derivedData", categoryName: "DerivedData", path: ddDir, bytes: 4096, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
-        let outside = CleanAction(categoryID: "derivedData", categoryName: "DerivedData", path: t.dir("not-derived-data"), bytes: 1, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
-        let protected = CleanAction(categoryID: "simulatorDevices", categoryName: "x", path: t.dir("Library/Developer/CoreSimulator"), bytes: 1, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
+        let good = CleanAction(
+            categoryID: "derivedData", categoryName: "DerivedData", path: ddDir, bytes: 4096, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
+        let outside = CleanAction(
+            categoryID: "derivedData", categoryName: "DerivedData", path: t.dir("not-derived-data"), bytes: 1, isExperimental: true, risk: .low,
+            requiresRoot: false, notes: [])
+        let protected = CleanAction(
+            categoryID: "simulatorDevices", categoryName: "x", path: t.dir("Library/Developer/CoreSimulator"), bytes: 1, isExperimental: true, risk: .low,
+            requiresRoot: false, notes: [])
         let result = try executor.execute(CleanPlan(actions: [good, outside, protected], skipped: [], warnings: []))
         XCTAssertEqual(result.deleted.map(\.path), [ddDir])
         XCTAssertEqual(result.failedPairs.count, 2)
@@ -94,7 +106,8 @@ final class CleanTests: XCTestCase {
         let t = TempDir()
         let dd = t.dir("Library/Developer/Xcode/DerivedData/P-1")
         let executor = CleanExecutor(journal: Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl")), home: t.path, isXcodeRunning: { true })
-        let a = CleanAction(categoryID: "derivedData", categoryName: "DerivedData", path: dd, bytes: 1, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
+        let a = CleanAction(
+            categoryID: "derivedData", categoryName: "DerivedData", path: dd, bytes: 1, isExperimental: true, risk: .low, requiresRoot: false, notes: [])
         XCTAssertThrowsError(try executor.execute(CleanPlan(actions: [a], skipped: [], warnings: [])))
         XCTAssertTrue(FileManager.default.fileExists(atPath: dd))
         XCTAssertNoThrow(try executor.execute(CleanPlan(actions: [a], skipped: [], warnings: []), force: true))
@@ -105,10 +118,14 @@ final class RuntimeOperationsTests: XCTestCase {
     private var xcode26: XcodeInstallation {
         var c = XcodeCapabilities.parse(xcodebuildHelp: Fixtures.string("xcodebuild-help-xcode26.5.txt"))
         c.apply(simctlRuntimeHelp: Fixtures.string("simctl-runtime-help-xcode26.5.txt"))
-        return XcodeInstallation(path: "/Applications/Xcode.app", developerDirectory: "/Applications/Xcode.app/Contents/Developer", version: "26.5", build: "17F42", isSelected: true, capabilities: c)
+        return XcodeInstallation(
+            path: "/Applications/Xcode.app", developerDirectory: "/Applications/Xcode.app/Contents/Developer", version: "26.5", build: "17F42",
+            isSelected: true, capabilities: c)
     }
     private func host(free: UInt64, arm: Bool) -> HostEnvironment {
-        HostEnvironment(macOSVersion: "26.6", macOSBuild: "x", architecture: arm ? "arm64" : "x86_64", homeDirectory: "/tmp", dataVolumeFreeBytes: free, dataVolumeTotalBytes: 500_000_000_000, userName: "t", isRoot: false)
+        HostEnvironment(
+            macOSVersion: "26.6", macOSBuild: "x", architecture: arm ? "arm64" : "x86_64", homeDirectory: "/tmp", dataVolumeFreeBytes: free,
+            dataVolumeTotalBytes: 500_000_000_000, userName: "t", isRoot: false)
     }
 
     func testInstallerNameParsing() {
@@ -123,7 +140,7 @@ final class RuntimeOperationsTests: XCTestCase {
         let t = TempDir()
         t.file("iOS 26.5 Simulator Runtime.dmg", bytes: 600_000_000)
         t.file("notes.txt", bytes: 3)
-        t.file("tvOS 26.0 Simulator Runtime.dmg", bytes: 10)   // too small to be real
+        t.file("tvOS 26.0 Simulator Runtime.dmg", bytes: 10)  // too small to be real
         let lib = try RuntimeOperations.library(at: t.path)
         XCTAssertEqual(lib.map(\.fileName).sorted(), ["iOS 26.5 Simulator Runtime.dmg", "tvOS 26.0 Simulator Runtime.dmg"])
         let rts = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
@@ -162,9 +179,11 @@ final class RuntimeOperationsTests: XCTestCase {
     func testDeleteRunsSimctlAndJournals() throws {
         let t = TempDir()
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
-        let runner = FakeRunner(responses: ["xcrun simctl runtime delete ABC --keep-asset": .init(status: 0, stdout: "", stderr: ""),
-                                            "xcrun simctl runtime delete ABC --dry-run --keep-asset": .init(status: 0, stdout: "", stderr: ""),
-                                            "xcrun simctl runtime delete BAD": .init(status: 1, stdout: "", stderr: "No such runtime")])
+        let runner = FakeRunner(responses: [
+            "xcrun simctl runtime delete ABC --keep-asset": .init(status: 0, stdout: "", stderr: ""),
+            "xcrun simctl runtime delete ABC --dry-run --keep-asset": .init(status: 0, stdout: "", stderr: ""),
+            "xcrun simctl runtime delete BAD": .init(status: 1, stdout: "", stderr: "No such runtime"),
+        ])
         let ops = RuntimeOperations(runner: runner, journal: journal, xcode: xcode26, host: host(free: 1, arm: true))
         XCTAssertNoThrow(try ops.delete(identifier: "ABC", keepAsset: true))
         XCTAssertThrowsError(try ops.delete(identifier: "BAD"))
@@ -177,8 +196,10 @@ final class RuntimeOperationsTests: XCTestCase {
 
 final class XcodeLocationsTests: XCTestCase {
     func testReadUsesDefaults() {
-        let runner = FakeRunner(responses: ["defaults read com.apple.dt.Xcode IDECustomDerivedDataLocation": .init(status: 0, stdout: "/Volumes/X/DD\n", stderr: ""),
-                                            "defaults read com.apple.dt.Xcode IDEBuildLocationStyle": .init(status: 0, stdout: "Shared\n", stderr: "")])
+        let runner = FakeRunner(responses: [
+            "defaults read com.apple.dt.Xcode IDECustomDerivedDataLocation": .init(status: 0, stdout: "/Volumes/X/DD\n", stderr: ""),
+            "defaults read com.apple.dt.Xcode IDEBuildLocationStyle": .init(status: 0, stdout: "Shared\n", stderr: ""),
+        ])
         let l = XcodeLocations.read(runner: runner)
         XCTAssertEqual(l.derivedData, "/Volumes/X/DD"); XCTAssertEqual(l.buildLocationStyle, "Shared"); XCTAssertNil(l.archives)
     }
@@ -186,9 +207,10 @@ final class XcodeLocationsTests: XCTestCase {
     func testPreflightRequiresAcknowledgementForExternalVolumes() throws {
         let t = TempDir()
         let ext = t.dir("ext/DD")
-        let vol = Volume(deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: MountStatus.filesystem(containing: ext)!.mountPoint,
-                         filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false, isEjectable: true,
-                         busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: false, totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: MountStatus.filesystem(containing: ext)!.mountPoint,
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false, isEjectable: true,
+            busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: false, totalBytes: 1, freeBytes: 1, isBootVolume: false)
         XCTAssertThrowsError(try XcodeLocations.preflightDerivedData(path: ext, volumes: [vol], xcodeRunning: false, acknowledgeExternalTests: false))
         let w = try XcodeLocations.preflightDerivedData(path: ext, volumes: [vol], xcodeRunning: false, acknowledgeExternalTests: true)
         XCTAssertTrue(w.contains { $0.contains("E2") }); XCTAssertTrue(w.contains { $0.contains("Ownership") })
@@ -200,8 +222,10 @@ final class XcodeLocationsTests: XCTestCase {
     func testApplyWritesAndDeletesViaDefaultsAndJournals() throws {
         let t = TempDir()
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
-        let runner = FakeRunner(responses: ["defaults write": .init(status: 0, stdout: "", stderr: ""), "defaults delete": .init(status: 0, stdout: "", stderr: ""),
-                                            "defaults read": .init(status: 1, stdout: "", stderr: "")])
+        let runner = FakeRunner(responses: [
+            "defaults write": .init(status: 0, stdout: "", stderr: ""), "defaults delete": .init(status: 0, stdout: "", stderr: ""),
+            "defaults read": .init(status: 1, stdout: "", stderr: ""),
+        ])
         try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: "/tmp/dd"), runner: runner, journal: journal)
         try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: nil), runner: runner, journal: journal)
         XCTAssertEqual(try journal.entries().map(\.state), [.started, .completed, .started, .completed])

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import XCodeVaultCore
 
 final class DiskUsageTests: XCTestCase {
@@ -13,7 +14,7 @@ final class DiskUsageTests: XCTestCase {
         XCTAssertEqual(u.symlinkCount, 1)
         XCTAssertEqual(u.logicalBytes, 15_001)
         XCTAssertGreaterThanOrEqual(u.allocatedBytes, u.logicalBytes)
-        XCTAssertEqual(u.directoryCount, 4) // root, a, a/b, c
+        XCTAssertEqual(u.directoryCount, 4)  // root, a, a/b, c
         XCTAssertTrue(u.unreadable.isEmpty)
         XCTAssertNil(DiskUsage.measure(t.path + "/nope"))
     }

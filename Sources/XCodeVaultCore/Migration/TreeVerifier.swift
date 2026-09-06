@@ -18,7 +18,7 @@ public struct TreeVerifier: Sendable {
         public var destinationBytes: UInt64
         public var hashedFiles: UInt64
         public var mismatches: [Mismatch]
-        public var truncated: Bool                 // more mismatches than recorded
+        public var truncated: Bool  // more mismatches than recorded
         public var isIdentical: Bool { mismatches.isEmpty && !truncated }
     }
 
@@ -27,10 +27,17 @@ public struct TreeVerifier: Sendable {
     /// Compare uid/gid (only meaningful when both filesystems honour ownership).
     public var compareOwnership: Bool
     /// xattrs that the system rewrites per copy and that carry no user data: Spotlight's last-used
-    /// date, TCC's per-app access list, the provenance tag. Quarantine and FinderInfo are compared.
+    /// date, TCC's per-app access list, the provenance tag. FinderInfo is compared by value;
+    /// `com.apple.quarantine` by presence only — `ditto` rewrites its value (agent name/timestamp)
+    /// on every copy (re-review probe, 2026-09-06), and what matters is that the flag survives.
     public var ignoredXattrs: Set<String> = ["com.apple.lastuseddate#PS", "com.apple.macl", "com.apple.provenance"]
+    public static let presenceOnlyXattrs: Set<String> = ["com.apple.quarantine"]
+    /// BSD flags the system toggles on its own (Spotlight tracking, dataless/restricted markers).
+    static let ignoredFlags: UInt32 = UInt32(SF_ARCHIVED) | UInt32(UF_TRACKED) | UInt32(SF_RESTRICTED) | UInt32(SF_DATALESS)
 
-    public init(deep: Bool, maxMismatches: Int = 200, compareOwnership: Bool = true) { self.deep = deep; self.maxMismatches = maxMismatches; self.compareOwnership = compareOwnership }
+    public init(deep: Bool, maxMismatches: Int = 200, compareOwnership: Bool = true) {
+        self.deep = deep; self.maxMismatches = maxMismatches; self.compareOwnership = compareOwnership
+    }
 
     struct Entry: Equatable {
         var type: mode_t; var size: UInt64; var mode: mode_t; var linkTarget: String?; var xattrs: [String: Data]; var isDir: Bool
@@ -54,9 +61,10 @@ public struct TreeVerifier: Sendable {
             let st = sp.pointee
             let type = st.st_mode & S_IFMT
             let link = type == S_IFLNK ? (try? FileManager.default.destinationOfSymbolicLink(atPath: path)) : nil
-            out[rel] = Entry(type: type, size: type == S_IFREG ? UInt64(st.st_size) : 0, mode: st.st_mode & 0o7777, linkTarget: link,
-                             xattrs: xattrs(of: path, ignoring: ignoredXattrs), isDir: type == S_IFDIR,
-                             uid: st.st_uid, gid: st.st_gid, flags: st.st_flags & ~UInt32(SF_ARCHIVED), acl: aclText(of: path))
+            out[rel] = Entry(
+                type: type, size: type == S_IFREG ? UInt64(st.st_size) : 0, mode: st.st_mode & 0o7777, linkTarget: link,
+                xattrs: xattrs(of: path, ignoring: ignoredXattrs), isDir: type == S_IFDIR,
+                uid: st.st_uid, gid: st.st_gid, flags: st.st_flags & ~ignoredFlags, acl: aclText(of: path))
         }
         return out
     }
@@ -71,6 +79,7 @@ public struct TreeVerifier: Sendable {
         for name in buf[0..<got].split(separator: 0).map({ String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }) where !ignoring.contains(name) {
             let vlen = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
             guard vlen >= 0 else { continue }
+            if presenceOnlyXattrs.contains(name) { out[name] = Data(); continue }
             var v = [UInt8](repeating: 0, count: vlen)
             let r = getxattr(path, name, &v, vlen, 0, XATTR_NOFOLLOW)
             out[name] = r >= 0 ? Data(v[0..<r]) : Data()
@@ -96,14 +105,22 @@ public struct TreeVerifier: Sendable {
 
     public func verify(source: String, destination: String) -> Report {
         guard let src = TreeVerifier.inventory(source, ignoredXattrs: ignoredXattrs) else {
-            return Report(sourceFiles: 0, destinationFiles: 0, sourceBytes: 0, destinationBytes: 0, hashedFiles: 0, mismatches: [Mismatch(relativePath: ".", reason: "cannot read source")], truncated: false)
+            return Report(
+                sourceFiles: 0, destinationFiles: 0, sourceBytes: 0, destinationBytes: 0, hashedFiles: 0,
+                mismatches: [Mismatch(relativePath: ".", reason: "cannot read source")], truncated: false)
         }
         guard let dst = TreeVerifier.inventory(destination, ignoredXattrs: ignoredXattrs) else {
-            return Report(sourceFiles: 0, destinationFiles: 0, sourceBytes: 0, destinationBytes: 0, hashedFiles: 0, mismatches: [Mismatch(relativePath: ".", reason: "cannot read destination")], truncated: false)
+            return Report(
+                sourceFiles: 0, destinationFiles: 0, sourceBytes: 0, destinationBytes: 0, hashedFiles: 0,
+                mismatches: [Mismatch(relativePath: ".", reason: "cannot read destination")], truncated: false)
         }
         var mm: [Mismatch] = []
         var truncated = false
         func add(_ m: Mismatch) { if mm.count < maxMismatches { mm.append(m) } else { truncated = true } }
+        var sroot = stat(), droot = stat()
+        if lstat(source, &sroot) == 0, lstat(destination, &droot) == 0, (sroot.st_mode & 0o7777) != (droot.st_mode & 0o7777) {
+            add(Mismatch(relativePath: ".", reason: String(format: "root mode %o vs %o", sroot.st_mode & 0o7777, droot.st_mode & 0o7777)))
+        }
         var hashed: UInt64 = 0
         for (rel, s) in src.sorted(by: { $0.key < $1.key }) {
             guard let d = dst[rel] else { add(Mismatch(relativePath: rel, reason: "missing in destination")); continue }
@@ -111,8 +128,14 @@ public struct TreeVerifier: Sendable {
             if s.size != d.size { add(Mismatch(relativePath: rel, reason: "size \(s.size) vs \(d.size)")); continue }
             if s.mode != d.mode { add(Mismatch(relativePath: rel, reason: String(format: "mode %o vs %o", s.mode, d.mode))) }
             if s.linkTarget != d.linkTarget { add(Mismatch(relativePath: rel, reason: "symlink target differs")) }
-            if s.xattrs != d.xattrs { add(Mismatch(relativePath: rel, reason: "xattrs differ (\(Set(s.xattrs.keys).symmetricDifference(d.xattrs.keys).sorted().joined(separator: ",")))")) }
-            if compareOwnership && (s.uid != d.uid || s.gid != d.gid) { add(Mismatch(relativePath: rel, reason: "ownership \(s.uid):\(s.gid) vs \(d.uid):\(d.gid)")) }
+            if s.xattrs != d.xattrs {
+                add(
+                    Mismatch(
+                        relativePath: rel, reason: "xattrs differ (\(Set(s.xattrs.keys).symmetricDifference(d.xattrs.keys).sorted().joined(separator: ",")))"))
+            }
+            if compareOwnership && (s.uid != d.uid || s.gid != d.gid) {
+                add(Mismatch(relativePath: rel, reason: "ownership \(s.uid):\(s.gid) vs \(d.uid):\(d.gid)"))
+            }
             if s.flags != d.flags { add(Mismatch(relativePath: rel, reason: String(format: "flags %x vs %x", s.flags, d.flags))) }
             if s.acl != d.acl { add(Mismatch(relativePath: rel, reason: "ACL differs")) }
             if deep && s.type == S_IFREG {
@@ -123,8 +146,9 @@ public struct TreeVerifier: Sendable {
         }
         for rel in dst.keys where src[rel] == nil { add(Mismatch(relativePath: rel, reason: "extra in destination")) }
         let sf = src.values.filter { !$0.isDir }.count, df = dst.values.filter { !$0.isDir }.count
-        return Report(sourceFiles: UInt64(sf), destinationFiles: UInt64(df),
-                      sourceBytes: src.values.reduce(0) { $0 + $1.size }, destinationBytes: dst.values.reduce(0) { $0 + $1.size },
-                      hashedFiles: hashed, mismatches: mm, truncated: truncated)
+        return Report(
+            sourceFiles: UInt64(sf), destinationFiles: UInt64(df),
+            sourceBytes: src.values.reduce(0) { $0 + $1.size }, destinationBytes: dst.values.reduce(0) { $0 + $1.size },
+            hashedFiles: hashed, mismatches: mm, truncated: truncated)
     }
 }

@@ -19,7 +19,7 @@ public struct StorageItem: Sendable, Codable, Equatable, Identifiable {
 
 /// Summary groupings from docs/product/UX_AND_CLI.md.
 public struct ScanSummary: Sendable, Codable, Equatable {
-    public var internalDeveloperBytes: UInt64 = 0     // everything found on the boot volume
+    public var internalDeveloperBytes: UInt64 = 0  // everything found on the boot volume
     public var relocatableBytes: UInt64 = 0
     public var cleanableBytes: UInt64 = 0
     public var coldStorageEligibleBytes: UInt64 = 0
@@ -29,8 +29,8 @@ public struct ScanSummary: Sendable, Codable, Equatable {
     public var estimatedInternalSavingsBytes: UInt64 = 0
     /// The subset of `estimatedInternalSavingsBytes` whose strategy is verified (not experimental).
     public var verifiedSavingsBytes: UInt64 = 0
-    public var runtimeImageBytes: UInt64 = 0          // from simctl sizeBytes
-    public var lowerBound: Bool = false               // some paths unreadable
+    public var runtimeImageBytes: UInt64 = 0  // from simctl sizeBytes
+    public var lowerBound: Bool = false  // some paths unreadable
 }
 
 public struct ScanReport: Sendable, Codable, Equatable {

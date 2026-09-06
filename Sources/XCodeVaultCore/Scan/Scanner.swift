@@ -9,9 +9,11 @@ public struct Scanner: Sendable {
     public var measureSizes: Bool
     public var detectXcodeCapabilities: Bool
 
-    public init(runner: CommandRunning = ProcessCommandRunner(), home: String = NSHomeDirectory(),
-                catalog: [StorageCategory] = StorageCatalog.all, measureSizes: Bool = true,
-                detectXcodeCapabilities: Bool = true) {
+    public init(
+        runner: CommandRunning = ProcessCommandRunner(), home: String = NSHomeDirectory(),
+        catalog: [StorageCategory] = StorageCatalog.all, measureSizes: Bool = true,
+        detectXcodeCapabilities: Bool = true
+    ) {
         self.runner = runner; self.home = home; self.catalog = catalog
         self.measureSizes = measureSizes; self.detectXcodeCapabilities = detectXcodeCapabilities
     }
@@ -33,17 +35,21 @@ public struct Scanner: Sendable {
 
         // Disclose-don't-bury warnings (NON_GOALS_AND_SAFETY.md).
         if host.dataVolumeFreeBytes < 40 * 1_000_000_000 {
-            warnings.append("Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume. Installing a simulator runtime needs internal staging space (reported ~40 GB) even when the installer is stored externally (E11).")
+            warnings.append(
+                "Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume. Installing a simulator runtime needs internal staging space (reported ~40 GB) even when the installer is stored externally (E11)."
+            )
         }
         if !host.isAppleSilicon {
             warnings.append("Intel Mac: `-architectureVariant arm64` does not apply; runtime downloads are universal.")
         }
         for r in runtimes where r.mountPath != nil && !r.isMounted && r.state == "Ready" {
-            warnings.append("Runtime \(r.runtimeIdentifier ?? r.identifier) reports Ready but its image is not mounted at \(r.mountPath!) — Xcode may not see it (F1).")
+            warnings.append(
+                "Runtime \(r.runtimeIdentifier ?? r.identifier) reports Ready but its image is not mounted at \(r.mountPath!) — Xcode may not see it (F1).")
         }
-        return ScanReport(generatedAt: Date(), toolVersion: XCodeVaultVersion.current, catalogVersion: StorageCatalog.version,
-                          host: host, xcodes: xcodes, runtimes: runtimes, devices: devices, volumes: volumes,
-                          items: items, summary: summary, warnings: warnings)
+        return ScanReport(
+            generatedAt: Date(), toolVersion: XCodeVaultVersion.current, catalogVersion: StorageCatalog.version,
+            host: host, xcodes: xcodes, runtimes: runtimes, devices: devices, volumes: volumes,
+            items: items, summary: summary, warnings: warnings)
     }
 
     /// Resolves every catalog path template on this machine. Sizes are measured in parallel.
@@ -67,9 +73,10 @@ public struct Scanner: Sendable {
         let isMount = exists && !isLink && MountStatus.isMountPoint(path)
         let fs = exists ? MountStatus.filesystem(containing: path) : nil
         let usage = (exists && measureSizes) ? DiskUsage.measure(path) : nil
-        return StorageItem(categoryID: categoryID, path: path, exists: exists, isSymlink: isLink, symlinkTarget: target,
-                           isMountPoint: isMount, usage: usage, volumeMountPoint: fs?.mountPoint,
-                           onBootVolume: fs != nil && fs?.mountPoint == bootMountPoint)
+        return StorageItem(
+            categoryID: categoryID, path: path, exists: exists, isSymlink: isLink, symlinkTarget: target,
+            isMountPoint: isMount, usage: usage, volumeMountPoint: fs?.mountPoint,
+            onBootVolume: fs != nil && fs?.mountPoint == bootMountPoint)
     }
 
     func summarize(items: [StorageItem], runtimes: [SimulatorRuntime]) -> ScanSummary {

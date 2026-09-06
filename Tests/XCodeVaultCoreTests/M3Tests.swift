@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import XCodeVaultCore
 
 /// Fault-injection and safety tests for the vault + migration engine. All on temp directories;
@@ -6,18 +7,21 @@ import XCTest
 /// real mount point (the temp dir's filesystem) so ATTR_DIR_MOUNTSTATUS checks stay honest.
 final class VaultTests: XCTestCase {
     func fakeVolume(uuid: String, mountPoint: String, name: String = "VAULT") -> Volume {
-        Volume(deviceNode: "/dev/disk99s1", volumeName: name, volumeUUID: uuid, mountPoint: mountPoint, filesystemPersonality: "APFS",
-               filesystemType: "apfs", isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true,
-               isWritable: true, ownersEnabled: true, totalBytes: 10, freeBytes: 5, isBootVolume: false)
+        Volume(
+            deviceNode: "/dev/disk99s1", volumeName: name, volumeUUID: uuid, mountPoint: mountPoint, filesystemPersonality: "APFS",
+            filesystemType: "apfs", isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true,
+            isWritable: true, ownersEnabled: true, totalBytes: 10, freeBytes: 5, isBootVolume: false)
     }
 
     func testRegisterRefusesUnsuitableAndNonMountPoints() throws {
         let t = TempDir()
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
-        var v = fakeVolume(uuid: "U1", mountPoint: t.path)             // a plain directory, not a mount point
+        var v = fakeVolume(uuid: "U1", mountPoint: t.path)  // a plain directory, not a mount point
         XCTAssertThrowsError(try reg.register(v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")))) { XCTAssertTrue("\($0)".contains("mount point")) }
         v.filesystemType = "exfat"; v.filesystemPersonality = "ExFAT"
-        XCTAssertThrowsError(try reg.register(v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")))) { XCTAssertTrue("\($0)".contains("not suitable")) }
+        XCTAssertThrowsError(try reg.register(v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")))) {
+            XCTAssertTrue("\($0)".contains("not suitable"))
+        }
     }
 
     func testVerifierStates() throws {
@@ -25,7 +29,7 @@ final class VaultTests: XCTestCase {
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
         // Simulate a registered volume whose "mount point" is the temp dir's real mount point (e.g. /System/Volumes/Data).
         let realMount = MountStatus.filesystem(containing: t.path)!.mountPoint
-        let vaultDir = realMount + "/" + VaultVolume.directoryName   // may not be writable; we test the absent/ambiguous branches instead
+        let vaultDir = realMount + "/" + VaultVolume.directoryName  // may not be writable; we test the absent/ambiguous branches instead
         _ = vaultDir
         let absent = VaultVolume(volumeUUID: "U-absent", volumeName: "A", lastMountPoint: t.path + "/never", registeredAt: Date(), sentinelID: "s")
         let shadowMP = t.dir("shadow"); t.file("shadow/DerivedData/x.o", bytes: 4096)
@@ -50,9 +54,11 @@ final class VaultTests: XCTestCase {
         XCTAssertEqual(v2.check(liveReg).state, .sentinelMissing)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
         t.dir("livemount/" + VaultVolume.directoryName)
-        try enc.encode(VaultSentinel(volumeUUID: "U-live", sentinelID: "WRONG", createdAt: Date(), createdBy: "t")).write(to: URL(fileURLWithPath: mp + "/" + VaultVolume.directoryName + "/" + VaultVolume.sentinelName))
+        try enc.encode(VaultSentinel(volumeUUID: "U-live", sentinelID: "WRONG", createdAt: Date(), createdBy: "t")).write(
+            to: URL(fileURLWithPath: mp + "/" + VaultVolume.directoryName + "/" + VaultVolume.sentinelName))
         XCTAssertEqual(v2.check(liveReg).state, .foreign)
-        try enc.encode(VaultSentinel(volumeUUID: "U-live", sentinelID: "tok", createdAt: Date(), createdBy: "t")).write(to: URL(fileURLWithPath: mp + "/" + VaultVolume.directoryName + "/" + VaultVolume.sentinelName))
+        try enc.encode(VaultSentinel(volumeUUID: "U-live", sentinelID: "tok", createdAt: Date(), createdBy: "t")).write(
+            to: URL(fileURLWithPath: mp + "/" + VaultVolume.directoryName + "/" + VaultVolume.sentinelName))
         XCTAssertEqual(v2.check(liveReg).state, .verified)
         XCTAssertEqual(try v2.resolveUsable("D").1, mp + "/" + VaultVolume.directoryName)
         // Same volume mounted elsewhere ("Name 1"): movedMountPoint, still usable.
@@ -85,8 +91,11 @@ final class TreeVerifierTests: XCTestCase {
         XCTAssertTrue(r.isIdentical, "\(r.mismatches)")
         XCTAssertEqual(r.sourceFiles, 3); XCTAssertEqual(r.hashedFiles, 2)
         // Same size, different content → only deep verification catches it
-        let fh = try FileHandle(forWritingTo: URL(fileURLWithPath: t.path + "/dst/a/one.bin")); try fh.seek(toOffset: 10); try fh.write(contentsOf: Data([0x42])); try fh.close()
-        XCTAssertTrue(TreeVerifier(deep: false).verify(source: t.path + "/src", destination: t.path + "/dst").isIdentical, "shallow verification cannot see a same-size corruption")
+        let fh = try FileHandle(forWritingTo: URL(fileURLWithPath: t.path + "/dst/a/one.bin")); try fh.seek(toOffset: 10);
+        try fh.write(contentsOf: Data([0x42])); try fh.close()
+        XCTAssertTrue(
+            TreeVerifier(deep: false).verify(source: t.path + "/src", destination: t.path + "/dst").isIdentical,
+            "shallow verification cannot see a same-size corruption")
         r = TreeVerifier(deep: true).verify(source: t.path + "/src", destination: t.path + "/dst")
         XCTAssertEqual(r.mismatches.map(\.reason), ["content hash differs"])
         // Missing, extra, xattr, symlink target, size, mode
@@ -134,10 +143,13 @@ final class MigrationEngineTests: XCTestCase {
         /// A verifier that reports the vault as verified at `vaultMount` (bypassing the real mount check, which temp dirs cannot satisfy).
         func engine(afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil) -> MigrationEngine {
             let mp = vaultMount
-            let vol = Volume(deviceNode: "/dev/disk98s1", volumeName: "VAULT", volumeUUID: "VU", mountPoint: mp, filesystemPersonality: "APFS", filesystemType: "apfs",
-                             isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
-                             totalBytes: 1, freeBytes: 1, isBootVolume: false)
-            return MigrationEngine(journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home, isXcodeRunning: { false }, afterCopy: afterCopy)
+            let vol = Volume(
+                deviceNode: "/dev/disk98s1", volumeName: "VAULT", volumeUUID: "VU", mountPoint: mp, filesystemPersonality: "APFS", filesystemType: "apfs",
+                isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+                totalBytes: 1, freeBytes: 1, isBootVolume: false)
+            return MigrationEngine(
+                journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home, isXcodeRunning: { false },
+                afterCopy: afterCopy)
         }
     }
 
@@ -157,7 +169,9 @@ final class MigrationEngineTests: XCTestCase {
         let removed = try engine.removeSource(outcome, confirmNonRegenerable: true)
         XCTAssertTrue(removed.sourceRemoved); XCTAssertFalse(FileManager.default.fileExists(atPath: f.archives))
         let states = try f.journal.entries().filter { $0.id == plan.operationID }.map(\.state)
-        XCTAssertEqual(states, [.planned, .started, .started, .completed, .started, .started, .completed], "PLAN, COPY, VERIFY, VERIFIED, CLEANUP-rename, CLEANUP-delete, DONE")
+        XCTAssertEqual(
+            states, [.planned, .started, .started, .completed, .started, .started, .completed],
+            "PLAN, COPY, VERIFY, VERIFIED, CLEANUP-rename, CLEANUP-delete, DONE")
         // Restore refuses to overwrite, then restores when the destination is gone.
         let r = try engine.planRestore(categoryID: "archives", vaultRef: "VU", name: "Archives", to: f.archives)
         let back = try engine.copyAndVerify(r)
@@ -214,7 +228,9 @@ final class MigrationEngineTests: XCTestCase {
         try f.journal.record(id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination])
         try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: plan.destination + "/partial", contents: Data([1]))
-        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")) { XCTAssertTrue("\($0)".contains("interrupted")) }
+        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")) {
+            XCTAssertTrue("\($0)".contains("interrupted"))
+        }
         XCTAssertEqual(try f.journal.interrupted().map(\.id), [plan.operationID])
         try engine.abort(operationID: plan.operationID)
         XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination))
@@ -226,11 +242,15 @@ final class MigrationEngineTests: XCTestCase {
     func testRefusesRegenerableCategoriesSymlinksAndUnknownVaults() throws {
         let f = try Fixture()
         let engine = f.engine()
-        XCTAssertThrowsError(try engine.planExternalize(categoryID: "derivedData", source: f.home + "/Library/Developer/Xcode/DerivedData", vaultRef: "VU")) { XCTAssertTrue("\($0)".contains("coldStorage")) }
+        XCTAssertThrowsError(try engine.planExternalize(categoryID: "derivedData", source: f.home + "/Library/Developer/Xcode/DerivedData", vaultRef: "VU")) {
+            XCTAssertTrue("\($0)".contains("coldStorage"))
+        }
         f.t.symlink("home/Library/Developer/Xcode/ArchivesLink", to: f.archives)
         XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.home + "/Library/Developer/Xcode/ArchivesLink", vaultRef: "VU"))
         XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "NOPE"))
-        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.t.dir("elsewhere"), vaultRef: "VU")) { XCTAssertTrue("\($0)".contains("not under")) }
+        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.t.dir("elsewhere"), vaultRef: "VU")) {
+            XCTAssertTrue("\($0)".contains("not under"))
+        }
     }
 }
 
