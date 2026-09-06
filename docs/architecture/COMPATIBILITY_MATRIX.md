@@ -170,12 +170,31 @@ those entries "pending — manual" until someone actually runs and records the r
 - Notes: single platform (tvOS, smallest); the "~40 GB" community figure was not reproduced for
   a 5 GB image. Re-run for iOS (10.6 GB) once ≥ 20 GB are free.
 
+### E6 software variant — vault volume force-unmounted mid-migration — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-06 (four runs; run 4 is the clean pass)
+- Hypothesis reference: H3 (disconnect / shadow data), disconnect-safety Definition of Done items 2–4
+- Test performed: `scripts/experiments/e6-software-unmount.sh /Volumes/<usb> 2500` — real USB APFS
+  volume registered as a vault; `externalize --apply` of a 2.5 GB Archives fixture; `diskutil
+  unmount force` after ~750 MB written; remount; abort; full externalize → remove source → restore
+  round trip with a clean unmount in between.
+- Result: **pass** — failure is clean and journaled, source never touched, no shadow directory
+  left at `/Volumes/<name>` (macOS removes the mount point on force unmount), volume returns at
+  the same path, vault identity re-verified by UUID + sentinel, leftover partial copy detected and
+  removable, restore refused while absent and verified after remount (quarantine xattr + symlink
+  preserved).
+- Evidence: `../research/evidence/e6-software-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Functional checks: N/A (data-only category)
+- Verdict: Archives cold storage **probable**; disconnect handling **probable**. Physical yank,
+  reboot mid-migration and a second macOS/Xcode combination still needed for the DoD.
+- Notes: found and fixed the "failed op leaves an unremovable partial copy" gap during the run.
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |
 |---|---|---|
 | E1 mount half | H8 | pending — manual (root) |
-| E6 surprise removal | H3, disconnect safety DoD | pending — manual (hardware); harness = `vault`/`externalize`/`migration` commands + fault-injection unit tests |
+| E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
 | E8 export/import round trip | H4 | export done (tvOS, see entry above); import half + iOS-size run pending (needs ≥ 20 GB free) |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
