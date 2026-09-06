@@ -5,7 +5,7 @@ post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
 
-**M3 — disconnect safety: implemented, reviewed, review fixes committed (re-review in flight).**
+**M3 — disconnect safety: implemented, independently reviewed twice, all findings fixed and committed.**
 M1, M2, M3 committed. M4 GUI first slice builds and launches (read-only + clean flow). M5:
 release/bundle scripts and cask draft exist; nothing signed yet.
 
@@ -51,7 +51,7 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   `restore`, `migration status/abort`, `bench` (E10, heuristic verdicts). 55 unit tests incl.
   fault injection (source mutation mid-copy, destination vanishing, corrupted copy, crash
   between COPY and VERIFY).
-- **Helper skeleton (committed; security review in flight, not reachable from clients):** `XCodeVaultHelperProtocol`
+- **Helper skeleton (committed, security-reviewed, not reachable from clients yet):** `XCodeVaultHelperProtocol`
   (three allowlisted verbs, fixed paths, NSSecureCoding result), `xcodevault-helper` daemon
   (code-signing requirement set before resume; refuses to serve without a baked team id),
   launchd plist for `SMAppService.daemon`. Not yet wired into the CLI/GUI (needs a signed bundle).
@@ -61,10 +61,9 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## In flight
 
-- Migration-safety re-review of the fixes (first review: 10 findings, all addressed with
-  regression tests). Helper-security review of the daemon skeleton.
-- E2 is complete (9 cases): only the physical USB volume fails; the mechanism is still unnamed
-  (no TCC/sandbox denials in the unified log). Recorded in FINDINGS + matrix.
+- Nothing. Reviews done: migration-safety (10 findings → fixed; re-review: 2 required fixes →
+  fixed; 65 tests green), helper-security (3 findings → fixed; guard hook self-tested).
+  E2 complete (9 cases). Repo is clean at commit 35524ef.
 
 ## Blocked / pending — manual (ask the user)
 
