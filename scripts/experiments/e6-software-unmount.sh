@@ -59,8 +59,10 @@ trap cleanup EXIT
   echo "\$ diskutil mount $dev"; diskutil mount "$dev"; echo "[exit=$?]"; sleep 2
   xcv_run "mount point after remount (same name or 'Name 1'?)" sh -c "mount | grep '$dev'"
   xcv_run "vault status after remount" "$CTL" vault status
-  op=$("$CTL" migration status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')
-  if [ -n "$op" ]; then xcv_run "abort interrupted migration $op" "$CTL" migration abort "$op"; fi
+  xcv_run "migration status after remount (expect LEFTOVER PARTIAL COPY)" "$CTL" migration status
+  xcv_run "externalize retry must point at abort" "$CTL" externalize --category archives --vault "$uuid"
+  op=$("$CTL" migration status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); l=d.get("interrupted",[])+d.get("leftoverPartialCopies",[]); print(l[0]["id"] if l else "")')
+  if [ -n "$op" ]; then xcv_run "abort failed/interrupted migration $op (removes only the partial copy)" "$CTL" migration abort "$op"; fi
   xcv_run "partial copy gone?" sh -c "ls -la '$VDIR/archives' 2>&1"
 
   echo "==================== PHASE 2: full round trip, then clean unmount between operations ===================="

@@ -8,6 +8,7 @@ extension Doctor {
         f += checkVaultVolumes(registry: registry, volumes: report.volumes)
         f += checkShadowVolumesDirectories(volumes: report.volumes)
         f += checkInterruptedMigrations(journal: journal)
+        f += checkLeftoverPartialCopies(journal: journal)
         f += checkLocationsPointAtPresentVolumes(volumes: report.volumes)
         return f
     }
@@ -93,6 +94,17 @@ extension Doctor {
                         ? "The vault copy was verified before the interruption. Run `xcodevaultctl migration resume \(e.id)` to re-verify and finish removing the original (nothing is deleted unless it matches the vault copy)."
                         : "Run `xcodevaultctl migration abort \(e.id)` — removes only the partial vault copy; the source is never touched."),
                 evidence: "docs/architecture/MIGRATION_ENGINE.md")
+        }
+    }
+
+    func checkLeftoverPartialCopies(journal: Journal) -> [Finding] {
+        guard let leftovers = try? MigrationEngine(journal: journal).leftoverPartialCopies() else { return [] }
+        return leftovers.map { e in
+            let bytes = DiskUsage.measure(e.paths[1])?.allocatedBytes ?? 0
+            return Finding(
+                id: "partial-copy:\(e.id)", severity: .warning, title: "Partial vault copy left by failed migration (\(ByteCount.format(bytes)))",
+                detail: "\(e.paths[1]) was being written when the migration failed (typically the volume disappeared mid-copy) and could not be cleaned up then. It blocks retrying the migration and wastes vault space. The source \(e.paths[0]) was never touched.",
+                path: e.paths[1], remediation: "`xcodevaultctl migration abort \(e.id)` removes only this partial copy.", evidence: "E6 software run 2 (2026-09-06)")
         }
     }
 

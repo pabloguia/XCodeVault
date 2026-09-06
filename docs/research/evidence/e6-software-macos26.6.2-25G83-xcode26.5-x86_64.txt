@@ -1,14 +1,15 @@
 # Experiment: E6 software variant: vault volume unmounted during/between migrations (/Volumes/<vault>, /dev/disk3s1, <vault-uuid>)
-# Date: 2026-09-06T20:44:09Z
+# Date: 2026-09-06T20:49:13Z
 # macOS: 26.6.2 (25G83)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
 # xcode-select: /Applications/Xcode.app/Contents/Developer
 # Runner: <user> (uid 501); sudo available: no
 
+vault directory: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault
 ## fixture
 $ du -sk ~/Library/Developer/Xcode/Archives
-614404	~/Library/Developer/Xcode/Archives
+2560004	~/Library/Developer/Xcode/Archives
 [exit=0]
 
 ## vault status before
@@ -18,14 +19,16 @@ VERIFIED  <vault>  <vault-uuid>
 [exit=0]
 
 ==================== PHASE 1: force-unmount during COPY ====================
-$ diskutil unmount force /Volumes/<vault>   (at 17:44:58)
+destination had 809856 KB when the volume was force-unmounted
+$ diskutil unmount force /Volumes/<vault>   (at 17:49:47)
 Volume <vault> on disk3s1 force-unmounted
 [exit=0]
 --- externalize output ---
+Error: `/usr/bin/ditto ~/Library/Developer/Xcode/Archives /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives` exited 1: ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/dSYMs/XCVProbe.app.dSYM/Contents/Resources/DWARF/XCVProbe: Input/output error
+ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/Info.plist: No such file or directory
 ! Archives is non-regenerable: deep (SHA-256) verification is mandatory and the source is never removed automatically.
-Copying 629,1 MB → /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives …
-Verified: 3 files, 2 hashed, 629,1 MB. Source intact.
-externalize exit=0
+Copying 2,62 GB → /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives …
+externalize exit=1
 ## is /Volumes/<vault> a mount point now?
 $ sh -c mount | grep -c '/Volumes/<vault>' || true
 0
@@ -38,20 +41,21 @@ ls: /Volumes/<vault>: No such file or directory
 
 ## source intact?
 $ du -sk ~/Library/Developer/Xcode/Archives
-614404	~/Library/Developer/Xcode/Archives
+2560004	~/Library/Developer/Xcode/Archives
 [exit=0]
 
 ## journal tail
 $ sh -c '~/projects/XCodeVault/.build/debug/xcodevaultctl' journal --last 8
 Journal: ~/Library/Application Support/XCodeVault/journal.jsonl
-  10  2026-09-06T20:44:03Z  migration           planned    warning: vault directory under .TemporaryItems is not durable (macOS may purge it)
-  11  2026-09-06T20:44:03Z  migration           completed  registered vault volume <vault> (<vault-uuid>)
-  12  2026-09-06T20:44:18Z  runtimeDelete       started    simctl runtime delete E6149A54-04D7-4F56-8E94-6B1AC99A8E6A
   13  2026-09-06T20:44:20Z  runtimeDelete       completed  deleted E6149A54-04D7-4F56-8E94-6B1AC99A8E6A
   14  2026-09-06T20:44:30Z  migration           planned    externalize archives: ~/Library/Developer/Xcode/Archives → /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives
   15  2026-09-06T20:44:30Z  migration           started    COPY
   16  2026-09-06T20:44:31Z  migration           started    VERIFY
   17  2026-09-06T20:44:34Z  migration           completed  copied and verified 3 files, 629,1 MB; source intact
+  18  2026-09-06T20:49:46Z  migration           planned    externalize archives: ~/Library/Developer/Xcode/Archives → /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives
+  19  2026-09-06T20:49:46Z  migration           started    COPY
+  20  2026-09-06T20:49:47Z  migration           failed     `/usr/bin/ditto ~/Library/Developer/Xcode/Archives /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives` exited 1: ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/dSYMs/XCVProbe.app.dSYM/Contents/Resources/DWARF/XCVProbe: Input/output error
+ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/Info.plist: No such file or directory
 [exit=0]
 
 ## migration status
@@ -67,9 +71,8 @@ ABSENT  <vault>  <vault-uuid>
 
 ## doctor
 $ sh -c '~/projects/XCodeVault/.build/debug/xcodevaultctl' doctor 2>&1 | grep -E '^\[|doctor:'
-doctor: 3 finding(s)
-[CRITICAL] Low free space on the internal volume: 7,82 GB
-[WARNING] 3 simulator device(s) unavailable (12 KB)
+doctor: 2 finding(s)
+[CRITICAL] Low free space on the internal volume: 8,99 GB
 [INFO] Vault volume <vault> is not connected
 [exit=0]
 
@@ -88,9 +91,12 @@ VERIFIED  <vault>  <vault-uuid>
 [exit=0]
 
 ## partial copy gone?
-$ sh -c ls -la '/Volumes/<vault>/XcodeVault/archives' 2>&1
-ls: /Volumes/<vault>/XcodeVault/archives: No such file or directory
-[exit=1]
+$ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives' 2>&1
+total 0
+drwxr-xr-x@ 3 <user>  staff   96 Sep  6 17:49 .
+drwxr-xr-x@ 4 <user>  staff  128 Sep  6 17:49 ..
+drwxr-xr-x@ 3 <user>  staff   96 Sep  6 17:49 Archives
+[exit=0]
 
 ==================== PHASE 2: full round trip, then clean unmount between operations ====================
 ## externalize (plan)
@@ -106,14 +112,19 @@ Error: Destination /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/X
 ## source removed?
 $ sh -c ls -la '~/Library/Developer/Xcode/Archives' 2>&1 | head -2
 total 0
-drwxr-xr-x@  3 <user>  staff   96 Sep  6 17:44 .
+drwxr-xr-x@  3 <user>  staff   96 Sep  6 17:49 .
 [exit=0]
 
 ## vault copy
-$ sh -c find '/Volumes/<vault>/XcodeVault/archives' -maxdepth 4 | head; du -sk '/Volumes/<vault>/XcodeVault/archives'
-find: /Volumes/<vault>/XcodeVault/archives: No such file or directory
-du: /Volumes/<vault>/XcodeVault/archives: No such file or directory
-[exit=1]
+$ sh -c find '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives' -maxdepth 4 | head; du -sk '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives'
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/Products
+/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/dSYMs
+1508864	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives
+[exit=0]
 
 $ diskutil unmount /Volumes/<vault> (clean eject)
 Volume <vault> on disk3s1 unmounted
@@ -142,17 +153,14 @@ $ sh -c xattr -l '~/Library/Developer/Xcode/Archives/2026-09-06/XCVProbe.xcarchi
 com.apple.provenance: 
 com.apple.quarantine: 0083;68bd0000;Safari;XCV
 total 0
-drwxr-xr-x@ 2 <user>  staff  64 Sep  6 17:44 Applications
-lrwxr-xr-x@ 1 <user>  staff  13 Sep  6 17:44 link -> ../Info.plist
-614404	~/Library/Developer/Xcode/Archives
+drwxr-xr-x@ 2 <user>  staff  64 Sep  6 17:49 Applications
+lrwxr-xr-x@ 1 <user>  staff  13 Sep  6 17:49 link -> ../Info.plist
+2560004	~/Library/Developer/Xcode/Archives
 [exit=0]
 
 ## journal tail
 $ sh -c '~/projects/XCodeVault/.build/debug/xcodevaultctl' journal --last 12
 Journal: ~/Library/Application Support/XCodeVault/journal.jsonl
-  6  2026-09-06T20:28:11Z  clean               started    delete ~/Library/Developer/Xcode/DerivedData/CompilationCache.noindex
-  7  2026-09-06T20:28:11Z  clean               completed  freed 8,86 GB, 0 failure(s)
-  8  2026-09-06T20:28:21Z  runtimeExport       started    xcodebuild -downloadPlatform tvOS -exportPath /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary
   9  2026-09-06T20:41:50Z  runtimeExport       completed  exported tvOS to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary
   10  2026-09-06T20:44:03Z  migration           planned    warning: vault directory under .TemporaryItems is not durable (macOS may purge it)
   11  2026-09-06T20:44:03Z  migration           completed  registered vault volume <vault> (<vault-uuid>)
@@ -162,13 +170,16 @@ Journal: ~/Library/Application Support/XCodeVault/journal.jsonl
   15  2026-09-06T20:44:30Z  migration           started    COPY
   16  2026-09-06T20:44:31Z  migration           started    VERIFY
   17  2026-09-06T20:44:34Z  migration           completed  copied and verified 3 files, 629,1 MB; source intact
+  18  2026-09-06T20:49:46Z  migration           planned    externalize archives: ~/Library/Developer/Xcode/Archives → /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives
+  19  2026-09-06T20:49:46Z  migration           started    COPY
+  20  2026-09-06T20:49:47Z  migration           failed     `/usr/bin/ditto ~/Library/Developer/Xcode/Archives /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives` exited 1: ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/dSYMs/XCVProbe.app.dSYM/Contents/Resources/DWARF/XCVProbe: Input/output error
+ditto: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault/archives/Archives/2026-09-06/XCVProbe.xcarchive/Info.plist: No such file or directory
 [exit=0]
 
 ## doctor after
 $ sh -c '~/projects/XCodeVault/.build/debug/xcodevaultctl' doctor 2>&1 | grep -E '^\[|doctor:'
-doctor: 3 finding(s)
-[CRITICAL] Low free space on the internal volume: 9,21 GB
+doctor: 2 finding(s)
+[CRITICAL] Low free space on the internal volume: 7,9 GB
 [WARNING] mac-ssd-rescue data found on <vault>
-[WARNING] 3 simulator device(s) unavailable (12 KB)
 [exit=0]
 

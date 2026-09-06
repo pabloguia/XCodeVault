@@ -139,6 +139,38 @@ final class ReReviewTests: XCTestCase {
     }
 }
 
+final class E6LeftoverTests: XCTestCase {
+    typealias Fixture = MigrationEngineTests.Fixture
+    func testFailedCopyWithSurvivingDestinationIsReportedAndAbortable() throws {
+        let f = try Fixture()
+        // The volume "vanishes" mid-copy: the failure path cannot remove the destination (simulate by making
+        // the removal fail) — here we emulate the aftermath directly: a failed journal entry + a leftover copy.
+        let engine = f.engine(afterCopy: { plan in
+            // Recreate the destination after the engine deletes it, as if the volume had been absent at cleanup time
+            // and came back later with the partial copy still on it.
+            throw MigrationError("volume vanished")
+        })
+        let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        XCTAssertThrowsError(try engine.copyAndVerify(plan))
+        // Emulate the partial copy surviving (the engine removed it here because the fixture "volume" never went away).
+        f.t.file("vault/" + VaultVolume.directoryName + "/archives/Archives/partial.bin", bytes: 4096)
+        let leftovers = try engine.leftoverPartialCopies()
+        XCTAssertEqual(leftovers.map(\.id), [plan.operationID])
+        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")) { XCTAssertTrue("\($0)".contains("migration abort \(plan.operationID)"), "\($0)") }
+        try engine.abort(operationID: plan.operationID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: f.archives + "/2026-09-02/B.xcarchive/Info.plist"), "source untouched")
+        XCTAssertEqual(try engine.leftoverPartialCopies(), [])
+        XCTAssertNoThrow(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU"))
+        // A verified migration's destination is never reported as a leftover, and never abortable.
+        let healthy = f.engine()
+        let ok = try healthy.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        _ = try healthy.copyAndVerify(ok)
+        XCTAssertEqual(try healthy.leftoverPartialCopies(), [])
+        XCTAssertThrowsError(try healthy.abort(operationID: ok.operationID))
+    }
+}
+
 final class ReviewFixCleanTests: XCTestCase {
     func testExecutorRefusesPathEscapesAndNestedMounts() throws {
         let t = TempDir()

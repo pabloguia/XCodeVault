@@ -68,6 +68,10 @@ public struct MigrationEngine: Sendable {
         let source = try PathSafety.canonicalize(source)
         let dest = vaultDir + "/" + c.id + "/" + (source as NSString).lastPathComponent
         if FileManager.default.fileExists(atPath: dest) {
+            if let leftover = try leftoverPartialCopies().first(where: { $0.paths[1] == dest }) {
+                throw MigrationError(
+                    "Destination \(dest) holds the partial copy of failed migration \(leftover.id). Run `migration abort \(leftover.id)` to remove it, then retry.")
+            }
             throw MigrationError("Destination \(dest) already exists. Verify or remove it first; the engine never merges into existing data.")
         }
         let usage = DiskUsage.measure(source) ?? .zero
@@ -308,9 +312,11 @@ public struct MigrationEngine: Sendable {
         return "Nothing to do: the source was already removed and the vault copy is present."
     }
 
-    /// Abandons a migration interrupted during COPY/VERIFY: removes the partial destination copy
-    /// and journals the abort. Refuses once the copy was verified (VERIFIED/CLEANUP/DONE phases):
-    /// from then on the vault copy may be the only complete one. Never deletes a source.
+    /// Abandons a migration that never reached verification — interrupted (crash) or **failed**
+    /// (e.g. the vault volume vanished mid-copy, so the partial destination could not be removed
+    /// at the time and now blocks a retry). Removes only the partial destination copy and journals
+    /// the abort. Refuses once VERIFIED/CLEANUP/DONE was reached: from then on the vault copy may be
+    /// the only complete one. Never deletes a source.
     public func abort(operationID: String) throws {
         let entries = try journal.entries().filter { $0.id == operationID && $0.kind == .migration }
         guard let planned = entries.first, planned.paths.count == 2 else { throw MigrationError("No migration \(operationID) in the journal.") }
@@ -318,16 +324,38 @@ public struct MigrationEngine: Sendable {
         if !phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
             let aside = entries.compactMap { $0.detail["aside"] }.last
             throw MigrationError(
-                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(planned.paths[1]) was verified and may be the only complete copy. Not deleting anything.\(aside.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")"
-            )
+                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(planned.paths[1]) was verified and may be the only complete copy. Not deleting anything.\(aside.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")")
+        }
+        guard let last = entries.last, last.state == .started || last.state == .failed else {
+            throw MigrationError("Migration \(operationID) is in state \(entries.last?.state.rawValue ?? "?"); nothing to abort.")
         }
         let source = planned.paths[0], destination = planned.paths[1]
         var st = stat()
         guard lstat(source, &st) == 0 else { throw MigrationError("Source \(source) is gone; not removing \(destination) — it may be the only copy.") }
         var removed = false
-        if lstat(destination, &st) == 0 { try FileManager.default.removeItem(atPath: destination); removed = true }
-        try journal.record(
-            id: operationID, kind: .migration, state: .rolledBack,
-            summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
+        if lstat(destination, &st) == 0 {
+            // Only ever remove what this operation created: the destination must be on a usable vault
+            // (present) and must not be a mount point.
+            guard !MountStatus.isMountPoint(destination) else { throw MigrationError("\(destination) is a mount point; refusing.") }
+            try FileManager.default.removeItem(atPath: destination); removed = true
+        }
+        try journal.record(id: operationID, kind: .migration, state: .rolledBack, summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
+    }
+
+    /// Failed or interrupted pre-verification migrations whose destination still exists on disk —
+    /// partial copies that block a retry (`doctor` surfaces them; `abort` removes them).
+    public func leftoverPartialCopies() throws -> [JournalEntry] {
+        var last: [String: JournalEntry] = [:]
+        var planned: [String: JournalEntry] = [:]
+        var unsafe: Set<String> = []
+        for e in try journal.entries() where e.kind == .migration {
+            if planned[e.id] == nil, e.paths.count == 2 { planned[e.id] = e }
+            last[e.id] = e
+            if let ph = e.detail["phase"], MigrationEngine.phasesWhereAbortIsUnsafe.contains(ph) { unsafe.insert(e.id) }
+        }
+        return last.values.filter { e in
+            guard !unsafe.contains(e.id), e.state == .failed || e.state == .started, let p = planned[e.id] else { return false }
+            var st = stat(); return lstat(p.paths[1], &st) == 0
+        }.map { planned[$0.id]! }.sorted { $0.sequence < $1.sequence }
     }
 }
