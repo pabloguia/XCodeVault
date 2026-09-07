@@ -75,3 +75,9 @@ time, and the functional probes (device create/boot/app install).
 
 During `runtime import`, sample `df -k /System/Volumes/Data` every 5 s and record the peak
 internal usage vs. the image size. This turns the "~40 GB" community figure into evidence.
+
+
+## E8 import half (runbook)
+
+Executed in a dedicated session; see `RUNBOOK-E8-import-roundtrip.md` for the complete,
+self-contained procedure, expected outputs, abort conditions and how to record the result.

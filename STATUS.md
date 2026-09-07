@@ -90,10 +90,10 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
   `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
-- Import half of E8 (`scripts/experiments/e8c-import-roundtrip.sh`) needs ≥ 2× image + 3 GB
-  free internally (13 GB free after the reboot — just enough for tvOS) and a fresh export, which
-  itself installs the runtime and strands another Inbox copy until the next reboot. Ask before
-  re-running.
+- **Import half of E8 — scheduled for a fresh session.** Full self-contained runbook:
+  `docs/process/RUNBOOK-E8-import-roundtrip.md` (prerequisites, exact commands, expected outputs,
+  abort conditions, cleanup, how to record). Needs ≥ 20 GB internal free for export+import of
+  tvOS and a reboot afterwards to reclaim the Inbox copy.
 - E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
   (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
   write-test needs a moment when Xcode is closed.
