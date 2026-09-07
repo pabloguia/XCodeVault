@@ -48,6 +48,35 @@ refused by CoreSimulator for lack of space — see `docs/architecture/COMPATIBIL
   with `grep` before building. Always check `swift test` exit status before committing (a
   `| grep | tail` pipeline hides failures).
 
+## Notes for the executing agent (read before running anything)
+
+- **Scope is exactly this runbook.** Do not start M4/M5 work, do not refactor, do not re-run
+  other experiments, do not touch `~/Library/Developer` beyond what the steps below state. If
+  something outside this scope looks wrong, write it down in `STATUS.md` under "Follow-ups" and
+  continue.
+- **Reading order:** `CLAUDE.md` (auto-loaded) → `STATUS.md` → this file. Skim
+  `docs/architecture/COMPATIBILITY_MATRIX.md` "E8" entries and `.claude/skills/run-experiment/SKILL.md`.
+  Nothing else is needed; do not re-read the research corpus.
+- **Long steps exceed the Bash tool's 10-minute limit.** Run steps 1 and 3 with
+  `run_in_background: true` (or `nohup … > /tmp/xcv-step.log 2>&1 &`) and poll with
+  `until ! pgrep -f e11-staging-monitor >/dev/null; do sleep 15; done` (resp. `e8c-import-roundtrip`)
+  in a second background call. The scripts print their summary at the end and write the evidence
+  file themselves; read the evidence file, not the live process output.
+- **Repository hooks refuse some commands:** unbounded `git log` (use `git log -n 20`),
+  `sed -n`/`cat` on Swift files (use the token-pilot `read_range`/`read_symbol` tools or
+  `Read` with offset/limit), and filesystem-wide `find` without `-maxdepth`. Evidence `.txt`
+  and Markdown files may be read normally.
+- **Editing Swift:** use `read_for_edit`/`Read` then `Edit` with the exact text. Never patch
+  sources with `sed`/Python string replacement — `swift-format` reflows lines and the patch
+  silently misses (this bit the previous session three times).
+- **Committing:** run `swift build && swift test`, check the *exit code* (or grep for
+  `Test Suite 'All tests' passed`), then commit. Never `git push`, never create a remote.
+- **Never** ask for or accept the user's password; never run `sudo`; never disable SIP; never
+  modify anything under `/System` or `/Library/Developer/CoreSimulator` directly (only through
+  `xcodebuild`/`simctl`, which the scripts already do).
+- The user reads Portuguese; reply to the user in Portuguese, keep repository files and commit
+  messages in English.
+
 ## Prerequisites (check, do not assume)
 
 ```bash
@@ -73,7 +102,8 @@ MP=$(diskutil info <vault-uuid> | awk -F': *' '/Mount Point/{print $2}')
 LIB="$MP/.TemporaryItems/folders.$(id -u)/TemporaryItems/XCodeVault-RuntimeLibrary"; mkdir -p "$LIB"
 ```
 
-1. **Export tvOS again** (≈ 15 min, downloads 5 GB, installs it, monitored):
+1. **Export tvOS again** (≈ 15 min, downloads 5 GB, installs it, monitored — run in the
+   background and poll; the script writes `docs/research/evidence/e11-tvOS-*.txt`):
    ```bash
    scripts/experiments/e11-staging-monitor.sh tvOS "$LIB" 1.5
    ```
@@ -92,7 +122,8 @@ LIB="$MP/.TemporaryItems/folders.$(id -u)/TemporaryItems/XCodeVault-RuntimeLibra
    Expect: "Installer verified", then the simctl delete output; journal gets `runtimeOffload`
    started/completed. Internal free rises ≈ 4.9 GB (the Inbox 5 GB stays until reboot).
 
-3. **Import round trip with functional probe** (the actual pending experiment):
+3. **Import round trip with functional probe** (the actual pending experiment; ≈ 10 min, run in
+   the background and poll; writes `docs/research/evidence/e8c-import-*.txt` and `e11-import-*.txt`):
    ```bash
    df -k /System/Volumes/Data | awk 'NR==2{printf "%d MB\n",$4/1024}'       # need ≥ 12800 MB or the preflight refuses
    scripts/experiments/e8c-import-roundtrip.sh "$LIB"/appletvsimulator_26.5_23L470.exportedBundle
