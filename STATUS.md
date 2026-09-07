@@ -120,9 +120,8 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
   `noowners`. E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
-- **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. Cleanup pending —
-  ask the user to run `sudo chflags nouchg /Library/Developer/xcv-probe && sudo rm -rf
-  /Library/Developer/xcv-probe`.
+- **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. `/Library/Developer/
+  xcv-probe` removed by the user with sudo, confirmed gone.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
   `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
@@ -130,9 +129,6 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   `docs/process/RUNBOOK-E8-import-roundtrip.md` for the executed procedure. Only tvOS (~4.9 GB)
   was exercised; the same round trip on a larger image (iOS, ~10 GB) is still open if it matters
   for the preflight formula.
-- E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
-  (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
-  write-test needs a moment when Xcode is closed.
 - GitHub remote/CI: repo has no remote; do not create one without the user.
 
 ## Next three actions
