@@ -1,9 +1,28 @@
-# Experiment: E1 mount half: root mounts a scratch APFS volume over /Library/Developer/xcv-probe (admin prompt via osascript)
-# Date: 2026-09-06T20:20:44Z
-# macOS: 26.6.2 (25G83)
-# Arch: x86_64
-# Xcode: Xcode 26.5 Build version 17F42 
-# xcode-select: /Applications/Xcode.app/Contents/Developer
-# Runner: <user> (uid 501); sudo available: no
-
-# scratch device: disk9s1 (2 GB sparse image, attached -nomount)
+# Experiment: E1 mount half (as root)
+# Date: 2026-09-07T00:30:26Z
+# macOS: 26.6.2 (25G83) · x86_64 · Xcode 26.5 Build version 17F42 
+$ hdiutil create -size 2g -fs APFS -type SPARSE /tmp/xcv-e1b-probe.sparseimage
+[exit=0]
+scratch APFS volume device: /dev/disk9s1
+(removing leftover probe dir from an earlier run)
+$ mkdir /Library/Developer/xcv-probe
+[exit=0]
+$ diskutil mount -mountPoint /Library/Developer/xcv-probe /dev/disk9s1
+Volume XCVPROBE on /dev/disk9s1 mounted
+[exit=0]
+$ mount | grep xcv-probe
+/dev/disk9s1 on /Library/Developer/xcv-probe (apfs, local, nodev, nosuid, journaled, noowners)
+$ touch /Library/Developer/xcv-probe/hello && ls -l /Library/Developer/xcv-probe
+total 0
+drwx------+ 3 _unknown  _unknown  96 Sep  6 21:30 .fseventsd
+-rw-r--r--@ 1 _unknown  _unknown   0 Sep  6 21:30 hello
+[exit=0]
+$ diskutil unmount /Library/Developer/xcv-probe
+Volume XCVPROBE on disk9s1 unmounted
+[exit=0]
+$ ls -la /Library/Developer/xcv-probe (empty local dir again?)
+total 0
+drwxr-xr-x@ 2 root  wheel   64 Sep  6 21:30 .
+drwxr-xr-x  9 root  wheel  288 Sep  6 21:30 ..
+$ rmdir /Library/Developer/xcv-probe
+[exit=0]

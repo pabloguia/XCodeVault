@@ -143,7 +143,9 @@ not as a v1 mechanism.
 **Claim:** `/Library/Developer/CoreSimulator` is not SIP-protected
 (`com.apple.rootless`) and root can mount a volume over it.
 
-**Status: probable — read-only half verified (E1, 2026-09-06).** No `restricted`/`sunlnk`
+**Status: verified (E1 read-only half 2026-09-06 + mount half 2026-09-07, macOS 26.6.2 / Xcode 26.5 / Intel).**
+Root mounted a scratch APFS volume over `/Library/Developer/xcv-probe`, wrote to it, unmounted,
+and the directory was an empty local directory again. Note the default `noowners` mount. No `restricted`/`sunlnk`
 flag, no `com.apple.rootless` xattr on `/Library/Developer` or `…/CoreSimulator`;
 `rootless.conf` protects only `/System/Developer`. The actual mount attempt over a throwaway
 path needs root and is **pending — manual** (`scripts/experiments/e1-mountability.sh` records

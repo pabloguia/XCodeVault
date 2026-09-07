@@ -57,13 +57,19 @@ those entries "pending — manual" until someone actually runs and records the r
 - Date tested: 2026-09-06
 - Hypothesis reference: H1, H8
 - Test performed: read-only discovery (`scripts/experiments/e1-mountability.sh`)
-- Result: partial — path not SIP-protected (no restricted flag, no rootless xattr,
+- Result: **pass** — path not SIP-protected (no restricted flag, no rootless xattr,
   `rootless.conf` covers only `/System/Developer`); two nested runtime mounts already present
   under `Volumes/`; `Cryptex/Images/bundle` empty; all runtime bytes in
-  `/System/Library/AssetsV2`. **Mount attempt not run (needs root).**
-- Evidence: `../research/evidence/e1-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+  `/System/Library/AssetsV2`. **Mount half (run by the user with sudo, 2026-09-07 00:30 UTC):**
+  `diskutil mount -mountPoint /Library/Developer/xcv-probe /dev/disk9s1` succeeded on a scratch
+  APFS image; write worked; unmount left an empty local directory; `rmdir` clean. The mount came
+  up `noowners` (files shown as `_unknown:_unknown`) — the F5 ownership hazard is real and any
+  future mount must use `owners`/`diskutil enableOwnership`.
+- Evidence: `../research/evidence/e1-macos26.6.2-25G83-xcode26.5-x86_64.txt` (read-only half),
+  `../research/evidence/e1b-mount-macos26.6.2-25G83-xcode26.5-x86_64.txt` (mount half)
 - Functional checks: N/A
-- Verdict: H8 probable (read-only half); H1 unverified and reframed (ADR-0004)
+- Verdict: **H8 verified** on this combination; H1 stays demoted (ADR-0004) because nothing
+  worth mounting lives under the path on Xcode 26.
 - Notes: manual completion procedure: `hdiutil create -size 2g -fs APFS -type SPARSE /tmp/xcv.sparseimage`,
   `hdiutil attach -nomount /tmp/xcv.sparseimage`, `sudo mkdir /Library/Developer/xcv-probe`,
   `sudo diskutil mount -mountPoint /Library/Developer/xcv-probe <diskNsM>`, verify with
@@ -209,10 +215,9 @@ those entries "pending — manual" until someone actually runs and records the r
 
 | Experiment | Gates | Status |
 |---|---|---|
-| E1 mount half | H8 | pending — manual (root) |
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
 | E8 export/import round trip | H4 | export done; import attempted and refused by CoreSimulator for space (see entry); retry after `sudo rm` of the stranded Inbox dmg |
-| Stranded Inbox cleanup | F1 | needs root: `sudo rm /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/<uuid>.dmg` (helper verb exists, unsigned) |
+| Stranded Inbox cleanup | F1 | **blocked**: `sudo rm` → Operation not permitted (no flags, no holder per `lsof`, no log denial); mechanism unknown; try reboot, then Feedback Assistant |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
 | E11 staging space | Runtime Library UX | pending — manual |
