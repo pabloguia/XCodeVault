@@ -85,10 +85,13 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## Blocked / pending — manual (ask the user)
 
-- E1 mount half (root), E7, E9 (scratch account), physical yank for E6: need root and/or
-  hands on the Mac. `scripts/experiments/e1b-mount-probe.sh` is ready to run with sudo.
-- Removing the stranded 5 GB Inbox dmg (root). After that, re-run
-  `scripts/experiments/e8c-import-roundtrip.sh` to finish the import half + boot probe.
+- **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
+  `noowners`. E7, E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
+- **Stranded 5 GB Inbox dmg: blocked** — `sudo rm` refused (no flags, no holder, no logged
+  denial). Next: reboot and re-check with `doctor`; if it persists, file Feedback Assistant.
+  The helper's `removeStrandedRuntimeDownload` verb would hit the same policy — re-evaluate it.
+- Import half of E8 (`scripts/experiments/e8c-import-roundtrip.sh`) needs ≥ 2× image + 3 GB
+  free internally; blocked by the Inbox file (5 GB) on this Mac.
 - E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
   (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
   write-test needs a moment when Xcode is closed.
