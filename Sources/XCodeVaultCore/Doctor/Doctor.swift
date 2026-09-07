@@ -193,7 +193,7 @@ public struct Doctor: Sendable {
                     Finding(
                         id: "stranded-inbox:\(n)", severity: .warning, title: "Stranded runtime download: \(n) (\(ByteCount.format(size)))",
                         detail: "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful `-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
-                        path: p, remediation: "No verified removal path yet: even `sudo rm` is refused (Operation not permitted) on macOS 26.5; the directory is protected beyond classic SIP paths. Try `xcrun simctl runtime delete all --dry-run` to see whether simctl tracks it, restart the Mac (simdiskimaged may reap it), and report to Apple if it persists.",
+                        path: p, remediation: "Restart the Mac: simdiskimaged reaps the Inbox at startup (verified 2026-09-07, 5 GB reclaimed). Deleting by hand does not work — even `sudo rm` is refused (Operation not permitted) on macOS 26.5. If it survives a reboot, report to Apple.",
                         evidence: "docs/research/FINDINGS-2026-09-05.md §F1 + 2026-09-06 root-EPERM note"))
             }
         }

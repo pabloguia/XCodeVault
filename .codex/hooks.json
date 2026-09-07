@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'~/projects/XCodeVault/.codex/hooks/helper-guard.sh'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'~/projects/XCodeVault/.codex/hooks/swift-format-lint.sh'",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

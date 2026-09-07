@@ -218,6 +218,6 @@ those entries "pending — manual" until someone actually runs and records the r
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
 | E8 export/import round trip | H4 | export done; import attempted and refused by CoreSimulator for space (see entry); retry after `sudo rm` of the stranded Inbox dmg |
-| Stranded Inbox cleanup | F1 | **blocked**: `sudo rm` → Operation not permitted (no flags, no holder per `lsof`, no log denial); mechanism unknown; try reboot, then Feedback Assistant |
+| Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
 | E11 staging space | Runtime Library UX | pending — manual |

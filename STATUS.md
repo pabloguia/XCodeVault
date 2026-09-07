@@ -87,11 +87,13 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
   `noowners`. E7, E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
-- **Stranded 5 GB Inbox dmg: blocked** — `sudo rm` refused (no flags, no holder, no logged
-  denial). Next: reboot and re-check with `doctor`; if it persists, file Feedback Assistant.
-  The helper's `removeStrandedRuntimeDownload` verb would hit the same policy — re-evaluate it.
+- **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
+  but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
+  `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
 - Import half of E8 (`scripts/experiments/e8c-import-roundtrip.sh`) needs ≥ 2× image + 3 GB
-  free internally; blocked by the Inbox file (5 GB) on this Mac.
+  free internally (13 GB free after the reboot — just enough for tvOS) and a fresh export, which
+  itself installs the runtime and strands another Inbox copy until the next reboot. Ask before
+  re-running.
 - E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
   (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
   write-test needs a moment when Xcode is closed.
