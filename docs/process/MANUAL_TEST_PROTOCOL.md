@@ -41,10 +41,16 @@ Record: whether the volume came back at the same path, and whether any process w
 
 ## E7 — shadow-data defense on an unmounted mount point
 
-Only relevant if a canonical-mount strategy is ever revived (ADR-0004). Procedure kept for the
-record: create `/Library/Developer/xcv-probe`, `sudo chown root:wheel`, `sudo chmod 0500`,
-`sudo chflags uchg`; point an Xcode setting at a path inside it; observe whether Xcode fails
-loudly (good) or crashes (bad) — `log stream --process Xcode`.
+**Done 2026-09-07 — pass, see `../architecture/COMPATIBILITY_MATRIX.md` "E7 shadow-data
+defense" and `../architecture/HYPOTHESES.md` H3.** Only relevant if a canonical-mount strategy
+is ever revived (ADR-0004); kept low priority. Procedure used: user ran the three `sudo`
+commands (`chown root:wheel`, `chmod 0500`, `chflags uchg` on `/Library/Developer/xcv-probe`);
+the agent then drove `xcodevaultctl scan`/`doctor` against it and a disposable scratch project's
+`xcodebuild -derivedDataPath` build under `log stream`, without touching the global
+`IDECustomDerivedDataLocation` default (a real build was running concurrently). Result: Xcode
+fails loudly (`** BUILD FAILED **`, no crash); `scan`/`doctor` silently skip the locked
+directory (no crash, but no visibility either). Cleanup still needs root:
+`sudo chflags nouchg /Library/Developer/xcv-probe && sudo rm -rf /Library/Developer/xcv-probe`.
 
 ## E9 — does symlinking ~/Library/Developer/CoreSimulator break the Simulator? (H5)
 

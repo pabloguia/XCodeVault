@@ -59,15 +59,24 @@ downside — never do whole-tree redirection regardless of final verification st
 local directory, daemons write into it, and on reconnect the mount either fails or
 hides that data, which then consumes internal disk invisibly.
 
-**Status: probable, partially reproduced (E6 software variant, 2026-09-06).** A force
-unmount of a real USB APFS vault mid-copy made macOS remove the `/Volumes/<name>` mount point
-outright, so no local directory was left to collect shadow writes in that scenario; the volume
-came back at the same path. Shadow data therefore requires something to recreate the directory
-(a tool writing an absolute `/Volumes/…` path, Xcode's own Locations, a `Name 1` remount) — which
-is exactly what `doctor` now checks for. Physical yank not yet tested. Design for it regardless. Candidate defense —
-`chflags uchg` + mode `0500` + root ownership on the unmounted mount point so stray
-writes fail loudly — is **our own synthesis and unverified**; it may simply crash
-Xcode in a worse way. Gate: E6, E7.
+**Status: probable, partially reproduced (E6 software variant, 2026-09-06; E7, 2026-09-07).**
+A force unmount of a real USB APFS vault mid-copy made macOS remove the `/Volumes/<name>` mount
+point outright, so no local directory was left to collect shadow writes in that scenario; the
+volume came back at the same path. Shadow data therefore requires something to recreate the
+directory (a tool writing an absolute `/Volumes/…` path, Xcode's own Locations, a `Name 1`
+remount) — which is exactly what `doctor` now checks for. Physical yank not yet tested. Design
+for it regardless. Candidate defense — `chflags uchg` + mode `0500` + root ownership on the
+unmounted mount point so stray writes fail loudly — **partially verified (E7, 2026-09-07): does
+not crash Xcode.** `xcodevaultctl scan`/`doctor` silently skip a `0500` root-owned directory
+under `/Library/Developer` during their `fts` walk (no crash, no warning surfaced — a visibility
+gap, not a safety one). A real `xcodebuild build` pointed at a derived-data path inside such a
+directory (via `-derivedDataPath`, isolated from any live build) failed loudly and cleanly:
+"Couldn't create workspace arena folder … you don't have permission", `** BUILD FAILED **`, exit
+65 — no crash, no hang, no corrupted state, confirmed against a live `log stream` capture (no
+SIGSEGV/SIGABRT/fatal-error lines). Not yet tested: the Xcode.app GUI (only `xcodebuild` CLI was
+exercised, to avoid touching the global `IDECustomDerivedDataLocation` default while a real build
+was running concurrently) and the `VaultVerifier` sentinel-file check (no vault was pointed at
+the probe path). Gate: E6, E7.
 
 ## H4 — Official Apple mechanisms cover more than assumed
 

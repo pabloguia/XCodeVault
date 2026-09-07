@@ -99,6 +99,18 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - Ran alongside an unrelated concurrent `xcodebuild` (user's own MySmoke iOS project, different
   platform/DerivedData) with no observed contention; internal free stayed ≥ 19 GB throughout.
 - Everything created on the USB volume was removed; no vault registered.
+- **E7 shadow-data defense: pass, does not crash Xcode.** User set up
+  `/Library/Developer/xcv-probe` (`root:wheel`, `0500`, `chflags uchg`, per
+  `docs/process/MANUAL_TEST_PROTOCOL.md`); agent verified the setup, then confirmed
+  `xcodevaultctl scan`/`doctor` silently skip the locked directory (no crash), and — in a
+  disposable scratch project isolated via `-derivedDataPath` (to avoid touching the global
+  `IDECustomDerivedDataLocation` while the MySmoke build/tests above were still running) — a
+  real `xcodebuild build` failed loudly and cleanly (`** BUILD FAILED **`, exit 65, no crash,
+  confirmed against a `log stream` capture). H3 in `HYPOTHESES.md` updated;
+  `COMPATIBILITY_MATRIX.md` gets a new E7 entry. Not tested: Xcode.app GUI, `VaultVerifier`
+  sentinel check. **`/Library/Developer/xcv-probe` still exists and needs the user to run,
+  with sudo, to clean up:**
+  `sudo chflags nouchg /Library/Developer/xcv-probe && sudo rm -rf /Library/Developer/xcv-probe`.
 
 ## In flight
 
@@ -107,7 +119,10 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 ## Blocked / pending — manual (ask the user)
 
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
-  `noowners`. E7, E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
+  `noowners`. E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
+- **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. Cleanup pending —
+  ask the user to run `sudo chflags nouchg /Library/Developer/xcv-probe && sudo rm -rf
+  /Library/Developer/xcv-probe`.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
   `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.

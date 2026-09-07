@@ -233,12 +233,44 @@ those entries "pending — manual" until someone actually runs and records the r
   (superseded — filenames were later overwritten by the 2026-09-07 run's evidence of the same name).
 - Functional checks: not reached.
 
+### E7 shadow-data defense — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-07
+- Hypothesis reference: H3
+- Test performed: user set up `/Library/Developer/xcv-probe` as `root:wheel`, mode `0500`,
+  `chflags uchg` (per `../process/MANUAL_TEST_PROTOCOL.md` E7, manual sudo steps — not run by
+  the agent). Agent then: (1) ran `xcodevaultctl scan`/`doctor` to see whether the `fts`-based
+  disk-usage walker chokes on a permission-denied subdirectory of `/Library/Developer`; (2)
+  scaffolded a disposable macOS tool project (xcodegen) outside the repo and ran
+  `xcodebuild build -derivedDataPath /Library/Developer/xcv-probe/dd` (an unwritable path)
+  under a live `log stream` capture, isolated from the global `IDECustomDerivedDataLocation`
+  default since a real build (another project) was running concurrently.
+- Result: **pass — the defense does not crash Xcode.**
+  - `scan`/`doctor`: exit 0, no crash, no hang; neither mentions `xcv-probe` — the `fts` walker
+    silently skips permission-denied subdirectories (a visibility gap: this defense wouldn't be
+    self-reporting via `doctor`, but it also doesn't break the tool).
+  - `xcodebuild build`: failed cleanly — `Couldn't create workspace arena folder
+    '/Library/Developer/xcv-probe/dd': You don't have permission to save the file "dd" in the
+    folder "xcv-probe".`, `** BUILD FAILED **`, exit 65. `log stream` captured only
+    `IDELogStore`-level permission errors (log level "critical", not a crash) leading up to the
+    failure; no SIGSEGV/SIGABRT/fatal-error lines, no lingering/zombie processes, `xcv-probe`
+    itself unchanged (`root:wheel`, `0500`, `uchg`) after the attempt.
+- Evidence: this session's transcript (no `.txt` evidence file written — no script exists for
+  E7; recorded here and in `HYPOTHESES.md` H3 directly, per the "informative, low-priority"
+  nature of the experiment).
+- Verdict: for this failure shape (a build tool asked to create a derived-data directory under
+  a locked path), the shadow-data defense **fails loudly, does not crash or corrupt state.**
+  Not tested: the Xcode.app GUI (only the `xcodebuild` CLI was exercised, deliberately, to avoid
+  touching the concurrently-running build's global Locations default), and the
+  `VaultVerifier` sentinel-file check (no vault was pointed at the probe path). Still low
+  priority — only relevant if a canonical-mount strategy is revived per ADR-0004.
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |
 |---|---|---|
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
-| E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
+| E7 shadow-data defense | H3 | **done (2026-09-07)** — see entry below; does not crash Xcode; low priority after ADR-0004 |
 | E8 export/import round trip | H4 | **done** — export (2026-09-06) + import with functional boot probe (2026-09-07) both pass; see entries above |
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
