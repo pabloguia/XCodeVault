@@ -68,7 +68,7 @@ before touching Device Support. Do **not** delete Archives or simulator devices.
 Set variables once (adjust the volume name if it changed; the UUID is what matters):
 
 ```bash
-cd ~/projects/XCodeVault
+cd "$(git rev-parse --show-toplevel)"
 MP=$(diskutil info <vault-uuid> | awk -F': *' '/Mount Point/{print $2}')
 LIB="$MP/.TemporaryItems/folders.$(id -u)/TemporaryItems/XCodeVault-RuntimeLibrary"; mkdir -p "$LIB"
 ```
@@ -129,7 +129,7 @@ LIB="$MP/.TemporaryItems/folders.$(id -u)/TemporaryItems/XCodeVault-RuntimeLibra
 ## Recording the result (mandatory, see `.claude/skills/run-experiment`)
 
 - Evidence files: `docs/research/evidence/e11-tvOS-*.txt` (new export), `e8c-import-*.txt`,
-  `e11-import-*.txt`. Confirm the user's home is redacted (`grep -c <user>` must be 0).
+  `e11-import-*.txt`. Confirm the user's home is redacted (`grep -c "$USER"` must be 0).
 - `docs/architecture/COMPATIBILITY_MATRIX.md`: replace the "E8 import half — fail
   (environmental)" entry with the new result (pass/fail, peak internal MB during import,
   which argument form `-importPlatform` accepted, boot probe result). Update the "Pending —
