@@ -88,9 +88,14 @@ ls /Library/Developer/CoreSimulator/Cryptex/Images/Inbox                        
 pgrep -x Xcode && echo "quit Xcode first"
 ```
 
-If internal free is < 20 GB: run `.build/debug/xcodevaultctl clean` (dry run), then
-`clean --apply --category derivedData` (regenerable; journaled) and, if still short, ask the user
-before touching Device Support. Do **not** delete Archives or simulator devices.
+**Space budget for tvOS (5 GB image):** export peaks at ~7 GB and leaves +4.9 GB installed
++5 GB stranded in the Inbox; offload returns the 4.9 GB; import then needs ≥ 12.8 GB free.
+Starting from 13 GB free (state at the end of session 2) the import preflight will refuse after
+the export. Two valid paths: (a) get to ≥ 20 GB free before step 1 — `clean --apply --category
+derivedData` is fine without asking (regenerable), Device Support (≈ 15 GB, re-copied from the
+devices later) only with the user's explicit OK, never Archives or simulator devices; or (b) run
+steps 1–2, ask the user to reboot (reaps the Inbox, +5 GB), then run steps 3–6. Say which path
+you took in the evidence notes.
 
 ## Procedure
 
