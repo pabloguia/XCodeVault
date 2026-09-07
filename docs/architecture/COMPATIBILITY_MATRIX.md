@@ -197,19 +197,41 @@ those entries "pending — manual" until someone actually runs and records the r
 
 ### E8 import half — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
 
-- Date tested: 2026-09-06
+- Date tested: 2026-09-07 (retry after the 2026-09-06 environmental fail below)
 - Hypothesis reference: H4, E11
-- Test performed: `scripts/experiments/e8c-import-roundtrip.sh` — `xcodebuild -importPlatform`
-  of the exported tvOS Cryptex dmg from the USB volume, monitored; 10.3 GB free internally.
+- Test performed: `scripts/experiments/e8c-import-roundtrip.sh` — `xcodevaultctl runtime import`
+  invokes `xcodebuild -importPlatform <dmg>` with the direct path to
+  `Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg` (`RuntimeOperations.importRuntime`); this is
+  the only argument form tried and it worked first time, so the bundle-directory and `simctl
+  runtime add` fallbacks were not needed. Re-exported the tvOS installer to the USB volume,
+  offloaded it, then imported; 26.5 GB free internally (well above the preflight requirement).
+- Result: **pass.** Peak internal staging consumption: 4.807 GB for a 4.906 GB image (≈0.98×,
+  vs. 5.8 GB/≈1.18× observed on 2026-09-06). `simctl runtime list -j` showed `signatureState:
+  Verified`, `state: Ready`; `simctl runtime verify` reported "Signature verified, signature is
+  valid." (exit 0).
+- Functional checks (all exit 0): create `Apple TV` device → `boot` → `bootstatus -b` reached
+  terminal `Booted` state → `shutdown` → `delete` device → `runtime delete` → `simctl delete
+  unavailable`. Machine returned to only iOS 26.5 + watchOS 26.5, 0 unavailable devices, no
+  runtime/device `doctor` findings. This run left **no stranded file** in
+  `Cryptex/Images/Inbox` (unlike the 2026-09-06 export below), so no reboot was needed.
+- Evidence: `../research/evidence/e8c-import-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
+  `../research/evidence/e11-tvOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Verdict: import mechanism **verified** end-to-end (import + functional boot probe) on this
+  machine. The `runtime import` preflight's old 2×+3GB rule was materially too conservative
+  (≈12.8 GB required for a peak that was actually ≈4.8–5.8 GB); tightened to 1.5×+2GB
+  required / 2×+2GB warn (`RuntimeOperations.preflightImport`,
+  `M2Tests.testImportPreflightEnforcesStagingSpace`).
+
+#### 2026-09-06 attempt (environmental fail, superseded by the pass above)
+
+- Test performed: same script, 10.3 GB free internally.
 - Result: **fail (environmental, informative)** — 5.8 GB consumed internally in 20 s, then
   `SimDiskImageError 14 "Cannot copy the image because the disk is almost full"`; space released.
   A 5.02 GB stranded download left in `Cryptex/Images/Inbox` by the earlier export (flagged by
   `doctor`, root needed to remove) had eaten the headroom.
 - Evidence: `../research/evidence/e8c-import-*.txt`, `../research/evidence/e11-import-*.txt`
-- Functional checks: not reached
-- Verdict: import mechanism **unverified** on this machine (needs ≥ 2× image + headroom free);
-  re-run after the Inbox file is removed with root.
-- Notes: the `runtime import` preflight's 2× rule matches the observed shape.
+  (superseded — filenames were later overwritten by the 2026-09-07 run's evidence of the same name).
+- Functional checks: not reached.
 
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
@@ -217,7 +239,7 @@ those entries "pending — manual" until someone actually runs and records the r
 |---|---|---|
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
 | E7 shadow-data defense | H3 | pending — manual (root); low priority after ADR-0004 |
-| E8 export/import round trip | H4 | export done; import attempted and refused by CoreSimulator for space (see entry); retry after `sudo rm` of the stranded Inbox dmg |
+| E8 export/import round trip | H4 | **done** — export (2026-09-06) + import with functional boot probe (2026-09-07) both pass; see entries above |
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
 | E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
 | E11 staging space | Runtime Library UX | pending — manual |

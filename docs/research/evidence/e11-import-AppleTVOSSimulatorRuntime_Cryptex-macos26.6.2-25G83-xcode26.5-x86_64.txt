@@ -1,5 +1,5 @@
 # Experiment: E8b/E11: runtime export of import-AppleTVOSSimulatorRuntime_Cryptex to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore with internal staging monitor (floor 1536 MB)
-# Date: 2026-09-06T21:02:13Z
+# Date: 2026-09-07T21:36:26Z
 # macOS: 26.6.2 (25G83)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -8,35 +8,48 @@
 
 ## preflight
 $ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime import /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg --preflight
-! Internal free space is tight for staging (10,8 GB); the reported requirement is ~40 GB for a 9–12 GB runtime (E11, unverified).
 preflight OK
 [exit=0]
 
-internal free at start: 10297 MB; library volume free: 339697 MB
-t=   5s internal_free=   9272 MB (Δ  -1024 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
-t=  10s internal_free=   5817 MB (Δ  -4479 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
-t=  15s internal_free=   4481 MB (Δ  -5816 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
-t=  20s internal_free=   4480 MB (Δ  -5816 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
-t=  25s internal_free=   4480 MB (Δ  -5816 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 1
+internal free at start: 26467 MB; library volume free: 339757 MB
+t=   5s internal_free=  26467 MB (Δ     +0 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  10s internal_free=  26136 MB (Δ   -331 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  15s internal_free=  22524 MB (Δ  -3943 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  20s internal_free=  21668 MB (Δ  -4798 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  25s internal_free=  21672 MB (Δ  -4795 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  30s internal_free=  21670 MB (Δ  -4797 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  35s internal_free=  21670 MB (Δ  -4797 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  40s internal_free=  21668 MB (Δ  -4798 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  45s internal_free=  21667 MB (Δ  -4800 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  50s internal_free=  21667 MB (Δ  -4800 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  55s internal_free=  21665 MB (Δ  -4801 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  60s internal_free=  21665 MB (Δ  -4801 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  65s internal_free=  21665 MB (Δ  -4802 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  70s internal_free=  21664 MB (Δ  -4803 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  75s internal_free=  21664 MB (Δ  -4803 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  80s internal_free=  21663 MB (Δ  -4804 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  85s internal_free=  21660 MB (Δ  -4807 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
 --- export log ---
-Error: `/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -importPlatform /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg` exited 70: Import platform failed with error Error Domain=com.apple.CoreSimulator.simdiskimaged.SimDiskImageError Code=14 "Cannot copy the image because the disk is almost full" UserInfo={NSLocalizedDescription=Cannot copy the image because the disk is almost full}
-! Internal free space is tight for staging (10,8 GB); the reported requirement is ~40 GB for a 9–12 GB runtime (E11, unverified).
 Importing /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg … (installation stages on the internal volume)
-import exit=1
-peak internal consumption during export: 5816 MB; killed=0
+importing /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg
+Registered as EC2DC886-AC13-482C-B43C-A7758F31C3BE.
+
+import exit=0
+peak internal consumption during export: 4807 MB; killed=0
 ## library afterwards
 $ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'
 total 9812944
-drwxr-xr-x@ 6 <user>  staff         192 Sep  6 17:39 .
-drwxr-xr-x@ 4 <user>  staff         128 Sep  6 17:41 ..
--rw-r--r--@ 1 <user>  staff  5024197929 Sep  6 17:39 AppleTVOSSimulatorRuntime_Cryptex.dmg
--r--r--r--@ 1 <user>  staff       23981 Sep  6 17:39 BuildManifest.plist
-drwxr-xr-x@ 5 <user>  staff         160 Sep  6 17:39 Firmware
--r--r--r--@ 1 <user>  staff        1308 Sep  6 17:39 Restore.plist
+drwxr-xr-x@ 6 <user>  staff         192 Sep  7 18:30 .
+drwxr-xr-x@ 4 <user>  staff         128 Sep  7 18:34 ..
+-rw-r--r--@ 1 <user>  staff  5024197929 Sep  7 18:28 AppleTVOSSimulatorRuntime_Cryptex.dmg
+-r--r--r--@ 1 <user>  staff       23981 Sep  7 18:30 BuildManifest.plist
+drwxr-xr-x@ 5 <user>  staff         160 Sep  7 18:30 Firmware
+-r--r--r--@ 1 <user>  staff        1308 Sep  7 18:30 Restore.plist
 Installers in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore:
   5,02 GB    ?         ?       AppleTVOSSimulatorRuntime_Cryptex.dmg
 
 Installed runtimes:
+  appletv   26.5    5,02 GB  NO installer in library — export first
   iphone    26.5    10,6 GB  NO installer in library — export first
   watch     26.5    5,24 GB  NO installer in library — export first
 [exit=0]
@@ -46,11 +59,13 @@ $ sh -c xcrun simctl runtime list; du -sk /System/Library/AssetsV2/com_apple_Mob
 == Disk Images ==
 -- iOS --
 iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE (Ready)
+-- tvOS --
+tvOS 26.5 (23L470) - EC2DC886-AC13-482C-B43C-A7758F31C3BE (Ready)
 -- watchOS --
 watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
 
-Total Disk Images: 2 (14.8G)
-4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+Total Disk Images: 3 (19.4G)
+8	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
 10348880	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
 5119360	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
 [exit=0]
@@ -59,14 +74,13 @@ Total Disk Images: 2 (14.8G)
 $ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
 ls: ~/Library/Caches/com.apple.dt.Xcode/Downloads: No such file or directory
 /Library/Developer/CoreSimulator/Cryptex/Images/Inbox:
-total 9812888
-drwxr-xr-x  3 root  admin          96 Sep  6 18:02 .
-drwxr-xr-x@ 5 root  admin         160 Jul 23  2025 ..
--rw-r--r--@ 1 root  admin  5024197929 Sep  6 17:39 85D24F59-8A6C-40FD-B663-440AF721202A.dmg
+total 0
+drwxr-xr-x  2 root  admin   64 Sep  7 18:37 .
+drwxr-xr-x@ 5 root  admin  160 Jul 23  2025 ..
 
 /Library/Developer/CoreSimulator/Images/Inbox:
 total 0
-drwxr-xr-x  2 root  admin   64 Jul 26 23:09 .
-drwxr-xr-x@ 5 root  admin  160 Sep  6 17:55 ..
+drwxr-xr-x  2 root  admin   64 Sep  7 18:37 .
+drwxr-xr-x@ 6 root  admin  192 Sep  7 18:37 ..
 [exit=1]
 

@@ -150,18 +150,20 @@ public struct RuntimeOperations: Sendable {
         }
         guard dmg.lowercased().hasSuffix(".dmg") else { throw RuntimeOperationError("\(dmg) is not a .dmg installer.") }
         var w: [String] = []
-        // E11 (observed 2026-09-06, Xcode 26.5): -importPlatform first COPIES the image into CoreSimulator's
-        // internal staging area, then installs it; with 10.3 GB free a 4.9 GB image consumed 5.8 GB and
-        // CoreSimulator refused with SimDiskImageError 14 "disk is almost full". Require 2× + 3 GB headroom.
-        let need = size * 2 + 3_000_000_000
+        // E11 (2026-09-06, refused): 10.3 GB free, 4.9 GB image, 5.8 GB peak consumed before CoreSimulator
+        // refused with SimDiskImageError 14 "disk is almost full". E8c (2026-09-07, succeeded): 26.5 GB
+        // free, same 4.9 GB image, 4.8 GB peak, clean import + functional boot probe. Peak is ≈1.0–1.2×
+        // the image across both runs; require 1.5× + 2 GB (clears both measured peaks) and warn below
+        // 2× + 2 GB.
+        let need = size * 3 / 2 + 2_000_000_000
         if host.dataVolumeFreeBytes < need {
             throw RuntimeOperationError(
                 "Installing needs internal staging space: image is \(ByteCount.format(size)), only \(ByteCount.format(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.format(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
             )
         }
-        if host.dataVolumeFreeBytes < size * 3 + 3_000_000_000 {
+        if host.dataVolumeFreeBytes < size * 2 + 2_000_000_000 {
             w.append(
-                "Internal free space is tight: the import copies the whole image internally before installing (E11 measured 1.2× the image during the copy phase), and CoreSimulator refuses when the disk is 'almost full'."
+                "Internal free space is tight: the import copies the whole image internally before installing (measured 1.0–1.2× the image across two runs), and CoreSimulator refuses when the disk is 'almost full'."
             )
         }
         return w

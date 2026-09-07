@@ -71,21 +71,30 @@ Xcode in a worse way. Gate: E6, E7.
 
 ## H4 — Official Apple mechanisms cover more than assumed
 
-**Status: probable → partially verified by documentation** (F2) **and by feature detection
-on Xcode 26.5 (E8, 2026-09-06):** every flag below is present in `xcodebuild -help`, plus
+**Status: verified end-to-end for the Runtime Library workflow (E8, 2026-09-06 export +
+2026-09-07 import).** Every flag below is present in `xcodebuild -help` on Xcode 26.5, plus
 `-deleteComponent`, `-prepareDeviceSupport`, and `simctl runtime add/delete/unmount/verify`.
 `IDECustomDerivedDataLocation` **is honoured by xcodebuild on 26.5 (E8b, verified)** and the
-compilation cache lives inside DerivedData by default. The `-exportPath` export **ran for tvOS (E11 evidence): it downloads, installs the
-runtime internally, then exports an `.exportedBundle` — peak ≈1.4× the image internally.** So
-the Runtime Library is supported but is "export then offload", never "download without
-installing". The `-importPlatform` half is pending. Confirmed by Apple
+compilation cache lives inside DerivedData by default. The `-exportPath` export **ran for
+tvOS (E11 evidence): it downloads, installs the runtime internally, then exports an
+`.exportedBundle` — peak ≈1.4× the image internally.** The `-importPlatform` half, previously
+pending (blocked once by an environmental space shortfall on 2026-09-06), **now passed
+(2026-09-07):** `xcodevaultctl runtime import` invokes `xcodebuild -importPlatform <dmg>`
+with the direct path to the `.exportedBundle`'s inner Cryptex dmg — that argument form worked
+on the first try, no fallback to the bundle directory or `simctl runtime add` was needed —
+consuming a peak of 4.807 GB internally for a 4.906 GB image (≈0.98×, vs. ≈1.18× on the prior
+attempt), then a full functional probe (create → boot → reach `Booted` → shutdown → delete
+device → `runtime delete` → `simctl delete unavailable`) all exited 0 and left the machine
+back at its prior runtime/device state. So the Runtime Library is supported "export → offload
+→ import" round trip, verified working, not just "export then offload". Confirmed by Apple
 docs: `-downloadPlatform`/`-downloadAllPlatforms` with `-exportPath`, then
 `-importPlatform <dmg>` — i.e. the Runtime Library concept is **officially supported**;
 `-architectureVariant arm64` cuts image size; `-downloadComponent`/`-importComponent`
 (Xcode 26) for the Metal toolchain; `~/Library/Developer/Packages/` is a real,
 documented, undermanaged cache. Still unverified: whether `IDECustomDerivedDataLocation`
 / `IDEBuildLocationStyle` key names are current for Xcode 16/26 (2016-era source).
-Gate: E8.
+Evidence: `docs/research/evidence/e8c-import-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+Gate: E8 — closed.
 
 ## H5 — Symlink indirection breaks the Simulator even on the same disk *(new)*
 

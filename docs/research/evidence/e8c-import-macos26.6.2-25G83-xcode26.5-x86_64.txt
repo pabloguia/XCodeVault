@@ -1,5 +1,5 @@
 # Experiment: E8c: -importPlatform from an exported installer + functional probe + delete
-# Date: 2026-09-06T21:02:11Z
+# Date: 2026-09-07T21:36:22Z
 # macOS: 26.6.2 (25G83)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -21,10 +21,11 @@ Total Disk Images: 2 (14.8G)
 == import (monitored) ==
 $ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime import /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg --preflight
 preflight OK
-internal free at start: 10297 MB; library volume free: 339697 MB
-t=  20s internal_free=   4480 MB (Δ  -5816 MB)  library_free=  339697 MB (Δ     +0 MB)  staging dirs: 0
-Error: `/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -importPlatform /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg` exited 70: Import platform failed with error Error Domain=com.apple.CoreSimulator.simdiskimaged.SimDiskImageError Code=14 "Cannot copy the image because the disk is almost full" UserInfo={NSLocalizedDescription=Cannot copy the image because the disk is almost full}
-peak internal consumption during export: 5816 MB; killed=0
+internal free at start: 26467 MB; library volume free: 339757 MB
+t=  20s internal_free=  21668 MB (Δ  -4798 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 0
+t=  50s internal_free=  21667 MB (Δ  -4800 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+t=  80s internal_free=  21663 MB (Δ  -4804 MB)  library_free=  339757 MB (Δ     +0 MB)  staging dirs: 1
+peak internal consumption during export: 4807 MB; killed=0
 $ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary/appletvsimulator_26.5_23L470.exportedBundle/Restore'
 $ sh -c xcrun simctl runtime list; du -sk /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime
 $ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
@@ -37,7 +38,7 @@ $ xcrun simctl runtime list -j
     "deletable" : true,
     "identifier" : "90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE",
     "kind" : "Patchable Cryptex Disk Image",
-    "lastUsedAt" : "2026-09-06T15:45:20Z",
+    "lastUsedAt" : "2026-09-07T21:30:29Z",
     "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/iOS_23F77",
     "parentMountPath" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_iOSSimulatorRuntime\/af14d04fa4f5b29c2471951b01491c6403eab68f.asset\/AssetData",
     "path" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_iOSSimulatorRuntime\/af14d04fa4f5b29c2471951b01491c6403eab68f.asset\/AssetData\/Restore\/iOSSimulatorRuntime_Cryptex.dmg",
@@ -53,12 +54,31 @@ $ xcrun simctl runtime list -j
     ],
     "version" : "26.5"
   },
+  "EC2DC886-AC13-482C-B43C-A7758F31C3BE" : {
+    "build" : "23L470",
+    "deletable" : true,
+    "identifier" : "EC2DC886-AC13-482C-B43C-A7758F31C3BE",
+    "kind" : "Disk Image",
+    "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/tvOS_23L470",
+    "path" : "\/Library\/Developer\/CoreSimulator\/Images\/EC2DC886-AC13-482C-B43C-A7758F31C3BE.dmg",
+    "platformIdentifier" : "com.apple.platform.appletvsimulator",
+    "runtimeBundlePath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/tvOS_23L470\/Library\/Developer\/CoreSimulator\/Profiles\/Runtimes\/tvOS 26.5.simruntime",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.tvOS-26-5",
+    "signatureState" : "Verified",
+    "sizeBytes" : 5024197929,
+    "state" : "Ready",
+    "supportedArchitectures" : [
+      "x86_64",
+      "arm64"
+    ],
+    "version" : "26.5"
+  },
   "FC8D06B4-B87E-42BE-8DF3-AD0A2020571F" : {
     "build" : "23T570",
     "deletable" : true,
     "identifier" : "FC8D06B4-B87E-42BE-8DF3-AD0A2020571F",
     "kind" : "Patchable Cryptex Disk Image",
-    "lastUsedAt" : "2026-09-06T15:39:27Z",
+    "lastUsedAt" : "2026-09-07T21:26:36Z",
     "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/watchOS_23T570",
     "parentMountPath" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_watchOSSimulatorRuntime\/9abbe617b29829bb37df4be2a5bfd67f9af757e1.asset\/AssetData",
     "path" : "\/System\/Library\/AssetsV2\/com_apple_MobileAsset_watchOSSimulatorRuntime\/9abbe617b29829bb37df4be2a5bfd67f9af757e1.asset\/AssetData\/Restore\/WatchOSSimulatorRuntime_Cryptex.dmg",
@@ -77,21 +97,2799 @@ $ xcrun simctl runtime list -j
 }
 [exit=0]
 
-tvOS runtime id: 
+tvOS runtime id: EC2DC886-AC13-482C-B43C-A7758F31C3BE
+## verify
+$ xcrun simctl runtime verify EC2DC886-AC13-482C-B43C-A7758F31C3BE
+Signature verified, signature is valid.
+[exit=0]
+
+## create device
+$ xcrun simctl create xcv-probe-tv Apple TV com.apple.CoreSimulator.SimRuntime.tvOS-26-5
+6DE7F374-EC96-413E-950A-58569414FA25
+[exit=0]
+
+## boot device
+$ xcrun simctl boot 6DE7F374-EC96-413E-950A-58569414FA25
+[exit=0]
+
+## wait for boot
+$ xcrun simctl bootstatus 6DE7F374-EC96-413E-950A-58569414FA25 -b
+Monitoring boot status for xcv-probe-tv (6DE7F374-EC96-413E-950A-58569414FA25).
+[2026-09-07 21:39:56 +0000] Status=1, isTerminal=NO, Elapsed=00:28.
+	Waiting on BackBoard
+
+[2026-09-07 21:40:08 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
+	Waiting on Data Migration
+		Reason:(null)
+		Migration Elapsed:00:02 seconds
+
+[2026-09-07 21:40:17 +0000] Status=2, isTerminal=NO, Elapsed=00:50.
+	Waiting on Data Migration
+		Reason:Gathering plugins
+		Migration Elapsed:00:11 seconds
+
+[2026-09-07 21:40:17 +0000] Status=2, isTerminal=NO, Elapsed=00:50.
+	Waiting on Data Migration
+		Reason:Gathering plugins
+		Migration Elapsed:00:11 seconds
+
+[2026-09-07 21:40:18 +0000] Status=2, isTerminal=NO, Elapsed=00:51.
+	Waiting on Data Migration
+		Reason:Gathering plugins
+		Migration Elapsed:00:12 seconds
+
+[2026-09-07 21:40:19 +0000] Status=2, isTerminal=NO, Elapsed=00:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:13 seconds
+
+[2026-09-07 21:40:20 +0000] Status=2, isTerminal=NO, Elapsed=00:53.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:14 seconds
+
+[2026-09-07 21:40:21 +0000] Status=2, isTerminal=NO, Elapsed=00:54.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:15 seconds
+
+[2026-09-07 21:40:22 +0000] Status=2, isTerminal=NO, Elapsed=00:55.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:16 seconds
+
+[2026-09-07 21:40:23 +0000] Status=2, isTerminal=NO, Elapsed=00:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:17 seconds
+
+[2026-09-07 21:40:24 +0000] Status=2, isTerminal=NO, Elapsed=00:57.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:18 seconds
+
+[2026-09-07 21:40:25 +0000] Status=2, isTerminal=NO, Elapsed=00:58.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:19 seconds
+
+[2026-09-07 21:40:26 +0000] Status=2, isTerminal=NO, Elapsed=00:59.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:20 seconds
+
+[2026-09-07 21:40:27 +0000] Status=2, isTerminal=NO, Elapsed=01:00.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:21 seconds
+
+[2026-09-07 21:40:28 +0000] Status=2, isTerminal=NO, Elapsed=01:01.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:22 seconds
+
+[2026-09-07 21:40:29 +0000] Status=2, isTerminal=NO, Elapsed=01:02.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:23 seconds
+
+[2026-09-07 21:40:30 +0000] Status=2, isTerminal=NO, Elapsed=01:03.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:24 seconds
+
+[2026-09-07 21:40:31 +0000] Status=2, isTerminal=NO, Elapsed=01:04.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:25 seconds
+
+[2026-09-07 21:40:32 +0000] Status=2, isTerminal=NO, Elapsed=01:05.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:26 seconds
+
+[2026-09-07 21:40:33 +0000] Status=2, isTerminal=NO, Elapsed=01:06.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileContainerManager.ContainerMigrator (ContainerMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:27 seconds
+
+[2026-09-07 21:40:34 +0000] Status=2, isTerminal=NO, Elapsed=01:07.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:28 seconds
+
+[2026-09-07 21:40:35 +0000] Status=2, isTerminal=NO, Elapsed=01:08.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:29 seconds
+
+[2026-09-07 21:40:36 +0000] Status=2, isTerminal=NO, Elapsed=01:09.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:30 seconds
+
+[2026-09-07 21:40:37 +0000] Status=2, isTerminal=NO, Elapsed=01:10.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:31 seconds
+
+[2026-09-07 21:40:38 +0000] Status=2, isTerminal=NO, Elapsed=01:11.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:32 seconds
+
+[2026-09-07 21:40:39 +0000] Status=2, isTerminal=NO, Elapsed=01:12.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:33 seconds
+
+[2026-09-07 21:40:40 +0000] Status=2, isTerminal=NO, Elapsed=01:13.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:34 seconds
+
+[2026-09-07 21:40:41 +0000] Status=2, isTerminal=NO, Elapsed=01:14.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:35 seconds
+
+[2026-09-07 21:40:42 +0000] Status=2, isTerminal=NO, Elapsed=01:15.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:36 seconds
+
+[2026-09-07 21:40:43 +0000] Status=2, isTerminal=NO, Elapsed=01:16.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:37 seconds
+
+[2026-09-07 21:40:44 +0000] Status=2, isTerminal=NO, Elapsed=01:17.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:38 seconds
+
+[2026-09-07 21:40:45 +0000] Status=2, isTerminal=NO, Elapsed=01:18.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:39 seconds
+
+[2026-09-07 21:40:46 +0000] Status=2, isTerminal=NO, Elapsed=01:19.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:40 seconds
+
+[2026-09-07 21:40:47 +0000] Status=2, isTerminal=NO, Elapsed=01:20.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:41 seconds
+
+[2026-09-07 21:40:48 +0000] Status=2, isTerminal=NO, Elapsed=01:21.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:42 seconds
+
+[2026-09-07 21:40:49 +0000] Status=2, isTerminal=NO, Elapsed=01:22.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:43 seconds
+
+[2026-09-07 21:40:50 +0000] Status=2, isTerminal=NO, Elapsed=01:23.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:44 seconds
+
+[2026-09-07 21:40:51 +0000] Status=2, isTerminal=NO, Elapsed=01:24.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:45 seconds
+
+[2026-09-07 21:40:52 +0000] Status=2, isTerminal=NO, Elapsed=01:25.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:46 seconds
+
+[2026-09-07 21:40:53 +0000] Status=2, isTerminal=NO, Elapsed=01:26.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:47 seconds
+
+[2026-09-07 21:40:54 +0000] Status=2, isTerminal=NO, Elapsed=01:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:48 seconds
+
+[2026-09-07 21:40:55 +0000] Status=2, isTerminal=NO, Elapsed=01:28.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:49 seconds
+
+[2026-09-07 21:40:56 +0000] Status=2, isTerminal=NO, Elapsed=01:29.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:50 seconds
+
+[2026-09-07 21:40:57 +0000] Status=2, isTerminal=NO, Elapsed=01:30.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:51 seconds
+
+[2026-09-07 21:40:58 +0000] Status=2, isTerminal=NO, Elapsed=01:31.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:52 seconds
+
+[2026-09-07 21:40:59 +0000] Status=2, isTerminal=NO, Elapsed=01:32.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:53 seconds
+
+[2026-09-07 21:41:00 +0000] Status=2, isTerminal=NO, Elapsed=01:33.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:54 seconds
+
+[2026-09-07 21:41:01 +0000] Status=2, isTerminal=NO, Elapsed=01:34.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:55 seconds
+
+[2026-09-07 21:41:02 +0000] Status=2, isTerminal=NO, Elapsed=01:35.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:56 seconds
+
+[2026-09-07 21:41:03 +0000] Status=2, isTerminal=NO, Elapsed=01:36.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:57 seconds
+
+[2026-09-07 21:41:04 +0000] Status=2, isTerminal=NO, Elapsed=01:37.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:58 seconds
+
+[2026-09-07 21:41:05 +0000] Status=2, isTerminal=NO, Elapsed=01:38.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:59 seconds
+
+[2026-09-07 21:41:06 +0000] Status=2, isTerminal=NO, Elapsed=01:39.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:00 seconds
+
+[2026-09-07 21:41:07 +0000] Status=2, isTerminal=NO, Elapsed=01:40.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:01 seconds
+
+[2026-09-07 21:41:08 +0000] Status=2, isTerminal=NO, Elapsed=01:41.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:02 seconds
+
+[2026-09-07 21:41:09 +0000] Status=2, isTerminal=NO, Elapsed=01:42.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:03 seconds
+
+[2026-09-07 21:41:10 +0000] Status=2, isTerminal=NO, Elapsed=01:43.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:04 seconds
+
+[2026-09-07 21:41:11 +0000] Status=2, isTerminal=NO, Elapsed=01:44.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:05 seconds
+
+[2026-09-07 21:41:12 +0000] Status=2, isTerminal=NO, Elapsed=01:45.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:06 seconds
+
+[2026-09-07 21:41:13 +0000] Status=2, isTerminal=NO, Elapsed=01:46.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:07 seconds
+
+[2026-09-07 21:41:14 +0000] Status=2, isTerminal=NO, Elapsed=01:47.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:08 seconds
+
+[2026-09-07 21:41:15 +0000] Status=2, isTerminal=NO, Elapsed=01:48.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:09 seconds
+
+[2026-09-07 21:41:16 +0000] Status=2, isTerminal=NO, Elapsed=01:49.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:10 seconds
+
+[2026-09-07 21:41:17 +0000] Status=2, isTerminal=NO, Elapsed=01:50.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:11 seconds
+
+[2026-09-07 21:41:18 +0000] Status=2, isTerminal=NO, Elapsed=01:51.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:12 seconds
+
+[2026-09-07 21:41:19 +0000] Status=2, isTerminal=NO, Elapsed=01:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:13 seconds
+
+[2026-09-07 21:41:20 +0000] Status=2, isTerminal=NO, Elapsed=01:53.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:14 seconds
+
+[2026-09-07 21:41:21 +0000] Status=2, isTerminal=NO, Elapsed=01:54.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:15 seconds
+
+[2026-09-07 21:41:22 +0000] Status=2, isTerminal=NO, Elapsed=01:55.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:16 seconds
+
+[2026-09-07 21:41:23 +0000] Status=2, isTerminal=NO, Elapsed=01:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:17 seconds
+
+[2026-09-07 21:41:24 +0000] Status=2, isTerminal=NO, Elapsed=01:57.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:18 seconds
+
+[2026-09-07 21:41:25 +0000] Status=2, isTerminal=NO, Elapsed=01:58.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:19 seconds
+
+[2026-09-07 21:41:26 +0000] Status=2, isTerminal=NO, Elapsed=01:59.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:20 seconds
+
+[2026-09-07 21:41:27 +0000] Status=2, isTerminal=NO, Elapsed=02:00.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:21 seconds
+
+[2026-09-07 21:41:29 +0000] Status=2, isTerminal=NO, Elapsed=02:01.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:22 seconds
+
+[2026-09-07 21:41:29 +0000] Status=2, isTerminal=NO, Elapsed=02:02.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:23 seconds
+
+[2026-09-07 21:41:30 +0000] Status=2, isTerminal=NO, Elapsed=02:03.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:24 seconds
+
+[2026-09-07 21:41:31 +0000] Status=2, isTerminal=NO, Elapsed=02:04.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:25 seconds
+
+[2026-09-07 21:41:32 +0000] Status=2, isTerminal=NO, Elapsed=02:05.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:26 seconds
+
+[2026-09-07 21:41:33 +0000] Status=2, isTerminal=NO, Elapsed=02:06.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:27 seconds
+
+[2026-09-07 21:41:34 +0000] Status=2, isTerminal=NO, Elapsed=02:07.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:28 seconds
+
+[2026-09-07 21:41:35 +0000] Status=2, isTerminal=NO, Elapsed=02:08.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:29 seconds
+
+[2026-09-07 21:41:36 +0000] Status=2, isTerminal=NO, Elapsed=02:09.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:30 seconds
+
+[2026-09-07 21:41:37 +0000] Status=2, isTerminal=NO, Elapsed=02:10.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:31 seconds
+
+[2026-09-07 21:41:38 +0000] Status=2, isTerminal=NO, Elapsed=02:11.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:32 seconds
+
+[2026-09-07 21:41:39 +0000] Status=2, isTerminal=NO, Elapsed=02:12.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:33 seconds
+
+[2026-09-07 21:41:40 +0000] Status=2, isTerminal=NO, Elapsed=02:13.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:34 seconds
+
+[2026-09-07 21:41:41 +0000] Status=2, isTerminal=NO, Elapsed=02:14.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:35 seconds
+
+[2026-09-07 21:41:42 +0000] Status=2, isTerminal=NO, Elapsed=02:15.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:36 seconds
+
+[2026-09-07 21:41:43 +0000] Status=2, isTerminal=NO, Elapsed=02:16.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:37 seconds
+
+[2026-09-07 21:41:44 +0000] Status=2, isTerminal=NO, Elapsed=02:17.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:38 seconds
+
+[2026-09-07 21:41:45 +0000] Status=2, isTerminal=NO, Elapsed=02:18.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:39 seconds
+
+[2026-09-07 21:41:46 +0000] Status=2, isTerminal=NO, Elapsed=02:19.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:40 seconds
+
+[2026-09-07 21:41:47 +0000] Status=2, isTerminal=NO, Elapsed=02:20.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:41 seconds
+
+[2026-09-07 21:41:48 +0000] Status=2, isTerminal=NO, Elapsed=02:21.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.MobileGestalt.MobileGestaltMigrator (MobileGestaltMigrator.migrator, user-agnostic)
+		Migration Elapsed:01:42 seconds
+
+[2026-09-07 21:41:49 +0000] Status=2, isTerminal=NO, Elapsed=02:22.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.addressbook.migrator (AddressBookLegacy.migrator)
+		Migration Elapsed:01:43 seconds
+
+[2026-09-07 21:41:50 +0000] Status=2, isTerminal=NO, Elapsed=02:23.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.appleaccount.mergebuddyprovisioningresponse.migrator (MergeBuddyProvisioningResponse.migrator)
+		Migration Elapsed:01:44 seconds
+
+[2026-09-07 21:41:51 +0000] Status=2, isTerminal=NO, Elapsed=02:24.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.message.LegacyAccountsMigrator (LegacyMessageAccountsMigrator.migrator)
+		Migration Elapsed:01:45 seconds
+
+[2026-09-07 21:41:52 +0000] Status=2, isTerminal=NO, Elapsed=02:25.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.locationd.migrator (CoreLocationMigrator.migrator) (Concurrent: Running plugin com.apple.MobileSlideShow (MobileSlideShow.migrator, concurrent after com.apple.accounts.migrator))
+		Migration Elapsed:01:46 seconds
+
+[2026-09-07 21:41:53 +0000] Status=2, isTerminal=NO, Elapsed=02:26.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.preferences.InternationalSupportMigrator (InternationalSupportMigrator.migrator)
+		Migration Elapsed:01:47 seconds
+
+[2026-09-07 21:41:54 +0000] Status=2, isTerminal=NO, Elapsed=02:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.keyboards.migrator (KeyboardMigrator.migrator)
+		Migration Elapsed:01:48 seconds
+
+[2026-09-07 21:41:55 +0000] Status=2, isTerminal=NO, Elapsed=02:28.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)
+		Migration Elapsed:01:49 seconds
+
+[2026-09-07 21:41:56 +0000] Status=2, isTerminal=NO, Elapsed=02:29.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:50 seconds
+
+[2026-09-07 21:41:57 +0000] Status=2, isTerminal=NO, Elapsed=02:30.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:51 seconds
+
+[2026-09-07 21:41:58 +0000] Status=2, isTerminal=NO, Elapsed=02:31.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:52 seconds
+
+[2026-09-07 21:41:59 +0000] Status=2, isTerminal=NO, Elapsed=02:32.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:53 seconds
+
+[2026-09-07 21:42:00 +0000] Status=2, isTerminal=NO, Elapsed=02:33.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:54 seconds
+
+[2026-09-07 21:42:01 +0000] Status=2, isTerminal=NO, Elapsed=02:34.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:55 seconds
+
+[2026-09-07 21:42:02 +0000] Status=2, isTerminal=NO, Elapsed=02:35.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:56 seconds
+
+[2026-09-07 21:42:03 +0000] Status=2, isTerminal=NO, Elapsed=02:36.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:57 seconds
+
+[2026-09-07 21:42:04 +0000] Status=2, isTerminal=NO, Elapsed=02:37.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:58 seconds
+
+[2026-09-07 21:42:05 +0000] Status=2, isTerminal=NO, Elapsed=02:38.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:01:59 seconds
+
+[2026-09-07 21:42:06 +0000] Status=2, isTerminal=NO, Elapsed=02:39.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:00 seconds
+
+[2026-09-07 21:42:07 +0000] Status=2, isTerminal=NO, Elapsed=02:40.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:01 seconds
+
+[2026-09-07 21:42:08 +0000] Status=2, isTerminal=NO, Elapsed=02:41.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:02 seconds
+
+[2026-09-07 21:42:09 +0000] Status=2, isTerminal=NO, Elapsed=02:42.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:03 seconds
+
+[2026-09-07 21:42:10 +0000] Status=2, isTerminal=NO, Elapsed=02:43.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:04 seconds
+
+[2026-09-07 21:42:11 +0000] Status=2, isTerminal=NO, Elapsed=02:44.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:05 seconds
+
+[2026-09-07 21:42:12 +0000] Status=2, isTerminal=NO, Elapsed=02:45.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:06 seconds
+
+[2026-09-07 21:42:13 +0000] Status=2, isTerminal=NO, Elapsed=02:46.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:07 seconds
+
+[2026-09-07 21:42:14 +0000] Status=2, isTerminal=NO, Elapsed=02:47.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:08 seconds
+
+[2026-09-07 21:42:23 +0000] Status=2, isTerminal=NO, Elapsed=02:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:09 seconds
+
+[2026-09-07 21:42:23 +0000] Status=2, isTerminal=NO, Elapsed=02:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:17 seconds
+
+[2026-09-07 21:42:23 +0000] Status=2, isTerminal=NO, Elapsed=02:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:17 seconds
+
+[2026-09-07 21:42:24 +0000] Status=2, isTerminal=NO, Elapsed=02:57.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:18 seconds
+
+[2026-09-07 21:42:25 +0000] Status=2, isTerminal=NO, Elapsed=02:58.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:19 seconds
+
+[2026-09-07 21:42:26 +0000] Status=2, isTerminal=NO, Elapsed=02:59.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:20 seconds
+
+[2026-09-07 21:42:27 +0000] Status=2, isTerminal=NO, Elapsed=03:00.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:21 seconds
+
+[2026-09-07 21:42:28 +0000] Status=2, isTerminal=NO, Elapsed=03:01.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:22 seconds
+
+[2026-09-07 21:42:29 +0000] Status=2, isTerminal=NO, Elapsed=03:02.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:23 seconds
+
+[2026-09-07 21:42:30 +0000] Status=2, isTerminal=NO, Elapsed=03:03.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:24 seconds
+
+[2026-09-07 21:42:31 +0000] Status=2, isTerminal=NO, Elapsed=03:04.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:25 seconds
+
+[2026-09-07 21:43:06 +0000] Status=2, isTerminal=NO, Elapsed=03:39.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:02:38 seconds
+
+[2026-09-07 21:43:06 +0000] Status=2, isTerminal=NO, Elapsed=03:39.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:01 seconds
+
+[2026-09-07 21:43:07 +0000] Status=2, isTerminal=NO, Elapsed=03:40.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:01 seconds
+
+[2026-09-07 21:43:08 +0000] Status=2, isTerminal=NO, Elapsed=03:41.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:02 seconds
+
+[2026-09-07 21:43:09 +0000] Status=2, isTerminal=NO, Elapsed=03:42.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:03 seconds
+
+[2026-09-07 21:43:10 +0000] Status=2, isTerminal=NO, Elapsed=03:43.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:04 seconds
+
+[2026-09-07 21:43:11 +0000] Status=2, isTerminal=NO, Elapsed=03:44.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:05 seconds
+
+[2026-09-07 21:43:12 +0000] Status=2, isTerminal=NO, Elapsed=03:45.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:06 seconds
+
+[2026-09-07 21:43:13 +0000] Status=2, isTerminal=NO, Elapsed=03:46.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:07 seconds
+
+[2026-09-07 21:43:14 +0000] Status=2, isTerminal=NO, Elapsed=03:47.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:08 seconds
+
+[2026-09-07 21:43:16 +0000] Status=2, isTerminal=NO, Elapsed=03:49.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:09 seconds
+
+[2026-09-07 21:43:16 +0000] Status=2, isTerminal=NO, Elapsed=03:49.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:11 seconds
+
+[2026-09-07 21:43:17 +0000] Status=2, isTerminal=NO, Elapsed=03:50.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:11 seconds
+
+[2026-09-07 21:43:18 +0000] Status=2, isTerminal=NO, Elapsed=03:51.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:12 seconds
+
+[2026-09-07 21:43:19 +0000] Status=2, isTerminal=NO, Elapsed=03:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:13 seconds
+
+[2026-09-07 21:43:20 +0000] Status=2, isTerminal=NO, Elapsed=03:53.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:14 seconds
+
+[2026-09-07 21:43:21 +0000] Status=2, isTerminal=NO, Elapsed=03:54.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:15 seconds
+
+[2026-09-07 21:43:22 +0000] Status=2, isTerminal=NO, Elapsed=03:55.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:16 seconds
+
+[2026-09-07 21:43:23 +0000] Status=2, isTerminal=NO, Elapsed=03:56.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:17 seconds
+
+[2026-09-07 21:43:24 +0000] Status=2, isTerminal=NO, Elapsed=03:57.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:18 seconds
+
+[2026-09-07 21:43:25 +0000] Status=2, isTerminal=NO, Elapsed=03:58.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:19 seconds
+
+[2026-09-07 21:43:26 +0000] Status=2, isTerminal=NO, Elapsed=03:59.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:20 seconds
+
+[2026-09-07 21:43:27 +0000] Status=2, isTerminal=NO, Elapsed=04:00.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:21 seconds
+
+[2026-09-07 21:43:48 +0000] Status=2, isTerminal=NO, Elapsed=04:21.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:22 seconds
+
+[2026-09-07 21:43:54 +0000] Status=2, isTerminal=NO, Elapsed=04:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:48 seconds
+
+[2026-09-07 21:43:54 +0000] Status=2, isTerminal=NO, Elapsed=04:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:48 seconds
+
+[2026-09-07 21:43:54 +0000] Status=2, isTerminal=NO, Elapsed=04:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:48 seconds
+
+[2026-09-07 21:43:55 +0000] Status=2, isTerminal=NO, Elapsed=04:28.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:49 seconds
+
+[2026-09-07 21:43:56 +0000] Status=2, isTerminal=NO, Elapsed=04:29.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:50 seconds
+
+[2026-09-07 21:43:57 +0000] Status=2, isTerminal=NO, Elapsed=04:30.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:51 seconds
+
+[2026-09-07 21:43:58 +0000] Status=2, isTerminal=NO, Elapsed=04:31.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:52 seconds
+
+[2026-09-07 21:43:59 +0000] Status=2, isTerminal=NO, Elapsed=04:32.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:53 seconds
+
+[2026-09-07 21:44:00 +0000] Status=2, isTerminal=NO, Elapsed=04:33.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:54 seconds
+
+[2026-09-07 21:44:01 +0000] Status=2, isTerminal=NO, Elapsed=04:34.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:55 seconds
+
+[2026-09-07 21:44:02 +0000] Status=2, isTerminal=NO, Elapsed=04:35.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:56 seconds
+
+[2026-09-07 21:44:03 +0000] Status=2, isTerminal=NO, Elapsed=04:36.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:58 seconds
+
+[2026-09-07 21:44:04 +0000] Status=2, isTerminal=NO, Elapsed=04:37.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:58 seconds
+
+[2026-09-07 21:44:05 +0000] Status=2, isTerminal=NO, Elapsed=04:38.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:03:59 seconds
+
+[2026-09-07 21:44:06 +0000] Status=2, isTerminal=NO, Elapsed=04:39.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:00 seconds
+
+[2026-09-07 21:44:07 +0000] Status=2, isTerminal=NO, Elapsed=04:40.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:01 seconds
+
+[2026-09-07 21:44:08 +0000] Status=2, isTerminal=NO, Elapsed=04:41.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:02 seconds
+
+[2026-09-07 21:44:09 +0000] Status=2, isTerminal=NO, Elapsed=04:42.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:03 seconds
+
+[2026-09-07 21:44:10 +0000] Status=2, isTerminal=NO, Elapsed=04:43.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:04 seconds
+
+[2026-09-07 21:44:11 +0000] Status=2, isTerminal=NO, Elapsed=04:44.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:05 seconds
+
+[2026-09-07 21:44:12 +0000] Status=2, isTerminal=NO, Elapsed=04:45.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:06 seconds
+
+[2026-09-07 21:44:13 +0000] Status=2, isTerminal=NO, Elapsed=04:46.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:07 seconds
+
+[2026-09-07 21:44:14 +0000] Status=2, isTerminal=NO, Elapsed=04:47.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:08 seconds
+
+[2026-09-07 21:44:15 +0000] Status=2, isTerminal=NO, Elapsed=04:48.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:09 seconds
+
+[2026-09-07 21:44:16 +0000] Status=2, isTerminal=NO, Elapsed=04:49.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:10 seconds
+
+[2026-09-07 21:44:17 +0000] Status=2, isTerminal=NO, Elapsed=04:50.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:11 seconds
+
+[2026-09-07 21:44:18 +0000] Status=2, isTerminal=NO, Elapsed=04:51.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:12 seconds
+
+[2026-09-07 21:44:19 +0000] Status=2, isTerminal=NO, Elapsed=04:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:13 seconds
+
+[2026-09-07 21:44:20 +0000] Status=2, isTerminal=NO, Elapsed=04:53.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:14 seconds
+
+[2026-09-07 21:44:21 +0000] Status=2, isTerminal=NO, Elapsed=04:54.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:15 seconds
+
+[2026-09-07 21:44:22 +0000] Status=2, isTerminal=NO, Elapsed=04:55.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:16 seconds
+
+[2026-09-07 21:44:37 +0000] Status=2, isTerminal=NO, Elapsed=05:10.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:32 seconds
+
+[2026-09-07 21:44:37 +0000] Status=2, isTerminal=NO, Elapsed=05:10.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:32 seconds
+
+[2026-09-07 21:44:38 +0000] Status=2, isTerminal=NO, Elapsed=05:11.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:32 seconds
+
+[2026-09-07 21:44:39 +0000] Status=2, isTerminal=NO, Elapsed=05:12.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:33 seconds
+
+[2026-09-07 21:44:40 +0000] Status=2, isTerminal=NO, Elapsed=05:13.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:34 seconds
+
+[2026-09-07 21:44:41 +0000] Status=2, isTerminal=NO, Elapsed=05:14.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:35 seconds
+
+[2026-09-07 21:44:42 +0000] Status=2, isTerminal=NO, Elapsed=05:15.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:36 seconds
+
+[2026-09-07 21:44:43 +0000] Status=2, isTerminal=NO, Elapsed=05:16.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:37 seconds
+
+[2026-09-07 21:44:44 +0000] Status=2, isTerminal=NO, Elapsed=05:17.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:38 seconds
+
+[2026-09-07 21:44:45 +0000] Status=2, isTerminal=NO, Elapsed=05:18.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:39 seconds
+
+[2026-09-07 21:44:46 +0000] Status=2, isTerminal=NO, Elapsed=05:19.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:40 seconds
+
+[2026-09-07 21:44:47 +0000] Status=2, isTerminal=NO, Elapsed=05:20.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:42 seconds
+
+[2026-09-07 21:44:48 +0000] Status=2, isTerminal=NO, Elapsed=05:21.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:42 seconds
+
+[2026-09-07 21:44:49 +0000] Status=2, isTerminal=NO, Elapsed=05:22.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:43 seconds
+
+[2026-09-07 21:44:50 +0000] Status=2, isTerminal=NO, Elapsed=05:23.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:44 seconds
+
+[2026-09-07 21:44:51 +0000] Status=2, isTerminal=NO, Elapsed=05:24.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:45 seconds
+
+[2026-09-07 21:44:52 +0000] Status=2, isTerminal=NO, Elapsed=05:25.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:46 seconds
+
+[2026-09-07 21:44:54 +0000] Status=2, isTerminal=NO, Elapsed=05:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:48 seconds
+
+[2026-09-07 21:44:54 +0000] Status=2, isTerminal=NO, Elapsed=05:27.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:48 seconds
+
+[2026-09-07 21:44:55 +0000] Status=2, isTerminal=NO, Elapsed=05:28.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:49 seconds
+
+[2026-09-07 21:44:56 +0000] Status=2, isTerminal=NO, Elapsed=05:29.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.cleanup.migrator (MCCleanup.migrator)
+		Migration Elapsed:04:50 seconds
+
+[2026-09-07 21:44:57 +0000] Status=2, isTerminal=NO, Elapsed=05:30.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:51 seconds
+
+[2026-09-07 21:44:58 +0000] Status=2, isTerminal=NO, Elapsed=05:31.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:52 seconds
+
+[2026-09-07 21:44:59 +0000] Status=2, isTerminal=NO, Elapsed=05:32.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:53 seconds
+
+[2026-09-07 21:45:00 +0000] Status=2, isTerminal=NO, Elapsed=05:33.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:54 seconds
+
+[2026-09-07 21:45:01 +0000] Status=2, isTerminal=NO, Elapsed=05:34.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:55 seconds
+
+[2026-09-07 21:45:02 +0000] Status=2, isTerminal=NO, Elapsed=05:35.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:56 seconds
+
+[2026-09-07 21:45:03 +0000] Status=2, isTerminal=NO, Elapsed=05:36.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:57 seconds
+
+[2026-09-07 21:45:04 +0000] Status=2, isTerminal=NO, Elapsed=05:37.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:58 seconds
+
+[2026-09-07 21:45:05 +0000] Status=2, isTerminal=NO, Elapsed=05:38.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:04:59 seconds
+
+[2026-09-07 21:45:09 +0000] Status=2, isTerminal=NO, Elapsed=05:41.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:03 seconds
+
+[2026-09-07 21:45:09 +0000] Status=2, isTerminal=NO, Elapsed=05:42.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:03 seconds
+
+[2026-09-07 21:45:09 +0000] Status=2, isTerminal=NO, Elapsed=05:42.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:03 seconds
+
+[2026-09-07 21:45:10 +0000] Status=2, isTerminal=NO, Elapsed=05:43.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:04 seconds
+
+[2026-09-07 21:45:11 +0000] Status=2, isTerminal=NO, Elapsed=05:44.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:05 seconds
+
+[2026-09-07 21:45:12 +0000] Status=2, isTerminal=NO, Elapsed=05:45.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:06 seconds
+
+[2026-09-07 21:45:13 +0000] Status=2, isTerminal=NO, Elapsed=05:46.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:07 seconds
+
+[2026-09-07 21:45:14 +0000] Status=2, isTerminal=NO, Elapsed=05:47.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:08 seconds
+
+[2026-09-07 21:45:15 +0000] Status=2, isTerminal=NO, Elapsed=05:48.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:09 seconds
+
+[2026-09-07 21:45:16 +0000] Status=2, isTerminal=NO, Elapsed=05:49.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:10 seconds
+
+[2026-09-07 21:45:17 +0000] Status=2, isTerminal=NO, Elapsed=05:50.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:11 seconds
+
+[2026-09-07 21:45:18 +0000] Status=2, isTerminal=NO, Elapsed=05:51.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:12 seconds
+
+[2026-09-07 21:45:19 +0000] Status=2, isTerminal=NO, Elapsed=05:52.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:13 seconds
+
+[2026-09-07 21:45:20 +0000] Status=2, isTerminal=NO, Elapsed=05:53.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:14 seconds
+
+[2026-09-07 21:45:21 +0000] Status=2, isTerminal=NO, Elapsed=05:54.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:15 seconds
+
+[2026-09-07 21:45:22 +0000] Status=2, isTerminal=NO, Elapsed=05:55.
+	Waiting on Data Migration
+		Reason:Notifying clients of completion
+		Migration Elapsed:05:16 seconds
+
+[2026-09-07 21:45:23 +0000] Status=4, isTerminal=NO, Elapsed=05:56.
+	Waiting on System App
+
+[2026-09-07 21:45:24 +0000] Status=4, isTerminal=NO, Elapsed=05:57.
+	Waiting on System App
+
+[2026-09-07 21:45:25 +0000] Status=4, isTerminal=NO, Elapsed=05:58.
+	Waiting on System App
+
+[2026-09-07 21:45:26 +0000] Status=4, isTerminal=NO, Elapsed=05:59.
+	Waiting on System App
+
+[2026-09-07 21:45:27 +0000] Status=4, isTerminal=NO, Elapsed=06:00.
+	Waiting on System App
+
+[2026-09-07 21:45:28 +0000] Status=4, isTerminal=NO, Elapsed=06:01.
+	Waiting on System App
+
+[2026-09-07 21:45:29 +0000] Status=4, isTerminal=NO, Elapsed=06:02.
+	Waiting on System App
+
+[2026-09-07 21:45:30 +0000] Status=4, isTerminal=NO, Elapsed=06:03.
+	Waiting on System App
+
+[2026-09-07 21:45:31 +0000] Status=4, isTerminal=NO, Elapsed=06:04.
+	Waiting on System App
+
+[2026-09-07 21:45:32 +0000] Status=4, isTerminal=NO, Elapsed=06:05.
+	Waiting on System App
+
+[2026-09-07 21:45:33 +0000] Status=4, isTerminal=NO, Elapsed=06:06.
+	Waiting on System App
+
+[2026-09-07 21:45:34 +0000] Status=4, isTerminal=NO, Elapsed=06:07.
+	Waiting on System App
+
+[2026-09-07 21:45:35 +0000] Status=4, isTerminal=NO, Elapsed=06:08.
+	Waiting on System App
+
+[2026-09-07 21:45:36 +0000] Status=4, isTerminal=NO, Elapsed=06:09.
+	Waiting on System App
+
+[2026-09-07 21:45:37 +0000] Status=4, isTerminal=NO, Elapsed=06:10.
+	Waiting on System App
+
+[2026-09-07 21:45:38 +0000] Status=4, isTerminal=NO, Elapsed=06:11.
+	Waiting on System App
+
+[2026-09-07 21:45:39 +0000] Status=4, isTerminal=NO, Elapsed=06:12.
+	Waiting on System App
+
+[2026-09-07 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=06:13.
+	Waiting on System App
+
+[2026-09-07 21:45:41 +0000] Status=4, isTerminal=NO, Elapsed=06:14.
+	Waiting on System App
+
+[2026-09-07 21:45:42 +0000] Status=4, isTerminal=NO, Elapsed=06:15.
+	Waiting on System App
+
+[2026-09-07 21:45:43 +0000] Status=4, isTerminal=NO, Elapsed=06:16.
+	Waiting on System App
+
+[2026-09-07 21:45:44 +0000] Status=4, isTerminal=NO, Elapsed=06:17.
+	Waiting on System App
+
+[2026-09-07 21:45:45 +0000] Status=4, isTerminal=NO, Elapsed=06:18.
+	Waiting on System App
+
+[2026-09-07 21:45:46 +0000] Status=4, isTerminal=NO, Elapsed=06:19.
+	Waiting on System App
+
+[2026-09-07 21:45:47 +0000] Status=4, isTerminal=NO, Elapsed=06:20.
+	Waiting on System App
+
+[2026-09-07 21:45:48 +0000] Status=4, isTerminal=NO, Elapsed=06:21.
+	Waiting on System App
+
+[2026-09-07 21:45:49 +0000] Status=4, isTerminal=NO, Elapsed=06:22.
+	Waiting on System App
+
+[2026-09-07 21:45:50 +0000] Status=4, isTerminal=NO, Elapsed=06:23.
+	Waiting on System App
+
+[2026-09-07 21:45:51 +0000] Status=4, isTerminal=NO, Elapsed=06:24.
+	Waiting on System App
+
+[2026-09-07 21:45:52 +0000] Status=4, isTerminal=NO, Elapsed=06:25.
+	Waiting on System App
+
+[2026-09-07 21:45:53 +0000] Status=4, isTerminal=NO, Elapsed=06:26.
+	Waiting on System App
+
+[2026-09-07 21:45:54 +0000] Status=4, isTerminal=NO, Elapsed=06:27.
+	Waiting on System App
+
+[2026-09-07 21:45:55 +0000] Status=4, isTerminal=NO, Elapsed=06:28.
+	Waiting on System App
+
+[2026-09-07 21:45:56 +0000] Status=4, isTerminal=NO, Elapsed=06:29.
+	Waiting on System App
+
+[2026-09-07 21:45:57 +0000] Status=4, isTerminal=NO, Elapsed=06:30.
+	Waiting on System App
+
+[2026-09-07 21:45:58 +0000] Status=4, isTerminal=NO, Elapsed=06:31.
+	Waiting on System App
+
+[2026-09-07 21:45:59 +0000] Status=4, isTerminal=NO, Elapsed=06:32.
+	Waiting on System App
+
+[2026-09-07 21:46:00 +0000] Status=4, isTerminal=NO, Elapsed=06:33.
+	Waiting on System App
+
+[2026-09-07 21:46:01 +0000] Status=4, isTerminal=NO, Elapsed=06:34.
+	Waiting on System App
+
+[2026-09-07 21:46:02 +0000] Status=4, isTerminal=NO, Elapsed=06:35.
+	Waiting on System App
+
+[2026-09-07 21:46:03 +0000] Status=4, isTerminal=NO, Elapsed=06:36.
+	Waiting on System App
+
+[2026-09-07 21:46:04 +0000] Status=4, isTerminal=NO, Elapsed=06:37.
+	Waiting on System App
+
+[2026-09-07 21:46:05 +0000] Status=4, isTerminal=NO, Elapsed=06:38.
+	Waiting on System App
+
+[2026-09-07 21:46:06 +0000] Status=4, isTerminal=NO, Elapsed=06:39.
+	Waiting on System App
+
+[2026-09-07 21:46:07 +0000] Status=4, isTerminal=NO, Elapsed=06:40.
+	Waiting on System App
+
+[2026-09-07 21:46:08 +0000] Status=4, isTerminal=NO, Elapsed=06:41.
+	Waiting on System App
+
+[2026-09-07 21:46:09 +0000] Status=4, isTerminal=NO, Elapsed=06:42.
+	Waiting on System App
+
+[2026-09-07 21:46:10 +0000] Status=4, isTerminal=NO, Elapsed=06:43.
+	Waiting on System App
+
+[2026-09-07 21:46:11 +0000] Status=4, isTerminal=NO, Elapsed=06:44.
+	Waiting on System App
+
+[2026-09-07 21:46:12 +0000] Status=4, isTerminal=NO, Elapsed=06:45.
+	Waiting on System App
+
+[2026-09-07 21:46:13 +0000] Status=4, isTerminal=NO, Elapsed=06:46.
+	Waiting on System App
+
+[2026-09-07 21:46:14 +0000] Status=4, isTerminal=NO, Elapsed=06:47.
+	Waiting on System App
+
+[2026-09-07 21:46:15 +0000] Status=4, isTerminal=NO, Elapsed=06:48.
+	Waiting on System App
+
+[2026-09-07 21:46:16 +0000] Status=4, isTerminal=NO, Elapsed=06:49.
+	Waiting on System App
+
+[2026-09-07 21:46:17 +0000] Status=4, isTerminal=NO, Elapsed=06:50.
+	Waiting on System App
+
+[2026-09-07 21:46:18 +0000] Status=4, isTerminal=NO, Elapsed=06:51.
+	Waiting on System App
+
+[2026-09-07 21:46:19 +0000] Status=4, isTerminal=NO, Elapsed=06:52.
+	Waiting on System App
+
+[2026-09-07 21:46:20 +0000] Status=4, isTerminal=NO, Elapsed=06:53.
+	Waiting on System App
+
+[2026-09-07 21:46:21 +0000] Status=4, isTerminal=NO, Elapsed=06:54.
+	Waiting on System App
+
+[2026-09-07 21:46:22 +0000] Status=4, isTerminal=NO, Elapsed=06:55.
+	Waiting on System App
+
+[2026-09-07 21:46:23 +0000] Status=4, isTerminal=NO, Elapsed=06:56.
+	Waiting on System App
+
+[2026-09-07 21:46:24 +0000] Status=4, isTerminal=NO, Elapsed=06:57.
+	Waiting on System App
+
+[2026-09-07 21:46:25 +0000] Status=4, isTerminal=NO, Elapsed=06:58.
+	Waiting on System App
+
+[2026-09-07 21:46:26 +0000] Status=4, isTerminal=NO, Elapsed=06:59.
+	Waiting on System App
+
+[2026-09-07 21:46:27 +0000] Status=4, isTerminal=NO, Elapsed=07:00.
+	Waiting on System App
+
+[2026-09-07 21:46:28 +0000] Status=4, isTerminal=NO, Elapsed=07:01.
+	Waiting on System App
+
+[2026-09-07 21:46:29 +0000] Status=4, isTerminal=NO, Elapsed=07:02.
+	Waiting on System App
+
+[2026-09-07 21:46:30 +0000] Status=4, isTerminal=NO, Elapsed=07:03.
+	Waiting on System App
+
+[2026-09-07 21:46:31 +0000] Status=4, isTerminal=NO, Elapsed=07:04.
+	Waiting on System App
+
+[2026-09-07 21:46:32 +0000] Status=4, isTerminal=NO, Elapsed=07:05.
+	Waiting on System App
+
+[2026-09-07 21:46:33 +0000] Status=4, isTerminal=NO, Elapsed=07:06.
+	Waiting on System App
+
+[2026-09-07 21:46:34 +0000] Status=4, isTerminal=NO, Elapsed=07:07.
+	Waiting on System App
+
+[2026-09-07 21:46:35 +0000] Status=4, isTerminal=NO, Elapsed=07:08.
+	Waiting on System App
+
+[2026-09-07 21:46:36 +0000] Status=4, isTerminal=NO, Elapsed=07:09.
+	Waiting on System App
+
+[2026-09-07 21:46:37 +0000] Status=4, isTerminal=NO, Elapsed=07:10.
+	Waiting on System App
+
+[2026-09-07 21:46:38 +0000] Status=4, isTerminal=NO, Elapsed=07:11.
+	Waiting on System App
+
+[2026-09-07 21:46:39 +0000] Status=4, isTerminal=NO, Elapsed=07:12.
+	Waiting on System App
+
+[2026-09-07 21:46:40 +0000] Status=4, isTerminal=NO, Elapsed=07:13.
+	Waiting on System App
+
+[2026-09-07 21:46:41 +0000] Status=4, isTerminal=NO, Elapsed=07:14.
+	Waiting on System App
+
+[2026-09-07 21:46:42 +0000] Status=4, isTerminal=NO, Elapsed=07:15.
+	Waiting on System App
+
+[2026-09-07 21:46:43 +0000] Status=4, isTerminal=NO, Elapsed=07:16.
+	Waiting on System App
+
+[2026-09-07 21:46:52 +0000] Status=4, isTerminal=NO, Elapsed=07:25.
+	Waiting on System App
+
+[2026-09-07 21:46:55 +0000] Status=4, isTerminal=NO, Elapsed=07:28.
+	Waiting on System App
+
+[2026-09-07 21:46:55 +0000] Status=4, isTerminal=NO, Elapsed=07:28.
+	Waiting on System App
+
+[2026-09-07 21:46:56 +0000] Status=4, isTerminal=NO, Elapsed=07:29.
+	Waiting on System App
+
+[2026-09-07 21:46:57 +0000] Status=4, isTerminal=NO, Elapsed=07:30.
+	Waiting on System App
+
+[2026-09-07 21:46:58 +0000] Status=4, isTerminal=NO, Elapsed=07:31.
+	Waiting on System App
+
+[2026-09-07 21:46:59 +0000] Status=4, isTerminal=NO, Elapsed=07:32.
+	Waiting on System App
+
+[2026-09-07 21:47:00 +0000] Status=4, isTerminal=NO, Elapsed=07:33.
+	Waiting on System App
+
+[2026-09-07 21:47:01 +0000] Status=4, isTerminal=NO, Elapsed=07:34.
+	Waiting on System App
+
+[2026-09-07 21:47:02 +0000] Status=4, isTerminal=NO, Elapsed=07:35.
+	Waiting on System App
+
+[2026-09-07 21:47:03 +0000] Status=4, isTerminal=NO, Elapsed=07:36.
+	Waiting on System App
+
+[2026-09-07 21:47:04 +0000] Status=4, isTerminal=NO, Elapsed=07:37.
+	Waiting on System App
+
+[2026-09-07 21:47:05 +0000] Status=4, isTerminal=NO, Elapsed=07:38.
+	Waiting on System App
+
+[2026-09-07 21:47:06 +0000] Status=4, isTerminal=NO, Elapsed=07:39.
+	Waiting on System App
+
+[2026-09-07 21:47:08 +0000] Status=4, isTerminal=NO, Elapsed=07:41.
+	Waiting on System App
+
+[2026-09-07 21:47:08 +0000] Status=4, isTerminal=NO, Elapsed=07:41.
+	Waiting on System App
+
+[2026-09-07 21:47:09 +0000] Status=4, isTerminal=NO, Elapsed=07:42.
+	Waiting on System App
+
+[2026-09-07 21:47:10 +0000] Status=4, isTerminal=NO, Elapsed=07:43.
+	Waiting on System App
+
+[2026-09-07 21:47:11 +0000] Status=4, isTerminal=NO, Elapsed=07:44.
+	Waiting on System App
+
+[2026-09-07 21:47:12 +0000] Status=4, isTerminal=NO, Elapsed=07:45.
+	Waiting on System App
+
+[2026-09-07 21:47:13 +0000] Status=4, isTerminal=NO, Elapsed=07:46.
+	Waiting on System App
+
+[2026-09-07 21:47:14 +0000] Status=4, isTerminal=NO, Elapsed=07:47.
+	Waiting on System App
+
+[2026-09-07 21:47:15 +0000] Status=4, isTerminal=NO, Elapsed=07:48.
+	Waiting on System App
+
+[2026-09-07 21:47:16 +0000] Status=4, isTerminal=NO, Elapsed=07:49.
+	Waiting on System App
+
+[2026-09-07 21:47:17 +0000] Status=4, isTerminal=NO, Elapsed=07:50.
+	Waiting on System App
+
+[2026-09-07 21:47:18 +0000] Status=4, isTerminal=NO, Elapsed=07:51.
+	Waiting on System App
+
+[2026-09-07 21:47:19 +0000] Status=4, isTerminal=NO, Elapsed=07:52.
+	Waiting on System App
+
+[2026-09-07 21:47:20 +0000] Status=4, isTerminal=NO, Elapsed=07:53.
+	Waiting on System App
+
+[2026-09-07 21:47:21 +0000] Status=4, isTerminal=NO, Elapsed=07:54.
+	Waiting on System App
+
+[2026-09-07 21:47:22 +0000] Status=4, isTerminal=NO, Elapsed=07:55.
+	Waiting on System App
+
+[2026-09-07 21:47:23 +0000] Status=4, isTerminal=NO, Elapsed=07:56.
+	Waiting on System App
+
+[2026-09-07 21:47:24 +0000] Status=4, isTerminal=NO, Elapsed=07:57.
+	Waiting on System App
+
+[2026-09-07 21:47:25 +0000] Status=4, isTerminal=NO, Elapsed=07:58.
+	Waiting on System App
+
+[2026-09-07 21:47:26 +0000] Status=4, isTerminal=NO, Elapsed=07:59.
+	Waiting on System App
+
+[2026-09-07 21:47:27 +0000] Status=4, isTerminal=NO, Elapsed=08:00.
+	Waiting on System App
+
+[2026-09-07 21:47:28 +0000] Status=4, isTerminal=NO, Elapsed=08:01.
+	Waiting on System App
+
+[2026-09-07 21:47:29 +0000] Status=4, isTerminal=NO, Elapsed=08:02.
+	Waiting on System App
+
+[2026-09-07 21:47:30 +0000] Status=4, isTerminal=NO, Elapsed=08:03.
+	Waiting on System App
+
+[2026-09-07 21:47:31 +0000] Status=4, isTerminal=NO, Elapsed=08:04.
+	Waiting on System App
+
+[2026-09-07 21:47:32 +0000] Status=4, isTerminal=NO, Elapsed=08:05.
+	Waiting on System App
+
+[2026-09-07 21:47:33 +0000] Status=4, isTerminal=NO, Elapsed=08:06.
+	Waiting on System App
+
+[2026-09-07 21:47:34 +0000] Status=4, isTerminal=NO, Elapsed=08:07.
+	Waiting on System App
+
+[2026-09-07 21:47:35 +0000] Status=4, isTerminal=NO, Elapsed=08:08.
+	Waiting on System App
+
+[2026-09-07 21:47:36 +0000] Status=4, isTerminal=NO, Elapsed=08:09.
+	Waiting on System App
+
+[2026-09-07 21:47:37 +0000] Status=4, isTerminal=NO, Elapsed=08:10.
+	Waiting on System App
+
+[2026-09-07 21:47:38 +0000] Status=4, isTerminal=NO, Elapsed=08:11.
+	Waiting on System App
+
+[2026-09-07 21:47:39 +0000] Status=4, isTerminal=NO, Elapsed=08:12.
+	Waiting on System App
+
+[2026-09-07 21:47:40 +0000] Status=4, isTerminal=NO, Elapsed=08:13.
+	Waiting on System App
+
+[2026-09-07 21:47:41 +0000] Status=4, isTerminal=NO, Elapsed=08:14.
+	Waiting on System App
+
+[2026-09-07 21:47:42 +0000] Status=4, isTerminal=NO, Elapsed=08:15.
+	Waiting on System App
+
+[2026-09-07 21:47:43 +0000] Status=4, isTerminal=NO, Elapsed=08:16.
+	Waiting on System App
+
+[2026-09-07 21:47:44 +0000] Status=4, isTerminal=NO, Elapsed=08:17.
+	Waiting on System App
+
+[2026-09-07 21:47:45 +0000] Status=4, isTerminal=NO, Elapsed=08:18.
+	Waiting on System App
+
+[2026-09-07 21:47:46 +0000] Status=4, isTerminal=NO, Elapsed=08:19.
+	Waiting on System App
+
+[2026-09-07 21:47:47 +0000] Status=4, isTerminal=NO, Elapsed=08:20.
+	Waiting on System App
+
+[2026-09-07 21:47:48 +0000] Status=4, isTerminal=NO, Elapsed=08:21.
+	Waiting on System App
+
+[2026-09-07 21:47:49 +0000] Status=4, isTerminal=NO, Elapsed=08:22.
+	Waiting on System App
+
+[2026-09-07 21:47:50 +0000] Status=4, isTerminal=NO, Elapsed=08:23.
+	Waiting on System App
+
+[2026-09-07 21:47:51 +0000] Status=4, isTerminal=NO, Elapsed=08:24.
+	Waiting on System App
+
+[2026-09-07 21:47:52 +0000] Status=4, isTerminal=NO, Elapsed=08:25.
+	Waiting on System App
+
+[2026-09-07 21:47:53 +0000] Status=4, isTerminal=NO, Elapsed=08:26.
+	Waiting on System App
+
+[2026-09-07 21:47:54 +0000] Status=4, isTerminal=NO, Elapsed=08:27.
+	Waiting on System App
+
+[2026-09-07 21:47:55 +0000] Status=4, isTerminal=NO, Elapsed=08:28.
+	Waiting on System App
+
+[2026-09-07 21:47:56 +0000] Status=4, isTerminal=NO, Elapsed=08:29.
+	Waiting on System App
+
+[2026-09-07 21:47:57 +0000] Status=4, isTerminal=NO, Elapsed=08:30.
+	Waiting on System App
+
+[2026-09-07 21:47:58 +0000] Status=4, isTerminal=NO, Elapsed=08:31.
+	Waiting on System App
+
+[2026-09-07 21:47:59 +0000] Status=4, isTerminal=NO, Elapsed=08:32.
+	Waiting on System App
+
+[2026-09-07 21:48:00 +0000] Status=4, isTerminal=NO, Elapsed=08:33.
+	Waiting on System App
+
+[2026-09-07 21:48:01 +0000] Status=4, isTerminal=NO, Elapsed=08:34.
+	Waiting on System App
+
+[2026-09-07 21:48:02 +0000] Status=4, isTerminal=NO, Elapsed=08:35.
+	Waiting on System App
+
+[2026-09-07 21:48:03 +0000] Status=4, isTerminal=NO, Elapsed=08:36.
+	Waiting on System App
+
+[2026-09-07 21:48:04 +0000] Status=4, isTerminal=NO, Elapsed=08:37.
+	Waiting on System App
+
+[2026-09-07 21:48:05 +0000] Status=4, isTerminal=NO, Elapsed=08:38.
+	Waiting on System App
+
+[2026-09-07 21:48:06 +0000] Status=4, isTerminal=NO, Elapsed=08:39.
+	Waiting on System App
+
+[2026-09-07 21:48:07 +0000] Status=4, isTerminal=NO, Elapsed=08:40.
+	Waiting on System App
+
+[2026-09-07 21:48:08 +0000] Status=4, isTerminal=NO, Elapsed=08:41.
+	Waiting on System App
+
+[2026-09-07 21:48:09 +0000] Status=4, isTerminal=NO, Elapsed=08:42.
+	Waiting on System App
+
+[2026-09-07 21:48:10 +0000] Status=4, isTerminal=NO, Elapsed=08:43.
+	Waiting on System App
+
+[2026-09-07 21:48:11 +0000] Status=4, isTerminal=NO, Elapsed=08:44.
+	Waiting on System App
+
+[2026-09-07 21:48:12 +0000] Status=4, isTerminal=NO, Elapsed=08:45.
+	Waiting on System App
+
+[2026-09-07 21:48:13 +0000] Status=4, isTerminal=NO, Elapsed=08:46.
+	Waiting on System App
+
+[2026-09-07 21:48:14 +0000] Status=4, isTerminal=NO, Elapsed=08:47.
+	Waiting on System App
+
+[2026-09-07 21:48:15 +0000] Status=4, isTerminal=NO, Elapsed=08:48.
+	Waiting on System App
+
+[2026-09-07 21:48:16 +0000] Status=4, isTerminal=NO, Elapsed=08:49.
+	Waiting on System App
+
+[2026-09-07 21:48:17 +0000] Status=4, isTerminal=NO, Elapsed=08:50.
+	Waiting on System App
+
+[2026-09-07 21:48:18 +0000] Status=4, isTerminal=NO, Elapsed=08:51.
+	Waiting on System App
+
+[2026-09-07 21:48:19 +0000] Status=4, isTerminal=NO, Elapsed=08:52.
+	Waiting on System App
+
+[2026-09-07 21:48:20 +0000] Status=4, isTerminal=NO, Elapsed=08:53.
+	Waiting on System App
+
+[2026-09-07 21:48:21 +0000] Status=4, isTerminal=NO, Elapsed=08:54.
+	Waiting on System App
+
+[2026-09-07 21:48:22 +0000] Status=4, isTerminal=NO, Elapsed=08:55.
+	Waiting on System App
+
+[2026-09-07 21:48:23 +0000] Status=4, isTerminal=NO, Elapsed=08:56.
+	Waiting on System App
+
+[2026-09-07 21:48:24 +0000] Status=4, isTerminal=NO, Elapsed=08:57.
+	Waiting on System App
+
+[2026-09-07 21:48:25 +0000] Status=4, isTerminal=NO, Elapsed=08:58.
+	Waiting on System App
+
+[2026-09-07 21:48:26 +0000] Status=4, isTerminal=NO, Elapsed=08:59.
+	Waiting on System App
+
+[2026-09-07 21:48:27 +0000] Status=4, isTerminal=NO, Elapsed=09:00.
+	Waiting on System App
+
+[2026-09-07 21:48:28 +0000] Status=4, isTerminal=NO, Elapsed=09:01.
+	Waiting on System App
+
+[2026-09-07 21:48:29 +0000] Status=4, isTerminal=NO, Elapsed=09:02.
+	Waiting on System App
+
+[2026-09-07 21:48:30 +0000] Status=4, isTerminal=NO, Elapsed=09:03.
+	Waiting on System App
+
+[2026-09-07 21:48:31 +0000] Status=4, isTerminal=NO, Elapsed=09:04.
+	Waiting on System App
+
+[2026-09-07 21:48:32 +0000] Status=4, isTerminal=NO, Elapsed=09:05.
+	Waiting on System App
+
+[2026-09-07 21:48:33 +0000] Status=4, isTerminal=NO, Elapsed=09:06.
+	Waiting on System App
+
+[2026-09-07 21:48:34 +0000] Status=4, isTerminal=NO, Elapsed=09:07.
+	Waiting on System App
+
+[2026-09-07 21:48:35 +0000] Status=4, isTerminal=NO, Elapsed=09:08.
+	Waiting on System App
+
+[2026-09-07 21:48:36 +0000] Status=4, isTerminal=NO, Elapsed=09:09.
+	Waiting on System App
+
+[2026-09-07 21:48:37 +0000] Status=4, isTerminal=NO, Elapsed=09:10.
+	Waiting on System App
+
+[2026-09-07 21:48:38 +0000] Status=4, isTerminal=NO, Elapsed=09:11.
+	Waiting on System App
+
+[2026-09-07 21:48:39 +0000] Status=4, isTerminal=NO, Elapsed=09:12.
+	Waiting on System App
+
+[2026-09-07 21:48:40 +0000] Status=4, isTerminal=NO, Elapsed=09:13.
+	Waiting on System App
+
+[2026-09-07 21:48:41 +0000] Status=4, isTerminal=NO, Elapsed=09:14.
+	Waiting on System App
+
+[2026-09-07 21:48:42 +0000] Status=4, isTerminal=NO, Elapsed=09:15.
+	Waiting on System App
+
+[2026-09-07 21:48:43 +0000] Status=4, isTerminal=NO, Elapsed=09:16.
+	Waiting on System App
+
+[2026-09-07 21:48:44 +0000] Status=4, isTerminal=NO, Elapsed=09:17.
+	Waiting on System App
+
+[2026-09-07 21:48:45 +0000] Status=4, isTerminal=NO, Elapsed=09:18.
+	Waiting on System App
+
+[2026-09-07 21:48:46 +0000] Status=4, isTerminal=NO, Elapsed=09:19.
+	Waiting on System App
+
+[2026-09-07 21:48:47 +0000] Status=4, isTerminal=NO, Elapsed=09:20.
+	Waiting on System App
+
+[2026-09-07 21:48:48 +0000] Status=4, isTerminal=NO, Elapsed=09:21.
+	Waiting on System App
+
+[2026-09-07 21:48:49 +0000] Status=4, isTerminal=NO, Elapsed=09:22.
+	Waiting on System App
+
+[2026-09-07 21:48:50 +0000] Status=4, isTerminal=NO, Elapsed=09:23.
+	Waiting on System App
+
+[2026-09-07 21:48:51 +0000] Status=4, isTerminal=NO, Elapsed=09:24.
+	Waiting on System App
+
+[2026-09-07 21:48:52 +0000] Status=4, isTerminal=NO, Elapsed=09:25.
+	Waiting on System App
+
+[2026-09-07 21:48:53 +0000] Status=4, isTerminal=NO, Elapsed=09:26.
+	Waiting on System App
+
+[2026-09-07 21:48:54 +0000] Status=4, isTerminal=NO, Elapsed=09:27.
+	Waiting on System App
+
+[2026-09-07 21:48:55 +0000] Status=4, isTerminal=NO, Elapsed=09:28.
+	Waiting on System App
+
+[2026-09-07 21:48:56 +0000] Status=4, isTerminal=NO, Elapsed=09:29.
+	Waiting on System App
+
+[2026-09-07 21:48:57 +0000] Status=4, isTerminal=NO, Elapsed=09:30.
+	Waiting on System App
+
+[2026-09-07 21:48:58 +0000] Status=4, isTerminal=NO, Elapsed=09:31.
+	Waiting on System App
+
+[2026-09-07 21:48:59 +0000] Status=4, isTerminal=NO, Elapsed=09:32.
+	Waiting on System App
+
+[2026-09-07 21:49:00 +0000] Status=4, isTerminal=NO, Elapsed=09:33.
+	Waiting on System App
+
+[2026-09-07 21:49:01 +0000] Status=4, isTerminal=NO, Elapsed=09:34.
+	Waiting on System App
+
+[2026-09-07 21:49:02 +0000] Status=4, isTerminal=NO, Elapsed=09:35.
+	Waiting on System App
+
+[2026-09-07 21:49:03 +0000] Status=4, isTerminal=NO, Elapsed=09:36.
+	Waiting on System App
+
+[2026-09-07 21:49:04 +0000] Status=4, isTerminal=NO, Elapsed=09:37.
+	Waiting on System App
+
+[2026-09-07 21:49:05 +0000] Status=4, isTerminal=NO, Elapsed=09:38.
+	Waiting on System App
+
+[2026-09-07 21:49:06 +0000] Status=4, isTerminal=NO, Elapsed=09:39.
+	Waiting on System App
+
+[2026-09-07 21:49:07 +0000] Status=4, isTerminal=NO, Elapsed=09:40.
+	Waiting on System App
+
+[2026-09-07 21:49:08 +0000] Status=4, isTerminal=NO, Elapsed=09:41.
+	Waiting on System App
+
+[2026-09-07 21:49:09 +0000] Status=4, isTerminal=NO, Elapsed=09:42.
+	Waiting on System App
+
+[2026-09-07 21:49:10 +0000] Status=4, isTerminal=NO, Elapsed=09:43.
+	Waiting on System App
+
+[2026-09-07 21:49:11 +0000] Status=4, isTerminal=NO, Elapsed=09:44.
+	Waiting on System App
+
+[2026-09-07 21:49:12 +0000] Status=4, isTerminal=NO, Elapsed=09:45.
+	Waiting on System App
+
+[2026-09-07 21:49:13 +0000] Status=4, isTerminal=NO, Elapsed=09:46.
+	Waiting on System App
+
+[2026-09-07 21:49:14 +0000] Status=4, isTerminal=NO, Elapsed=09:47.
+	Waiting on System App
+
+[2026-09-07 21:49:15 +0000] Status=4, isTerminal=NO, Elapsed=09:48.
+	Waiting on System App
+
+[2026-09-07 21:49:16 +0000] Status=4, isTerminal=NO, Elapsed=09:49.
+	Waiting on System App
+
+[2026-09-07 21:49:17 +0000] Status=4, isTerminal=NO, Elapsed=09:50.
+	Waiting on System App
+
+[2026-09-07 21:49:18 +0000] Status=4, isTerminal=NO, Elapsed=09:51.
+	Waiting on System App
+
+[2026-09-07 21:49:19 +0000] Status=4, isTerminal=NO, Elapsed=09:52.
+	Waiting on System App
+
+[2026-09-07 21:49:20 +0000] Status=4, isTerminal=NO, Elapsed=09:53.
+	Waiting on System App
+
+[2026-09-07 21:49:21 +0000] Status=4, isTerminal=NO, Elapsed=09:54.
+	Waiting on System App
+
+[2026-09-07 21:49:22 +0000] Status=4, isTerminal=NO, Elapsed=09:55.
+	Waiting on System App
+
+[2026-09-07 21:49:23 +0000] Status=4, isTerminal=NO, Elapsed=09:56.
+	Waiting on System App
+
+[2026-09-07 21:49:24 +0000] Status=4, isTerminal=NO, Elapsed=09:57.
+	Waiting on System App
+
+[2026-09-07 21:49:25 +0000] Status=4, isTerminal=NO, Elapsed=09:58.
+	Waiting on System App
+
+[2026-09-07 21:49:26 +0000] Status=4, isTerminal=NO, Elapsed=09:59.
+	Waiting on System App
+
+[2026-09-07 21:49:27 +0000] Status=4, isTerminal=NO, Elapsed=10:00.
+	Waiting on System App
+
+[2026-09-07 21:49:28 +0000] Status=4, isTerminal=NO, Elapsed=10:01.
+	Waiting on System App
+
+[2026-09-07 21:49:29 +0000] Status=4, isTerminal=NO, Elapsed=10:02.
+	Waiting on System App
+
+[2026-09-07 21:49:30 +0000] Status=4, isTerminal=NO, Elapsed=10:03.
+	Waiting on System App
+
+[2026-09-07 21:49:31 +0000] Status=4, isTerminal=NO, Elapsed=10:04.
+	Waiting on System App
+
+[2026-09-07 21:49:32 +0000] Status=4, isTerminal=NO, Elapsed=10:05.
+	Waiting on System App
+
+[2026-09-07 21:49:33 +0000] Status=4, isTerminal=NO, Elapsed=10:06.
+	Waiting on System App
+
+[2026-09-07 21:49:34 +0000] Status=4, isTerminal=NO, Elapsed=10:07.
+	Waiting on System App
+
+[2026-09-07 21:49:35 +0000] Status=4, isTerminal=NO, Elapsed=10:08.
+	Waiting on System App
+
+[2026-09-07 21:49:36 +0000] Status=4, isTerminal=NO, Elapsed=10:09.
+	Waiting on System App
+
+[2026-09-07 21:49:37 +0000] Status=4, isTerminal=NO, Elapsed=10:10.
+	Waiting on System App
+
+[2026-09-07 21:49:38 +0000] Status=4, isTerminal=NO, Elapsed=10:11.
+	Waiting on System App
+
+[2026-09-07 21:49:39 +0000] Status=4, isTerminal=NO, Elapsed=10:12.
+	Waiting on System App
+
+[2026-09-07 21:49:40 +0000] Status=4, isTerminal=NO, Elapsed=10:13.
+	Waiting on System App
+
+[2026-09-07 21:49:41 +0000] Status=4, isTerminal=NO, Elapsed=10:14.
+	Waiting on System App
+
+[2026-09-07 21:49:42 +0000] Status=4, isTerminal=NO, Elapsed=10:15.
+	Waiting on System App
+
+[2026-09-07 21:49:43 +0000] Status=4, isTerminal=NO, Elapsed=10:16.
+	Waiting on System App
+
+[2026-09-07 21:49:44 +0000] Status=4, isTerminal=NO, Elapsed=10:17.
+	Waiting on System App
+
+[2026-09-07 21:49:45 +0000] Status=4, isTerminal=NO, Elapsed=10:18.
+	Waiting on System App
+
+[2026-09-07 21:49:46 +0000] Status=4, isTerminal=NO, Elapsed=10:19.
+	Waiting on System App
+
+[2026-09-07 21:49:47 +0000] Status=4, isTerminal=NO, Elapsed=10:20.
+	Waiting on System App
+
+[2026-09-07 21:49:48 +0000] Status=4, isTerminal=NO, Elapsed=10:21.
+	Waiting on System App
+
+[2026-09-07 21:49:49 +0000] Status=4, isTerminal=NO, Elapsed=10:22.
+	Waiting on System App
+
+[2026-09-07 21:49:50 +0000] Status=4, isTerminal=NO, Elapsed=10:23.
+	Waiting on System App
+
+[2026-09-07 21:49:51 +0000] Status=4, isTerminal=NO, Elapsed=10:24.
+	Waiting on System App
+
+[2026-09-07 21:49:52 +0000] Status=4, isTerminal=NO, Elapsed=10:25.
+	Waiting on System App
+
+[2026-09-07 21:49:53 +0000] Status=4, isTerminal=NO, Elapsed=10:26.
+	Waiting on System App
+
+[2026-09-07 21:49:54 +0000] Status=4, isTerminal=NO, Elapsed=10:27.
+	Waiting on System App
+
+[2026-09-07 21:49:55 +0000] Status=4, isTerminal=NO, Elapsed=10:28.
+	Waiting on System App
+
+[2026-09-07 21:49:56 +0000] Status=4, isTerminal=NO, Elapsed=10:29.
+	Waiting on System App
+
+[2026-09-07 21:49:57 +0000] Status=4, isTerminal=NO, Elapsed=10:30.
+	Waiting on System App
+
+[2026-09-07 21:49:58 +0000] Status=4, isTerminal=NO, Elapsed=10:31.
+	Waiting on System App
+
+[2026-09-07 21:49:59 +0000] Status=4, isTerminal=NO, Elapsed=10:32.
+	Waiting on System App
+
+[2026-09-07 21:50:00 +0000] Status=4, isTerminal=NO, Elapsed=10:33.
+	Waiting on System App
+
+[2026-09-07 21:50:01 +0000] Status=4, isTerminal=NO, Elapsed=10:34.
+	Waiting on System App
+
+[2026-09-07 21:50:02 +0000] Status=4, isTerminal=NO, Elapsed=10:35.
+	Waiting on System App
+
+[2026-09-07 21:50:03 +0000] Status=4, isTerminal=NO, Elapsed=10:36.
+	Waiting on System App
+
+[2026-09-07 21:50:04 +0000] Status=4, isTerminal=NO, Elapsed=10:37.
+	Waiting on System App
+
+[2026-09-07 21:50:05 +0000] Status=4, isTerminal=NO, Elapsed=10:38.
+	Waiting on System App
+
+[2026-09-07 21:50:06 +0000] Status=4, isTerminal=NO, Elapsed=10:39.
+	Waiting on System App
+
+[2026-09-07 21:50:07 +0000] Status=4, isTerminal=NO, Elapsed=10:40.
+	Waiting on System App
+
+[2026-09-07 21:50:08 +0000] Status=4, isTerminal=NO, Elapsed=10:41.
+	Waiting on System App
+
+[2026-09-07 21:50:09 +0000] Status=4, isTerminal=NO, Elapsed=10:42.
+	Waiting on System App
+
+[2026-09-07 21:50:10 +0000] Status=4, isTerminal=NO, Elapsed=10:43.
+	Waiting on System App
+
+[2026-09-07 21:50:11 +0000] Status=4, isTerminal=NO, Elapsed=10:44.
+	Waiting on System App
+
+[2026-09-07 21:50:12 +0000] Status=4, isTerminal=NO, Elapsed=10:45.
+	Waiting on System App
+
+[2026-09-07 21:50:13 +0000] Status=4, isTerminal=NO, Elapsed=10:46.
+	Waiting on System App
+
+[2026-09-07 21:50:14 +0000] Status=4, isTerminal=NO, Elapsed=10:47.
+	Waiting on System App
+
+[2026-09-07 21:50:15 +0000] Status=4, isTerminal=NO, Elapsed=10:48.
+	Waiting on System App
+
+[2026-09-07 21:50:16 +0000] Status=4, isTerminal=NO, Elapsed=10:49.
+	Waiting on System App
+
+[2026-09-07 21:50:17 +0000] Status=4, isTerminal=NO, Elapsed=10:50.
+	Waiting on System App
+
+[2026-09-07 21:50:18 +0000] Status=4, isTerminal=NO, Elapsed=10:51.
+	Waiting on System App
+
+[2026-09-07 21:50:19 +0000] Status=4, isTerminal=NO, Elapsed=10:52.
+	Waiting on System App
+
+[2026-09-07 21:50:20 +0000] Status=4, isTerminal=NO, Elapsed=10:53.
+	Waiting on System App
+
+[2026-09-07 21:50:21 +0000] Status=4, isTerminal=NO, Elapsed=10:54.
+	Waiting on System App
+
+[2026-09-07 21:50:22 +0000] Status=4, isTerminal=NO, Elapsed=10:55.
+	Waiting on System App
+
+[2026-09-07 21:50:23 +0000] Status=4, isTerminal=NO, Elapsed=10:56.
+	Waiting on System App
+
+[2026-09-07 21:50:24 +0000] Status=4, isTerminal=NO, Elapsed=10:57.
+	Waiting on System App
+
+[2026-09-07 21:50:25 +0000] Status=4, isTerminal=NO, Elapsed=10:58.
+	Waiting on System App
+
+[2026-09-07 21:50:26 +0000] Status=4, isTerminal=NO, Elapsed=10:59.
+	Waiting on System App
+
+[2026-09-07 21:50:27 +0000] Status=4, isTerminal=NO, Elapsed=11:00.
+	Waiting on System App
+
+[2026-09-07 21:50:28 +0000] Status=4, isTerminal=NO, Elapsed=11:01.
+	Waiting on System App
+
+[2026-09-07 21:50:29 +0000] Status=4, isTerminal=NO, Elapsed=11:02.
+	Waiting on System App
+
+[2026-09-07 21:50:30 +0000] Status=4, isTerminal=NO, Elapsed=11:03.
+	Waiting on System App
+
+[2026-09-07 21:50:31 +0000] Status=4, isTerminal=NO, Elapsed=11:04.
+	Waiting on System App
+
+[2026-09-07 21:50:32 +0000] Status=4, isTerminal=NO, Elapsed=11:05.
+	Waiting on System App
+
+[2026-09-07 21:50:33 +0000] Status=4, isTerminal=NO, Elapsed=11:06.
+	Waiting on System App
+
+[2026-09-07 21:50:34 +0000] Status=4, isTerminal=NO, Elapsed=11:07.
+	Waiting on System App
+
+[2026-09-07 21:50:35 +0000] Status=4, isTerminal=NO, Elapsed=11:08.
+	Waiting on System App
+
+[2026-09-07 21:50:36 +0000] Status=4, isTerminal=NO, Elapsed=11:09.
+	Waiting on System App
+
+[2026-09-07 21:50:37 +0000] Status=4, isTerminal=NO, Elapsed=11:10.
+	Waiting on System App
+
+[2026-09-07 21:50:38 +0000] Status=4, isTerminal=NO, Elapsed=11:11.
+	Waiting on System App
+
+[2026-09-07 21:50:39 +0000] Status=4, isTerminal=NO, Elapsed=11:12.
+	Waiting on System App
+
+[2026-09-07 21:50:40 +0000] Status=4, isTerminal=NO, Elapsed=11:13.
+	Waiting on System App
+
+[2026-09-07 21:50:41 +0000] Status=4, isTerminal=NO, Elapsed=11:14.
+	Waiting on System App
+
+[2026-09-07 21:50:42 +0000] Status=4, isTerminal=NO, Elapsed=11:15.
+	Waiting on System App
+
+[2026-09-07 21:50:43 +0000] Status=4, isTerminal=NO, Elapsed=11:16.
+	Waiting on System App
+
+[2026-09-07 21:50:44 +0000] Status=4, isTerminal=NO, Elapsed=11:17.
+	Waiting on System App
+
+[2026-09-07 21:50:45 +0000] Status=4, isTerminal=NO, Elapsed=11:18.
+	Waiting on System App
+
+[2026-09-07 21:50:46 +0000] Status=4, isTerminal=NO, Elapsed=11:19.
+	Waiting on System App
+
+[2026-09-07 21:50:47 +0000] Status=4, isTerminal=NO, Elapsed=11:20.
+	Waiting on System App
+
+[2026-09-07 21:50:48 +0000] Status=4, isTerminal=NO, Elapsed=11:21.
+	Waiting on System App
+
+[2026-09-07 21:50:49 +0000] Status=4, isTerminal=NO, Elapsed=11:22.
+	Waiting on System App
+
+[2026-09-07 21:50:50 +0000] Status=4, isTerminal=NO, Elapsed=11:23.
+	Waiting on System App
+
+[2026-09-07 21:50:51 +0000] Status=4, isTerminal=NO, Elapsed=11:24.
+	Waiting on System App
+
+[2026-09-07 21:50:52 +0000] Status=4, isTerminal=NO, Elapsed=11:25.
+	Waiting on System App
+
+[2026-09-07 21:50:53 +0000] Status=4, isTerminal=NO, Elapsed=11:26.
+	Waiting on System App
+
+[2026-09-07 21:50:54 +0000] Status=4, isTerminal=NO, Elapsed=11:27.
+	Waiting on System App
+
+[2026-09-07 21:50:55 +0000] Status=4, isTerminal=NO, Elapsed=11:28.
+	Waiting on System App
+
+[2026-09-07 21:50:56 +0000] Status=4, isTerminal=NO, Elapsed=11:29.
+	Waiting on System App
+
+[2026-09-07 21:50:57 +0000] Status=4, isTerminal=NO, Elapsed=11:30.
+	Waiting on System App
+
+[2026-09-07 21:50:58 +0000] Status=4, isTerminal=NO, Elapsed=11:31.
+	Waiting on System App
+
+[2026-09-07 21:50:59 +0000] Status=4, isTerminal=NO, Elapsed=11:32.
+	Waiting on System App
+
+[2026-09-07 21:51:00 +0000] Status=4, isTerminal=NO, Elapsed=11:33.
+	Waiting on System App
+
+[2026-09-07 21:51:01 +0000] Status=4, isTerminal=NO, Elapsed=11:34.
+	Waiting on System App
+
+[2026-09-07 21:51:02 +0000] Status=4, isTerminal=NO, Elapsed=11:35.
+	Waiting on System App
+
+[2026-09-07 21:51:03 +0000] Status=4, isTerminal=NO, Elapsed=11:36.
+	Waiting on System App
+
+[2026-09-07 21:51:04 +0000] Status=4, isTerminal=NO, Elapsed=11:37.
+	Waiting on System App
+
+[2026-09-07 21:51:05 +0000] Status=4, isTerminal=NO, Elapsed=11:38.
+	Waiting on System App
+
+[2026-09-07 21:51:06 +0000] Status=4, isTerminal=NO, Elapsed=11:39.
+	Waiting on System App
+
+[2026-09-07 21:51:07 +0000] Status=4, isTerminal=NO, Elapsed=11:40.
+	Waiting on System App
+
+[2026-09-07 21:51:08 +0000] Status=4, isTerminal=NO, Elapsed=11:41.
+	Waiting on System App
+
+[2026-09-07 21:51:09 +0000] Status=4, isTerminal=NO, Elapsed=11:42.
+	Waiting on System App
+
+[2026-09-07 21:51:10 +0000] Status=4, isTerminal=NO, Elapsed=11:43.
+	Waiting on System App
+
+[2026-09-07 21:51:11 +0000] Status=4, isTerminal=NO, Elapsed=11:44.
+	Waiting on System App
+
+[2026-09-07 21:51:12 +0000] Status=4, isTerminal=NO, Elapsed=11:45.
+	Waiting on System App
+
+[2026-09-07 21:51:13 +0000] Status=4, isTerminal=NO, Elapsed=11:46.
+	Waiting on System App
+
+[2026-09-07 21:51:14 +0000] Status=4, isTerminal=NO, Elapsed=11:47.
+	Waiting on System App
+
+[2026-09-07 21:51:15 +0000] Status=4, isTerminal=NO, Elapsed=11:48.
+	Waiting on System App
+
+[2026-09-07 21:51:16 +0000] Status=4, isTerminal=NO, Elapsed=11:49.
+	Waiting on System App
+
+[2026-09-07 21:51:17 +0000] Status=4, isTerminal=NO, Elapsed=11:50.
+	Waiting on System App
+
+[2026-09-07 21:51:18 +0000] Status=4, isTerminal=NO, Elapsed=11:51.
+	Waiting on System App
+
+[2026-09-07 21:51:19 +0000] Status=4, isTerminal=NO, Elapsed=11:52.
+	Waiting on System App
+
+[2026-09-07 21:51:20 +0000] Status=4, isTerminal=NO, Elapsed=11:53.
+	Waiting on System App
+
+[2026-09-07 21:51:21 +0000] Status=4, isTerminal=NO, Elapsed=11:54.
+	Waiting on System App
+
+[2026-09-07 21:51:22 +0000] Status=4, isTerminal=NO, Elapsed=11:55.
+	Waiting on System App
+
+[2026-09-07 21:51:23 +0000] Status=4, isTerminal=NO, Elapsed=11:56.
+	Waiting on System App
+
+[2026-09-07 21:51:24 +0000] Status=4, isTerminal=NO, Elapsed=11:57.
+	Waiting on System App
+
+[2026-09-07 21:51:25 +0000] Status=4, isTerminal=NO, Elapsed=11:58.
+	Waiting on System App
+
+[2026-09-07 21:51:26 +0000] Status=4, isTerminal=NO, Elapsed=11:59.
+	Waiting on System App
+
+[2026-09-07 21:51:27 +0000] Status=4, isTerminal=NO, Elapsed=12:00.
+	Waiting on System App
+
+[2026-09-07 21:51:28 +0000] Status=4, isTerminal=NO, Elapsed=12:01.
+	Waiting on System App
+
+[2026-09-07 21:51:29 +0000] Status=4, isTerminal=NO, Elapsed=12:02.
+	Waiting on System App
+
+[2026-09-07 21:51:30 +0000] Status=4, isTerminal=NO, Elapsed=12:03.
+	Waiting on System App
+
+[2026-09-07 21:51:31 +0000] Status=4, isTerminal=NO, Elapsed=12:04.
+	Waiting on System App
+
+[2026-09-07 21:51:32 +0000] Status=4, isTerminal=NO, Elapsed=12:05.
+	Waiting on System App
+
+[2026-09-07 21:51:33 +0000] Status=4, isTerminal=NO, Elapsed=12:06.
+	Waiting on System App
+
+[2026-09-07 21:51:34 +0000] Status=4, isTerminal=NO, Elapsed=12:07.
+	Waiting on System App
+
+[2026-09-07 21:51:35 +0000] Status=4, isTerminal=NO, Elapsed=12:08.
+	Waiting on System App
+
+[2026-09-07 21:51:36 +0000] Status=4, isTerminal=NO, Elapsed=12:09.
+	Waiting on System App
+
+[2026-09-07 21:51:37 +0000] Status=4, isTerminal=NO, Elapsed=12:10.
+	Waiting on System App
+
+[2026-09-07 21:51:38 +0000] Status=4, isTerminal=NO, Elapsed=12:11.
+	Waiting on System App
+
+[2026-09-07 21:51:39 +0000] Status=4, isTerminal=NO, Elapsed=12:12.
+	Waiting on System App
+
+[2026-09-07 21:51:40 +0000] Status=4, isTerminal=NO, Elapsed=12:13.
+	Waiting on System App
+
+[2026-09-07 21:51:41 +0000] Status=4, isTerminal=NO, Elapsed=12:14.
+	Waiting on System App
+
+[2026-09-07 21:51:42 +0000] Status=4, isTerminal=NO, Elapsed=12:15.
+	Waiting on System App
+
+[2026-09-07 21:51:43 +0000] Status=4, isTerminal=NO, Elapsed=12:16.
+	Waiting on System App
+
+[2026-09-07 21:51:46 +0000] Status=4, isTerminal=NO, Elapsed=12:19.
+	Waiting on System App
+
+[2026-09-07 21:51:46 +0000] Status=4, isTerminal=NO, Elapsed=12:19.
+	Waiting on System App
+
+[2026-09-07 21:51:46 +0000] Status=4, isTerminal=NO, Elapsed=12:19.
+	Waiting on System App
+
+[2026-09-07 21:51:47 +0000] Status=4, isTerminal=NO, Elapsed=12:20.
+	Waiting on System App
+
+[2026-09-07 21:51:48 +0000] Status=4, isTerminal=NO, Elapsed=12:21.
+	Waiting on System App
+
+[2026-09-07 21:51:49 +0000] Status=4, isTerminal=NO, Elapsed=12:22.
+	Waiting on System App
+
+[2026-09-07 21:51:50 +0000] Status=4, isTerminal=NO, Elapsed=12:23.
+	Waiting on System App
+
+[2026-09-07 21:51:51 +0000] Status=4, isTerminal=NO, Elapsed=12:24.
+	Waiting on System App
+
+[2026-09-07 21:51:52 +0000] Status=4, isTerminal=NO, Elapsed=12:25.
+	Waiting on System App
+
+[2026-09-07 21:51:53 +0000] Status=4, isTerminal=NO, Elapsed=12:26.
+	Waiting on System App
+
+[2026-09-07 21:51:54 +0000] Status=4, isTerminal=NO, Elapsed=12:27.
+	Waiting on System App
+
+[2026-09-07 21:51:55 +0000] Status=4, isTerminal=NO, Elapsed=12:28.
+	Waiting on System App
+
+[2026-09-07 21:51:56 +0000] Status=4, isTerminal=NO, Elapsed=12:29.
+	Waiting on System App
+
+[2026-09-07 21:51:57 +0000] Status=4, isTerminal=NO, Elapsed=12:30.
+	Waiting on System App
+
+[2026-09-07 21:51:58 +0000] Status=4, isTerminal=NO, Elapsed=12:31.
+	Waiting on System App
+
+[2026-09-07 21:51:59 +0000] Status=4, isTerminal=NO, Elapsed=12:32.
+	Waiting on System App
+
+[2026-09-07 21:52:00 +0000] Status=4, isTerminal=NO, Elapsed=12:33.
+	Waiting on System App
+
+[2026-09-07 21:52:01 +0000] Status=4, isTerminal=NO, Elapsed=12:34.
+	Waiting on System App
+
+[2026-09-07 21:52:02 +0000] Status=4, isTerminal=NO, Elapsed=12:35.
+	Waiting on System App
+
+[2026-09-07 21:52:03 +0000] Status=4, isTerminal=NO, Elapsed=12:36.
+	Waiting on System App
+
+[2026-09-07 21:52:04 +0000] Status=4, isTerminal=NO, Elapsed=12:37.
+	Waiting on System App
+
+[2026-09-07 21:52:05 +0000] Status=4, isTerminal=NO, Elapsed=12:38.
+	Waiting on System App
+
+[2026-09-07 21:52:06 +0000] Status=4, isTerminal=NO, Elapsed=12:39.
+	Waiting on System App
+
+[2026-09-07 21:52:07 +0000] Status=4, isTerminal=NO, Elapsed=12:40.
+	Waiting on System App
+
+[2026-09-07 21:52:08 +0000] Status=4, isTerminal=NO, Elapsed=12:41.
+	Waiting on System App
+
+[2026-09-07 21:52:09 +0000] Status=4, isTerminal=NO, Elapsed=12:42.
+	Waiting on System App
+
+[2026-09-07 21:52:10 +0000] Status=4, isTerminal=NO, Elapsed=12:43.
+	Waiting on System App
+
+[2026-09-07 21:52:11 +0000] Status=4, isTerminal=NO, Elapsed=12:44.
+	Waiting on System App
+
+[2026-09-07 21:52:12 +0000] Status=4, isTerminal=NO, Elapsed=12:45.
+	Waiting on System App
+
+[2026-09-07 21:52:13 +0000] Status=4, isTerminal=NO, Elapsed=12:46.
+	Waiting on System App
+
+[2026-09-07 21:52:14 +0000] Status=4, isTerminal=NO, Elapsed=12:47.
+	Waiting on System App
+
+[2026-09-07 21:52:15 +0000] Status=4, isTerminal=NO, Elapsed=12:48.
+	Waiting on System App
+
+[2026-09-07 21:52:16 +0000] Status=4, isTerminal=NO, Elapsed=12:49.
+	Waiting on System App
+
+[2026-09-07 21:52:17 +0000] Status=4, isTerminal=NO, Elapsed=12:50.
+	Waiting on System App
+
+[2026-09-07 21:52:18 +0000] Status=4, isTerminal=NO, Elapsed=12:51.
+	Waiting on System App
+
+[2026-09-07 21:52:19 +0000] Status=4, isTerminal=NO, Elapsed=12:52.
+	Waiting on System App
+
+[2026-09-07 21:52:20 +0000] Status=4, isTerminal=NO, Elapsed=12:53.
+	Waiting on System App
+
+[2026-09-07 21:52:21 +0000] Status=4, isTerminal=NO, Elapsed=12:54.
+	Waiting on System App
+
+[2026-09-07 21:52:22 +0000] Status=4, isTerminal=NO, Elapsed=12:55.
+	Waiting on System App
+
+[2026-09-07 21:52:23 +0000] Status=4, isTerminal=NO, Elapsed=12:56.
+	Waiting on System App
+
+[2026-09-07 21:52:24 +0000] Status=4, isTerminal=NO, Elapsed=12:57.
+	Waiting on System App
+
+[2026-09-07 21:52:25 +0000] Status=4, isTerminal=NO, Elapsed=12:58.
+	Waiting on System App
+
+[2026-09-07 21:52:26 +0000] Status=4, isTerminal=NO, Elapsed=12:59.
+	Waiting on System App
+
+[2026-09-07 21:52:27 +0000] Status=4, isTerminal=NO, Elapsed=13:00.
+	Waiting on System App
+
+[2026-09-07 21:52:28 +0000] Status=4, isTerminal=NO, Elapsed=13:01.
+	Waiting on System App
+
+[2026-09-07 21:52:29 +0000] Status=4, isTerminal=NO, Elapsed=13:02.
+	Waiting on System App
+
+[2026-09-07 21:52:30 +0000] Status=4, isTerminal=NO, Elapsed=13:03.
+	Waiting on System App
+
+[2026-09-07 21:52:31 +0000] Status=4, isTerminal=NO, Elapsed=13:04.
+	Waiting on System App
+
+[2026-09-07 21:52:32 +0000] Status=4, isTerminal=NO, Elapsed=13:05.
+	Waiting on System App
+
+[2026-09-07 21:52:33 +0000] Status=4, isTerminal=NO, Elapsed=13:06.
+	Waiting on System App
+
+[2026-09-07 21:52:34 +0000] Status=4, isTerminal=NO, Elapsed=13:07.
+	Waiting on System App
+
+[2026-09-07 21:52:35 +0000] Status=4, isTerminal=NO, Elapsed=13:08.
+	Waiting on System App
+
+[2026-09-07 21:52:36 +0000] Status=4, isTerminal=NO, Elapsed=13:09.
+	Waiting on System App
+
+[2026-09-07 21:52:37 +0000] Status=4, isTerminal=NO, Elapsed=13:10.
+	Waiting on System App
+
+[2026-09-07 21:52:38 +0000] Status=4, isTerminal=NO, Elapsed=13:11.
+	Waiting on System App
+
+[2026-09-07 21:52:39 +0000] Status=4, isTerminal=NO, Elapsed=13:12.
+	Waiting on System App
+
+[2026-09-07 21:52:40 +0000] Status=4, isTerminal=NO, Elapsed=13:13.
+	Waiting on System App
+
+[2026-09-07 21:52:41 +0000] Status=4, isTerminal=NO, Elapsed=13:14.
+	Waiting on System App
+
+[2026-09-07 21:52:42 +0000] Status=4, isTerminal=NO, Elapsed=13:15.
+	Waiting on System App
+
+[2026-09-07 21:52:43 +0000] Status=4, isTerminal=NO, Elapsed=13:16.
+	Waiting on System App
+
+[2026-09-07 21:52:44 +0000] Status=4, isTerminal=NO, Elapsed=13:17.
+	Waiting on System App
+
+[2026-09-07 21:52:45 +0000] Status=4, isTerminal=NO, Elapsed=13:18.
+	Waiting on System App
+
+[2026-09-07 21:52:46 +0000] Status=4, isTerminal=NO, Elapsed=13:19.
+	Waiting on System App
+
+[2026-09-07 21:52:47 +0000] Status=4, isTerminal=NO, Elapsed=13:20.
+	Waiting on System App
+
+[2026-09-07 21:52:48 +0000] Status=4, isTerminal=NO, Elapsed=13:21.
+	Waiting on System App
+
+[2026-09-07 21:52:49 +0000] Status=4, isTerminal=NO, Elapsed=13:22.
+	Waiting on System App
+
+[2026-09-07 21:52:50 +0000] Status=4, isTerminal=NO, Elapsed=13:23.
+	Waiting on System App
+
+[2026-09-07 21:52:51 +0000] Status=4, isTerminal=NO, Elapsed=13:24.
+	Waiting on System App
+
+[2026-09-07 21:52:52 +0000] Status=4, isTerminal=NO, Elapsed=13:25.
+	Waiting on System App
+
+[2026-09-07 21:52:53 +0000] Status=4, isTerminal=NO, Elapsed=13:26.
+	Waiting on System App
+
+[2026-09-07 21:52:54 +0000] Status=4, isTerminal=NO, Elapsed=13:27.
+	Waiting on System App
+
+[2026-09-07 21:52:55 +0000] Status=4, isTerminal=NO, Elapsed=13:28.
+	Waiting on System App
+
+[2026-09-07 21:52:56 +0000] Status=4, isTerminal=NO, Elapsed=13:29.
+	Waiting on System App
+
+[2026-09-07 21:52:57 +0000] Status=4, isTerminal=NO, Elapsed=13:30.
+	Waiting on System App
+
+[2026-09-07 21:52:58 +0000] Status=4, isTerminal=NO, Elapsed=13:31.
+	Waiting on System App
+
+[2026-09-07 21:52:59 +0000] Status=4, isTerminal=NO, Elapsed=13:32.
+	Waiting on System App
+
+[2026-09-07 21:53:00 +0000] Status=4, isTerminal=NO, Elapsed=13:33.
+	Waiting on System App
+
+[2026-09-07 21:53:01 +0000] Status=4, isTerminal=NO, Elapsed=13:34.
+	Waiting on System App
+
+[2026-09-07 21:53:02 +0000] Status=4, isTerminal=NO, Elapsed=13:35.
+	Waiting on System App
+
+[2026-09-07 21:53:03 +0000] Status=4, isTerminal=NO, Elapsed=13:36.
+	Waiting on System App
+
+[2026-09-07 21:53:04 +0000] Status=4, isTerminal=NO, Elapsed=13:37.
+	Waiting on System App
+
+[2026-09-07 21:53:05 +0000] Status=4, isTerminal=NO, Elapsed=13:38.
+	Waiting on System App
+
+[2026-09-07 21:53:06 +0000] Status=4, isTerminal=NO, Elapsed=13:39.
+	Waiting on System App
+
+[2026-09-07 21:53:07 +0000] Status=4, isTerminal=NO, Elapsed=13:40.
+	Waiting on System App
+
+[2026-09-07 21:53:08 +0000] Status=4, isTerminal=NO, Elapsed=13:41.
+	Waiting on System App
+
+[2026-09-07 21:53:09 +0000] Status=4, isTerminal=NO, Elapsed=13:42.
+	Waiting on System App
+
+[2026-09-07 21:53:10 +0000] Status=4, isTerminal=NO, Elapsed=13:43.
+	Waiting on System App
+
+[2026-09-07 21:53:11 +0000] Status=4, isTerminal=NO, Elapsed=13:44.
+	Waiting on System App
+
+[2026-09-07 21:53:12 +0000] Status=4, isTerminal=NO, Elapsed=13:45.
+	Waiting on System App
+
+[2026-09-07 21:53:13 +0000] Status=4, isTerminal=NO, Elapsed=13:46.
+	Waiting on System App
+
+[2026-09-07 21:53:14 +0000] Status=4, isTerminal=NO, Elapsed=13:47.
+	Waiting on System App
+
+[2026-09-07 21:53:15 +0000] Status=4, isTerminal=NO, Elapsed=13:48.
+	Waiting on System App
+
+[2026-09-07 21:53:16 +0000] Status=4, isTerminal=NO, Elapsed=13:49.
+	Waiting on System App
+
+[2026-09-07 21:53:17 +0000] Status=4, isTerminal=NO, Elapsed=13:50.
+	Waiting on System App
+
+[2026-09-07 21:53:18 +0000] Status=4, isTerminal=NO, Elapsed=13:51.
+	Waiting on System App
+
+[2026-09-07 21:53:19 +0000] Status=4, isTerminal=NO, Elapsed=13:52.
+	Waiting on System App
+
+[2026-09-07 21:53:20 +0000] Status=4, isTerminal=NO, Elapsed=13:53.
+	Waiting on System App
+
+[2026-09-07 21:53:21 +0000] Status=4, isTerminal=NO, Elapsed=13:54.
+	Waiting on System App
+
+[2026-09-07 21:53:25 +0000] Status=4, isTerminal=NO, Elapsed=13:58.
+	Waiting on System App
+
+[2026-09-07 21:53:25 +0000] Status=4, isTerminal=NO, Elapsed=13:58.
+	Waiting on System App
+
+[2026-09-07 21:53:26 +0000] Status=4, isTerminal=NO, Elapsed=13:59.
+	Waiting on System App
+
+[2026-09-07 21:53:27 +0000] Status=4, isTerminal=NO, Elapsed=14:00.
+	Waiting on System App
+
+[2026-09-07 21:53:28 +0000] Status=4, isTerminal=NO, Elapsed=14:01.
+	Waiting on System App
+
+[2026-09-07 21:53:29 +0000] Status=4, isTerminal=NO, Elapsed=14:02.
+	Waiting on System App
+
+[2026-09-07 21:53:30 +0000] Status=4, isTerminal=NO, Elapsed=14:03.
+	Waiting on System App
+
+[2026-09-07 21:53:31 +0000] Status=4, isTerminal=NO, Elapsed=14:04.
+	Waiting on System App
+
+[2026-09-07 21:53:32 +0000] Status=4, isTerminal=NO, Elapsed=14:05.
+	Waiting on System App
+
+[2026-09-07 21:53:33 +0000] Status=4, isTerminal=NO, Elapsed=14:06.
+	Waiting on System App
+
+[2026-09-07 21:53:34 +0000] Status=4, isTerminal=NO, Elapsed=14:07.
+	Waiting on System App
+
+[2026-09-07 21:53:35 +0000] Status=4, isTerminal=NO, Elapsed=14:08.
+	Waiting on System App
+
+[2026-09-07 21:53:36 +0000] Status=4, isTerminal=NO, Elapsed=14:09.
+	Waiting on System App
+
+[2026-09-07 21:53:37 +0000] Status=4, isTerminal=NO, Elapsed=14:10.
+	Waiting on System App
+
+[2026-09-07 21:53:38 +0000] Status=4, isTerminal=NO, Elapsed=14:11.
+	Waiting on System App
+
+[2026-09-07 21:53:39 +0000] Status=4, isTerminal=NO, Elapsed=14:12.
+	Waiting on System App
+
+[2026-09-07 21:53:40 +0000] Status=4, isTerminal=NO, Elapsed=14:13.
+	Waiting on System App
+
+[2026-09-07 21:53:41 +0000] Status=4, isTerminal=NO, Elapsed=14:14.
+	Waiting on System App
+
+[2026-09-07 21:53:42 +0000] Status=4, isTerminal=NO, Elapsed=14:15.
+	Waiting on System App
+
+[2026-09-07 21:53:43 +0000] Status=4, isTerminal=NO, Elapsed=14:16.
+	Waiting on System App
+
+[2026-09-07 21:53:44 +0000] Status=4, isTerminal=NO, Elapsed=14:17.
+	Waiting on System App
+
+[2026-09-07 21:53:45 +0000] Status=4, isTerminal=NO, Elapsed=14:18.
+	Waiting on System App
+
+[2026-09-07 21:53:46 +0000] Status=4, isTerminal=NO, Elapsed=14:19.
+	Waiting on System App
+
+[2026-09-07 21:53:47 +0000] Status=4, isTerminal=NO, Elapsed=14:20.
+	Waiting on System App
+
+[2026-09-07 21:53:48 +0000] Status=4, isTerminal=NO, Elapsed=14:21.
+	Waiting on System App
+
+[2026-09-07 21:53:49 +0000] Status=4, isTerminal=NO, Elapsed=14:22.
+	Waiting on System App
+
+[2026-09-07 21:53:50 +0000] Status=4, isTerminal=NO, Elapsed=14:23.
+	Waiting on System App
+
+[2026-09-07 21:53:51 +0000] Status=4, isTerminal=NO, Elapsed=14:24.
+	Waiting on System App
+
+[2026-09-07 21:53:52 +0000] Status=4, isTerminal=NO, Elapsed=14:25.
+	Waiting on System App
+
+[2026-09-07 21:53:53 +0000] Status=4, isTerminal=NO, Elapsed=14:26.
+	Waiting on System App
+
+[2026-09-07 21:53:54 +0000] Status=4, isTerminal=NO, Elapsed=14:27.
+	Waiting on System App
+
+[2026-09-07 21:53:55 +0000] Status=4, isTerminal=NO, Elapsed=14:28.
+	Waiting on System App
+
+[2026-09-07 21:53:56 +0000] Status=4, isTerminal=NO, Elapsed=14:29.
+	Waiting on System App
+
+[2026-09-07 21:53:57 +0000] Status=4, isTerminal=NO, Elapsed=14:30.
+	Waiting on System App
+
+[2026-09-07 21:53:58 +0000] Status=4, isTerminal=NO, Elapsed=14:31.
+	Waiting on System App
+
+[2026-09-07 21:53:59 +0000] Status=4, isTerminal=NO, Elapsed=14:32.
+	Waiting on System App
+
+[2026-09-07 21:54:00 +0000] Status=4, isTerminal=NO, Elapsed=14:33.
+	Waiting on System App
+
+[2026-09-07 21:54:01 +0000] Status=4, isTerminal=NO, Elapsed=14:34.
+	Waiting on System App
+
+[2026-09-07 21:54:02 +0000] Status=4, isTerminal=NO, Elapsed=14:35.
+	Waiting on System App
+
+[2026-09-07 21:54:03 +0000] Status=4, isTerminal=NO, Elapsed=14:36.
+	Waiting on System App
+
+[2026-09-07 21:54:04 +0000] Status=4, isTerminal=NO, Elapsed=14:37.
+	Waiting on System App
+
+[2026-09-07 21:54:05 +0000] Status=4, isTerminal=NO, Elapsed=14:38.
+	Waiting on System App
+
+[2026-09-07 21:54:06 +0000] Status=4, isTerminal=NO, Elapsed=14:39.
+	Waiting on System App
+
+[2026-09-07 21:54:07 +0000] Status=4, isTerminal=NO, Elapsed=14:40.
+	Waiting on System App
+
+[2026-09-07 21:54:08 +0000] Status=4, isTerminal=NO, Elapsed=14:41.
+	Waiting on System App
+
+[2026-09-07 21:54:09 +0000] Status=4, isTerminal=NO, Elapsed=14:42.
+	Waiting on System App
+
+[2026-09-07 21:54:10 +0000] Status=4, isTerminal=NO, Elapsed=14:43.
+	Waiting on System App
+
+[2026-09-07 21:54:11 +0000] Status=4, isTerminal=NO, Elapsed=14:44.
+	Waiting on System App
+
+[2026-09-07 21:54:12 +0000] Status=4, isTerminal=NO, Elapsed=14:45.
+	Waiting on System App
+
+[2026-09-07 21:54:13 +0000] Status=4, isTerminal=NO, Elapsed=14:46.
+	Waiting on System App
+
+[2026-09-07 21:54:14 +0000] Status=4, isTerminal=NO, Elapsed=14:47.
+	Waiting on System App
+
+[2026-09-07 21:54:15 +0000] Status=4, isTerminal=NO, Elapsed=14:48.
+	Waiting on System App
+
+[2026-09-07 21:54:16 +0000] Status=4, isTerminal=NO, Elapsed=14:49.
+	Waiting on System App
+
+[2026-09-07 21:54:17 +0000] Status=4294967295, isTerminal=YES, Elapsed=14:50.
+	Finished
+
+[exit=0]
+
+## device state
+$ sh -c xcrun simctl list devices | grep xcv-probe-tv
+    xcv-probe-tv (6DE7F374-EC96-413E-950A-58569414FA25) (Booted) 
+[exit=0]
+
+## shutdown
+$ xcrun simctl shutdown 6DE7F374-EC96-413E-950A-58569414FA25
+[exit=0]
+
+## delete device
+$ xcrun simctl delete 6DE7F374-EC96-413E-950A-58569414FA25
+[exit=0]
+
+## runtime delete (restore prior state)
+$ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime delete EC2DC886-AC13-482C-B43C-A7758F31C3BE --yes
+
+[exit=0]
+
+## delete unavailable devices created for the runtime
+$ xcrun simctl delete unavailable
+[exit=0]
+
 ## registry after
 $ xcrun simctl runtime list
 == Disk Images ==
 -- iOS --
 iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE (Ready)
+-- tvOS --
+tvOS 26.5 (23L470) - EC2DC886-AC13-482C-B43C-A7758F31C3BE (Deleting)
 -- watchOS --
 watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
 
-Total Disk Images: 2 (14.8G)
+Total Disk Images: 3 (19.4G)
 [exit=0]
 
 ## asset stores
 $ du -sk /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime /System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime /System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
-4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+8	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
 10348880	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
 5119360	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
 [exit=0]
@@ -99,6 +2897,6 @@ $ du -sk /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntim
 ## internal free
 $ df -h /System/Volumes/Data
 Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk1s1   466Gi   435Gi   4.4Gi   100%    4.2M   46M    8%   /System/Volumes/Data
+/dev/disk1s1   466Gi   424Gi    16Gi    97%    3.7M  171M    2%   /System/Volumes/Data
 [exit=0]
 

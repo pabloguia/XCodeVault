@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-06 (session 1). This file is the hand-off for the next session or a
+_Last updated: 2026-09-07 (session 3). This file is the hand-off for the next session or a
 post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
@@ -79,6 +79,27 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   registration was forgotten. Machine state vs. session start: DerivedData cleaned (−8.9 GB),
   the stranded Inbox dmg (+5 GB, needs root), tvOS devices/runtime removed again.
 
+## Session 3 (2026-09-07, `docs/process/RUNBOOK-E8-import-roundtrip.md` executed as written)
+
+- **E8 import half: pass, with a functional boot probe.** Re-exported tvOS to the USB volume,
+  offloaded, then `xcodevaultctl runtime import` → `xcodebuild -importPlatform <dmg>` (direct
+  path to the exported bundle's inner Cryptex dmg — worked first try, no fallback needed) →
+  `simctl runtime verify` → create/boot/reach `Booted`/shutdown/delete an "Apple TV" device →
+  `runtime delete` → `simctl delete unavailable`. All exit 0. Peak internal staging: 4.807 GB
+  for a 4.906 GB image (≈0.98×, vs. ≈1.18× on the 2026-09-06 attempt). Machine returned to only
+  iOS 26.5 + watchOS 26.5, 0 unavailable devices, no runtime/device `doctor` findings — **no
+  reboot needed this run** (unlike 2026-09-06, no stranded file landed in the Inbox this time;
+  cause not investigated — worth a follow-up if it recurs). H4 in `HYPOTHESES.md` moved to
+  verified; `COMPATIBILITY_MATRIX.md` E8 import entry and pending table updated.
+- **Preflight tightened:** `RuntimeOperations.preflightImport`'s old 2×+3 GB hard requirement was
+  materially too conservative next to the two measured peaks (≈4.8–5.8 GB for the same 4.9 GB
+  image); now 1.5×+2 GB required / 2×+2 GB warn. Only validated against one mid-size (tvOS,
+  ~4.9 GB) image — revisit if a much larger image (e.g. iOS, ~10 GB) shows a different peak
+  ratio.
+- Ran alongside an unrelated concurrent `xcodebuild` (user's own MySmoke iOS project, different
+  platform/DerivedData) with no observed contention; internal free stayed ≥ 19 GB throughout.
+- Everything created on the USB volume was removed; no vault registered.
+
 ## In flight
 
 - Nothing running. 67 tests green.
@@ -90,10 +111,10 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
   `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
-- **Import half of E8 — scheduled for a fresh session.** Full self-contained runbook:
-  `docs/process/RUNBOOK-E8-import-roundtrip.md` (prerequisites, exact commands, expected outputs,
-  abort conditions, cleanup, how to record). Needs ≥ 20 GB internal free for export+import of
-  tvOS and a reboot afterwards to reclaim the Inbox copy.
+- **Import half of E8 — done (2026-09-07), pass.** See Session 3 above and
+  `docs/process/RUNBOOK-E8-import-roundtrip.md` for the executed procedure. Only tvOS (~4.9 GB)
+  was exercised; the same round trip on a larger image (iOS, ~10 GB) is still open if it matters
+  for the preflight formula.
 - E8 behavioural half: `-downloadPlatform … -exportPath` round trip needs ≥ 20 GB free
   (the dev Mac has < 4 GB — E11 staging problem in real life); `IDECustomDerivedDataLocation`
   write-test needs a moment when Xcode is closed.
