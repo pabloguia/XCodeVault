@@ -1,0 +1,25 @@
+## E1 mount half (as root, uid 0)
+$ mkdir /Library/Developer/xcv-probe
+[exit=0]
+$ ls -ldO /Library/Developer/xcv-probe
+drwxr-xr-x@ 2 root  wheel  - 64 Sep  6 21:17 /Library/Developer/xcv-probe
+$ diskutil mount -mountPoint /Library/Developer/xcv-probe disk9s1
+Failed to find disk disk9s1
+[exit=1]
+$ mount | grep xcv-probe
+$ touch /Library/Developer/xcv-probe/hello && ls -l /Library/Developer/xcv-probe
+total 0
+-rw-r--r--@ 1 root  wheel  0 Sep  6 21:17 hello
+[exit=0]
+$ getattrlist mount status via xcodevaultctl volumes (is it a mount point?)
+$ diskutil unmount /Library/Developer/xcv-probe
+Unmount failed for /Library/Developer/xcv-probe
+[exit=1]
+$ ls -la /Library/Developer/xcv-probe (should be empty local dir again)
+total 0
+drwxr-xr-x@ 3 root  wheel   96 Sep  6 21:17 .
+drwxr-xr-x  9 root  wheel  288 Sep  6 21:17 ..
+-rw-r--r--@ 1 root  wheel    0 Sep  6 21:17 hello
+$ rmdir /Library/Developer/xcv-probe
+rmdir: /Library/Developer/xcv-probe: Directory not empty
+[exit=1]
