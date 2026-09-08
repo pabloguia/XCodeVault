@@ -1,0 +1,378 @@
+# Experiment: E9 phase 1: symlink ~/Library/Developer/CoreSimulator to a same-disk target
+# Date: 2026-09-08T18:13:58Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo: not used — this experiment requires no root
+
+## baseline devices (before swap)
+$ xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## baseline runtimes (before swap)
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 34AF883C-5859-4A52-BA30-1BCB0A577DD2 (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## baseline: real directory, size, inode
+$ sh -c ls -ld '~/Library/Developer/CoreSimulator'; du -sh '~/Library/Developer/CoreSimulator'; stat -f 'inode=%i' '~/Library/Developer/CoreSimulator'
+drwxr-xr-x@ 6 <user>  staff  192 Aug 21 23:21 ~/Library/Developer/CoreSimulator
+9.1G	~/Library/Developer/CoreSimulator
+inode=270520018
+[exit=0]
+
+## step 2 — swap (rename + symlink, same volume: instantaneous, no copy, no extra space)
+## mv CoreSimulator -> CoreSimulator-real
+$ mv ~/Library/Developer/CoreSimulator ~/CoreSimulator-real
+[exit=0]
+
+## ln -s CoreSimulator-real -> CoreSimulator
+$ ln -s ~/CoreSimulator-real ~/Library/Developer/CoreSimulator
+[exit=0]
+
+## verify the swap
+$ sh -c ls -ld '~/Library/Developer/CoreSimulator'; readlink '~/Library/Developer/CoreSimulator'; stat -f 'target inode=%i' '~/Library/Developer/CoreSimulator/'
+lrwxr-xr-x@ 1 <user>  staff  32 Sep  8 15:14 ~/Library/Developer/CoreSimulator -> ~/CoreSimulator-real
+~/CoreSimulator-real
+target inode=270520018
+[exit=0]
+
+## step 3 — does CoreSimulatorService still see the same devices through the symlink?
+## devices through the symlink (service not restarted)
+$ xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## restart CoreSimulatorService (forces a cold path resolution)
+$ sh -c pkill -9 -f com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null; sleep 3; true
+[exit=0]
+
+## devices after service restart
+$ xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## runtimes after service restart
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 34AF883C-5859-4A52-BA30-1BCB0A577DD2 (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## step 4 — simctl-level sanity pass on a throwaway device (never the user's real ones)
+runtime: com.apple.CoreSimulator.SimRuntime.iOS-26-5
+device type: com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
+## create probe device
+$ xcrun simctl create xcv-e9-probe com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+8F9C30CA-923E-46FE-9998-9109B510A693
+[exit=0]
+
+probe udid: 8F9C30CA-923E-46FE-9998-9109B510A693
+## boot probe device
+$ xcrun simctl boot 8F9C30CA-923E-46FE-9998-9109B510A693
+[exit=0]
+
+## wait for Booted (polling simctl list, not bootstatus)
+$ sh -c for i in $(seq 1 60); do xcrun simctl list devices | grep -q '8F9C30CA-923E-46FE-9998-9109B510A693.*Booted' && { echo "booted after ${i}0% of budget ($((i*5))s)"; break; }; sleep 5; done
+booted after 10% of budget (5s)
+[exit=0]
+
+## probe device state
+$ sh -c xcrun simctl list devices | grep '8F9C30CA-923E-46FE-9998-9109B510A693'
+    xcv-e9-probe (8F9C30CA-923E-46FE-9998-9109B510A693) (Booted) 
+[exit=0]
+
+## screenshot through the symlinked path
+$ xcrun simctl io 8F9C30CA-923E-46FE-9998-9109B510A693 screenshot /tmp/xcv-e9-screenshot-1.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: 3E315F8C-0ED9-451D-8FB6-40932FFDC1E9 (screenID: 1, name: LCD)
+Wrote screenshot to: /tmp/xcv-e9-screenshot-1.png
+[exit=0]
+
+## screenshot file produced?
+$ sh -c ls -l /tmp/xcv-e9-screenshot-1.png 2>&1
+-rw-r--r--@ 1 <user>  wheel  61289 Sep  8 15:14 /tmp/xcv-e9-screenshot-1.png
+[exit=0]
+
+## device data dir resolves through the symlink
+$ sh -c ls -d '~/Library/Developer/CoreSimulator/Devices/8F9C30CA-923E-46FE-9998-9109B510A693/data' 2>&1
+~/Library/Developer/CoreSimulator/Devices/8F9C30CA-923E-46FE-9998-9109B510A693/data
+[exit=0]
+
+
+############################################################
+# Experiment: E9 phase 2: build/run/write cycle + probe cleanup (symlink still in place)
+# Date: 2026-09-08T18:31:01Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo: not used — this experiment requires no root
+
+## symlink still in place?
+$ sh -c ls -ld '~/Library/Developer/CoreSimulator'; readlink '~/Library/Developer/CoreSimulator'
+lrwxr-xr-x@ 1 <user>  staff  32 Sep  8 15:14 ~/Library/Developer/CoreSimulator -> ~/CoreSimulator-real
+~/CoreSimulator-real
+[exit=0]
+
+## step 6 — build, install, launch and write a file, all through the symlinked path
+## xcodegen generate
+$ sh -c cd '/private/tmp/xcv-e9-scratch' && xcodegen generate 2>&1 | tail -3
+⚙️  Generating project...
+⚙️  Writing project...
+Created project at /tmp/xcv-e9-scratch/E9Probe.xcodeproj
+[exit=0]
+
+## xcodebuild build
+$ sh -c cd '/private/tmp/xcv-e9-scratch' && xcodebuild build -project E9Probe.xcodeproj -scheme E9Probe -destination 'id=8F9C30CA-923E-46FE-9998-9109B510A693' -derivedDataPath '/private/tmp/xcv-e9-scratch/dd' 2>&1 | tail -12
+    builtin-RegisterExecutionPolicyException /tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app
+
+Validate /tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app (in target 'E9Probe' from project 'E9Probe')
+    cd /tmp/xcv-e9-scratch
+    builtin-validationUtility /tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app (in target 'E9Probe' from project 'E9Probe')
+    cd /tmp/xcv-e9-scratch
+    /usr/bin/touch -c /tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app
+
+** BUILD SUCCEEDED **
+
+[exit=0]
+
+## install
+$ xcrun simctl install 8F9C30CA-923E-46FE-9998-9109B510A693 /private/tmp/xcv-e9-scratch/dd/Build/Products/Debug-iphonesimulator/E9Probe.app
+[exit=0]
+
+## launch
+$ xcrun simctl launch 8F9C30CA-923E-46FE-9998-9109B510A693 com.xcodevault.e9probe.E9Probe
+com.xcodevault.e9probe.E9Probe: 90791
+[exit=0]
+
+container: ~/CoreSimulator-real/Devices/8F9C30CA-923E-46FE-9998-9109B510A693/data/Containers/Data/Application/CBE9EED2-0628-4AA9-B0D8-A8774A61D4BF
+## app actually wrote through the symlink?
+$ sh -c ls -l '~/CoreSimulator-real/Devices/8F9C30CA-923E-46FE-9998-9109B510A693/data/Containers/Data/Application/CBE9EED2-0628-4AA9-B0D8-A8774A61D4BF/Documents/' 2>&1; echo '--- content ---'; cat '~/CoreSimulator-real/Devices/8F9C30CA-923E-46FE-9998-9109B510A693/data/Containers/Data/Application/CBE9EED2-0628-4AA9-B0D8-A8774A61D4BF/Documents/e9-write-test.txt' 2>&1; echo
+total 8
+-rw-r--r--@ 1 <user>  staff  11 Sep  8 15:32 e9-write-test.txt
+--- content ---
+e9 write ok
+[exit=0]
+
+## app still running (did not crash)?
+$ sh -c xcrun simctl spawn '8F9C30CA-923E-46FE-9998-9109B510A693' launchctl list 2>/dev/null | grep -c e9probe
+1
+[exit=0]
+
+## step 8 — FB12363725 opportunistic read-only check (only CoreSimulator is symlinked,
+##          NOT ~/Library/Developer — the wider swap is forbidden by CLAUDE.md rule 7)
+## DeveloperDiskImages must still be a real directory
+$ sh -c ls -ld '~/Library/Developer/DeveloperDiskImages' 2>&1; [ -L '~/Library/Developer/DeveloperDiskImages' ] && echo 'SYMLINK — VIOLATION' || echo 'real directory (as required)'
+ls: ~/Library/Developer/DeveloperDiskImages: No such file or directory
+real directory (as required)
+[exit=0]
+
+## physical devices still available?
+$ sh -c xcrun devicectl list devices 2>&1 | tail -5
+Name                       Hostname                                    Identifier                             State                Model                         
+------------------------   -----------------------------------------   ------------------------------------   ------------------   ------------------------------
+<watch-name>        <watch-host>.coredevice.local          <watch-device-uuid>   available (paired)   Apple Watch Ultra 2 (Watch7,5)
+<phone-name>   <phone-host>.coredevice.local   <phone-device-uuid>   available (paired)   iPhone 17 Pro Max (iPhone18,2)
+[exit=0]
+
+## step 7 — probe cleanup
+## shutdown probe
+$ xcrun simctl shutdown 8F9C30CA-923E-46FE-9998-9109B510A693
+[exit=0]
+
+## delete probe
+$ xcrun simctl delete 8F9C30CA-923E-46FE-9998-9109B510A693
+[exit=0]
+
+## scratch project removed
+$ sh -c ls -d '/private/tmp/xcv-e9-scratch' 2>&1 || echo 'removed'
+ls: /private/tmp/xcv-e9-scratch: No such file or directory
+removed
+[exit=0]
+
+
+############################################################
+# Experiment: E9 step 9-10: restore + validation against the pre-experiment baseline
+# Date: 2026-09-08T18:33:25Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo: not used — this experiment requires no root
+
+## quit Simulator.app
+$ sh -c osascript -e 'quit app "Simulator"' 2>/dev/null; sleep 2; true
+[exit=0]
+
+## state before restore
+$ sh -c ls -ld '~/Library/Developer/CoreSimulator'; readlink '~/Library/Developer/CoreSimulator' 2>&1
+lrwxr-xr-x@ 1 <user>  staff  32 Sep  8 15:14 ~/Library/Developer/CoreSimulator -> ~/CoreSimulator-real
+~/CoreSimulator-real
+[exit=0]
+
+## remove the symlink
+$ rm ~/Library/Developer/CoreSimulator
+[exit=0]
+
+## move the real directory back
+$ mv ~/CoreSimulator-real ~/Library/Developer/CoreSimulator
+[exit=0]
+
+## confirm it is a real directory again
+$ sh -c ls -ld '~/Library/Developer/CoreSimulator'; if [ -L '~/Library/Developer/CoreSimulator' ]; then echo 'STILL A SYMLINK — FAILED'; else echo 'confirmed: real directory, not a symlink'; fi; [ -e '~/CoreSimulator-real' ] && echo 'WARNING: ~/CoreSimulator-real still exists' || echo 'CoreSimulator-real gone (good)'
+drwxr-xr-x@ 6 <user>  staff  192 Aug 21 23:21 ~/Library/Developer/CoreSimulator
+confirmed: real directory, not a symlink
+CoreSimulator-real gone (good)
+[exit=0]
+
+## restart CoreSimulatorService
+$ sh -c pkill -9 -f com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null; sleep 3; true
+[exit=0]
+
+## step 10 — validation: must match the pre-experiment baseline exactly
+## devices
+$ xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## runtimes
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 34AF883C-5859-4A52-BA30-1BCB0A577DD2 (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## unavailable device count (expect 0)
+$ sh -c xcrun simctl list devices | grep -ci unavailable
+0
+[exit=1]
+
+## size unchanged (expect ~9.1G)
+$ du -sh ~/Library/Developer/CoreSimulator
+9.1G	~/Library/Developer/CoreSimulator
+[exit=0]
+
+## doctor
+$ sh -c cd '~/projects/XCodeVault' && .build/debug/xcodevaultctl doctor 2>&1 | tail -25
+doctor: 2 finding(s)
+
+[WARNING] Low free space on the internal volume: 16,06 GB
+  Simulator runtime installs stage on the internal volume and reportedly need ~40 GB free even when the installer is elsewhere; Xcode itself needs headroom for indexes and builds.
+  path: ~
+  → Run `xcodevaultctl scan` and clean regenerable categories first (DerivedData, old Device Support, unused runtimes via `simctl runtime delete`).
+  evidence: docs/research/FINDINGS-2026-09-05.md §F9 (E11)
+
+[WARNING] mac-ssd-rescue data found on <vault>
+  /Volumes/<vault>/mac-ssd-rescue contains: CoreSimulator, DerivedData, SPM Repos, XCTestDevices, iOS DeviceSupport. If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data with a documented-broken configuration (H5).
+  path: /Volumes/<vault>/mac-ssd-rescue
+  → Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone.
+  evidence: docs/process/PRIOR_ART.md
+[exit=0]
+
+
+############################################################
+# Experiment: E9 step 5 (+ step 8 note) — Files-app interactive pass, MANUALLY RECORDED
+# Date: 2026-09-08
+# Method: driven through the real Simulator GUI via this session's iOS Simulator control tool
+#         (screenshot / tap / swipe / text), on device xcv-e9-probe, while
+#         ~/Library/Developer/CoreSimulator was a symlink to ~/CoreSimulator-real.
+#         Screenshots were taken at every step but are not committed; what was observed is
+#         described below, and every claimed success was independently confirmed on disk.
+
+## step 5a — create a new folder (Files > Browse > On My iPhone > "..." > New Folder)
+RESULT: SUCCESS. No error dialog. The folder appeared as "untitled folder", 0 items, with the
+name in inline-rename mode, and the container footer changed from "On My iPhone is Empty" to
+"1 item". It persisted after leaving and re-entering the view.
+Confirmed on disk, through the symlink:
+  .../Devices/<probe>/data/Containers/Shared/AppGroup/8325E71A-.../File Provider Storage/untitled folder
+NOTE ON METHOD: the first tap on "New Folder" produced no folder and the menu simply closed.
+This looked like a reproduction of the reported failure, but it was an artifact of the
+automation, not of the product: the Simulator window was not the frontmost macOS window, so its
+first synthetic click is consumed as a window-focus click. The same tap repeated immediately
+afterwards created the folder. Every subsequent interaction in this run showed the same
+one-eaten-first-click pattern on each new UI state. Recorded here because a less careful run
+would have logged a false positive for H5.
+
+## step 5b — share a photo and save it into Files (Photos > image > Share > Save to Files)
+RESULT: SUCCESS. The share sheet opened normally and listed the full action set; "Save to Files"
+was present; the document picker opened on "On My iPhone" with "Save as IMG_0002"; tapping Save
+dismissed it with no error dialog.
+Confirmed on disk, through the symlink: File Provider Storage/IMG_0002.JPG, 2,567,402 bytes.
+
+## step 5c — save a file from Safari
+RESULT: SUCCESS, via download. Two variants were exercised:
+  (1) Sharing a plain-text page rendered inline offered no "Save to Files" entry — only
+      URL-level actions (Add to Favorites / Find on Page / Markup / Print). This is ordinary
+      iOS behaviour for a page share, NOT a failure: Safari shares the URL, not a file.
+  (2) Serving the same content as a .zip from a local HTTP server on the Mac (127.0.0.1:8099)
+      produced Safari's "Do you want to download ...?" prompt; Download completed and the
+      download badge appeared in the address bar.
+Confirmed on disk, through the symlink:
+  File Provider Storage/Downloads/e9-safari-download.zip
+The guest had no route to the public internet during this run (an earlier attempt to load
+example.com rendered blank), which is why a local server was used; this does not affect the
+claim under test, since the write path into Files is identical.
+
+## guest log check during the Files interactions
+A `simctl spawn <udid> log stream --level debug` capture (845,711 lines, not committed) was
+scanned for FileProvider/sandbox/symlink failures. Findings:
+  - Guest subsystems resolve paths through the symlink to /Users/<user>/CoreSimulator-real/...
+    and operate on them successfully, e.g. MobileAsset "successfully locked SHORT-TERM" against
+    .../CoreSimulator-real/Devices/<probe>/data/private/var/MobileAsset/...
+  - The only "Operation not permitted" lines come from runningboardd (pid_resume / pid_suspend /
+    Darwin GPU role changes) and kbd's memorystatus_control. These are ordinary Simulator noise
+    on any device, unrelated to the symlink, and appear on non-symlinked runs too.
+  - No sandbox denials and no FileProvider errors were logged.
+
+## step 8 — FB12363725 opportunistic check (read-only; the wider ~/Library/Developer swap was
+##          deliberately NOT performed — CLAUDE.md rule 7)
+Both paired physical devices remained "available (paired)" in `xcrun devicectl list devices`
+throughout, while only CoreSimulator was symlinked: an iPhone 17 Pro Max and an Apple Watch
+Ultra 2. No "Preparing..." state and no DDI errors were observed. This is negative evidence for
+the narrow case only; the report's own precondition (symlinking ~/Library/Developer itself) was
+not reproduced and remains untested.
+SCRIPT WORDING DEFECT (recorded for honesty): the automated check above prints "real directory
+(as required)" for ~/Library/Developer/DeveloperDiskImages, but `ls` on the same line shows
+"No such file or directory" — the path does not exist at all on Xcode 26.5 here. The `[ -L ]`
+test is false for a missing path, so it falls into the else branch. Not a rule-7 violation
+(nothing was symlinked), but the message is misleading and the check should test existence
+first.

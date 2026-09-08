@@ -309,6 +309,49 @@ those entries "pending — manual" until someone actually runs and records the r
   `VaultVerifier` sentinel-file check (no vault was pointed at the probe path). Still low
   priority — only relevant if a canonical-mount strategy is revived per ADR-0004.
 
+### E9 CoreSimulator symlink — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-08
+- Hypothesis reference: H5 (and, opportunistically, the FB12363725 half of H2)
+- Test performed: per `../process/RUNBOOK-E9-symlink-coresimulator.md`, run on the user's own
+  account with explicit authorization (no scratch account, no `sudo` — none was needed).
+  `~/Library/Developer/CoreSimulator` (9.1 GB) was renamed to `~/CoreSimulator-real` and
+  replaced by a symlink to it on the same internal volume — a rename, never a copy or a delete.
+  Then: device registry check before and after a forced `CoreSimulatorService` restart; a
+  throwaway `xcv-e9-probe` (`iPhone 17 Pro`, iOS 26.5) created and booted; the three Files-app
+  operations from the report driven through the real Simulator GUI; a disposable xcodegen iOS
+  app built, installed, launched and made to write into its container; a read-only `devicectl`
+  check; then the mandatory restore.
+- Result: **the reported failure did not reproduce.** All three Files-app operations succeeded,
+  each confirmed on disk through the symlink — `File Provider Storage/untitled folder`,
+  `IMG_0002.JPG` (2,567,402 bytes, via Share > Save to Files), and
+  `Downloads/e9-safari-download.zip` (Safari download). The share sheet opened normally.
+  `xcodebuild build` → `simctl install` → `launch` all exit 0 (`** BUILD SUCCEEDED **`), and the
+  app wrote `e9-write-test.txt` (11 bytes) into its own container without crashing. The device
+  registry listed all devices correctly both before and after killing `CoreSimulatorService`.
+  A debug guest `log stream` (845,711 lines) showed subsystems resolving through the symlink and
+  succeeding; no sandbox denials, no FileProvider errors — the only `Operation not permitted`
+  lines were ordinary `runningboardd`/`memorystatus_control` Simulator noise.
+- Restore: mandatory step ran and passed. `~/Library/Developer/CoreSimulator` is a real
+  directory again (9.1 GB, original mtime), `~/CoreSimulator-real` is gone, and the three real
+  devices returned with their original UUIDs — `iPhone 17 Pro Max`, `iPhone SE (3rd generation)`,
+  `Apple Watch Ultra 3 (49mm)` — with runtimes unchanged and 0 unavailable devices. `doctor`
+  reported only the two pre-existing findings (low internal free space; `mac-ssd-rescue` data on
+  `/Volumes/<vault>`), neither caused by this run.
+- Evidence: `../research/evidence/e9-symlink-coresimulator-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+  (scripted steps plus a manually written section for the GUI pass).
+- Verdict: H5 **not reproduced here** — but deliberately *not* promoted to "symlink is safe".
+  See `HYPOTHESES.md` H5 for why one passing configuration is not a safety proof, and note that
+  `CLAUDE.md` rule 7 and ADR-0004 are unchanged: the product still ships no symlink strategy for
+  CoreSimulator. Not tested: the `~/Library/Developer`-wide symlink that FB12363725 actually
+  requires (forbidden by rule 7), the Xcode.app GUI, Apple Silicon, and iCloud-Drive-signed-in
+  configurations. Useful negative evidence for the narrow case: both paired physical devices
+  stayed `available (paired)` in `devicectl` with only `CoreSimulator` symlinked.
+- Method caveat worth carrying forward: the first synthetic tap on each new Simulator UI state is
+  consumed as a window-focus click. The first "New Folder" tap produced nothing and looked like a
+  reproduction of the bug; repeating the identical tap created the folder. A less careful run
+  would have recorded a false positive for H5.
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |
@@ -317,5 +360,5 @@ those entries "pending — manual" until someone actually runs and records the r
 | E7 shadow-data defense | H3 | **done (2026-09-07)** — see entry below; does not crash Xcode; low priority after ADR-0004 |
 | E8 export/import round trip | H4 | **done** — export (2026-09-06) + import with functional boot probe (2026-09-07) both pass; see entries above |
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
-| E9 CoreSimulator symlink | H5 | pending — manual (scratch account) |
+| E9 CoreSimulator symlink | H5 | **done (2026-09-08)** — see entry above; the reported Files-app failure did **not** reproduce. Rule 7 / ADR-0004 unchanged. Still pending: the `~/Library/Developer`-wide symlink of FB12363725 (forbidden by rule 7), Xcode.app GUI, Apple Silicon, iCloud-signed-in |
 | E11 staging space | Runtime Library UX | pending — manual |

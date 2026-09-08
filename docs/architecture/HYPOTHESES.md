@@ -126,12 +126,48 @@ Gate: E8 — closed.
 **Claim:** symlinking `~/Library/Developer/CoreSimulator` breaks Simulator subsystems
 (Files app: cannot share, save, or create folders) independently of any external drive.
 
-**Status: probable** — Jeff Johnson, 2025-08-17, target on the same internal disk (F3).
+**Status: NOT REPRODUCED on this configuration (E9, 2026-09-08, macOS 26.6.2 25G83 /
+Xcode 26.5 17F42 / Intel x86_64).** The claim as stated — that the Files app cannot share,
+save, or create folders — did **not** hold here. With `~/Library/Developer/CoreSimulator`
+renamed to `~/CoreSimulator-real` and replaced by a symlink to it (same internal disk), all
+three reported operations succeeded on a throwaway `iPhone 17 Pro` device, each confirmed on
+disk through the symlink: creating a folder (`File Provider Storage/untitled folder`), sharing
+a photo via Share > Save to Files (`IMG_0002.JPG`, 2,567,402 bytes), and a Safari download
+landing in Files (`Downloads/e9-safari-download.zip`). The share sheet opened and behaved
+normally. A full `xcodebuild build` → `simctl install` → `launch` cycle also succeeded
+(`** BUILD SUCCEEDED **`, exit 0) and the app wrote `e9-write-test.txt` into its own container
+through the symlink without crashing. The device registry survived a forced
+`CoreSimulatorService` restart with all devices intact. A debug-level guest `log stream`
+(845,711 lines) showed subsystems resolving through the symlink and succeeding, with no sandbox
+denials and no FileProvider errors. Evidence:
+`../research/evidence/e9-symlink-coresimulator-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
 
-**Why this matters more than H1:** it removes "per-category symlink" as the safe
-fallback for CoreSimulator, which is precisely what the prior art does. If confirmed,
-CoreSimulator has **no** symlink-based strategy at any risk level, and the choice
-narrows to canonical mount (H1), official mechanisms (H4), or cleanup only. Gate: E9.
+**This does not make symlinking CoreSimulator a supported strategy, and `CLAUDE.md` rule 7
+stands unchanged.** One passing configuration is not a safety proof: the original report (F3)
+may have been accurate for its own OS/Xcode build, the failure may be intermittent or depend on
+iCloud Drive / a signed-in Apple Account (absent here), and this run exercised a *freshly
+created* device rather than long-lived ones with accumulated state. What E9 does settle is
+narrower and still useful: the mechanism is **not** an unconditional, immediately-visible break
+on current macOS/Xcode, so a user who already has this layout (e.g. via `mac-ssd-rescue`) will
+not necessarily see obvious Files-app symptoms — which makes silent, hard-to-attribute breakage
+the more realistic risk, and argues for `doctor` detecting and reporting the layout rather than
+relying on the user noticing failures. The product still ships no symlink strategy for
+CoreSimulator (ADR-0004: accounting + official mechanisms + cleanup + disconnect safety).
+
+**Caveat on what was NOT tested:** the FB12363725 half of E9. The report's precondition is
+symlinking `~/Library/Developer` *itself*, which was deliberately not performed (it would move
+`DeveloperDiskImages`, forbidden by rule 7). As read-only negative evidence for the narrow case,
+both paired physical devices (iPhone 17 Pro Max, Apple Watch Ultra 2) stayed
+`available (paired)` in `devicectl` throughout, with no "Preparing…" state and no DDI errors,
+while only `CoreSimulator` was symlinked. Also untested: the Xcode.app GUI (only `xcodebuild`
+was exercised), Apple Silicon, and any configuration with iCloud Drive signed in.
+
+**Why this mattered more than H1:** it was expected to remove "per-category symlink" as the safe
+fallback for CoreSimulator, which is precisely what the prior art does. The strategic conclusion
+is unchanged by this result — the choice remains canonical mount (H1), official mechanisms (H4),
+or cleanup only — because the reason for refusing the symlink is now "unverified and
+contradicted by a credible field report we could not reproduce", not "proven broken". Gate: E9
+(executed 2026-09-08; runbook `../process/RUNBOOK-E9-symlink-coresimulator.md`).
 
 ## H6 — External-volume sandbox/TCC restrictions apply regardless of mount path *(new, highest value)*
 

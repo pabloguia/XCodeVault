@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-08 (session 4). This file is the hand-off for the next session or a
+_Last updated: 2026-09-08 (session 5). This file is the hand-off for the next session or a
 post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
@@ -135,6 +135,43 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - `HYPOTHESES.md` H4, `COMPATIBILITY_MATRIX.md` (new entry), `FINDINGS-2026-09-05.md` updated.
   Everything created on the USB volume removed; no vault registered.
 
+## Session 5 (2026-09-08, `docs/process/RUNBOOK-E9-symlink-coresimulator.md` executed as written)
+
+- **E9: the symlink-breaks-the-Simulator report (F3) did not reproduce.** With
+  `~/Library/Developer/CoreSimulator` (9.1 GB) renamed to `~/CoreSimulator-real` and replaced by
+  a symlink on the same internal disk, all three Files-app operations from the report succeeded
+  on a throwaway `xcv-e9-probe` device and were verified on disk *through the symlink*: create
+  folder, share a photo via Save to Files (2,567,402 bytes), Safari download into
+  `On My iPhone/Downloads`. `xcodebuild build` → `simctl install` → `launch` → container write
+  all exit 0 (`** BUILD SUCCEEDED **`, `e9-write-test.txt` written, no crash). Device registry
+  intact before *and* after a forced `CoreSimulatorService` restart. Guest `log stream`
+  (845,711 lines, debug): subsystems resolve through the symlink and succeed; no sandbox denials,
+  no FileProvider errors.
+- **H5 recorded as "not reproduced on this configuration", NOT as "symlink is safe."**
+  `CLAUDE.md` rule 7 and ADR-0004 are unchanged and the product still ships no symlink strategy
+  for CoreSimulator. The useful shift is in the risk shape: the failure is not an unconditional,
+  visible break on current macOS/Xcode, so a user already in this layout (typically from
+  `mac-ssd-rescue`) may see no symptom — which is an argument for `doctor` reporting the layout
+  rather than assuming the user notices breakage.
+- **Method caveat that nearly produced a false positive:** the first synthetic tap on each new
+  Simulator UI state is consumed as a window-focus click. The first "New Folder" tap produced no
+  folder and the menu just closed — visually identical to the reported bug. Repeating the
+  identical tap created the folder. Recorded in the evidence file and the matrix.
+- Physical devices (read-only, opportunistic): iPhone 17 Pro Max and Apple Watch Ultra 2 stayed
+  `available (paired)` in `devicectl` with only `CoreSimulator` symlinked. The wider
+  `~/Library/Developer` symlink FB12363725 needs was deliberately not performed.
+- **Restore ran and passed.** `CoreSimulator` is a real directory again (9.1 GB, original mtime),
+  `~/CoreSimulator-real` gone, the three real devices back with their original UUIDs, runtimes
+  unchanged, 0 unavailable, `doctor` showing only the two pre-existing findings. One deviation
+  from the runbook, taken for safety: the `Apple Watch Ultra 3` was found `Booted` (stale since
+  2026-09-07 21:02, no Xcode/Simulator running), so it was `simctl shutdown`-ed before the swap
+  rather than left running through a `CoreSimulatorService` kill, and booted again afterwards to
+  match the baseline.
+- Follow-up (small): the E9 script's `DeveloperDiskImages` check prints "real directory (as
+  required)" when the path does not exist at all (`[ -L ]` is false for a missing path). Not a
+  rule-7 violation — nothing was symlinked — but the check should test existence first.
+  `~/Library/Developer/DeveloperDiskImages` does not exist on Xcode 26.5 here.
+
 ## In flight
 
 - Nothing running. 67 tests green.
@@ -143,10 +180,12 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
   `noowners`. The physical yank for E6 still needs hands on the Mac.
-- **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5) — scheduled for a fresh session.**
-  Full self-contained runbook: `docs/process/RUNBOOK-E9-symlink-coresimulator.md`. User
-  authorized running it on their own account (not a scratch account) on 2026-09-08 — "o
-  CoreSimulator se refaz se for necessário". No `sudo` needed; mandatory restore step either way.
+- **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5): done (2026-09-08) — the reported
+  failure did NOT reproduce.** See Session 5 below. Rule 7 / ADR-0004 unchanged. Still pending
+  and explicitly out of scope for that runbook: the `~/Library/Developer`-wide symlink that
+  FB12363725 actually requires (forbidden by rule 7 — it would move `DeveloperDiskImages`), the
+  Xcode.app GUI (only `xcodebuild` was exercised), Apple Silicon, and any iCloud-Drive-signed-in
+  configuration.
 - **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. `/Library/Developer/
   xcv-probe` removed by the user with sudo, confirmed gone.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
