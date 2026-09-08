@@ -351,6 +351,15 @@ those entries "pending — manual" until someone actually runs and records the r
   consumed as a window-focus click. The first "New Folder" tap produced nothing and looked like a
   reproduction of the bug; repeating the identical tap created the folder. A less careful run
   would have recorded a false positive for H5.
+- **Secondary finding (product-relevant): the symlink leaves a shadow directory behind.** After a
+  restore that verified clean, `~/CoreSimulator-real` was found recreated minutes later with an
+  empty `Devices/` — CoreSimulator had cached the *resolved* target path (visible earlier in the
+  run, where `simctl get_app_container` returned a `~/CoreSimulator-real/...` path) and its
+  restarted service recreated the skeleton there. Empty and harmless here, and removed with
+  `rmdir` after confirming the real directory still held all three device UUIDs. It is a concrete
+  instance of the rule-6 shadow/duplicate failure mode with no external volume involved, and
+  suggests a `doctor` rule for "a CoreSimulator-shaped directory exists outside
+  `~/Library/Developer`".
 
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 

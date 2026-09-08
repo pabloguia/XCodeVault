@@ -167,10 +167,24 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   2026-09-07 21:02, no Xcode/Simulator running), so it was `simctl shutdown`-ed before the swap
   rather than left running through a `CoreSimulatorService` kill, and booted again afterwards to
   match the baseline.
-- Follow-up (small): the E9 script's `DeveloperDiskImages` check prints "real directory (as
-  required)" when the path does not exist at all (`[ -L ]` is false for a missing path). Not a
-  rule-7 violation — nothing was symlinked — but the check should test existence first.
-  `~/Library/Developer/DeveloperDiskImages` does not exist on Xcode 26.5 here.
+- **Post-restore residue — a real shadow directory, worth a `doctor` rule.** The restore
+  correctly removed `~/CoreSimulator-real`, but a final independent check found it *recreated*
+  minutes later, holding an empty `Devices/` (0 KB, nothing open under it). Cause: the restore's
+  `pkill CoreSimulatorService` was followed by the service restarting and recreating the skeleton
+  at the **resolved** path it had cached while the symlink was live — consistent with step 6,
+  where `simctl get_app_container` returned a path under `~/CoreSimulator-real` rather than under
+  `~/Library/Developer/CoreSimulator`. Verified the real directory still held all three device
+  UUIDs plus `device_set.plist` before touching anything, then removed the leftover with `rmdir`
+  (not `rm -rf`) so it would refuse if anything were inside. This is a concrete, external-volume-
+  free instance of the rule-6 shadow/duplicate failure mode: **consider a `doctor` rule for
+  "a CoreSimulator-shaped directory exists outside `~/Library/Developer`"**, alongside the
+  existing mac-ssd-rescue-leftovers rule.
+- Follow-up (small, fixed in this commit): the E9 script's `DeveloperDiskImages` check printed
+  "real directory (as required)" when the path does not exist at all (`[ -L ]` is false for a
+  missing path). Not a rule-7 violation — nothing was symlinked — but the check now tests
+  existence first. `~/Library/Developer/DeveloperDiskImages` does not exist on Xcode 26.5 here.
+- Not ours, left alone: `/tmp/xcv-e9-runbook-test.log` (13:17, a `swift test` log predating this
+  session — presumably from writing the runbook earlier today).
 
 ## In flight
 

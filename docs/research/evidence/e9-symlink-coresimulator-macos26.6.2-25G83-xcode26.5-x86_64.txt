@@ -376,3 +376,33 @@ SCRIPT WORDING DEFECT (recorded for honesty): the automated check above prints "
 test is false for a missing path, so it falls into the else branch. Not a rule-7 violation
 (nothing was symlinked), but the message is misleading and the check should test existence
 first.
+
+############################################################
+# Experiment: E9 post-restore observation — the symlink leaves a shadow directory behind
+# Date: 2026-09-08 (found during the final state check, after step 9/10 reported success)
+
+The restore step (step 9) removed ~/CoreSimulator-real by `mv`-ing it back into place, and its
+own verification correctly printed "CoreSimulator-real gone (good)". A final independent check a
+few minutes later found the path had been **recreated**:
+
+  drwxr-xr-x  3 <user>  staff  96 Sep  8 15:33 ~/CoreSimulator-real
+  └── Devices/          (empty, 0 KB, nothing open under it per `lsof +D`)
+
+Timeline: the restore ran just before 15:33 and included `pkill -9 CoreSimulatorService`. The
+service restarted and recreated the `Devices/` skeleton at the path it had been using while the
+symlink was in place — i.e. CoreSimulator had cached the *resolved* target path, not the symlink
+path. (Consistent with step 6's own output, where `simctl get_app_container` returned a path
+under ~/CoreSimulator-real rather than under ~/Library/Developer/CoreSimulator.)
+
+Verified before touching it: the real ~/Library/Developer/CoreSimulator/Devices still held all
+three real device UUIDs plus device_set.plist; the leftover held no devices and no data. Removed
+with `rmdir` (not `rm -rf`) precisely so that it would refuse if anything unexpected were inside.
+Devices re-listed correctly afterwards.
+
+WHY THIS MATTERS FOR THE PRODUCT: this is a small, concrete instance of the shadow/duplicate
+directory failure mode that NON_GOALS_AND_SAFETY.md rule 6 exists for, produced by an ordinary
+symlink swap plus a service restart — with no external volume involved at all. It is empty and
+harmless here, but it shows the mechanism is real: CoreSimulator can keep writing to a resolved
+path after the indirection is removed. A `doctor` rule for "a CoreSimulator-shaped directory
+exists outside ~/Library/Developer" would have caught it. Worth considering alongside the
+existing mac-ssd-rescue-leftovers rule.
