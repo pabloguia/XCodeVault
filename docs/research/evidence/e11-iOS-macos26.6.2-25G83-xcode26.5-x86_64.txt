@@ -1,0 +1,75 @@
+# Experiment: E8b/E11: runtime export of iOS to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS with internal staging monitor (floor 3072 MB)
+# Date: 2026-09-08T09:42:55Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+## preflight
+$ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime export iOS --to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS --preflight
+! Observed on Xcode 26.5 (E11): `-downloadPlatform -exportPath` downloads, INSTALLS the runtime on the internal volume, then exports a copy. Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`.
+preflight OK
+[exit=0]
+
+internal free at start: 21391 MB; library volume free: 344548 MB
+t=   5s internal_free=  21390 MB (Δ     +0 MB)  library_free=  344548 MB (Δ     +0 MB)  staging dirs: 0
+t=  10s internal_free=  21390 MB (Δ     +0 MB)  library_free=  334442 MB (Δ -10106 MB)  staging dirs: 0
+t=  15s internal_free=  21390 MB (Δ     +0 MB)  library_free=  334442 MB (Δ -10106 MB)  staging dirs: 0
+t=  20s internal_free=  21390 MB (Δ     +0 MB)  library_free=  334442 MB (Δ -10106 MB)  staging dirs: 0
+t=  25s internal_free=  21390 MB (Δ     +0 MB)  library_free=  334442 MB (Δ -10106 MB)  staging dirs: 0
+t=  30s internal_free=  21389 MB (Δ     -1 MB)  library_free=  334442 MB (Δ -10106 MB)  staging dirs: 0
+--- export log ---
+! Observed on Xcode 26.5 (E11): `-downloadPlatform -exportPath` downloads, INSTALLS the runtime on the internal volume, then exports a copy. Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`.
+Downloading iOS runtime installer to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS … (this can take a long time; output appears when xcodebuild finishes)
+Finding content...
+Automatically resolved architecture variant for platform iOS as 'universal'.
+Exported 'com.apple.CoreSimulator.SimRuntime.iOS-26-5' to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle
+iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE
+
+Done. Installers now in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS:
+  10,6 GB  iphonesimulator_26.5_23F77.exportedBundle
+export exit=0
+peak internal consumption during export: 1 MB; killed=0
+## library afterwards
+$ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS'
+total 0
+drwxr-xr-x@   3 <user>  staff    96 Sep  8 06:43 .
+drwx------  179 <user>  staff  5728 Sep  8 06:42 ..
+drwxr-xr-x@   4 <user>  staff   128 Sep  8 06:43 iphonesimulator_26.5_23F77.exportedBundle
+Installers in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS:
+  10,6 GB    iOS       26.5    iphonesimulator_26.5_23F77.exportedBundle
+
+Installed runtimes:
+  iphone    26.5    10,6 GB  installer in library ✓ (can be offloaded)
+  watch     26.5    5,24 GB  NO installer in library — export first
+[exit=0]
+
+## runtime registry afterwards
+$ sh -c xcrun simctl runtime list; du -sk /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 90F2566D-F038-4CF6-A8FF-0A9CC9C1F0BE (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+10348880	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
+5119360	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
+[exit=0]
+
+## any stranded downloads?
+$ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
+ls: ~/Library/Caches/com.apple.dt.Xcode/Downloads: No such file or directory
+/Library/Developer/CoreSimulator/Cryptex/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Sep  7 18:37 .
+drwxr-xr-x@ 5 root  admin  160 Jul 23  2025 ..
+
+/Library/Developer/CoreSimulator/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Sep  7 18:37 .
+drwxr-xr-x@ 5 root  admin  160 Sep  8 06:40 ..
+[exit=1]
+

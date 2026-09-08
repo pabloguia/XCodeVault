@@ -1,0 +1,89 @@
+# Experiment: E8b/E11: runtime export of import-iOSSimulatorRuntime_Cryptex to /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore with internal staging monitor (floor 3072 MB)
+# Date: 2026-09-08T09:45:16Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+## preflight
+$ ~/projects/XCodeVault/.build/debug/xcodevaultctl runtime import /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore/iOSSimulatorRuntime_Cryptex.dmg --preflight
+preflight OK
+[exit=0]
+
+internal free at start: 36015 MB; library volume free: 334442 MB
+t=   5s internal_free=  36020 MB (Δ     +4 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  10s internal_free=  29029 MB (Δ  -6985 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  15s internal_free=  25909 MB (Δ -10105 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  20s internal_free=  25909 MB (Δ -10105 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  25s internal_free=  25910 MB (Δ -10104 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  30s internal_free=  25910 MB (Δ -10104 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+t=  35s internal_free=  25911 MB (Δ -10104 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  40s internal_free=  25908 MB (Δ -10106 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  45s internal_free=  25907 MB (Δ -10107 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  50s internal_free=  25907 MB (Δ -10107 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  55s internal_free=  25907 MB (Δ -10107 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  60s internal_free=  25907 MB (Δ -10107 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  65s internal_free=  25911 MB (Δ -10103 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  70s internal_free=  25909 MB (Δ -10105 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  75s internal_free=  25909 MB (Δ -10105 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  80s internal_free=  25913 MB (Δ -10102 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  85s internal_free=  25910 MB (Δ -10104 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  90s internal_free=  25909 MB (Δ -10106 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t=  95s internal_free=  25908 MB (Δ -10106 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t= 100s internal_free=  25908 MB (Δ -10106 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t= 105s internal_free=  25906 MB (Δ -10108 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t= 110s internal_free=  25904 MB (Δ -10110 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 1
+t= 115s internal_free=  25906 MB (Δ -10109 MB)  library_free=  334442 MB (Δ     +0 MB)  staging dirs: 0
+--- export log ---
+Importing /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore/iOSSimulatorRuntime_Cryptex.dmg … (installation stages on the internal volume)
+importing /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore/iOSSimulatorRuntime_Cryptex.dmg
+Registered as 34AF883C-5859-4A52-BA30-1BCB0A577DD2.
+
+import exit=0
+peak internal consumption during export: 10110 MB; killed=0
+## library afterwards
+$ sh -c ls -la '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore'; '~/projects/XCodeVault/.build/debug/xcodevaultctl' runtime library --dir '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore'
+total 20697712
+drwxr-xr-x@ 6 <user>  staff          192 Aug  6 14:58 .
+drwxr-xr-x@ 4 <user>  staff          128 Sep  8 06:43 ..
+-r--r--r--@ 1 <user>  staff        23910 Aug  6 14:58 BuildManifest.plist
+drwxr-xr-x@ 5 <user>  staff          160 Aug  6 14:58 Firmware
+-r--r--r--@ 1 <user>  staff         1307 Aug  6 14:58 Restore.plist
+-rw-r--r--@ 1 <user>  staff  10597197700 Aug  6 15:05 iOSSimulatorRuntime_Cryptex.dmg
+Installers in /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-RuntimeLibrary-iOS/iphonesimulator_26.5_23F77.exportedBundle/Restore:
+  10,6 GB    ?         ?       iOSSimulatorRuntime_Cryptex.dmg
+
+Installed runtimes:
+  iphone    26.5    10,6 GB  NO installer in library — export first
+  watch     26.5    5,24 GB  NO installer in library — export first
+[exit=0]
+
+## runtime registry afterwards
+$ sh -c xcrun simctl runtime list; du -sk /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 34AF883C-5859-4A52-BA30-1BCB0A577DD2 (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+
+Total Disk Images: 2 (14.8G)
+4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+4	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
+5119360	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
+[exit=0]
+
+## any stranded downloads?
+$ sh -c ls -la /Library/Developer/CoreSimulator/Cryptex/Images/Inbox /Library/Developer/CoreSimulator/Images/Inbox ~/Library/Caches/com.apple.dt.Xcode/Downloads 2>&1
+ls: ~/Library/Caches/com.apple.dt.Xcode/Downloads: No such file or directory
+/Library/Developer/CoreSimulator/Cryptex/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Sep  8 06:45 .
+drwxr-xr-x@ 5 root  admin  160 Jul 23  2025 ..
+
+/Library/Developer/CoreSimulator/Images/Inbox:
+total 0
+drwxr-xr-x  2 root  admin   64 Sep  8 06:47 .
+drwxr-xr-x@ 6 root  admin  192 Sep  8 06:47 ..
+[exit=1]
+

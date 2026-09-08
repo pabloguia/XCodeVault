@@ -233,6 +233,50 @@ those entries "pending — manual" until someone actually runs and records the r
   (superseded — filenames were later overwritten by the 2026-09-07 run's evidence of the same name).
 - Functional checks: not reached.
 
+### E8 import — larger image (iOS, real in-use devices) — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-08
+- Hypothesis reference: H4, E11
+- Test performed: same export → offload → import → functional-probe pattern as the tvOS E8c
+  run, but against the machine's real, already-installed iOS 26.5 runtime (10.35 GB) — the
+  runtime the user's own MySmokeiOS project actively uses — run manually (not via
+  `e8c-import-roundtrip.sh`, which is tvOS-hardcoded and unconditionally deletes the runtime +
+  runs `simctl delete unavailable` at the end; both are wrong for a runtime that must stay
+  installed). Two real devices were present and in use: `iPhone 17 Pro Max` (booted, gracefully
+  shut down first) and `iPhone SE (3rd generation)` (shutdown). A throwaway `xcv-probe-ios`
+  device (distinct name, not touching the real ones) was used for the boot probe; no blanket
+  `simctl delete unavailable` was ever run.
+- Result: **pass.**
+  - Export: peak internal consumption **1 MB** — since iOS 26.5 was already installed,
+    `-downloadPlatform iOS -exportPath` just copied the sealed image out; no re-download,
+    no install, no Inbox residue. This differs from the tvOS case (which needed a fresh
+    download+install) and refines H4: export cost depends on whether the platform is already
+    installed.
+  - Offload: freed the runtime (`Total Disk Images: 1`); both real devices moved to
+    `Unavailable: com.apple.CoreSimulator.SimRuntime.iOS-26-5` — listed, not deleted, UDIDs
+    unchanged.
+  - Import: peak **10.110 GB for a 10.35 GB image (≈1.0×)** — consistent with the tvOS
+    ≈0.98–1.18× range, confirming the tightened preflight formula
+    (`RuntimeOperations.preflightImport`, 1.5×+2GB) holds for a much larger image too; no code
+    change needed. `simctl runtime verify`: "Signature verified, signature is valid."
+  - **Both real devices returned to normal `Shutdown` state automatically** once the
+    same-version runtime was reimported — no manual recreation, no data loss, despite the
+    runtime getting a new internal identifier (`90F2566D…` → `34AF883C…`). CoreSimulator
+    rebinds existing devices by OS version, not by the ephemeral runtime UUID.
+  - Functional probe: throwaway device created, booted (`simctl list devices` confirmed
+    `Booted`), shut down, deleted — all exit 0. **Gotcha:** `simctl bootstatus -b` itself hung
+    reporting a non-terminal `Data Migration` status for several minutes after the device had
+    actually finished booting; worked around by polling `simctl list devices` state directly
+    instead of trusting `bootstatus`'s own termination. Not a runtime/import defect — `simctl
+    bootstatus` is not used anywhere in product code (`Sources/`), only in the experiment
+    scripts, so this doesn't affect `xcodevaultctl` itself.
+- Evidence: `../research/evidence/e11-iOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
+  `../research/evidence/e11-import-iOSSimulatorRuntime_Cryptex-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Verdict: import mechanism **verified safe against a large, real, in-use runtime** — the
+  offload→import round trip does not lose devices or data even when the runtime being cycled
+  is the one actively backing the user's own development devices. Confirms the preflight
+  formula generalizes beyond the single tvOS data point.
+
 ### E7 shadow-data defense — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
 
 - Date tested: 2026-09-07

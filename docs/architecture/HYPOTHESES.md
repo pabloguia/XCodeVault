@@ -103,6 +103,22 @@ docs: `-downloadPlatform`/`-downloadAllPlatforms` with `-exportPath`, then
 documented, undermanaged cache. Still unverified: whether `IDECustomDerivedDataLocation`
 / `IDEBuildLocationStyle` key names are current for Xcode 16/26 (2016-era source).
 Evidence: `docs/research/evidence/e8c-import-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
+**Re-run against a much larger image, iOS 26.5 (10.35 GB), on 2026-09-08: confirms the ratio
+holds.** Export was near-free (1 MB peak — the runtime was already installed, so `-exportPath`
+just copied the sealed image out, no re-download/re-install); offload freed the runtime and
+left the two real, in-use devices on it (`iPhone 17 Pro Max`, `iPhone SE (3rd gen)`) in
+`Unavailable` state (not deleted); import peak was **10.110 GB for a 10.35 GB image (≈1.0×,
+matching the tvOS ≈0.98–1.18× range)**, `simctl runtime verify` passed, and — critically — the
+two real devices came back to normal `Shutdown` state **automatically** once the same-version
+runtime was reimported, with zero data loss and no manual recreation. The throwaway probe
+device booted successfully (confirmed via `simctl list devices` state), but **`simctl
+bootstatus -b` itself hung** reporting a non-terminal `Data Migration` status for several
+minutes after the device had actually reached `Booted` — a monitoring-tool gotcha, not a
+runtime/import defect (worked around by polling device state directly instead of trusting
+`bootstatus`'s exit). Evidence:
+`docs/research/evidence/e11-iOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
+`docs/research/evidence/e11-import-iOSSimulatorRuntime_Cryptex-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
 Gate: E8 — closed.
 
 ## H5 — Symlink indirection breaks the Simulator even on the same disk *(new)*

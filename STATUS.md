@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-07 (session 3). This file is the hand-off for the next session or a
+_Last updated: 2026-09-08 (session 4). This file is the hand-off for the next session or a
 post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
@@ -112,6 +112,29 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   with sudo, to clean up:**
   `sudo chflags nouchg /Library/Developer/xcv-probe && sudo rm -rf /Library/Developer/xcv-probe`.
 
+## Session 4 (2026-09-08, E8 import round trip repeated against the real, in-use iOS runtime)
+
+- **E8 import re-validated against a much larger, real, in-use image (iOS 26.5, 10.35 GB):
+  pass.** Confirms the tightened preflight formula (1.5×+2GB) generalizes: import peak was
+  10.110 GB (≈1.0×), matching the tvOS ≈0.98–1.18× range. No code change needed.
+- **Real devices survive the round trip.** `iPhone 17 Pro Max` and `iPhone SE (3rd gen)` — the
+  user's actual MySmokeiOS dev devices, one of them booted at the time — were marked
+  `Unavailable` (not deleted) the moment the iOS runtime was offloaded, and came back to normal
+  `Shutdown` state **automatically** once the same-version runtime was reimported. Zero data
+  loss, nothing recreated. `e8c-import-roundtrip.sh` was NOT reused as-is (it's tvOS-specific
+  and unconditionally deletes the runtime + runs `simctl delete unavailable` at the end — both
+  wrong here); ran the steps manually with a distinctly-named throwaway device
+  (`xcv-probe-ios`) instead.
+- **Gotcha found:** `simctl bootstatus -b` hung reporting a non-terminal `Data Migration`
+  status for several minutes after the probe device had actually finished booting (confirmed
+  via `simctl list devices` directly). Not a product defect — `bootstatus` isn't used anywhere
+  in `Sources/`, only in the tvOS experiment script.
+- Freed 5.31 GB of DerivedData first (pre-authorized category) to get comfortable headroom
+  before the export; this deleted the user's own MySmokeiOS DerivedData too (expected/
+  regenerable — their next build there will be a full build).
+- `HYPOTHESES.md` H4, `COMPATIBILITY_MATRIX.md` (new entry), `FINDINGS-2026-09-05.md` updated.
+  Everything created on the USB volume removed; no vault registered.
+
 ## In flight
 
 - Nothing running. 67 tests green.
@@ -125,10 +148,9 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
   `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
-- **Import half of E8 — done (2026-09-07), pass.** See Session 3 above and
-  `docs/process/RUNBOOK-E8-import-roundtrip.md` for the executed procedure. Only tvOS (~4.9 GB)
-  was exercised; the same round trip on a larger image (iOS, ~10 GB) is still open if it matters
-  for the preflight formula.
+- **Import half of E8 — done (2026-09-07, tvOS; 2026-09-08, iOS 10.35 GB), pass both times.**
+  See Session 3 and Session 4 above and `docs/process/RUNBOOK-E8-import-roundtrip.md` for the
+  tvOS procedure. Preflight formula confirmed against two very different image sizes.
 - GitHub remote/CI: repo has no remote; do not create one without the user.
 
 ## Next three actions
