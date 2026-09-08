@@ -52,8 +52,13 @@ Defects to learn from, each of which is a requirement for us:
 - **`$HOME`-only.** It never touches `/Library/Developer`, so on Xcode 15+ it never
   reaches the runtimes that actually hold the gigabytes — while its README claims the
   CoreSimulator row covers "Simulator runtimes, 5-20 GB".
-- **The CoreSimulator symlink it creates is a documented-broken configuration** (Jeff
-  Johnson, Aug 2025 — breaks the Simulator's Files app even same-disk). See H5.
+- **The CoreSimulator symlink it creates is an unsupported configuration.** Jeff Johnson
+  (Aug 2025) reported it breaking the Simulator's Files app even same-disk; E9 (2026-09-08)
+  could **not** reproduce that on macOS 26.6.2 / Xcode 26.5, so do not repeat it as
+  established fact. E9 did confirm the layout leaves **shadow device sets** behind, because
+  CoreSimulator caches the resolved target path — and on this machine the tool's own
+  leftovers under `/Volumes/<disk>/mac-ssd-rescue/CoreSimulator/Devices` hold duplicates of
+  every real device. See H5 and the E9 entry in `../architecture/COMPATIBILITY_MATRIX.md`.
 
 ## What we take from it
 

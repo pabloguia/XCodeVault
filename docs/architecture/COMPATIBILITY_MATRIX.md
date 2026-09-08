@@ -357,9 +357,13 @@ those entries "pending — manual" until someone actually runs and records the r
   run, where `simctl get_app_container` returned a `~/CoreSimulator-real/...` path) and its
   restarted service recreated the skeleton there. Empty and harmless here, and removed with
   `rmdir` after confirming the real directory still held all three device UUIDs. It is a concrete
-  instance of the rule-6 shadow/duplicate failure mode with no external volume involved, and
-  suggests a `doctor` rule for "a CoreSimulator-shaped directory exists outside
-  `~/Library/Developer`".
+  instance of the rule-6 shadow/duplicate failure mode with no external volume involved. The
+  `doctor` rule it suggested is now implemented as `shadow-coresimulator`
+  (`Doctor.checkShadowCoreSimulatorRoots`): `.error` when the shadow set holds devices or a
+  `device_set.plist`, `.warning` for an empty skeleton, detection only. Running it against this
+  machine also surfaced a pre-existing case the mac-ssd-rescue rule only saw the parent of:
+  `/Volumes/<vault>/mac-ssd-rescue/CoreSimulator/Devices` holds duplicates of all three real
+  device UUIDs plus a `device_set.plist`.
 
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 

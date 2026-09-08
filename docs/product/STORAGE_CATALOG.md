@@ -80,10 +80,13 @@ The category list above was written from the original brief. Research
 - **`-architectureVariant arm64`** materially shrinks runtime downloads on Apple
   Silicon. Surface this as a first-class recommended action; it is free savings that
   requires no relocation at all.
-- **CoreSimulator has no safe symlink strategy** — symlinking
-  `~/Library/Developer/CoreSimulator` breaks the Simulator's Files app even when the
-  target is on the same internal disk (H5). Do not offer `symlinkRelocation` for this
-  category at any risk level until E9 says otherwise.
+- **CoreSimulator has no symlink strategy** — do not offer `symlinkRelocation` for this
+  category at any risk level. **This is unconditional** (CLAUDE.md rule 7); it is not
+  waiting on an experiment. E9 ran on 2026-09-08 and could **not** reproduce the Aug 2025
+  report that symlinking `~/Library/Developer/CoreSimulator` breaks the Simulator's Files
+  app (H5), so do not restate that as fact — but E9 did show the layout leaves shadow
+  device sets behind, because CoreSimulator caches the resolved target path. The rule
+  stands on "unverified, and known to produce shadow data".
 - **`~/Library/Developer/DeveloperDiskImages` is `neverMove`** — it must remain a real
   directory (FB12363725). `~/Library/Developer` itself is `neverMove` as a whole.
 - **Staging space is a category concern**: installing a 9–12 GB runtime reportedly needs

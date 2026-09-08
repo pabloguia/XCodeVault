@@ -26,10 +26,17 @@ detailed version — expand on rationale here, keep CLAUDE.md as the terse check
   category as an independent unit with its own strategy.
 - Symlink `~/Library/Developer/DeveloperDiskImages` — it must remain a real directory.
 - Symlink `~/Library/Developer/CoreSimulator` at **any** risk level, including with the
-  target on the same internal disk: this breaks Simulator subsystems (Files app cannot
-  share, save, or create folders). Reported Aug 2025; see H5 / research finding F3. The
-  prior art does exactly this — do not inherit it. Until E9 says otherwise,
-  CoreSimulator has **no** symlink-based strategy at all.
+  target on the same internal disk. **This prohibition is unconditional** (CLAUDE.md rule 7):
+  CoreSimulator has **no** symlink-based strategy at all. The prior art does exactly this —
+  do not inherit it.
+  E9 has now run (2026-09-08) and this is deliberately *not* a lapsed condition. It could
+  **not** reproduce the Aug 2025 report of the Files app being unable to share, save, or
+  create folders (H5 / research finding F3) on macOS 26.6.2 / Xcode 26.5 — so do not repeat
+  that breakage as established fact. What E9 did show is that the layout leaves **shadow
+  device sets** behind: CoreSimulator caches the resolved target, so a restarted
+  `CoreSimulatorService` recreates and keeps writing to the old path (rule 6). The
+  prohibition therefore stands on "unverified, and known to produce shadow data" — a weaker
+  claim about the symptom, not a weaker rule.
 - Ship pre-macOS-14 compatibility code paths, and in particular never add a second,
   SMJobBless-based privileged-helper implementation (ADR-0001). An untestable
   privileged code path is worse than an unsupported OS.

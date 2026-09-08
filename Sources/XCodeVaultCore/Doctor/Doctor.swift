@@ -33,8 +33,12 @@ public struct Doctor: Sendable {
 
     public func diagnose(report: ScanReport) -> [Finding] {
         var f: [Finding] = []
-        f += checkForbiddenSymlinks()
+        // Computed once and shared: the shadow-root rule escalates when a live redirect is also
+        // present, because that is the case where two device sets can take writes at the same time.
+        let forbidden = checkForbiddenSymlinks()
+        f += forbidden
         f += checkBrokenSymlinks()
+        f += checkShadowCoreSimulatorRoots(volumes: report.volumes, forbiddenSymlinks: forbidden)
         f += checkPriorToolLeftovers(volumes: report.volumes)
         f += checkFreeSpace(host: report.host)
         f += checkRuntimeRegistry(runtimes: report.runtimes)
@@ -60,7 +64,12 @@ public struct Doctor: Sendable {
             switch t {
             case "~/Library/Developer": why = "Breaks Xcode 15+ physical-device DDI discovery (FB12363725)."
             case "~/Library/Developer/CoreSimulator":
-                why = "Breaks the Simulator's Files app (share/save/create folder) even when the target is on the same disk (H5, Aug 2025 report)."
+                // Wording corrected after E9 (2026-09-08): we could NOT reproduce the Files-app
+                // breakage on macOS 26.6.2 / Xcode 26.5, so stating it as fact would be wrong.
+                // The path stays forbidden — the reason is "unverified and known to leave shadow
+                // data", not "proven to break".
+                why =
+                    "Unsupported redirect (this is what mac-ssd-rescue creates). CoreSimulator caches the resolved target, so this layout leaves shadow device sets behind (E9). An Aug 2025 report also describes the Simulator's Files app losing share/save/create-folder on this configuration; we could not reproduce that on macOS 26.6.2 / Xcode 26.5, so treat it as unverified rather than safe (H5)."
             case "~/Library/Developer/DeveloperDiskImages": why = "Must be a real directory for device support to work (FB12363725)."
             default: why = "This path must never be redirected wholesale."
             }
@@ -111,6 +120,242 @@ public struct Doctor: Sendable {
         return out
     }
 
+    /// A CoreSimulator device-set root sitting outside `~/Library/Developer/CoreSimulator`.
+    ///
+    /// This is the rule-6 shadow/duplicate failure mode, and it does not need an external volume
+    /// to happen: E9 (2026-09-08) produced one on the internal disk alone. CoreSimulator caches
+    /// the *resolved* target path while a symlink is in place — `simctl get_app_container`
+    /// returns the resolved path, not the symlinked one — so after the symlink is removed, a
+    /// restarted `CoreSimulatorService` can recreate the device-set skeleton at the old target
+    /// and keep writing there.
+    ///
+    /// Scope is deliberately bounded and differs per root: the home directory is scanned one
+    /// level deep (going deeper would walk every project directory on every `doctor` run), while
+    /// external volumes and disk images are scanned two levels deep, because the layout that
+    /// actually occurs in the wild puts the device set one level down —
+    /// `/Volumes/<disk>/mac-ssd-rescue/CoreSimulator`. Matching is by name, so an arbitrarily
+    /// named shadow root buried elsewhere is still missed; catching those would need a full
+    /// filesystem walk, which `doctor` must stay cheap enough to avoid.
+    ///
+    /// Known false negatives, deliberately accepted:
+    /// - A **symlink** whose target is a shadow set (e.g. `~/CoreSimulator-backup` → a real set)
+    ///   is skipped here, and is *not* picked up elsewhere either: `checkForbiddenSymlinks` only
+    ///   walks `CatalogRules.neverSymlink` and `checkBrokenSymlinks` only walks
+    ///   `~/Library/Developer`. This is a genuine gap, not a delegation.
+    /// - `/Volumes` is not itself a scanned root, so a set on a volume that `diskutil` does not
+    ///   enumerate — network mounts, or any volume whose `mountPoint` is nil — is invisible.
+    /// - The rule cannot tell a live set from a stale duplicate or a deliberate cold backup.
+    ///   That is why severity stops at `.error` unless a live redirect is also present.
+    /// - An *unreadable* hidden directory on a volume is passed over without a finding, so a set
+    ///   underneath one is missed. Readable hidden directories are still scanned.
+    /// - The depth cap of 2 means a set in the volume's Trash —
+    ///   `/Volumes/X/.Trashes/<uid>/CoreSimulator`, at depth 3 — is invisible. This one is not a
+    ///   deliberate stash: it is where a set lands when a user follows this rule's own
+    ///   `.holdsDevices` advice and removes the duplicate through Finder. The bytes are still on
+    ///   the disk and `doctor` will report clean. Worth fixing when the depth cap is revisited.
+    /// - The home scan is depth 1, so the same prior-tool layout pointed at an internal path
+    ///   (`~/mac-ssd-rescue/CoreSimulator`) is missed while the identical layout on a volume is
+    ///   caught. Deliberate asymmetry: descending the home directory would walk every project.
+    func checkShadowCoreSimulatorRoots(volumes: [Volume], forbiddenSymlinks: [Finding] = []) -> [Finding] {
+        let fm = FileManager.default
+        func resolved(_ p: String) -> String { URL(fileURLWithPath: p).resolvingSymlinksInPath().path }
+        let resolvedCanonical = resolved(home + "/Library/Developer/CoreSimulator")
+        var roots: [(path: String, scope: String, display: String, depth: Int)] = [(home, "home", "your home directory", 1)]
+        for v in volumes where v.isExternal || v.isDiskImage {
+            guard let mp = v.mountPoint else { continue }
+            roots.append((mp, v.id, v.volumeName, 2))
+        }
+
+        // A live redirect means the canonical path and the shadow set can both be taking writes
+        // right now, which is worse than any single stale copy. Computed once for all roots.
+        //
+        // Note for anyone tempted to "fix" the resolved-path guard below so this fires for
+        // mac-ssd-rescue: it deliberately does not. When `~/Library/Developer` is symlinked onto
+        // an external volume, the redirect *target* resolves to the canonical path and is
+        // excluded here on purpose — that layout is already reported by `checkForbiddenSymlinks`
+        // (`.critical`) and `checkPriorToolLeftovers`. Escalating it here too would double-report
+        // the same configuration.
+        let liveRedirect = forbiddenSymlinks.contains {
+            $0.id == "forbidden-symlink:~/Library/Developer/CoreSimulator" || $0.id == "forbidden-symlink:~/Library/Developer"
+        }
+
+        var out: [Finding] = []
+        for root in roots {
+            // Relative paths of everything to consider, at the depth this root allows.
+            // A root we cannot enumerate is reported rather than skipped: silence is precisely
+            // the failure mode this rule exists to prevent, and a volume that vanished between
+            // the scan and now is a disconnect event, not a clean bill of health.
+            guard let topLevel = try? fm.contentsOfDirectory(atPath: root.path) else {
+                out.append(
+                    Finding(
+                        id: "shadow-coresimulator-unscannable:\(root.scope)", severity: .warning,
+                        title: "Could not scan \(root.display) for stray CoreSimulator device sets",
+                        detail:
+                            "\(root.path) could not be enumerated (permissions). This rule reports nothing about that location — treat it as unknown, not as clean. Note it does NOT catch a volume that merely went away: an unmounted mount point that is still a readable empty directory enumerates fine and produces no finding at all.",
+                        path: root.path,
+                        remediation: "Re-run `xcodevaultctl doctor` with the volume mounted and readable. If it stays unreadable, inspect it manually before assuming no shadow data is there.",
+                        evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
+                continue
+            }
+            var relatives = topLevel.sorted()
+            if root.depth >= 2 {
+                // Hidden directories ARE descended into. The noise problem they caused is about
+                // *reporting*, not scanning: every external volume carries root-owned macOS
+                // metadata stores (`.Spotlight-V100`, `.DocumentRevisions-V100`, `.TemporaryItems`,
+                // `.Trashes`, `.fseventsd`, …) that this process cannot read, and announcing each
+                // as "could not scan" every run is unactionable noise. Suppressing the finding
+                // rather than the readdir costs one extra listing per hidden top-level directory
+                // and keeps coverage of the readable ones — a set at `/Volumes/X/.stash/…` is
+                // still found. A deny-list of known stores was rejected: that set is not closed,
+                // so every macOS release would be a latent noise regression discovered on a
+                // user's machine.
+                for parent in relatives {
+                    var isDir: ObjCBool = false
+                    guard fm.fileExists(atPath: root.path + "/" + parent, isDirectory: &isDir), isDir.boolValue else { continue }
+                    // Same principle as the root guard above: an unreadable intermediate directory
+                    // would otherwise swallow a whole device set one level below it and report
+                    // nothing at all, which is the silence this rule exists to prevent.
+                    guard let children = try? fm.contentsOfDirectory(atPath: root.path + "/" + parent) else {
+                        // An unreadable *hidden* directory is almost certainly a macOS metadata
+                        // store this process was never meant to read. Reporting it teaches the
+                        // user to ignore this rule's findings, which is worse than the coverage
+                        // it buys.
+                        if parent.hasPrefix(".") { continue }
+                        out.append(
+                            Finding(
+                                id: "shadow-coresimulator-unscannable:\(root.scope):\(parent)", severity: .warning,
+                                title: "Could not scan \(parent) on \(root.display) for stray CoreSimulator device sets",
+                                detail:
+                                    "\(root.path)/\(parent) could not be enumerated (permissions). Anything below it — including a whole CoreSimulator device set — is invisible to this check. Treat it as unknown, not as clean.",
+                                path: root.path + "/" + parent,
+                                remediation: "Inspect it as a user who can read it before assuming no shadow data is there, then re-run `xcodevaultctl doctor`.",
+                                evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
+                        continue
+                    }
+                    relatives.append(contentsOf: children.sorted().map { parent + "/" + $0 })
+                }
+            }
+            for name in relatives where (name as NSString).lastPathComponent.lowercased().contains("coresimulator") {
+                let candidate = root.path + "/" + name
+                // Compare *resolved* paths, not strings: a volume or an aliased parent in the
+                // chain (e.g. a root containing `dev -> ~/Library/Developer`) otherwise makes the
+                // real device set report itself as its own shadow, which would tell the user
+                // their live data is a duplicate.
+                guard resolved(candidate) != resolvedCanonical else { continue }
+                // Only real directories. A symlink at this name is a different problem and is
+                // already covered by checkForbiddenSymlinks / checkBrokenSymlinks.
+                var st = stat()
+                guard lstat(candidate, &st) == 0, (st.st_mode & S_IFMT) == S_IFDIR else { continue }
+                // The `Devices` subdirectory is what makes this CoreSimulator-shaped rather than
+                // an unrelated folder that happens to be named after it. `lstat`, not
+                // `fileExists`: the latter follows symlinks, and a symlinked `Devices` pointing at
+                // an empty directory would otherwise be classified as removable residue — while
+                // the `rmdir` that advice names returns ENOTDIR on a symlink.
+                var dst = stat()
+                guard lstat(candidate + "/Devices", &dst) == 0, (dst.st_mode & S_IFMT) == S_IFDIR else { continue }
+
+                // A failed listing must NEVER be read as "empty". `try?` here would turn an
+                // EPERM/EACCES on a root-owned set (external volume with owners enabled, or a
+                // TCC-protected path) into an empty array, i.e. report real shadow data as
+                // harmless residue and offer to delete it. Keep the distinction.
+                let deviceEntries = try? fm.contentsOfDirectory(atPath: candidate + "/Devices")
+                let rootEntries = try? fm.contentsOfDirectory(atPath: candidate)
+                // Device directories are UUID-named (36 chars, hyphenated). Dotfiles are skipped
+                // so a stray .DS_Store never reads as "this holds devices".
+                let udids = (deviceEntries ?? []).filter { $0.count == 36 && $0.contains("-") && !$0.hasPrefix(".") }
+                let hasDeviceSet = (deviceEntries ?? []).contains("device_set.plist")
+                // Residue is only residue when the whole root is nothing but a genuinely empty
+                // `Devices`. Two separate traps here:
+                //  - a root whose `Devices` is empty but which still holds `Caches` (the dyld
+                //    cache alone is multi-GB), `Temp`, `Runtimes`… is not removable;
+                //  - `Devices` itself may hold entries that are not UUID-shaped — a restored
+                //    device under a hand-given name, or just a `.DS_Store` from a Finder visit,
+                //    which is the likely state of any set on a drive somebody has browsed.
+                // Both are checked on the *unfiltered* listings, because `rmdir` refuses over a
+                // `.DS_Store` too: the advice must not promise what the tool cannot deliver.
+                // Dot entries are NOT filtered out here. `rootIsOnlyDevices` below counts them and
+                // `rmdir` refuses over them, so a message that drops them would say "not empty
+                // either — ." and name nothing. That is not hypothetical: a real CoreSimulator
+                // root carries `.metadata_never_index`, so the recreated skeleton this rule exists
+                // to catch lands in exactly that state. Naming nothing sends the user to Finder,
+                // which hides dotfiles, to conclude the tool is wrong and reach for `rm -rf`.
+                let siblings = (rootEntries ?? []).filter { $0 != "Devices" }
+                let rootIsOnlyDevices = (rootEntries ?? []).allSatisfy { $0 == "Devices" }
+                let devicesIsTrulyEmpty = (deviceEntries ?? []).isEmpty
+
+                enum Shape { case unreadable, holdsDevices, otherContent, pureResidue }
+                let shape: Shape =
+                    deviceEntries == nil || rootEntries == nil
+                    ? .unreadable
+                    : (!udids.isEmpty || hasDeviceSet)
+                        ? .holdsDevices
+                        : (rootIsOnlyDevices && devicesIsTrulyEmpty) ? .pureResidue : .otherContent
+
+                let severity: Finding.Severity
+                let detail: String
+                let remediation: String
+                switch shape {
+                case .unreadable:
+                    // The case we know least about, so it escalates on the same signal as a
+                    // populated set: an unreadable shadow root next to a live redirect could be
+                    // anything, including a second set actively taking writes.
+                    severity = liveRedirect ? .critical : .error
+                    detail =
+                        "\(candidate) looks like a CoreSimulator device set, but its contents could not be read (permissions). It cannot be classified as empty residue or as live data, so it is reported at the higher severity on purpose."
+                        + (liveRedirect ? " A forbidden symlink under ~/Library/Developer is present at the same time." : "")
+                    // No shell command here either: the path would need escaping for volume names
+                    // containing spaces or quotes, which is the same trap the residue branch avoids.
+                    remediation =
+                        "Inspect the directory yourself before doing anything — list the contents of its `Devices` subdirectory as a user who can read it. Do not delete it: an unreadable directory is not an empty one."
+                case .holdsDevices:
+                    // Two device sets that can both take writes right now — the shadow set plus a
+                    // live redirect pointing simulator traffic away from the canonical path — is
+                    // materially worse than a stale duplicate sitting on a shelf.
+                    severity = liveRedirect ? .critical : .error
+                    detail =
+                        "\(candidate)/Devices holds "
+                        + (udids.isEmpty ? "a device_set.plist and no device directories" : "\(udids.count) device director\(udids.count == 1 ? "y" : "ies")\(hasDeviceSet ? " and a device_set.plist" : "")")
+                        + ". Either this is a live device set reached through a redirect — an unsupported configuration — or it is a stale duplicate left behind by one, or a deliberate cold backup. All three mean simulator state exists in two places, which is the shadow-data failure mode; this rule cannot tell them apart."
+                        + (liveRedirect
+                            ? " A forbidden symlink under ~/Library/Developer is present at the same time, so both sets can be taking writes right now — resolve that redirect first."
+                            : "")
+                    remediation =
+                        "Do not delete it yet. Compare it against ~/Library/Developer/CoreSimulator/Devices first — check which set `xcrun simctl list devices` actually reports, and confirm no path still points here. XCodeVault `verify` will diff the two in a later milestone."
+                case .otherContent:
+                    severity = .warning
+                    // Name what is actually there, on both levels. Saying only "not empty" invites
+                    // the user to go looking with `rm -rf`; saying exactly what is left does not.
+                    var leftovers: [String] = []
+                    if !siblings.isEmpty { leftovers.append("alongside `Devices`: " + siblings.sorted().joined(separator: ", ")) }
+                    let insideDevices = (deviceEntries ?? []).sorted()
+                    if !insideDevices.isEmpty { leftovers.append("inside `Devices`: " + insideDevices.joined(separator: ", ")) }
+                    detail =
+                        "\(candidate) holds no UUID-named devices and no device_set.plist, but it is not empty either — \(leftovers.joined(separator: "; ")). Not removable residue: CoreSimulator keeps multi-gigabyte caches next to the device set, a device may have been restored under a non-UUID name, and even a stray `.DS_Store` is enough for `rmdir` to refuse."
+                    remediation =
+                        "Inspect what remains before removing anything — `Caches` in particular can be several GB, and a non-UUID entry under `Devices` may still be a real device directory. Confirm what each item is rather than assuming it is junk."
+                case .pureResidue:
+                    severity = .warning
+                    detail =
+                        "\(candidate) contains nothing but an empty `Devices` directory. This is residue: CoreSimulator caches the resolved target path while a redirect is in place and can recreate the skeleton there after the redirect is gone (observed in E9)."
+                    // No copy-pasteable command on purpose. The path would need shell-escaping for
+                    // volume names containing quotes, and `report` redacts $HOME to a literal `~`,
+                    // which does not expand inside quotes — so an emitted command is the one thing
+                    // a user is most likely to copy and the most likely to be subtly wrong.
+                    remediation =
+                        "Empty as of this scan. Remove it with `rmdir` — never `rm -rf` — taking `Devices` first and then the directory itself; `rmdir` refuses a non-empty directory, so it cannot take data with it. If `rmdir` refuses, the directory is no longer empty: stop, and re-run `xcodevaultctl doctor` to see what appeared."
+                }
+
+                out.append(
+                    Finding(
+                        id: "shadow-coresimulator:\(root.scope):\(name)", severity: severity,
+                        title: "CoreSimulator device set outside ~/Library/Developer: \(name) in \(root.display)",
+                        detail: detail, path: candidate, remediation: remediation,
+                        evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
+            }
+        }
+        return out
+    }
+
     func checkPriorToolLeftovers(volumes: [Volume]) -> [Finding] {
         var out: [Finding] = []
         for v in volumes where v.isExternal || v.isDiskImage {
@@ -124,7 +369,7 @@ public struct Doctor: Sendable {
                         id: "prior-tool:mac-ssd-rescue:\(v.id)", severity: .warning,
                         title: "mac-ssd-rescue data found on \(v.volumeName)",
                         detail:
-                            "\(candidate) contains: \(contents.sorted().joined(separator: ", ")). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data with a documented-broken configuration (H5).",
+                            "\(candidate) contains: \(contents.sorted().joined(separator: ", ")). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (H5 — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind, see E9).",
                         path: candidate,
                         remediation: "Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone.",
                         evidence: "docs/process/PRIOR_ART.md"))

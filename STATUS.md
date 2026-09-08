@@ -176,9 +176,78 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   `~/Library/Developer/CoreSimulator`. Verified the real directory still held all three device
   UUIDs plus `device_set.plist` before touching anything, then removed the leftover with `rmdir`
   (not `rm -rf`) so it would refuse if anything were inside. This is a concrete, external-volume-
-  free instance of the rule-6 shadow/duplicate failure mode: **consider a `doctor` rule for
-  "a CoreSimulator-shaped directory exists outside `~/Library/Developer`"**, alongside the
-  existing mac-ssd-rescue-leftovers rule.
+  free instance of the rule-6 shadow/duplicate failure mode. **The `doctor` rule this suggested
+  is now implemented** — see below.
+- **New `doctor` rule `shadow-coresimulator` (implemented this session).**
+  `Doctor.checkShadowCoreSimulatorRoots` flags CoreSimulator device sets living outside
+  `~/Library/Developer/CoreSimulator`. `.error` when the set holds devices or a
+  `device_set.plist` (real duplicated state, remediation explicitly refuses to suggest deletion),
+  `.warning` when it is an empty skeleton (remediation offers `rmdir`, which cannot take data
+  with it). Scans home 1 level deep and external volumes / disk images 2 levels deep — the
+  second level matters because the real-world layout is
+  `/Volumes/<disk>/mac-ssd-rescue/CoreSimulator`, which a top-level-only scan missed in the
+  first draft. Detection only; it never touches the filesystem.
+  Four shapes, because "could not read it" and "empty" must never collapse into one:
+  `.unreadable` (→ `.error`, refuses to suggest removal), `.holdsDevices` (→ `.error`, "do not
+  delete it yet"), `.otherContent` (→ `.warning`, names what is actually left), `.pureResidue`
+  (→ `.warning`, the only branch that mentions `rmdir`, and only when the root is nothing but a
+  genuinely empty `Devices`). Both `.unreadable` and `.holdsDevices` escalate to `.critical` when
+  a forbidden symlink co-exists, i.e. when two sets can be taking writes at once. A root that
+  cannot be enumerated emits its own `shadow-coresimulator-unscannable` finding rather than
+  passing silently. No copy-pasteable shell command is emitted anywhere: paths would need
+  escaping for volume names with quotes, and `report` redacts `$HOME` to a literal `~` that does
+  not expand inside quotes.
+  **Verified against this machine, not just fixtures:** it flags
+  `/Volumes/<vault>/mac-ssd-rescue/CoreSimulator` (3 devices + `device_set.plist`, 7.4 GB) as
+  `.error` — i.e. there is a duplicate copy of all three real simulator devices on the external
+  drive — and the deliberately recreated E9 residue as `.warning`. 18 new tests (85 total,
+  0 failures).
+  **Three independent review rounds, each REQUEST CHANGES, each finding a real defect of the same
+  class — a false "this is empty" claim on the one branch that invites deletion:**
+  (1) the residue branch checked only UUID-named entries, so a `Devices/` holding a `.DS_Store`
+  — the likely state of any set on a drive somebody has browsed in Finder — was announced as
+  "nothing but an empty Devices directory" and offered for `rmdir`; (2) the same branch used
+  `fileExists`, which follows symlinks, so a symlinked `Devices` reached it too and the suggested
+  `rmdir` would return `ENOTDIR`; (3) an unreadable directory below a volume root silently
+  swallowed a whole device set. All three are now gated on unfiltered listings and `lstat`, with
+  regression tests, and the three surviving mutants the reviewer reported were re-run locally and
+  confirmed killed.
+  **A fourth defect was caught by running against the real machine rather than fixtures:** the fix
+  for (3) fired on every external volume's root-owned macOS metadata stores (`.Spotlight-V100`,
+  `.DocumentRevisions-V100`, `.TemporaryItems`) — three unactionable warnings per volume on every
+  run. The first fix (skip hidden directories entirely) was itself wrong and was replaced on
+  review: hidden directories are scanned, only the *unreadable-hidden finding* is suppressed —
+  the noise came from reporting, not from scanning, and a deny-list of known macOS stores was
+  rejected because that set is not closed, so every OS release would be a latent noise regression.
+  **A fifth, found in the fourth round and the nastiest of the set:** dot entries were filtered out
+  of the "what is left" list but still counted by the gate, so a root holding only hidden extras
+  rendered "not empty either — ." — naming nothing, while Finder hides dotfiles and shows an empty
+  directory. A real CoreSimulator root carries `.metadata_never_index`, so **the exact E9 residue
+  this rule exists for hit that path**: the user sees an empty directory, a message naming nothing,
+  and reaches for `rm -rf`. Fixed, with a test for that precise shape.
+  **Approved on the fifth round**, after the reviewer brute-forced 56 directory shapes (root ×
+  `Devices` entry combinations, incl. dotfiles at both levels) asserting that no branch renders an
+  empty leftovers list, no "nothing but an empty" claim contradicts the on-disk listing, and every
+  remediation naming `rmdir` survives a real `rmdir(2)`. 8 of 8 adversarial mutants killed; the two
+  newest tests are each the *sole* killer of two mutants, including "someone adds a harmless-dotfile
+  allowlist", which is the plausible future regression that would put the E9 skeleton back on the
+  removal branch.
+  **Follow-ups, tracked not fixed** (the first two are in the rule's false-negative list):
+  1. `ATTR_DIR_MOUNTSTATUS` is still unchecked, so a volume that unmounted and left a readable
+     empty mount-point stub enumerates clean and yields no finding. The finding text now says this
+     honestly, but "doctor reports clean on an unmounted volume" is the exact silence rule 6
+     exists to prevent — this is the one gap where the documentation is a stopgap, not a fix.
+     `MountStatus.isMountPoint` already exists and is used elsewhere in `Doctor`; it needs an
+     injection seam like the one `Doctor` has for `home`/`runner` to be testable.
+  2. A set in a volume's Trash (`/Volumes/X/.Trashes/<uid>/CoreSimulator`, depth 3) is invisible —
+     and that is precisely where one lands when a user follows this rule's own `.holdsDevices`
+     advice via Finder. Deserves an issue, not just a comment.
+- **Two existing rule texts corrected, deliberately without weakening the rules.**
+  `checkForbiddenSymlinks` asserted that symlinking `~/Library/Developer/CoreSimulator` "breaks
+  the Simulator's Files app"; `checkPriorToolLeftovers` called it "a documented-broken
+  configuration". E9 could not reproduce that, so both now say the layout is *unsupported* and
+  *leaves shadow device sets*, with the Files-app report flagged as unverified rather than
+  proven. Severity stays `.critical` and rule 7 is untouched — only the stated reason changed.
 - Follow-up (small, fixed in this commit): the E9 script's `DeveloperDiskImages` check printed
   "real directory (as required)" when the path does not exist at all (`[ -L ]` is false for a
   missing path). Not a rule-7 violation — nothing was symlinked — but the check now tests

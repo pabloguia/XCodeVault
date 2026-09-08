@@ -87,9 +87,10 @@ public enum StorageCatalog {
             description: "Per-device data containers (apps, user data, caches). Delete unwanted devices with `simctl delete`; never symlink this tree.",
             regenerability: .userRecreatable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
-            evidence: "H5/F3 (symlinking ~/Library/Developer/CoreSimulator breaks the Simulator even same-disk)", evidenceStatus: .probable,
+            evidence: "H5/F3 + E9 (2026-09-08): symlinking ~/Library/Developer/CoreSimulator is unsupported — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2/Xcode 26.5, but the layout leaves shadow device sets behind",
+            evidenceStatus: .probable,
             notes: [
-                "No relocation strategy at any risk level until E9 says otherwise (CLAUDE.md rule 7).",
+                "No relocation strategy at any risk level. Unconditional (CLAUDE.md rule 7) — not contingent on E9, which has now run without reproducing the reported breakage; the rule stands on 'unverified, and known to produce shadow data'.",
                 "Never deleted through the filesystem: `simctl delete unavailable` removes devices whose runtime is gone; `simctl delete <udid>` removes one; `simctl erase` frees data without deleting the device.",
             ],
             cleanupCommand: "xcrun simctl delete unavailable"),
