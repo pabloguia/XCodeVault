@@ -142,7 +142,11 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 ## Blocked / pending — manual (ask the user)
 
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
-  `noowners`. E9 (scratch account) and the physical yank for E6 still need hands on the Mac.
+  `noowners`. The physical yank for E6 still needs hands on the Mac.
+- **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5) — scheduled for a fresh session.**
+  Full self-contained runbook: `docs/process/RUNBOOK-E9-symlink-coresimulator.md`. User
+  authorized running it on their own account (not a scratch account) on 2026-09-08 — "o
+  CoreSimulator se refaz se for necessário". No `sudo` needed; mandatory restore step either way.
 - **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. `/Library/Developer/
   xcv-probe` removed by the user with sudo, confirmed gone.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
