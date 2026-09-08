@@ -365,6 +365,32 @@ those entries "pending — manual" until someone actually runs and records the r
   `/Volumes/<vault>/mac-ssd-rescue/CoreSimulator/Devices` holds duplicates of all three real
   device UUIDs plus a `device_set.plist`.
 
+### E12 case-sensitive APFS — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-08
+- Gates: the `VolumeQualification` case-sensitivity warning (not a hypothesis — this was an
+  untested assumption in shipped code)
+- Test performed: `scripts/experiments/e12-case-sensitivity.sh` on a disposable `hdiutil`
+  case-sensitive APFS sparse image (no sudo; the user's drive untouched). Control first — wrote
+  `probe.txt` and `PROBE.txt` to both volumes to prove they differ. Then (A) a full `swift build`
+  of this repo with `--scratch-path` on the case-sensitive volume, which also clones dependency
+  source into `checkouts/`; (B) an `xcodebuild -derivedDataPath` iOS build with source left on the
+  internal case-insensitive volume.
+- Result: **both pass.** Control confirmed the difference — the two names coexist on the
+  case-sensitive volume and collapse to one file (content `upper`, the second write) on the
+  internal one. (A) `Build complete!`, `swift-argument-parser` source cloned onto the volume, and
+  the produced `xcodevaultctl` binary runs (`0.1.0-dev`). (B) `** BUILD SUCCEEDED **`, `.app`
+  produced on the volume. 203 MB + 139 MB written.
+- Incidental: the sparse image mounts `noowners`, and `xcodevaultctl volumes` correctly reports it
+  `unsuitable` with the ownership blocker — a free end-to-end check of the F5 qualification logic.
+- Evidence: `../research/evidence/e12-case-sensitivity-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Verdict: the warning was over-broad and is now narrowed to what was measured. Build output and
+  SwiftPM checkouts work; the residual risk is source that refers to a file by the wrong case,
+  which is invisible on the internal volume and a build error on a case-sensitive one. **Not
+  tested:** CocoaPods, Carthage, projects with Objective-C bridging headers, frameworks that ship
+  case-colliding filenames, and CoreSimulator device data (which has no relocation strategy at all
+  under rule 7, so it is moot).
+
 ### Pending — manual (procedures in `../process/MANUAL_TEST_PROTOCOL.md`)
 
 | Experiment | Gates | Status |

@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-08 (session 5). This file is the hand-off for the next session or a
+_Last updated: 2026-09-08 (session 6). This file is the hand-off for the next session or a
 post-compaction continuation. Update it as milestones move._
 
 ## Current milestone
@@ -255,9 +255,76 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 - Not ours, left alone: `/tmp/xcv-e9-runbook-test.log` (13:17, a `swift test` log predating this
   session — presumably from writing the runbook earlier today).
 
+## Session 6 (2026-09-08, external-drive setup + E12)
+
+- **The user is done with `mac-ssd-rescue`.** They deleted its ~26.4 GB (11 GB iOS DeviceSupport,
+  8.0 GB DerivedData, 7.4 GB CoreSimulator, plus SPM Repos / XCTestDevices) after a read-only
+  comparison found nothing worth keeping: internal copies newer and larger on all three devices, no
+  app present only externally, and — after normalising the per-install container UUIDs, without
+  which thousands of files look "missing" — everything genuinely unique was simulator OS state
+  (Apple News widget cache, PosterKit, MobileAsset analytics, `.tracev3` logs), unsent SDK telemetry
+  (Crashlytics, google-sdks-events), or a build artifact regenerable from source. Caveat stated to
+  the user: paths were compared, not contents.
+- **E12 (new): case-sensitive APFS is not the hazard the shipped warning implied.** See the matrix
+  entry and `scripts/experiments/e12-case-sensitivity.sh`. Both product-shaped workloads pass on a
+  disposable case-sensitive image; the warning is narrowed from "may break" to the residual risk
+  actually left (source referring to a file by the wrong case). This mattered because the user's
+  real destination drive is Case-sensitive APFS.
+- **Ownership has a second face that F5 never recorded.** Enabling ownership is required (mixed
+  root/user data) *and* is exactly what makes the volume root `root:wheel` and unwritable by the
+  user — so `vault init` fails with a bare "permission denied", and `rm -rf` on a directory in the
+  volume root empties it but cannot remove it. New `OwnershipAdvice` (`Sources/.../Vault/`) turns
+  both into the precise one-time privileged command, shell-quoted for volume names with spaces or
+  apostrophes, resolving the real user/group at runtime rather than hardcoding. `install -d` over `mkdir`+`chown`
+  for idempotency — NOT atomicity: install(1) does mkdir then chown, so the root-owned window
+  exists either way; the advantage is one command that also repairs an existing directory. XCodeVault prints these and never
+  runs them (`SECURITY_MODEL.md`: the helper allowlist has no arbitrary `mkdir`/`chown`).
+  `vault init` now also rejects a pre-existing but unwritable vault directory — the bare
+  `sudo mkdir` case, which otherwise fails on the first real write instead of here.
+- **A `contains: .` bug in `checkPriorToolLeftovers`, found in real use rather than by review.**
+  Once the prior tool's data was deleted but its directory survived, the rule rendered an empty
+  contents list as nothing and still advised "compare with the local copies before deleting" —
+  advice about nothing, on a rule that talks about deletion. Same defect class as the four the E9
+  doctor-rule reviews chased, in pre-existing code. Empty and unreadable are now distinct, with
+  tests.
+- **Drive state:** `/Volumes/<vault>`, Case-sensitive APFS, `Owners: Enabled`, 1.0 TB / ~363 GiB free,
+  qualifies `suitableWithWarnings` (USB IOPS + case-sensitivity). Vault directory
+  `/Volumes/<vault>/XcodeVault` pending the user's one privileged command.
+- **Four safety-review rounds on this session's code; the blocking finding was mine, three times
+  over.** `try? contentsOfDirectory(...) ?? []` — list a directory, and on failure treat it as
+  empty. It fails *open*: a directory nobody can read reads as "this is empty". It appeared in the
+  shadow-root rule, then in the mac-ssd-rescue rule, then in `OwnershipAdvice`, where the empty
+  branch is exactly the one that emitted `sudo chown`. Rather than patch it a third time I grepped
+  every `contentsOfDirectory` in `Sources/`: all 13 others already `guard let … else { continue }`
+  and fail closed. That was the last one. **If this pattern reappears, treat it as a repeat, not a
+  new bug.**
+- Follow-ups from the final review, tracked not fixed:
+  1. **`VaultVolume.register` re-check (highest).** `createDirectory` at :106 and the sentinel write
+     at :116 are separated only by the mount check at :91. If the volume unmounts in that window,
+     macOS removes the mount-point directory and `withIntermediateDirectories: true` recreates it
+     *locally* — and the new writability check approves it, because it really is ours. Today the
+     only thing preventing a local write at a canonical path is `/Volumes` being root-owned, which
+     is the OS, not our code, and does not hold for disk images or user-writable mount directories.
+     Re-assert `isMountPoint` **and** the volume UUID immediately before the sentinel write.
+  2. **One resolution helper.** There are now three copies of "resolve a symlink destination and
+     compare" (`Doctor.swift` twice, `PathSafety.canonicalize`). `stillTargeted` still misses
+     symlink→symlink, case-differing destinations, and doubled slashes — all fail-open. One helper
+     comparing lexical + `realpath()` forms, case-insensitively, closes all three. Harm ceiling is
+     low (the advice is `rmdir`, which cannot destroy data).
+  3. **Journal the directory creation.** `register` journals only on success, so a crash between
+     creating the directory and writing the sentinel leaves an unjournalled empty directory.
+  4. **SF-2 not done, deliberately.** A test that `register` refuses an existing-but-unwritable
+     vault directory needs a real mount point plus a directory we cannot write — impossible without
+     sudo or a disk image in a unit test. `writabilityProblem` is covered in isolation instead; the
+     integration is one line. Recorded rather than faked.
+  5. `common.sh` could print the script name and git rev in every evidence header — E12 does this
+     now; no other experiment file records which script version produced it.
+- Next: once the vault directory exists, exercise a real relocation into it (DerivedData is the
+  natural first, `nativeConfiguration` via Xcode Locations) and verify the disconnect path.
+
 ## In flight
 
-- Nothing running. 67 tests green.
+- Nothing running. 105 tests green.
 
 ## Blocked / pending — manual (ask the user)
 

@@ -382,6 +382,156 @@ final class DoctorTests: XCTestCase {
         XCTAssertFalse(f.contains { $0.path == t.path + "/ext/too/deep/CoreSimulator" }, "depth cap is 2 on volumes")
     }
 
+    /// Found in real use, not by review: after the prior tool's data was deleted, the directory
+    /// itself survived (the volume root is root-owned, so unlinking an entry needs sudo) and the
+    /// rule rendered "contains: ." — an empty list — while still advising the user to compare
+    /// before deleting. Advice about nothing, on a rule that talks about deletion.
+    func testEmptiedPriorToolDirectoryIsNotDescribedAsHavingContents() {
+        let t = TempDir()
+        t.dir("Library/Developer")
+        t.dir("ext/mac-ssd-rescue")
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
+        XCTAssertNotNil(hit)
+        XCTAssertFalse(hit?.detail.contains("contains: .") == true, "empty list rendered as nothing: \(hit?.detail ?? "nil")")
+        XCTAssertTrue(hit?.detail.contains("is empty") == true, "should say it is empty: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(hit?.remediation?.contains("Compare with the local copies") == true,
+                       "nothing to compare when it is empty: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(hit?.remediation?.contains("rmdir") == true, "should offer the safe removal: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(hit?.remediation?.contains("not `rm -rf`") == true,
+                      "must steer away from rm -rf explicitly: \(hit?.remediation ?? "nil")")
+    }
+
+    /// Blocking regression from review, and the same defect this rewrite was meant to close, one
+    /// line lower: filtering dotfiles before the emptiness test. `rm -rf dir/*` in a shell without
+    /// `dotglob` — exactly how this directory got emptied in practice — leaves `.DS_Store` behind,
+    /// and `rmdir` then refuses. Calling it empty is a false all-clear from a rule whose whole job
+    /// is deciding whether data is at risk.
+    func testDirectoryHoldingOnlyHiddenFilesIsNotCalledEmpty() {
+        let t = TempDir()
+        t.dir("Library/Developer")
+        t.dir("ext/mac-ssd-rescue")
+        _ = t.file("ext/mac-ssd-rescue/.DS_Store", bytes: 8)
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = try? XCTUnwrap(f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") })
+        XCTAssertFalse(hit?.detail.contains("is empty") == true,
+                       "a .DS_Store is enough for rmdir to refuse: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(hit?.remediation?.contains("rmdir") == true,
+                       "must not offer a removal that would refuse: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(hit?.detail.contains("plus 1 hidden entry") == true,
+                      "must state the count, not just the word: \(hit?.detail ?? "nil")")
+    }
+
+    /// An emptied directory that something still redirects into is not "nothing at risk" — it is a
+    /// live redirect pointing at an empty tree.
+    func testEmptyPriorToolDirectoryThatIsStillASymlinkTargetIsNotCalledSafe() {
+        let t = TempDir()
+        t.dir("ext/mac-ssd-rescue")
+        t.symlink("Library/Developer/CoreSimulator", to: t.path + "/ext/mac-ssd-rescue")
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
+        XCTAssertFalse(hit?.detail.contains("nothing at risk") == true,
+                       "a live redirect target is not nothing at risk: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
+                       "must not offer removal while a redirect still points here: \(hit?.remediation ?? "nil")")
+    }
+
+    /// The redirect check has to survive three shapes that a raw string compare misses, all of
+    /// which leave a dangling symlink if the user follows the removal advice.
+    func testRedirectDetectionSurvivesRelativeParentAndDeeperTargets() {
+        // 1. relative destination — destinationOfSymbolicLink returns it unresolved
+        // 2. destination that is a PARENT of the candidate (the mac-ssd-rescue layout)
+        // 3. a redirect from a path deeper than the leftover directory itself
+        let cases: [(name: String, link: String, target: (String) -> String)] = [
+            ("relative", "Library/Developer/CoreSimulator", { _ in "../../ext/mac-ssd-rescue" }),
+            ("parent", "Library/Developer", { root in root + "/ext" }),
+            ("exact", "Library/Developer/CoreSimulator", { root in root + "/ext/mac-ssd-rescue" }),
+        ]
+        for c in cases {
+            let t = TempDir()
+            t.dir("ext/mac-ssd-rescue")
+            t.symlink(c.link, to: c.target(t.path))
+            let vol = Volume(
+                deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+                filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+                isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+                totalBytes: 1, freeBytes: 1, isBootVolume: false)
+            let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+            let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
+            XCTAssertFalse(hit?.detail.contains("nothing at risk") == true,
+                           "\(c.name) redirect must not read as safe: \(hit?.detail ?? "nil")")
+            XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
+                           "\(c.name) redirect must not be offered for removal: \(hit?.remediation ?? "nil")")
+        }
+    }
+
+    /// A symlinked candidate must not be followed: it would report some other tree's contents
+    /// under this path, and the empty branch would offer `sudo rmdir` on a symlink (ENOTDIR).
+    func testSymlinkedPriorToolCandidateIsNotFollowed() {
+        let t = TempDir()
+        t.dir("Library/Developer")
+        t.dir("somewhere/else")
+        t.symlink("ext/mac-ssd-rescue", to: t.path + "/somewhere/else")
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
+        XCTAssertTrue(hit?.detail.contains("is a symlink") == true, "\(hit?.detail ?? "nil")")
+        XCTAssertFalse(hit?.remediation?.contains("rmdir") == true, "rmdir on a symlink returns ENOTDIR")
+    }
+
+    /// Deeper-target redirect: the comment claims this shape is covered; pin it.
+    func testRedirectDeeperThanTheCandidateIsAlsoDetected() {
+        let t = TempDir()
+        t.dir("ext/mac-ssd-rescue/Devices")
+        t.symlink("Library/Developer/CoreSimulator", to: t.path + "/ext/mac-ssd-rescue/Devices")
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
+        XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
+                       "a redirect into a subdirectory still makes removal unsafe: \(hit?.remediation ?? "nil")")
+    }
+
+    func testUnreadablePriorToolDirectoryIsNotDescribedAsEmpty() throws {
+        try XCTSkipIf(getuid() == 0, "root can read a 000 directory")
+        let t = TempDir()
+        t.dir("Library/Developer")
+        let dir = t.dir("ext/mac-ssd-rescue")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir) }
+        let vol = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
+            filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
+            isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
+        let hit = try XCTUnwrap(f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") })
+        XCTAssertTrue(hit.detail.contains("could not be read"), "unreadable must not read as empty: \(hit.detail)")
+        XCTAssertFalse(hit.remediation?.contains("rmdir") == true, "never offer removal for something we could not inspect")
+    }
+
     func testLowFreeSpaceSeverity() {
         let t = TempDir(); t.dir("Library/Developer")
         let d = Doctor(home: t.path, runner: quiet)

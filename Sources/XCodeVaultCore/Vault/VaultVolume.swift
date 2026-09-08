@@ -105,9 +105,12 @@ public struct VaultRegistry: Sendable {
         }
         do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch {
             throw VaultError(
-                "Cannot create \(dir): \(error.localizedDescription). The volume root is usually root-owned — create the folder once with Finder, or grant write access."
-            )
+                "Cannot create \(dir): \(error.localizedDescription)\n" + OwnershipAdvice.createVaultDirectory(dir))
         }
+        // The directory may pre-exist (created by the privileged step below, by Finder, or by a
+        // previous run). Creating it is not enough — it has to be *ours*, or every later write
+        // fails in a place much harder to diagnose than here.
+        if let problem = OwnershipAdvice.writabilityProblem(dir) { throw VaultError(problem) }
         let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)

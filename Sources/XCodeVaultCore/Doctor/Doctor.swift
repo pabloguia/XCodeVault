@@ -361,17 +361,84 @@ public struct Doctor: Sendable {
         for v in volumes where v.isExternal || v.isDiskImage {
             guard let mp = v.mountPoint else { continue }
             let candidate = mp + "/mac-ssd-rescue"
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: candidate, isDirectory: &isDir), isDir.boolValue {
-                let contents = (try? FileManager.default.contentsOfDirectory(atPath: candidate)) ?? []
+            // `lstat`, not `fileExists`: the latter follows symlinks, so a symlinked
+            // `mac-ssd-rescue` would report some *other* tree's contents under this path, and the
+            // empty branch would offer `sudo rmdir` on a symlink (ENOTDIR).
+            var cst = stat()
+            if lstat(candidate, &cst) == 0, (cst.st_mode & S_IFMT) == S_IFLNK {
+                let target = (try? FileManager.default.destinationOfSymbolicLink(atPath: candidate)) ?? "?"
                 out.append(
                     Finding(
                         id: "prior-tool:mac-ssd-rescue:\(v.id)", severity: .warning,
-                        title: "mac-ssd-rescue data found on \(v.volumeName)",
+                        title: "mac-ssd-rescue on \(v.volumeName) is a symlink",
                         detail:
-                            "\(candidate) contains: \(contents.sorted().joined(separator: ", ")). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (H5 — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind, see E9).",
+                            "\(candidate) is a symlink to \(target), not a directory. Whatever it reports would be that other tree's contents, so this rule does not follow it.",
                         path: candidate,
-                        remediation: "Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone.",
+                        remediation: "Inspect the link and its target yourself. Removing the link does not remove the data it points at.",
+                        evidence: "docs/process/PRIOR_ART.md"))
+            } else if lstat(candidate, &cst) == 0, (cst.st_mode & S_IFMT) == S_IFDIR {
+                // `try?` collapsed into `[]` used to render "contains: ." for an emptied directory
+                // and still told the user to compare before deleting — advice about nothing. Found
+                // in real use, after the tool's data had been removed but the directory could not
+                // be (the volume root is root-owned, so unlinking an entry from it needs sudo).
+                // Same defect class as the shadow-root rule's: keep unreadable and empty distinct.
+                let listing = try? FileManager.default.contentsOfDirectory(atPath: candidate)
+                // Emptiness is decided on the RAW listing. Filtering dotfiles first is the same
+                // mistake this rewrite was meant to fix, one line lower: `rm -rf dir/*` in a shell
+                // without `dotglob` — exactly how this directory got emptied in practice — leaves
+                // `.DS_Store` behind, `rmdir` then refuses, and calling it "empty" would be a false
+                // all-clear from a rule whose whole job is deciding whether data is at risk.
+                let isEmpty = (listing ?? []).isEmpty
+                let visible = (listing ?? []).filter { !$0.hasPrefix(".") }.sorted()
+                let hiddenCount = (listing ?? []).count - visible.count
+                let hiddenNote = hiddenCount > 0 ? " plus \(hiddenCount) hidden entr\(hiddenCount == 1 ? "y" : "ies")" : ""
+                // "Nothing at risk" is only true if nothing still points here. The populated branch
+                // already reasons about that; the empty branch must not skip it — an empty directory
+                // that is still a live redirect target is a live redirect to an empty tree.
+                // Containment is tested in BOTH directions and against the *resolved* destination.
+                // Three shapes are otherwise missed, all of which leave a dangling symlink if the
+                // user follows the removal advice: a relative destination (`destinationOfSymbolicLink`
+                // returns it unresolved), a destination that is a *parent* of the candidate (the
+                // volume mount point, the mac-ssd-rescue layout), and a redirect deeper than the
+                // link itself. The link set is `CatalogRules.neverSymlink` rather than two literals,
+                // so it stays in step with the shadow-root rule.
+                let stillTargeted = CatalogRules.neverSymlink.contains { template in
+                    let link = template.expandingTilde(home: home)
+                    guard let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: link) else { return false }
+                    // Built as a string rather than with `relativeTo:`, whose behaviour depends on
+                    // whether the base URL carries a trailing slash — which in turn depends on a
+                    // filesystem probe. Explicit concatenation + `standardized` resolves `..`
+                    // deterministically for both absolute and relative destinations.
+                    let base = (link as NSString).deletingLastPathComponent
+                    let resolved =
+                        raw.hasPrefix("/") ? URL(fileURLWithPath: raw).standardized.path : URL(fileURLWithPath: base + "/" + raw).standardized.path
+                    return resolved == candidate || resolved.hasPrefix(candidate + "/") || candidate.hasPrefix(resolved + "/")
+                }
+                let detail: String
+                let remediation: String
+                if listing == nil {
+                    detail = "\(candidate) exists but could not be read (permissions), so its contents are unknown — treat it as unknown, not as empty."
+                    remediation = "Inspect it as a user who can read it before deciding anything."
+                } else if isEmpty {
+                    detail =
+                        "\(candidate) is empty — the prior tool's data is gone and only the directory itself remains."
+                        + (stillTargeted
+                            ? " But something under ~/Library/Developer still redirects here, so this is a live redirect pointing at an empty tree — resolve that first."
+                            : " Nothing to compare and nothing at risk.")
+                    remediation = stillTargeted
+                        ? "Do not remove it yet: fix the redirect under ~/Library/Developer first, then this directory is safe to delete."
+                        : "Remove the empty directory. The volume root is root-owned, so this one needs sudo:\n  sudo rmdir \(OwnershipAdvice.shellQuoted(candidate))\nUse `rmdir`, not `rm -rf` — it refuses if anything reappeared inside."
+                } else {
+                    detail =
+                        "\(candidate) contains: \(visible.isEmpty ? "(only hidden entries)" : visible.joined(separator: ", "))\(hiddenNote). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (H5 — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind, see E9)."
+                    remediation = "Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone."
+                }
+                out.append(
+                    Finding(
+                        id: "prior-tool:mac-ssd-rescue:\(v.id)", severity: .warning,
+                        title: isEmpty && listing != nil
+                            ? "Empty mac-ssd-rescue directory left on \(v.volumeName)" : "mac-ssd-rescue data found on \(v.volumeName)",
+                        detail: detail, path: candidate, remediation: remediation,
                         evidence: "docs/process/PRIOR_ART.md"))
             }
         }

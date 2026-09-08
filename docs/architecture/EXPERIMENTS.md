@@ -144,3 +144,21 @@ must say so and, if possible, help (free space first, or stage elsewhere if supp
 Every experiment produces: a matrix entry, a hypothesis status change (or an explicit
 "still unverified, here's why"), an evidence file, and — where it changes a design
 decision — an ADR.
+
+## E12 — does developer data survive on case-sensitive APFS? (qualification warning)
+
+macOS ships case-**in**sensitive APFS; a user's external drive may be case-sensitive, and
+`VolumeQualification` warned about it from first principles without ever testing it. The warning
+gates a real decision, so it needs evidence rather than caution.
+
+Script: `scripts/experiments/e12-case-sensitivity.sh` — runs entirely on a disposable `hdiutil`
+sparse image, no sudo, never touches the user's drive. Two surfaces, chosen to match the product's
+own layout (source stays internal, XCodeVault relocates the rest):
+- **A.** `swift build --scratch-path <case-sensitive volume>` — this also clones dependency
+  *source* into `checkouts/`, which is the riskier half: a package with case-inconsistent internal
+  references breaks when its source is case-sensitive, not when its output is.
+- **B.** `xcodebuild -derivedDataPath <case-sensitive volume>` with source on the internal volume.
+
+Include a control that proves the two volumes actually differ (`probe.txt` + `PROBE.txt` coexist on
+one and collapse to a single file on the other) — otherwise a passing build proves nothing about
+case sensitivity.

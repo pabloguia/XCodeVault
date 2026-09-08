@@ -38,7 +38,9 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
         if v.mountPoint == nil { blockers.append("Not mounted.") }
         if !v.isAPFS { blockers.append("Filesystem is \(v.filesystemPersonality); XCodeVault requires APFS (ownership, xattrs, clones, symlinks).") }
         if !v.isWritable { blockers.append("Volume is read-only.") }
-        if !v.ownersEnabled {
+        if !v.ownersEnabled, let mp = v.mountPoint {
+            blockers.append(OwnershipAdvice.enableOwnership(mp))
+        } else if !v.ownersEnabled {
             blockers.append(
                 "Ownership is ignored on this volume (noowners). Enable it with `diskutil enableOwnership` — CoreSimulator/Xcode data has mixed root/user ownership."
             )
@@ -49,7 +51,13 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
             warnings.append("USB-attached: expect much lower 4K random IOPS than internal storage; DerivedData workloads are IOPS-bound (research F9).")
         }
         if v.filesystemPersonality.lowercased().contains("case-sensitive") {
-            warnings.append("Case-sensitive APFS: Xcode projects that rely on case-insensitive paths may break.")
+            // Downgraded from a speculative "may break" to what E12 (2026-09-08) actually measured:
+            // a full SwiftPM build with its scratch path here — dependency *source* included — and
+            // an `xcodebuild -derivedDataPath` build both succeeded. The residual risk is real but
+            // narrower than the old wording implied, and it only bites source that lives here.
+            warnings.append(
+                "Case-sensitive APFS (macOS default is case-insensitive). Build output and SwiftPM checkouts were verified to work on one combination — macOS 26.6.2 / Xcode 26.5 / Intel, E12 — not proven in general. The residual risk is source code that refers to a file by the wrong case: harmless on the internal volume, a build error on this one."
+            )
         }
         let verdict: Verdict = blockers.isEmpty ? (warnings.isEmpty ? .suitable : .suitableWithWarnings) : .unsuitable
         return VolumeQualification(verdict: verdict, blockers: blockers, warnings: warnings)
