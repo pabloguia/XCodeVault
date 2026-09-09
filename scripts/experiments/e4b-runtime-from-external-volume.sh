@@ -78,6 +78,16 @@ booted=$(sim list devices booted 2>/dev/null | grep -c "Booted")
 pgrep -q "^Xcode$" && fail "Xcode is running — quit it first"
 sim runtime list 2>/dev/null | grep -q "watchOS 26.5" || fail "the watchOS 26.5 runtime is not installed; nothing to relocate"
 
+# Free space. Not because the experiment needs room — the edit is 1.6 KB — but because the most
+# plausible way this goes wrong is simdiskimaged deciding to STAGE the external image into the
+# secure storage area, which is exactly what `simctl runtime add` does. That is 5.2 GB written to
+# the internal disk, and it is shadow data at a canonical path (the E9 pattern). Floor = image size
+# + 3 GB of headroom, so a stage that starts cannot fill the disk before the watcher below aborts.
+IMG_GB=$(( $(stat -f '%z' "$EXTERNAL_IMAGE") / 1000000000 ))
+FREE_GB=$(df -k / | tail -1 | awk '{print int($4/1024/1024)}')
+FLOOR=$(( IMG_GB + 3 ))
+[ "$FREE_GB" -ge "$FLOOR" ] || fail "only ${FREE_GB} GiB free; need ${FLOOR} GiB so a staging copy of the ${IMG_GB} GB image cannot fill the disk. Free some first (\`xcodevaultctl clean --apply\` recovers user-level regenerable data)."
+
 INTERNAL_IMAGE=$(python3 -c "
 import plistlib,pathlib,urllib.parse,sys
 d=plistlib.loads(pathlib.Path('$PLIST').read_bytes())
@@ -194,7 +204,28 @@ PY
 echo "== kickstart simdiskimaged ==" | tee -a "$OUT"
 launchctl kickstart -k system/com.apple.CoreSimulator.simdiskimaged 2>&1 | tee -a "$OUT"
 echo "kickstart exit=$?" | tee -a "$OUT"
-sleep 10
+
+# Watch the staging directories while the daemon settles. If it starts copying the external image
+# in, that is both a disk-space hazard and shadow data at a canonical path — abort and let the trap
+# restore, rather than discovering 5 GB later. Ten one-second samples instead of one blind sleep.
+for i in $(seq 1 10); do
+  staged=0
+  for d in /Library/Developer/CoreSimulator/Images/Inbox /Library/Developer/CoreSimulator/Images/mnt \
+           /Library/Developer/CoreSimulator/Cryptex/Images/Inbox; do
+    n=$(ls -A "$d" 2>/dev/null | wc -l | tr -d ' '); staged=$(( staged + n ))
+  done
+  now=$(df -k / | tail -1 | awk '{print int($4/1024/1024)}')
+  if [ "$staged" -gt 0 ]; then
+    echo "ABORT at t=${i}s: $staged entry(ies) appeared in the staging directories — the daemon is copying the image in." | tee -a "$OUT"
+    echo "That is shadow data at a canonical path and a disk-space hazard. Restoring." | tee -a "$OUT"
+    exit 1
+  fi
+  if [ "$now" -lt 3 ]; then
+    echo "ABORT at t=${i}s: internal free fell to ${now} GiB. Restoring." | tee -a "$OUT"; exit 1
+  fi
+  sleep 1
+done
+echo "staging directories stayed empty; free ${FREE_GB} -> $(df -k / | tail -1 | awk '{print int($4/1024/1024)}') GiB" | tee -a "$OUT"
 sim runtime verify "$TARGET_RID" 2>&1 | tee -a "$OUT"
 
 {

@@ -1,0 +1,54 @@
+E4b — CoreSimulator with runtime bytes on an external volume
+date:     2026-09-09T23:00:07Z   macOS: 26.6.2 (25G83)   arch: x86_64
+xcode:    Xcode 26.5 Build version 17F42 
+repo:     94cded8
+target:   com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+internal: /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+external: /Volumes/<vault>/XCodeVault/RuntimeLibrary/watchsimulator_26.5_23T570.exportedBundle/Restore/WatchOSSimulatorRuntime_Cryptex.dmg
+free:     6.6Gi
+== hashing both images (a few minutes) ==
+internal sha256: d80c9180a3038489f3d6c187d9f6beb2fdd2c5eb7c1f33ae583242be982d1900
+external sha256: d80c9180a3038489f3d6c187d9f6beb2fdd2c5eb7c1f33ae583242be982d1900
+
+== BASELINE ==
+-- runtimes --
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
+    State: Ready
+    Image Kind: Disk Image
+    Signature State: Verified
+    Deletable: YES
+    Mounting Mode: Disk Image Mount
+    Mount Policy: Automatic
+    Mount Path: /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+    Image Path: /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+    Size: 9.9G
+    Bundle Path: /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime
+    Supported Architectures: x86_64, arm64
+-- watchOS --
+watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B
+    State: Ready
+    Image Kind: Disk Image
+    Signature State: Verified
+    Deletable: YES
+    Mounting Mode: Disk Image Mount
+    Mount Policy: Automatic
+    Mount Path: /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+    Image Path: /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+    Size: 4.9G
+    Bundle Path: /Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS 26.5.simruntime
+    Supported Architectures: x86_64, arm64
+
+Total Disk Images: 2 (14.8G)
+-- backing files (hdiutil info: the only proof of what is actually being read) --
+image-path      : /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+/dev/disk5s1	41504653-0000-11AA-AA11-00306543ECAC	/Library/Developer/CoreSimulator/Volumes/iOS_23F77
+image-path      : /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+/dev/disk7s1	41504653-0000-11AA-AA11-00306543ECAC	/Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+-- staging dirs (shadow-data watch, E9 precedent) --
+   /Library/Developer/CoreSimulator/Images/Inbox: 0 entries
+   /Library/Developer/CoreSimulator/Images/mnt: 0 entries
+   /Library/Developer/CoreSimulator/Cryptex/Images/Inbox: 0 entries
+
+DRY RUN: images.plist would be repointed com.apple.CoreSimulator.SimRuntime.watchOS-26-5 -> /Volumes/<vault>/XCodeVault/RuntimeLibrary/watchsimulator_26.5_23T570.exportedBundle/Restore/WatchOSSimulatorRuntime_Cryptex.dmg. Nothing written.
