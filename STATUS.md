@@ -691,3 +691,66 @@ distinct harness bugs tonight — `head -1` across suites, assertions inside `if
 
 Round 4 tally: 19 tests in `RuntimeOperationsTests`, 168 total, 0 failures; 8 mutations, 8 killed
 after the tests were made load-bearing (3 initially survived).
+
+### Live data-loss bug, found by the user running the tool (2026-09-09)
+
+The user offloaded both runtimes — ~23 GiB freed, devices correctly left `unavailable` rather than
+deleted, exactly as the E8 round trip predicted. `doctor` then told them:
+
+> `xcrun simctl delete unavailable` removes devices whose runtime is gone.
+
+That would have permanently destroyed their three baseline devices and 9.82 GB of data, when the
+correct action was to re-import and get them back. **XCodeVault created the state and then advised
+destroying what it had just promised to preserve.** Rule 5, reached through our own happy path.
+
+The fix is not "check the journal" — that was my first attempt, and review found it reintroduced the
+same bug one step away: unplug the vault, run `doctor`, and an unreachable installer read as "no
+installer", which fell straight back to the delete recommendation. **The absence of a *reachable*
+installer is not the absence of an installer, and silence from a journal that could not be read is
+not a fact.**
+
+`checkUnavailableDevices` now recognises five states and emits the destructive suggestion from
+**exactly one** — journal read in full, no offload on record:
+
+1. reachable installer matching an unavailable device's runtime → name it, re-import
+2. reachable installer, journal entry predates identity recording → neutral, check `runtime library`
+3. installer recorded on a volume that is not mounted → reconnect and re-run (rule 6)
+4. journal missing, unreadable or partially corrupt → not advising deletion
+5. journal complete, no offload → delete, stated as permanent
+
+Supporting changes, each of which was its own defect:
+
+- **`Journal.entries()` cannot report failure.** It returns `[]` for a missing file and
+  `compactMap { try? decode }` swallows corrupt lines, so "nothing happened", "the journal is gone"
+  and "every line is corrupt" are one value — and `try?` at the call site was decoration. New
+  `read() -> ReadResult` distinguishes them. **Wherever absence of a record drives a destructive
+  suggestion, an unreadable source must not read as an empty one.**
+- **The offload entry recorded the image UUID, not the runtime identity**, so nothing could match an
+  installer to the devices it would restore. Now in `detail`. Do **not** fix this by parsing the
+  filename: for a `.exportedBundle` the recorded path is
+  `…/Restore/WatchOSSimulatorRuntime_Cryptex.dmg`, whose basename carries neither platform nor
+  version — a filename matcher would silently drop the watchOS installer and hand the Apple Watch
+  the delete advice.
+- **`fileExists` is not "is this an installer"**: it is true for a directory and for a 16-byte stub,
+  and the first version of the test *asserted* a stub counted. Now a regular file above the 500 MB
+  floor `installer(for:in:)` already uses.
+- **`Doctor(home:)` read this machine's real journal**, because `Journal.defaultURL` reads
+  `NSHomeDirectory()` while `Doctor.home` is injected. The seam looked complete and was not — a test
+  can pass against production data. The journal now derives from `home`.
+- **The same destructive advice was reaching the user through a second door**: the catalog's
+  `cleanupCommand` was `xcrun simctl delete unavailable`, printed verbatim by *every* `clean` run.
+  Replaced with the per-device `simctl delete <udid>`, which is still the official tool and still
+  delete-only, but names what it destroys and cannot sweep up a device that is coming back.
+- **The claim was over-stated and mis-cited.** Device return is one observation (macOS 26.6.2 /
+  Xcode 26.5 / Intel, iOS 26.5, re-imported at the **same version**) and the precondition is
+  load-bearing, so it is now in the user-facing text. E11 is the staging-space experiment; the
+  device-return finding belongs to the E8 import round trip under H4.
+- `runtime offload` printed `stdout + stderr` from `simctl runtime delete`, which prints nothing on
+  success — so it emitted a blank line and finished having reported only its pre-checks. The user
+  asked whether it had worked. It now says what it deleted, and that the devices are Unavailable
+  rather than gone. The size is reported as "at least", since deleting the runtime also drops its
+  MobileAsset copy.
+
+12 tests in `UnavailableDeviceAdviceTests`, 180 total, 0 failures. 7 mutations, 6 killed; the
+surviving one (dropping the `S_IFREG` check) is documented in place as redundant-today rather than
+covered by an invented test — under `lstat` both directories and symlinks fail the size floor anyway.

@@ -188,15 +188,38 @@ extension Runtime {
             }
             let ops = RuntimeOperations(xcode: x, host: h)
             let op = UUID().uuidString
+            // `detail` carries the runtime's identity, not just the image UUID. `doctor` has to decide
+            // whether an unavailable *device* is recoverable, and devices are keyed by
+            // runtimeIdentifier — without this the only link is the installer's filename, which for a
+            // `.exportedBundle` is `…/Restore/WatchOSSimulatorRuntime_Cryptex.dmg` and carries neither
+            // platform nor version.
+            let identity = [
+                "runtimeIdentifier": rt.runtimeIdentifier ?? "", "version": rt.version ?? "", "build": rt.build ?? "",
+                "installer": inst.path,
+            ].filter { !$0.value.isEmpty }
             try ops.journal.record(
-                id: op, kind: .runtimeOffload, state: .started, summary: "offload \(identifier) (installer \(inst.path))", paths: [inst.path])
+                id: op, kind: .runtimeOffload, state: .started, summary: "offload \(identifier) (installer \(inst.path))", paths: [inst.path],
+                detail: identity)
             let r: CommandResult
             do { r = try ops.delete(identifier: identifier) } catch {
                 try ops.journal.record(id: op, kind: .runtimeOffload, state: .failed, summary: "offload \(identifier) failed: \(error)", paths: [inst.path]);
                 throw error
             }
-            try ops.journal.record(id: op, kind: .runtimeOffload, state: .completed, summary: "offloaded \(identifier)", paths: [inst.path])
-            print(r.stdout + r.stderr)
+            try ops.journal.record(
+                id: op, kind: .runtimeOffload, state: .completed, summary: "offloaded \(identifier)", paths: [inst.path], detail: identity)
+            // `simctl runtime delete` prints nothing on success, so the old `print(stdout + stderr)`
+            // emitted a blank line and the command finished having said only what it checked
+            // beforehand — leaving the user to guess whether 10 GB had actually been deleted.
+            let tail = (r.stdout + r.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tail.isEmpty { print(tail) }
+            // No parenthetical when the size is unknown: "0 B" answers "how much did this free?" with
+            // a confident wrong number. The image size is also a floor, not the total — deleting the
+            // runtime drops its MobileAsset copy too.
+            let freed = rt.sizeBytes.map { " (at least \(ByteCount.format($0)))" } ?? ""
+            print("Deleted runtime \(rt.runtimeIdentifier ?? identifier)\(freed) from the internal volume.")
+            // The surprising part, and the reason `doctor` now refuses to suggest deleting them:
+            // the devices survive, they just cannot run until the runtime is back.
+            print("Devices for this runtime are now Unavailable, NOT deleted — they return to Shutdown with their data when it is re-imported (E11).")
             print("Re-install later with: xcodevaultctl runtime import \"\(inst.path)\"")
         }
     }

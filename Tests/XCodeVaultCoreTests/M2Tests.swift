@@ -71,7 +71,11 @@ final class CleanTests: XCTestCase {
         t.file("Library/Developer/CoreSimulator/Devices/UUID/data/x", bytes: 4096)
         let devPlan = CleanPlanner(home: t.path).plan(report: report(home: t.path, items: devs.resolveItems()))
         XCTAssertTrue(devPlan.actions.isEmpty, "simulator devices are never filesystem-deleted")
-        XCTAssertTrue(devPlan.skipped.contains { $0.contains("simctl delete unavailable") })
+        // Deliberately NOT `simctl delete unavailable`: that command is permanent and sweeps up
+        // devices whose runtime XCodeVault offloaded on purpose and can bring back. `clean` printed
+        // it unconditionally on every run, which is the same defect `doctor` was corrected for.
+        XCTAssertTrue(devPlan.skipped.contains { $0.contains("simctl delete <udid>") }, "\(devPlan.skipped)")
+        XCTAssertFalse(devPlan.skipped.contains { $0.contains("delete unavailable") }, "\(devPlan.skipped)")
         XCTAssertGreaterThanOrEqual(plan.totalBytes, 12288)
         XCTAssertTrue(plan.warnings.contains { $0.contains("full build") })
     }

@@ -57,9 +57,42 @@ public struct Journal: Sendable {
     }
 
     public func entries() throws -> [JournalEntry] {
-        guard let data = FileManager.default.contents(atPath: url.path) else { return [] }
+        try read().entries
+    }
+
+    /// What a read actually saw. `entries()` cannot express any of this: it returns `[]` for a
+    /// missing file and `compactMap { try? … }` swallows every undecodable line, so "no operations
+    /// were recorded", "the journal is gone" and "every line is corrupt" are the same value.
+    ///
+    /// That matters wherever the *absence* of a record drives a destructive suggestion — `doctor`'s
+    /// unavailable-device rule reads "no offload on record" as "the runtime is gone for good, delete
+    /// the devices". Silence from a journal that could not be read must not be mistaken for a fact.
+    public struct ReadResult: Sendable {
+        public var entries: [JournalEntry]
+        /// False when the journal file does not exist yet — normal on a fresh install.
+        public var filePresent: Bool
+        /// Lines that failed to decode. Non-zero means `entries` is a lower bound.
+        public var undecodableLines: Int
+        /// True when the journal could be read in full: either absent (nothing has happened yet) or
+        /// present with every line decoded.
+        public var isComplete: Bool { undecodableLines == 0 }
+    }
+
+    /// Reads the journal, distinguishing absent from unreadable from partially corrupt. Throws when
+    /// the file exists but cannot be read at all (permissions, I/O) — a case `entries()` reports as
+    /// an empty history.
+    public func read() throws -> ReadResult {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return ReadResult(entries: [], filePresent: false, undecodableLines: 0)
+        }
+        let data = try Data(contentsOf: url)
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
-        return data.split(separator: 0x0A).compactMap { try? dec.decode(JournalEntry.self, from: $0) }
+        var out: [JournalEntry] = []
+        var bad = 0
+        for line in data.split(separator: 0x0A) {
+            if let e = try? dec.decode(JournalEntry.self, from: line) { out.append(e) } else { bad += 1 }
+        }
+        return ReadResult(entries: out, filePresent: true, undecodableLines: bad)
     }
 
     /// Operations whose last recorded state is `started` — i.e. interrupted by a crash or kill.

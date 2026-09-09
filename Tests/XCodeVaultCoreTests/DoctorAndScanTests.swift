@@ -1016,3 +1016,204 @@ final class OrphanedDyldCacheTests: XCTestCase {
         XCTAssertTrue(f.contains { $0.id == "orphan-dyld:\(tvOSid).23L470" }, "\(f.map(\.id))")
     }
 }
+
+/// `checkUnavailableDevices` — the rule that decides whether the user is told to delete their
+/// simulator devices. A device goes unavailable the moment its runtime leaves, including when
+/// XCodeVault itself offloads it, and that case is reversible: the E8 round trip saw the devices
+/// return to `Shutdown` with their data once the runtime was re-imported.
+///
+/// The invariant every test here defends: **the destructive suggestion comes from exactly one
+/// state** — journal read in full, no offload on record. An installer we can see, an installer on an
+/// unplugged volume, and a journal we could not read all withhold it. The second of those was a live
+/// bug: unplug the vault, run `doctor`, get told to delete devices whose installers are in your
+/// pocket.
+final class UnavailableDeviceAdviceTests: XCTestCase {
+    let iOSrid = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+    let watchRid = "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+
+    func device(_ name: String, available: Bool, rid: String? = nil, bytes: UInt64 = 1_000_000) -> SimulatorDevice {
+        SimulatorDevice(
+            udid: UUID().uuidString, name: name, runtimeIdentifier: rid ?? iOSrid, state: "Shutdown", isAvailable: available, dataPathSize: bytes)
+    }
+
+    /// A sparse file above `installer(for:in:)`'s 500 MB floor. Sparse because the floor is about
+    /// rejecting stubs, and a test should not write 600 MB to assert that.
+    func installerFile(_ dir: String, _ name: String, bytes: UInt64 = 600_000_000) throws -> String {
+        let path = dir + "/" + name
+        FileManager.default.createFile(atPath: path, contents: nil)
+        let fh = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        try fh.truncate(atOffset: bytes)
+        try fh.close()
+        return path
+    }
+
+    struct Offload { var installer: String; var rid: String?; var reimported = false }
+
+    /// A Doctor whose journal contains the given completed offloads, and nothing else.
+    func doctor(_ offloads: [Offload], extra: [(JournalEntry.Kind, JournalEntry.State, [String])] = [], corruptLine: Bool = false) throws -> (Doctor, String) {
+        let dir = NSTemporaryDirectory() + "/j-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let url = URL(fileURLWithPath: dir + "/journal.jsonl")
+        let journal = Journal(url: url)
+        for o in offloads {
+            var detail = ["installer": o.installer]
+            if let r = o.rid { detail["runtimeIdentifier"] = r }
+            _ = try journal.record(kind: .runtimeOffload, state: .completed, summary: "offloaded", paths: [o.installer], detail: detail)
+            if o.reimported {
+                _ = try journal.record(kind: .runtimeImport, state: .completed, summary: "imported", paths: [o.installer])
+            }
+        }
+        for (k, st, paths) in extra { _ = try journal.record(kind: k, state: st, summary: "x", paths: paths) }
+        if corruptLine { try "{not json\n".write(to: url, atomically: false, encoding: .utf8) }
+        return (Doctor(home: dir, journal: journal), dir)
+    }
+
+    func remediation(_ d: Doctor, _ devices: [SimulatorDevice]) throws -> String {
+        try XCTUnwrap(d.checkUnavailableDevices(devices: devices).first?.remediation)
+    }
+
+    // MARK: the one state that may recommend deletion
+
+    func testWithNoOffloadOnRecordDeletionIsAdvisedAndCalledPermanent() throws {
+        let (d, _) = try doctor([])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertTrue(r.hasPrefix("`xcrun simctl delete unavailable`"), r)
+        XCTAssertTrue(r.contains("permanent"), r)
+    }
+
+    func testAvailableDevicesProduceNoFinding() throws {
+        let (d, _) = try doctor([])
+        XCTAssertTrue(d.checkUnavailableDevices(devices: [device("iPhone", available: true)]).isEmpty)
+    }
+
+    // MARK: states that must never recommend deletion
+
+    func testDevicesLeftUnavailableByOurOwnOffloadAreNotProposedForDeletion() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "iphonesimulator_26.5_23F77.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: iOSrid)])
+        let r = try remediation(d, [device("iPhone 17 Pro Max", available: false)])
+        XCTAssertTrue(r.hasPrefix("Do NOT run `xcrun simctl delete unavailable`"), r)
+        XCTAssertTrue(r.contains(installer), r)
+    }
+
+    /// The blocker this rule was rewritten for. The vault is unplugged, so the installer is not
+    /// reachable — but it exists, and the journal says where. Telling the user to delete here is the
+    /// original bug with an extra step.
+    func testAnInstallerOnAnUnmountedVolumeWithholdsTheDeleteAdvice() throws {
+        let absent = "/Volumes/XCVGhost-\(UUID().uuidString)/RuntimeLibrary/iphonesimulator_26.5_23F77.dmg"
+        let (d, _) = try doctor([Offload(installer: absent, rid: iOSrid)])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertFalse(r.contains("`xcrun simctl delete unavailable` removes"), "never the destructive form here: \(r)")
+        XCTAssertTrue(r.contains("not mounted"), r)
+        XCTAssertTrue(r.contains("Reconnect"), r)
+    }
+
+    /// A journal we could not read in full cannot testify that no offload happened. `entries()` reads
+    /// a corrupt line as no line at all, which is why the rule uses `read()`.
+    func testACorruptJournalWithholdsTheDeleteAdvice() throws {
+        let (d, _) = try doctor([], corruptLine: true)
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertTrue(r.hasPrefix("Not advising deletion"), r)
+        XCTAssertFalse(r.contains("removes devices whose runtime is gone"), r)
+    }
+
+    /// Entries written before the journal recorded which runtime was offloaded cannot be matched to
+    /// these devices — so the advice is neutral, never an affirmative recovery promise and never a
+    /// deletion.
+    func testALegacyEntryWithoutRuntimeIdentityGivesNeutralAdvice() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "iphonesimulator_26.5_23F77.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: nil)])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertTrue(r.contains("predates recording which runtime it was"), r)
+        XCTAssertFalse(r.contains("should return to Shutdown"), "no promise it cannot support: \(r)")
+    }
+
+    // MARK: false promises
+
+    /// An installer for a runtime the unavailable devices do not use recovers nothing for them.
+    /// Promising otherwise sends the user to import 10 GB and find the devices still unavailable.
+    func testAnInstallerForADifferentRuntimeDoesNotPromiseRecovery() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "watchsimulator_26.5_23T570.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: watchRid)])
+        let r = try remediation(d, [device("iPhone", available: false, rid: iOSrid)])
+        XCTAssertFalse(r.contains("Re-import instead"), "a watchOS installer does not restore an iOS device: \(r)")
+    }
+
+    /// After a re-import the offload entry is stale: the runtime is back, and whatever leaves these
+    /// devices unavailable is something else.
+    func testAnOffloadFollowedByAReimportNoLongerClaimsRecoverability() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "iphonesimulator_26.5_23F77.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: iOSrid, reimported: true)])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertFalse(r.contains("Re-import instead"), r)
+    }
+
+    /// `fileExists` says true for a directory and for a 16-byte stub. Neither can restore a runtime,
+    /// and calling one recoverable is a promise the user acts on.
+    func testAStubOrDirectoryIsNotAcceptedAsAnInstaller() throws {
+        let t = TempDir()
+        let stub = t.file("iphonesimulator_26.5_23F77.dmg", bytes: 16)
+        let (d1, _) = try doctor([Offload(installer: stub, rid: iOSrid)])
+        XCTAssertFalse(try remediation(d1, [device("iPhone", available: false)]).contains("Re-import instead"), "a 16-byte stub is not an installer")
+        t.dir("bundle.dmg")
+        let (d2, _) = try doctor([Offload(installer: t.path + "/bundle.dmg", rid: iOSrid)])
+        XCTAssertFalse(try remediation(d2, [device("iPhone", available: false)]).contains("Re-import instead"), "a directory is not an installer")
+    }
+
+    /// The journal records many kinds of operation, most carrying paths that exist. Only a completed
+    /// offload means "a runtime left the machine and its installer is over there".
+    func testOnlyCompletedOffloadsCountAsRecoverableInstallers() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let unrelated = try installerFile(dir, "DerivedData-leftover")
+        let (d, _) = try doctor([], extra: [(.clean, .completed, [unrelated]), (.runtimeOffload, .started, [unrelated])])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertFalse(r.contains("Do NOT run"), "a cleanup path is not a runtime installer: \(r)")
+        XCTAssertFalse(r.contains(unrelated), r)
+    }
+
+    /// An offload → import → offload cycle records the same installer twice; naming it twice reads
+    /// like two separate recoveries.
+    func testARepeatedInstallerIsNamedOnce() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "iphonesimulator_26.5_23F77.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: iOSrid), Offload(installer: installer, rid: iOSrid)])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        let occurrences = r.components(separatedBy: installer).count - 1
+        XCTAssertEqual(occurrences, 1, r)
+    }
+
+    /// The claim is one observation on one configuration, and the same-version precondition is what
+    /// makes it true. Stating it unqualified is how a user re-imports a different version and
+    /// concludes the tool lied.
+    func testTheRecoveryPromiseCarriesItsPreconditionAndCitesTheRightExperiment() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let installer = try installerFile(dir, "iphonesimulator_26.5_23F77.dmg")
+        let (d, _) = try doctor([Offload(installer: installer, rid: iOSrid)])
+        let f = try XCTUnwrap(d.checkUnavailableDevices(devices: [device("iPhone", available: false)]).first)
+        let r = try XCTUnwrap(f.remediation)
+        XCTAssertTrue(r.contains("same version"), "the precondition is load-bearing: \(r)")
+        XCTAssertTrue(r.contains("Observed once"), r)
+        // E11 is the staging-space experiment; device return belongs to the E8 import round trip.
+        XCTAssertFalse(f.evidence?.contains("E11") == true, "wrong experiment cited: \(f.evidence ?? "")")
+        XCTAssertTrue(f.evidence?.contains("H4") == true, f.evidence ?? "")
+    }
+}

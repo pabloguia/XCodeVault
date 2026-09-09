@@ -31,11 +31,21 @@ public struct Doctor: Sendable {
     /// only ever be exercised against whatever the machine happens to hold, and its wiring into
     /// `diagnose` cannot be tested at all.
     public var dyldCacheRoot: String
+    /// Read-only here. `checkUnavailableDevices` needs it to tell "this runtime is gone for good"
+    /// apart from "XCodeVault offloaded this runtime and the installer is still on the vault", which
+    /// is the difference between advice that frees space and advice that destroys the user's devices.
+    public var journal: Journal
     public init(
         home: String = NSHomeDirectory(), runner: CommandRunning = ProcessCommandRunner(),
-        dyldCacheRoot: String = "/Library/Developer/CoreSimulator/Caches/dyld"
+        dyldCacheRoot: String = "/Library/Developer/CoreSimulator/Caches/dyld", journal: Journal? = nil
     ) {
-        self.home = home; self.runner = runner; self.dyldCacheRoot = dyldCacheRoot
+        self.home = home
+        self.runner = runner
+        self.dyldCacheRoot = dyldCacheRoot
+        // Derived from `home`, not from `Journal.defaultURL`. The default reads `NSHomeDirectory()`
+        // directly, so a test that injected `home` still got this machine's real journal — the
+        // injection looked complete and was not, which is how a test can pass against production data.
+        self.journal = journal ?? Journal(url: URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support/XCodeVault/journal.jsonl"))
     }
 
     public func diagnose(report: ScanReport) -> [Finding] {
@@ -779,16 +789,119 @@ public struct Doctor: Sendable {
         return out
     }
 
+    /// Unavailable devices are not automatically garbage. A device goes unavailable the moment its
+    /// runtime leaves the machine — including when **XCodeVault itself** offloads that runtime, which
+    /// is reversible and whose whole promise is that the devices come back untouched on re-import.
+    ///
+    /// `xcrun simctl delete unavailable` is therefore right in one case and permanent data loss in
+    /// another, and the two are indistinguishable from `simctl list devices` alone. Recommending it
+    /// unconditionally meant the tool offloaded a runtime and then, in the same breath, told the user
+    /// to destroy the devices it had just promised to preserve.
+    ///
+    /// **The destructive suggestion is emitted from exactly one state: the journal was read in full
+    /// and records no offload at all.** Every other state — an installer we can see, an installer on
+    /// a volume that is not mounted right now, a journal we could not read — withholds it. The
+    /// second of those is the one that bites: unplug the vault, run `doctor`, and an earlier version
+    /// of this rule would tell you to delete devices whose installers are in your pocket. Absence of
+    /// a *reachable* installer is not absence of an installer, and silence from a journal that could
+    /// not be read is not a fact about the world.
     func checkUnavailableDevices(devices: [SimulatorDevice]) -> [Finding] {
         let bad = devices.filter { !$0.isAvailable }
         guard !bad.isEmpty else { return [] }
         let bytes = bad.reduce(0) { $0 + ($1.dataPathSize ?? 0) }
+        let deviceRuntimes = Set(bad.map(\.runtimeIdentifier))
+
+        let read = try? journal.read()
+        let entries = read?.entries ?? []
+        // An installer that was offloaded and later re-imported is no longer standing in for a
+        // missing runtime; the stale offload entry must not keep claiming recoverability.
+        let reimported = Set(entries.filter { $0.kind == .runtimeImport && $0.state == .completed }.flatMap(\.paths))
+        var seen = Set<String>()
+        let offloads =
+            entries
+            .filter { $0.kind == .runtimeOffload && $0.state == .completed }
+            .compactMap { e -> (installer: String, rid: String?)? in
+                guard let path = e.detail["installer"] ?? e.paths.first, !reimported.contains(path), seen.insert(path).inserted else { return nil }
+                return (path, e.detail["runtimeIdentifier"])
+            }
+
+        /// A recorded path is only evidence of a recoverable runtime when it is a real image we can
+        /// see. `fileExists` alone says true for a directory and for a 16-byte stub — the floor is the
+        /// one `installer(for:in:)` already applies, so a truncated copy cannot pose as a runtime.
+        /// Integrity beyond that is left to `runtime import`: the cost of a corrupt-but-large image is
+        /// a failed import, while the cost of calling a real installer missing is a deleted device.
+        func isUsableImage(_ path: String) -> Bool {
+            var st = stat()
+            // The S_IFREG test is redundant *today* and mutation testing says so: under `lstat` a
+            // directory and a symlink both report a small `st_size`, so the floor already rejects
+            // them. It stays because it states the intent the floor only implies — if the floor is
+            // ever lowered or made configurable, this becomes the only thing standing between a
+            // `.exportedBundle` directory and a promise that it can restore a runtime.
+            guard lstat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return false }
+            return st.st_size >= 500_000_000
+        }
+        let reachable = offloads.filter { isUsableImage($0.installer) }
+        // Not reachable, but on a /Volumes path with nothing mounted: the vault is unplugged, not
+        // gone. Distinguished with the same mount primitive `runtime export`/`offload` use.
+        let disconnected = offloads.filter { !isUsableImage($0.installer) && RuntimeOperations.isNotOnAMountedVolume(destination: $0.installer) }
+
+        // Identity matching where the journal carries it. Entries written before `detail` gained the
+        // runtime identity have `rid == nil` and cannot be matched — those degrade to neutral wording
+        // rather than an affirmative promise about devices they may have nothing to do with.
+        let matched = reachable.filter { rid in rid.rid.map(deviceRuntimes.contains) ?? false }
+        let unidentified = reachable.filter { $0.rid == nil }
+
+        func importList(_ items: [(installer: String, rid: String?)]) -> String {
+            let shown = items.prefix(5).map { "`xcodevaultctl runtime import \(OwnershipAdvice.shellQuoted($0.installer))`" }
+            let more = items.count > 5 ? " (+\(items.count - 5) more — see `xcodevaultctl runtime library`)" : ""
+            return shown.joined(separator: ", then ") + more
+        }
+        // The device-return claim is one observation, not a law: macOS 26.6.2 / Xcode 26.5 / x86_64,
+        // iOS 26.5, re-imported at the SAME version. The precondition is load-bearing and has to be
+        // visible to the user. Cited as E8/H4 — E11 is the staging-space experiment, and the
+        // device-return finding belongs to the import round trip.
+        let caveat =
+            "Observed once (macOS 26.6.2 / Xcode 26.5 / Intel, iOS 26.5, re-imported at the same version — E8 round trip, H4); "
+            + "re-import first and confirm the devices come back before deleting anything."
+
+        let remediation: String
+        let evidence: String
+        if !matched.isEmpty {
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable` — it is permanent. Re-import instead: \(importList(matched)). "
+                + "The devices should return to Shutdown with their data. \(caveat) "
+                + "Delete them only if you have decided you no longer want these devices at all."
+            evidence = "docs/architecture/HYPOTHESES.md H4 (E8 import round trip)"
+        } else if !unidentified.isEmpty {
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable` yet — it is permanent. XCodeVault offloaded "
+                + "\(unidentified.count == 1 ? "a runtime" : "\(unidentified.count) runtimes") and the installer is still on the vault, but the journal entry "
+                + "predates recording which runtime it was, so this cannot confirm it matches these devices. "
+                + "Check `xcodevaultctl runtime library --dir <your library>` before deleting anything."
+            evidence = "docs/architecture/HYPOTHESES.md H4 (E8 import round trip)"
+        } else if !disconnected.isEmpty {
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable` — it is permanent, and these devices may be recoverable. XCodeVault offloaded "
+                + "\(disconnected.count == 1 ? "a runtime whose installer is" : "\(disconnected.count) runtimes whose installers are") recorded at "
+                + "\(disconnected.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", ")), on a volume that is not mounted. "
+                + "Reconnect it and re-run `xcodevaultctl doctor`."
+            evidence = "CLAUDE.md rule 6 (a disconnected volume is a first-class failure mode)"
+        } else if read == nil || read?.isComplete == false {
+            remediation =
+                "Not advising deletion: XCodeVault could not read its journal in full, so it cannot tell whether these devices' runtime was offloaded "
+                + "and is recoverable. `xcrun simctl delete unavailable` is permanent — check `xcodevaultctl journal` first."
+            evidence = "CLAUDE.md rule 5"
+        } else {
+            remediation =
+                "`xcrun simctl delete unavailable` removes devices whose runtime is gone. This is permanent — the device data goes with them — and the "
+                + "journal records no offloaded runtime that could bring these back."
+            evidence = "simctl help"
+        }
         return [
             Finding(
                 id: "unavailable-devices", severity: .warning, title: "\(bad.count) simulator device(s) unavailable (\(ByteCount.format(bytes)))",
                 detail: bad.prefix(5).map { "\($0.name): \($0.availabilityError ?? "runtime missing")" }.joined(separator: "; "),
-                path: home + "/Library/Developer/CoreSimulator/Devices",
-                remediation: "`xcrun simctl delete unavailable` removes devices whose runtime is gone.", evidence: "simctl help")
+                path: home + "/Library/Developer/CoreSimulator/Devices", remediation: remediation, evidence: evidence)
         ]
     }
 

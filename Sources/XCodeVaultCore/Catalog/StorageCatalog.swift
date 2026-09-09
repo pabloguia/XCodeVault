@@ -91,9 +91,17 @@ public enum StorageCatalog {
             evidenceStatus: .probable,
             notes: [
                 "No relocation strategy at any risk level. Unconditional (CLAUDE.md rule 7) — not contingent on E9, which has now run without reproducing the reported breakage; the rule stands on 'unverified, and known to produce shadow data'.",
-                "Never deleted through the filesystem: `simctl delete unavailable` removes devices whose runtime is gone; `simctl delete <udid>` removes one; `simctl erase` frees data without deleting the device.",
+                "Never deleted through the filesystem: `simctl delete <udid>` removes one device; `simctl erase` frees its data without deleting it.",
+                "`simctl delete unavailable` is PERMANENT and is not a cleanup step. A device is unavailable whenever its runtime is off the machine — including a runtime XCodeVault offloaded on purpose, which comes back with its devices intact on re-import. Check `xcodevaultctl doctor`, which reads the journal and refuses to suggest deletion while an offloaded installer exists or the vault is merely unplugged.",
             ],
-            cleanupCommand: "xcrun simctl delete unavailable"),
+            // Was `xcrun simctl delete unavailable`, which `clean` printed verbatim on every run —
+            // the same permanent, unconditional advice `doctor` was corrected for, reaching the user
+            // through a second door. "Unavailable" is not a synonym for disposable: a device is
+            // unavailable whenever its runtime is off the machine, including one XCodeVault offloaded
+            // on purpose. The per-device form is kept instead: it is still the official tool and
+            // still delete-only, but it names what is being destroyed and cannot sweep up a device
+            // the user is about to get back.
+            cleanupCommand: "xcrun simctl delete <udid>"),
         StorageCategory(
             id: "simulatorUserCaches", name: "Simulator user caches", subsystem: .coreSimulator,
             pathTemplates: ["~/Library/Developer/CoreSimulator/Caches", "~/Library/Developer/CoreSimulator/Temp"],
