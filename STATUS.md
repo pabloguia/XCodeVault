@@ -375,6 +375,50 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   user-level** (watchOS DeviceSupport 3.13 GB, SwiftPM caches 484 MB, logs) and **10.12 GB is the
   root-owned CoreSimulator dyld caches**, which need the privileged helper's
   `removeRegenerableSystemDirectoryContents` — listed for accounting, not executable today.
+- **FU-1 closed (was the highest-priority follow-up, and the one item `VaultVolume` outright
+  failed):** `register` now re-asserts, immediately before the sentinel write, that `mp` is still a
+  mount point AND that its volume UUID still matches. Both are needed — the first catches "nothing
+  is mounted here any more", the second catches "a different volume auto-mounted into the freed
+  path", which answers the first with a cheerful yes. Without this, an unmount between
+  `createDirectory(withIntermediateDirectories:)` and the sentinel write lands the vault on the
+  *internal* disk at a canonical-looking path, and the writability check approves it because it
+  really is ours. New `MountStatus.volumeUUID(at:)` (`getattrlist ATTR_VOL_UUID`, mirroring the
+  helper) makes the check cheap enough to run inside the transaction — `VolumeDiscovery` shells out
+  to `diskutil` and is far too heavy for that.
+  **Caveat I wrote and the test disproved:** the first doc comment claimed the primitive returns nil
+  for a non-mount-point. It does not — `ATTR_VOL_*` answers about the *containing* volume, so an
+  ordinary directory returns its filesystem's UUID. Comment corrected and the real behaviour pinned;
+  callers must pair it with `isMountPoint`, which `register` does (ordering matters).
+- **FU-2 closed:** three copies of "read a symlink, resolve it, compare" in `Doctor` are now one
+  `PathSafety.symlinkRedirectsBetween`. It closes the fail-open gaps the review listed — chained
+  symlinks, doubled slashes, relative destinations, and containment in *both* directions — via
+  `realpath(3)` with a lexical fallback for dangling targets. Comparison is case-insensitive on
+  purpose: it over-matches, and over-matching only withholds a deletion suggestion, whereas
+  under-matching offers to delete a live redirect target. Mutation-verified: reverting to the old
+  lexical-only comparison fails the chained-symlink and doubled-slash tests.
+- **Review round 2 on FU-1 found three errors in my reasoning, all worth carrying forward:**
+  1. "The ordering makes it safe" is **wrong** — `isMountPoint` and `volumeUUID` are separate
+     syscalls with a gap, the same class of gap this code closes. What makes it safe is that the
+     UUID check is a *positive identity assertion that fails closed*: unmounted-and-gone (nil),
+     unmounted-with-the-directory-persisting (boot volume UUID) and different-volume-mounted (its
+     UUID) all fail the comparison. **Never rewrite it as `if let now = …, now != uuid { throw }`** —
+     that form lets nil pass and silently reinstates the bug.
+  2. "Nothing was written" was **false**: `createDirectory` ran before the guards, so a refusal left
+     a directory behind, on the internal disk, at the canonical path, in exactly the failure mode
+     being guarded. The guards now run before any write, which makes the sentence true, removes the
+     orphan and closes FU-3. A `writabilityProblem` refusal is now journalled `.failed`.
+  3. My real-machine "verification" **did not touch the new code** — re-register returns early at
+     the already-registered branch, before the guards. Zero coverage, unit or manual.
+- `register` gained an injection seam (`isMountPoint`, `volumeUUID` closures, mirroring
+  `VaultVerifier`). Two reasons: a stub that answers truthfully once and then lies distinguishes
+  "caught at the top" from "caught by the guard", and without it the happy path became permanently
+  un-unit-testable — the fixtures use synthetic UUIDs against real mount points, which the identity
+  guard rejects by construction. **No test had ever exercised a successful `register()`**; all three
+  call sites were throws-assertions and every fixture bypassed it via `save(...)`. There is one now.
+- `testDiskutilAndGetattrlistAgreeOnVolumeUUIDs` pins the assumption the whole guard rests on: if
+  `diskutil`'s VolumeUUID ever disagreed with `ATTR_VOL_UUID`, **every** registration would fail.
+  Verified against whatever is actually mounted, so it keeps checking on any machine.
+- Mutation-verified: restoring the old order (mkdir before the guards) fails two tests.
 - Next: exercise a real relocation into the vault and verify the disconnect path. Note DerivedData
   is currently **0 B**, so it is not a usable subject until something is built; and a migration
   needs no internal free space at all (source internal → destination external, internal usage only
@@ -383,7 +427,7 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## In flight
 
-- Nothing running. 107 tests green.
+- Nothing running. 114 tests green.
 
 ## Blocked / pending — manual (ask the user)
 

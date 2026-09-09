@@ -89,12 +89,21 @@ public struct VaultRegistry: Sendable {
     /// Registers a mounted, qualified volume: creates `<mount>/<relativeDirectory>/` (default
     /// `XCodeVault`) and the sentinel. Refuses unsuitable volumes, the boot volume, and any
     /// directory that escapes the volume.
+    /// `isMountPoint` and `volumeUUID` are injectable for the same reason `VaultVerifier` takes a
+    /// closure: without them a unit test cannot distinguish "refused by the check at the top" from
+    /// "refused by the re-assertion before the write", because both use the same predicates. They
+    /// also keep the happy path testable at all — the fixtures use synthetic UUIDs against a real
+    /// mount point, which the identity guard below rejects by construction.
     @discardableResult
-    public func register(_ v: Volume, relativeDirectory: String = VaultVolume.directoryName, journal: Journal = Journal()) throws -> VaultVolume {
+    public func register(
+        _ v: Volume, relativeDirectory: String = VaultVolume.directoryName, journal: Journal = Journal(),
+        isMountPoint: @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
+        volumeUUID: @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) }
+    ) throws -> VaultVolume {
         guard let mp = v.mountPoint, let uuid = v.volumeUUID else { throw VaultError("Volume has no mount point or UUID.") }
         let q = VolumeQualification.evaluate(v)
         guard q.verdict != .unsuitable else { throw VaultError("Volume \(v.volumeName) is not suitable: \(q.blockers.joined(separator: " "))") }
-        guard MountStatus.isMountPoint(mp) else { throw VaultError("\(mp) is not a mount point.") }
+        guard isMountPoint(mp) else { throw VaultError("\(mp) is not a mount point.") }
         let rel = relativeDirectory.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !rel.isEmpty, !rel.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { throw VaultError("Invalid vault directory '\(relativeDirectory)'.") }
         let dir = mp + "/" + rel
@@ -109,14 +118,47 @@ public struct VaultRegistry: Sendable {
             throw VaultError(
                 "Volume \(uuid) is already registered but in state \(check.state.rawValue): \(check.detail). Use `vault forget` first if this is intentional.")
         }
+        // Re-assert the volume BEFORE creating anything. Ordering is the whole point: with the
+        // mkdir first, a guard failure left a directory behind — on the internal disk, at the
+        // canonical vault path, in exactly the failure mode being guarded against — while the error
+        // said "Nothing was written". Guards first make that sentence true and remove the orphan.
+        //
+        // What makes this safe is NOT that `isMountPoint` runs first: these are separate syscalls
+        // with a gap between them, the same class of gap this code exists to close. It is that the
+        // UUID check is a *positive identity assertion that fails closed*. Every degradation —
+        // unmounted and the directory gone (nil), unmounted with the mount directory persisting (the
+        // boot volume's UUID), a different volume mounted in its place (that volume's UUID) — fails
+        // the comparison and refuses. Do not rewrite this as `if let now = …, now != uuid { throw }`:
+        // that form lets nil *pass* and silently reinstates the bug.
+        guard isMountPoint(mp) else {
+            throw VaultError("\(mp) is no longer a mount point — the volume was unmounted during registration. Nothing was written; re-run with it mounted.")
+        }
+        // Read once. Re-reading it for the error message is a third syscall and a fresh race, so the
+        // message could name a different volume than the one that actually failed the comparison.
+        let observed = volumeUUID(mp)
+        guard let nowUUID = observed else {
+            throw VaultError(
+                "Could not read the volume identity at \(mp) (permissions, or an I/O error) — refusing rather than guessing. Nothing was written.")
+        }
+        guard nowUUID.caseInsensitiveCompare(uuid) == .orderedSame else {
+            throw VaultError(
+                "\(mp) is now volume \(nowUUID), not \(uuid) — a different volume was mounted here during registration. Nothing was written.")
+        }
+
         do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch {
             throw VaultError(
                 "Cannot create \(dir): \(error.localizedDescription)\n" + OwnershipAdvice.createVaultDirectory(dir))
         }
-        // The directory may pre-exist (created by the privileged step below, by Finder, or by a
-        // previous run). Creating it is not enough — it has to be *ours*, or every later write
-        // fails in a place much harder to diagnose than here.
-        if let problem = OwnershipAdvice.writabilityProblem(dir) { throw VaultError(problem) }
+        // The directory may pre-exist (created by the privileged step, by Finder, or by a previous
+        // run). Creating it is not enough — it has to be *ours*, or every later write fails in a
+        // place much harder to diagnose than here.
+        if let problem = OwnershipAdvice.writabilityProblem(dir) {
+            // Journalled because by this point a directory may exist that we created and are now
+            // refusing to use; without a record it is an orphan nothing downstream will look at.
+            try? journal.record(kind: .migration, state: .failed, summary: "vault directory unusable: \(problem.prefix(120))", paths: [dir])
+            throw VaultError(problem)
+        }
+
         let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)

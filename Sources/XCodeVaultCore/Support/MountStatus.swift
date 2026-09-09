@@ -19,6 +19,42 @@ public enum MountStatus {
         return (buffer[1] & UInt32(DIR_MNTSTATUS_MNTPOINT)) != 0
     }
 
+    /// The volume UUID of the filesystem **containing** `path` — nil when the attribute cannot be
+    /// read at all (path missing, unreadable, `ELOOP`, I/O error) or the filesystem reports none.
+    /// Not APFS-specific: `ATTR_VOL_UUID` is answered by HFS+ too. Only the callers are APFS-bound.
+    ///
+    /// Note what this is not: `ATTR_VOL_*` answers about the volume, so an ordinary directory
+    /// returns the UUID of the filesystem it lives on rather than nil. Asking this alone cannot
+    /// distinguish "this *is* the volume" from "this is *on* the volume" — pair it with
+    /// `isMountPoint` when identity of a mount point is what you mean. Pinned by
+    /// `MountStatusTests.testAnOrdinaryDirectoryReportsItsContainingVolumeNotNil`, because the two
+    /// functions read as interchangeable and are not.
+    ///
+    /// Deliberately a `getattrlist` syscall rather than `diskutil`: `VolumeDiscovery` shells out to
+    /// build its inventory, which is fine once per scan but far too heavy — and far too slow — to
+    /// re-check inside a transaction. The point of this primitive is to be cheap enough that
+    /// "is the volume I verified a moment ago still the volume under my feet?" can be asked
+    /// immediately before a write, closing the window between the check and the use.
+    public static func volumeUUID(at path: String) -> String? {
+        var attrList = attrlist()
+        attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        attrList.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_UUID)
+        // Layout: u_int32 length, then uuid_t (16 bytes).
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let rc = buffer.withUnsafeMutableBytes { raw in getattrlist(path, &attrList, raw.baseAddress, raw.count, UInt32(FSOPT_NOFOLLOW)) }
+        // Validate the length prefix rather than relying on the buffer having been zero-initialised:
+        // a filesystem that does not support the attribute returns a short record, and without this
+        // check the all-zero fallback below is what silently saves us. `isMountPoint` above makes the
+        // same check explicitly (`>= 8`); this record is u_int32 length + uuid_t = 20.
+        let returned = buffer.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        guard rc == 0, returned >= 20 else { return nil }
+        let b = Array(buffer[4..<20])
+        // An all-zero UUID means the filesystem reported none; treat that as absent rather than as
+        // a volume whose identity happens to be zeros.
+        guard b.contains(where: { $0 != 0 }) else { return nil }
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15])).uuidString
+    }
+
     public struct FilesystemInfo: Sendable, Equatable {
         public let mountPoint: String
         public let device: String  // f_mntfromname

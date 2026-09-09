@@ -13,6 +13,102 @@ final class VaultTests: XCTestCase {
             isWritable: true, ownersEnabled: true, totalBytes: 10, freeBytes: 5, isBootVolume: false)
     }
 
+    /// The whole guard rests on `diskutil`'s VolumeUUID (what VolumeDiscovery records) agreeing
+    /// with `ATTR_VOL_UUID` (what the guard reads). If they ever disagree, **every** registration
+    /// fails. Nothing pinned that assumption; this does, against whatever is actually mounted.
+    func testDiskutilAndGetattrlistAgreeOnVolumeUUIDs() throws {
+        let vols = try VolumeDiscovery.mountedVolumes()
+        let apfs = vols.filter { $0.isAPFS && $0.volumeUUID != nil && $0.mountPoint != nil }
+        try XCTSkipIf(apfs.isEmpty, "no mounted APFS volume to compare against")
+        for v in apfs {
+            guard let mp = v.mountPoint, let expected = v.volumeUUID else { continue }
+            guard let observed = MountStatus.volumeUUID(at: mp) else {
+                XCTFail("getattrlist reported no UUID for \(mp), diskutil says \(expected)")
+                continue
+            }
+            XCTAssertEqual(
+                observed.caseInsensitiveCompare(expected), .orderedSame,
+                "diskutil and getattrlist disagree for \(mp): \(expected) vs \(observed) — this breaks every vault registration")
+        }
+    }
+
+    /// Distinguishes "refused by the check at the top" from "refused by the re-assertion before the
+    /// write", which is impossible without the seam because both use the same predicates. The stub
+    /// answers truthfully once and then lies, simulating an unmount mid-registration.
+    func testRegisterRefusesWhenTheVolumeDisappearsBetweenTheCheckAndTheWrite() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let dir = t.dir("mnt")
+        let v = fakeVolume(uuid: "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D", mountPoint: dir)
+        let calls = Counter()
+        XCTAssertThrowsError(
+            try reg.register(
+                v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")),
+                isMountPoint: { _ in calls.next() == 1 },  // true at the top, false at the re-assertion
+                volumeUUID: { _ in v.volumeUUID })
+        ) {
+            XCTAssertTrue("\($0)".contains("no longer a mount point"), "must be the re-assertion, not the top check: \($0)")
+            XCTAssertTrue("\($0)".contains("Nothing was written"), "\($0)")
+        }
+        // The claim in that message has to be literally true: no directory, no sentinel.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/" + VaultVolume.directoryName),
+                       "the vault directory must not survive a refusal that says nothing was written")
+        XCTAssertEqual(try reg.volumes().count, 0)
+    }
+
+    /// The nastier half: something is still mounted there, but it is a different volume.
+    func testRegisterRefusesWhenADifferentVolumeIsMountedInThePlace() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let dir = t.dir("mnt")
+        let v = fakeVolume(uuid: "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D", mountPoint: dir)
+        XCTAssertThrowsError(
+            try reg.register(
+                v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")),
+                isMountPoint: { _ in true },
+                volumeUUID: { _ in "AAAAAAAA-0000-0000-0000-000000000000" })
+        ) {
+            XCTAssertTrue("\($0)".contains("is now volume"), "\($0)")
+            XCTAssertTrue("\($0)".contains("Nothing was written"), "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/" + VaultVolume.directoryName))
+    }
+
+    /// Unreadable identity must refuse with its own message, not be misreported as a different
+    /// volume — that would point the user at the wrong problem entirely.
+    func testRegisterRefusesAndSaysSoWhenTheVolumeIdentityCannotBeRead() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let v = fakeVolume(uuid: "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D", mountPoint: t.dir("mnt"))
+        XCTAssertThrowsError(
+            try reg.register(
+                v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")),
+                isMountPoint: { _ in true }, volumeUUID: { _ in nil })
+        ) {
+            XCTAssertTrue("\($0)".contains("Could not read the volume identity"), "\($0)")
+            XCTAssertFalse("\($0)".contains("is now volume"), "must not misdiagnose as a different volume: \($0)")
+        }
+    }
+
+    /// No test had ever exercised a SUCCESSFUL register(): all three call sites were
+    /// throws-assertions and every fixture bypassed it via `save(...)`. The identity guard would
+    /// have made the happy path permanently un-unit-testable without the seam.
+    func testRegisterHappyPathWritesTheSentinelAndRecordsTheVolume() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let mnt = t.dir("mnt")
+        let uuid = "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D"
+        let v = fakeVolume(uuid: uuid, mountPoint: mnt)
+        let vv = try reg.register(
+            v, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")),
+            isMountPoint: { _ in true }, volumeUUID: { _ in uuid })
+        XCTAssertEqual(vv.volumeUUID, uuid)
+        XCTAssertEqual(vv.relativeDirectory, VaultVolume.directoryName)
+        let sentinel = mnt + "/" + VaultVolume.directoryName + "/" + VaultVolume.sentinelName
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel), "the sentinel must exist at \(sentinel)")
+        XCTAssertEqual(try reg.volumes().map(\.volumeUUID), [uuid])
+    }
+
     func testRegisterRefusesUnsuitableAndNonMountPoints() throws {
         let t = TempDir()
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
@@ -275,4 +371,11 @@ enum StubVerifier {
     static func make(registry: VaultRegistry, volume: Volume, mountPoint: String) -> VaultVerifier {
         VaultVerifier(registry: registry, mountedVolumes: { [volume] }, isMountPoint: { $0 == mountPoint || MountStatus.isMountPoint($0) })
     }
+}
+
+/// Minimal call counter for the register() seam: lets a stub answer differently on each call.
+final class Counter: @unchecked Sendable {
+    private var n = 0
+    private let lock = NSLock()
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
 }

@@ -395,24 +395,12 @@ public struct Doctor: Sendable {
                 // "Nothing at risk" is only true if nothing still points here. The populated branch
                 // already reasons about that; the empty branch must not skip it — an empty directory
                 // that is still a live redirect target is a live redirect to an empty tree.
-                // Containment is tested in BOTH directions and against the *resolved* destination.
-                // Three shapes are otherwise missed, all of which leave a dangling symlink if the
-                // user follows the removal advice: a relative destination (`destinationOfSymbolicLink`
-                // returns it unresolved), a destination that is a *parent* of the candidate (the
-                // volume mount point, the mac-ssd-rescue layout), and a redirect deeper than the
-                // link itself. The link set is `CatalogRules.neverSymlink` rather than two literals,
-                // so it stays in step with the shadow-root rule.
-                let stillTargeted = CatalogRules.neverSymlink.contains { template in
-                    let link = template.expandingTilde(home: home)
-                    guard let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: link) else { return false }
-                    // Built as a string rather than with `relativeTo:`, whose behaviour depends on
-                    // whether the base URL carries a trailing slash — which in turn depends on a
-                    // filesystem probe. Explicit concatenation + `standardized` resolves `..`
-                    // deterministically for both absolute and relative destinations.
-                    let base = (link as NSString).deletingLastPathComponent
-                    let resolved =
-                        raw.hasPrefix("/") ? URL(fileURLWithPath: raw).standardized.path : URL(fileURLWithPath: base + "/" + raw).standardized.path
-                    return resolved == candidate || resolved.hasPrefix(candidate + "/") || candidate.hasPrefix(resolved + "/")
+                // `PathSafety.symlinkRedirectsBetween` owns the resolution: relative destinations,
+                // chained symlinks, doubled slashes, case, and containment in both directions. The
+                // link set is `CatalogRules.neverSymlink` rather than literals, so it stays in step
+                // with the shadow-root rule.
+                let stillTargeted = CatalogRules.neverSymlink.contains {
+                    PathSafety.symlinkRedirectsBetween($0.expandingTilde(home: home), candidate)
                 }
                 let detail: String
                 let remediation: String
