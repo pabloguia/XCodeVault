@@ -265,7 +265,7 @@ reproduced behavior, (5) Apple Developer Forums (DTS answers rank above user pos
 (6) high-quality open-source implementations, (7) community reports. Never promote a
 forum workaround straight to "verified" — reproduce it first.
 
-## H10 — regenerable system caches are reclaimed by the system, not by us
+## H11 — regenerable system caches are reclaimed by the system, not by us
 
 **Status: open.** Two paths under `/Library/Developer/CoreSimulator` accumulate multi-GB residue
 that no user action reclaims: the runtime Inbox (F1) and the dyld shared-cache tree (F10). For the
