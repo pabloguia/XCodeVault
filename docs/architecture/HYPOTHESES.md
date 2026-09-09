@@ -251,7 +251,7 @@ failure — `SimDiskImageErrorDomain Code 5` / `-67061` — did not occur.
 only), and no simctl verb points CoreSimulator at an external path — so nothing here shows a runtime
 being *used* with its bytes left outside. Nor is a user-level `hdiutil` APFS seal shown to be the
 same gate as the cryptex trust-cache check that emits -67061. Making the copy visible at the
-canonical location by mount needs root and is recorded as **E4b**; per H6 that is where the
+canonical location needs root and is recorded as **E4b** (amended to an images.plist repoint — the mount route cannot distinguish a real read from a stale mount); per H6 that is where the
 interesting failure is expected anyway, since the xctest restriction classifies by device
 removability rather than path. Evidence:
 `evidence/e4a-seal-survives-external-relocation-macos26.6.2-25G83-xcode26.5-x86_64.txt`.

@@ -228,6 +228,30 @@ Two reasons to keep expectations low before spending the effort:
 - **ADR-0004** already demoted canonical mount to R&D on exactly that reasoning. E4b is a
   falsification attempt, not a step toward shipping it.
 
+**Amended 2026-09-09, before running: the mount route is replaced by an images.plist repoint.**
+Mounting over `/Library/Developer/CoreSimulator/Volumes/<name>` fights `simdiskimaged` for the same
+mount point, and `Signature State` is served from `images.plist` rather than from whatever is
+mounted — so the mount route answers the wrong question. The script repoints the database
+CoreSimulator actually consults.
+
+**The trap that shaped the script, worth reading before designing any successor.** Both runtime
+volumes are already attached at the kernel level, and killing `simdiskimaged` does not detach them;
+`signatureState` and `state` are *stored in* `images.plist`, which the edit preserves. So a naive
+version reports `Ready / Verified` while the daemon never opens the external file — reading back a
+cached value the script itself wrote, over a stale mount. A false positive here would argue for
+reopening a safety-motivated ADR, which is the worst outcome available. The script therefore
+unmounts the runtime first, asserts the mount point is clear, and records `hdiutil info` before and
+after: **the `image-path` line is the verdict, not the Ready/Verified text.**
+
+Script: `scripts/experiments/e4b-runtime-from-external-volume.sh`, with `--dry-run` that needs no
+privilege. It refuses unless the vault verifies by UUID + sentinel, no device is booted, Xcode is
+closed, and the external image is **sha256-identical** to the registered one — that last check
+matters because E4a hashed the *iOS* image, while E4b relocates watchOS (confirmed identical
+2026-09-09: `d80c9180…`). Recovery is a pointer restore, not a re-import: the internal image is never
+touched, and re-import is not in fact available here — the vault's watchOS artifact is an
+`.exportedBundle` directory that `runtime import` rejects, and free space is below the 1.5×+2 GB
+`preflightImport` requires.
+
 Sequence, once a root shell is available and a simulator can be spared:
 
 1. Record the baseline: `xcrun simctl runtime list -v`, `mount | grep CoreSimulator`.
