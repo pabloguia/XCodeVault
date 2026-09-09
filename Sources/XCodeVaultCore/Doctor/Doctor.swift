@@ -856,13 +856,14 @@ public struct Doctor: Sendable {
             let more = items.count > 5 ? " (+\(items.count - 5) more — see `xcodevaultctl runtime library`)" : ""
             return shown.joined(separator: ", then ") + more
         }
-        // The device-return claim is one observation, not a law: macOS 26.6.2 / Xcode 26.5 / x86_64,
-        // iOS 26.5, re-imported at the SAME version. The precondition is load-bearing and has to be
-        // visible to the user. Cited as E8/H4 — E11 is the staging-space experiment, and the
-        // device-return finding belongs to the import round trip.
+        // Replicated, but on one configuration: macOS 26.6.2 / Xcode 26.5 / x86_64, iOS 26.5,
+        // re-imported at the SAME version (E8/H4, then F13 end-to-end through these verbs). Two runs
+        // of one setup is not a law, and the same-version precondition is load-bearing — a
+        // cross-version import has never been tried, so the user has to see the qualifier. E11 is the
+        // staging-space experiment; the device-return finding belongs to the import round trip.
         let caveat =
-            "Observed once (macOS 26.6.2 / Xcode 26.5 / Intel, iOS 26.5, re-imported at the same version — E8 round trip, H4); "
-            + "re-import first and confirm the devices come back before deleting anything."
+            "Observed twice on one configuration (macOS 26.6.2 / Xcode 26.5 / Intel, iOS 26.5, re-imported at the same version — E8/H4, F13); "
+            + "a cross-version import has not been tried. Re-import first and confirm the devices come back before deleting anything."
 
         let remediation: String
         let evidence: String

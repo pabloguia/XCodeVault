@@ -1211,7 +1211,7 @@ final class UnavailableDeviceAdviceTests: XCTestCase {
         let f = try XCTUnwrap(d.checkUnavailableDevices(devices: [device("iPhone", available: false)]).first)
         let r = try XCTUnwrap(f.remediation)
         XCTAssertTrue(r.contains("same version"), "the precondition is load-bearing: \(r)")
-        XCTAssertTrue(r.contains("Observed once"), r)
+        XCTAssertTrue(r.contains("one configuration"), "the qualifier is the point, not the count: \(r)")
         // E11 is the staging-space experiment; device return belongs to the E8 import round trip.
         XCTAssertFalse(f.evidence?.contains("E11") == true, "wrong experiment cited: \(f.evidence ?? "")")
         XCTAssertTrue(f.evidence?.contains("H4") == true, f.evidence ?? "")

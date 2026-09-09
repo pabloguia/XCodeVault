@@ -1,0 +1,63 @@
+F13 — offload → import round trip through XCodeVault: devices return, and the image UUID does not
+=================================================================================================
+Host:  macOS 26.6.2 (25G83), Xcode 26.5 (17F42), Intel x86_64
+Date:  2026-09-09
+Repo:  XCodeVault @ 4978ed5
+Why:   `doctor` now tells users NOT to delete unavailable devices because an offloaded runtime
+       brings them back. That claim rested on ONE observation (E8/H4). This is a replication,
+       run end-to-end through the product's own verbs rather than raw xcodebuild.
+
+BEFORE  (both runtimes offloaded earlier the same day; 0 runtimes installed, 36 GiB free)
+  iPhone 17 Pro Max     15EA64C9-…  Shutdown  (unavailable, runtime profile not found)   3.7 GB data
+  iPhone SE (3rd gen)   855CCF05-…  Shutdown  (unavailable, runtime profile not found)   4.3 GB data
+  Apple Watch Ultra 3   0F29E552-…  Shutdown  (unavailable, runtime profile not found)   1.2 GB data
+
+  Device → runtime requirement (simctl list devices -j):
+    iPhone 17 Pro Max, iPhone SE  -> com.apple.CoreSimulator.SimRuntime.iOS-26-5
+    Apple Watch Ultra 3           -> com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+
+PREDICTION MADE BEFORE RUNNING (this is the point of the run)
+  Importing ONLY iOS must return the two iPhones and leave the Watch unavailable. If the Watch
+  also returned, the rule's promise would be broader than the evidence supports and the text
+  would need weakening.
+
+ACTION
+  $ xcodevaultctl runtime import \
+      "/Volumes/<vault>/XCodeVault/RuntimeLibrary/iphonesimulator_26.5_23F77.dmg"
+
+  Internal free sampled every 15 s: 36 GiB before, floor 27 GiB, 26 GiB after.
+  Peak internal use 9 GiB for a 9.9 GB image (~0.9x) — consistent with E11's ~1.0x.
+
+AFTER
+  iPhone 17 Pro Max     Shutdown                                    3.7 GB data intact
+  iPhone SE (3rd gen)   Shutdown                                    4.3 GB data intact
+  Apple Watch Ultra 3   Shutdown (unavailable — watchOS still off)  1.2 GB data intact
+
+  Prediction held. No device was recreated by hand; none lost data; the Watch correctly did
+  NOT return, so availability tracks the specific runtime and not "any import".
+
+THE FINDING THAT WAS NOT PREDICTED — the image UUID is not stable across the round trip
+  offloaded: 34AF883C-5859-4A52-BA30-1BCB0A577DD2
+  imported : 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
+
+  The runtime is the same platform, version and build (iOS 26.5 / 23F77) and the devices bind
+  to it correctly, but `simctl runtime list`'s identifier is a *per-installation* image id, not
+  a stable identity for the runtime.
+
+  This matters directly: the offload journal originally recorded only that UUID. Matching an
+  installer to the devices it can restore by image UUID would therefore fail after exactly one
+  round trip — the entry names an image that no longer exists. `runtimeIdentifier` is the
+  stable key, which is what the journal now records in `detail` and what
+  `Doctor.checkUnavailableDevices` matches on.
+
+SECOND-ORDER CHECK — the rule's own behaviour on live data after the import
+  `xcodevaultctl doctor` now reports 1 unavailable device (was 3), and its remediation refers to
+  "a runtime" (singular): the iOS offload entry is excluded because a completed `runtimeImport`
+  for the same installer follows it, leaving only the watchOS one. The stale-entry filter works
+  against real journal data, not just fixtures.
+
+SCOPE — what this does and does not establish
+  Two observations, ONE configuration: macOS 26.6.2 / Xcode 26.5 / Intel, iOS 26.5, re-imported
+  at the SAME version. Nothing here says anything about a cross-version import, about Apple
+  Silicon, or about watchOS/tvOS device return — the watchOS installer is still on the vault and
+  that case remains untested.

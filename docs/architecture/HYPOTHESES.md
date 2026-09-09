@@ -119,6 +119,16 @@ runtime/import defect (worked around by polling device state directly instead of
 `bootstatus`'s exit). Evidence:
 `docs/research/evidence/e11-iOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
 `docs/research/evidence/e11-import-iOSSimulatorRuntime_Cryptex-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+**Replicated 2026-09-09 through XCodeVault's own verbs (F13).** Both runtimes were offloaded, then
+iOS alone re-imported: the two iPhones returned to `Shutdown` with their data (3.7 GB, 4.3 GB)
+automatically, while the Apple Watch Ultra 3 — needing the still-offloaded watchOS runtime —
+correctly stayed `unavailable` with its 1.2 GB intact. So device availability tracks the *specific*
+runtime, not merely "an import happened". Import peak 9 GiB for a 9.9 GB image (~0.9×).
+Unpredicted, and load-bearing for anything that records what was offloaded: the runtime came back
+with a **different image UUID** (`34AF883C…` → `99ABCCEF…`), so `simctl runtime list`'s identifier is
+a per-installation id and only `runtimeIdentifier` survives a round trip. Still one configuration —
+same-version re-import on macOS 26.6.2 / Xcode 26.5 / Intel.
+
 Gate: E8 — closed.
 
 ## H5 — Symlink indirection breaks the Simulator even on the same disk *(new)*
