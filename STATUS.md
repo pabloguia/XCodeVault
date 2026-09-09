@@ -350,8 +350,36 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   `O_NOFOLLOW` descriptor to the uid/gid from the XPC audit token. macOS shows its own
   authentication once, at `SMAppService.daemon` installation; the app never sees a password.
   `OwnershipAdvice` printing a command is the stopgap until the bundle is signed, and says so.
-- Next: exercise a real relocation into the vault (DerivedData first, `nativeConfiguration` via
-  Xcode Locations) and verify the disconnect path.
+- **F1 corrected: an imported runtime lives outside the MobileAsset store.** F1 said 100 % of
+  installed-runtime bytes are in `/System/Library/AssetsV2/...` and that
+  `/Library/Developer/CoreSimulator/Images/` holds only `images.plist` and empty dirs. True for a
+  runtime Apple downloaded; false in general. After E8's export → offload → `-importPlatform`, iOS
+  26.5 reports `path = /Library/Developer/CoreSimulator/Images/<UUID>.dmg` — 9.9 GiB there — while
+  watchOS 26.5, never exported, is still in the MobileAsset store at 4.9 GiB. The two locations
+  coexist and which one applies depends on how the runtime was installed. Also: the iOS and
+  appleTVOS MobileAsset store directories still exist at **4 KB each**, so a store directory's
+  presence says nothing about whether bytes are in it.
+- **Runtime audit (2026-09-08): no orphans.** Both installed runtimes are in use — iOS 26.5 by
+  iPhone 17 Pro Max + iPhone SE, watchOS 26.5 by Apple Watch Ultra 3. 14.8 GB total, none
+  reclaimable. Zero `unavailable` devices, Inbox empty (session 2's stranded 5 GB dmg is confirmed
+  reaped). The five "skipped runtime image" lines in `clean` were the tool listing each MobileAsset
+  store path including the two empty ones — not evidence of waste, contrary to how I first read it.
+- **Follow-up (design question, not a bug):** the storage catalog has `Images/Inbox` and
+  `Cryptex/Images/bundle` but no category for `/Library/Developer/CoreSimulator/Images/*.dmg`, so
+  the category accounting and the runtime accounting reach the same bytes by different routes.
+  Adding a category would double-count against the runtime listing in `scan` totals; decide
+  deliberately rather than reflexively.
+- **The machine's actual reclaim is cleanup, not relocation.** Internal free is ~8.6 GiB
+  (`doctor` now CRITICAL, threshold 10 GB). Nothing large is relocatable: the big categories are
+  `appleManaged`, `safeCleanup` or must-stay-local. `clean` plans 13.75 GB, of which **3.6 GB is
+  user-level** (watchOS DeviceSupport 3.13 GB, SwiftPM caches 484 MB, logs) and **10.12 GB is the
+  root-owned CoreSimulator dyld caches**, which need the privileged helper's
+  `removeRegenerableSystemDirectoryContents` — listed for accounting, not executable today.
+- Next: exercise a real relocation into the vault and verify the disconnect path. Note DerivedData
+  is currently **0 B**, so it is not a usable subject until something is built; and a migration
+  needs no internal free space at all (source internal → destination external, internal usage only
+  falls when the verified source is removed). The ~40 GB internal requirement belongs to *runtime
+  installs* (E11), which is a different operation — do not conflate them.
 
 ## In flight
 
