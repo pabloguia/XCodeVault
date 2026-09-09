@@ -1,7 +1,7 @@
 import Foundation
 
 /// The transactional copy engine behind `externalize` (cold storage) and `restore`
-/// (MIGRATION_ENGINE.md). One migration = copy a catalog path to `<vault>/XcodeVault/<category>/…`
+/// (MIGRATION_ENGINE.md). One migration = copy a catalog path to `<vault>/XCodeVault/<category>/…`
 /// (or back), verify beyond file counts, and only ever remove the source on an explicit,
 /// separate, re-verified step. Every transition is journaled under one operation id so a
 /// crash leaves a resumable/abortable record that `doctor` and `migration status` surface.

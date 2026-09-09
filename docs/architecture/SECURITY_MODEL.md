@@ -13,7 +13,7 @@ impossible by construction, not by validation alone.
 - **Allowlisted API only.** No arbitrary command execution, no arbitrary shell, no
   client-supplied arbitrary paths, no generic `rm`/`mv`/`mount`/`umount`.
 - Every operation is a specific, narrow verb against a specific, approved resource,
-  e.g.: mount an approved external-volume UUID at an approved XcodeVault mount point;
+  e.g.: mount an approved external-volume UUID at an approved XCodeVault mount point;
   unmount an approved volume; create an approved canonical mount point; query mount
   state; update a single, explicitly controlled `/etc/fstab` record (only if the
   chosen architecture requires it — prefer avoiding fstab edits entirely if possible);

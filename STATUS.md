@@ -319,12 +319,43 @@ release/bundle scripts and cask draft exist; nothing signed yet.
      integration is one line. Recorded rather than faked.
   5. `common.sh` could print the script name and git rev in every evidence header — E12 does this
      now; no other experiment file records which script version produced it.
-- Next: once the vault directory exists, exercise a real relocation into it (DerivedData is the
-  natural first, `nativeConfiguration` via Xcode Locations) and verify the disconnect path.
+- **Vault directory renamed `XcodeVault` → `XCodeVault`** (capital C, the project's own spelling) at
+  the user's request, and **registered**: `/Volumes/<vault>/XCodeVault`, `<user>:staff` 755, sentinel
+  written unprivileged, `vault status` VERIFIED. On a case-sensitive volume — which the user's drive
+  is — the spelling is a genuinely different path, not cosmetic. The name now lives in
+  `XCodeVaultHelperProtocol` (the only module both the client and the helper link);
+  `XCodeVaultCore` deliberately keeps NO dependencies, so it repeats the literal and
+  `HelperContractTests` links both modules and fails if they drift.
+- **Helper security review found a real hole the rename opened.** Moving the name out of
+  `main.swift` moved with it the guarantee that the created directory stays inside the approved
+  mount point. A leading `".."` would make `dir` resolve to `/Volumes`: `lstat` sees a directory so
+  `mkdir` is skipped, `O_NOFOLLOW` does not constrain `..`, and the `fchown` hands `/Volumes` to the
+  caller. Unreachable (compile-time constant, no XPC parameter feeds it) and already blocked by a CI
+  assertion — but in *another target*, not by the helper. The guard is back in `main.swift`, and
+  validated on **bytes**: `String.contains("/")` compares graphemes, so a `/` carrying a combining
+  mark passes it while the kernel still splits on 0x2F; an embedded NUL likewise passes every
+  String-level check and then truncates the C string to the volume root.
+- **Correction worth remembering:** `openat`/`mkdirat` is *not* a substitute for that guard. macOS
+  has neither `O_RESOLVE_BENEATH` nor `openat2(RESOLVE_BENEATH)`, so an anchored fd still traverses
+  `..` in the name argument. What `openat` would buy is closing the path-based TOCTOU on `mp`
+  between `isMountPoint` and `mkdir` — a race the filesystem already closes, since `/Volumes` is
+  root-owned and SIP-restricted. Low-priority hardening, tracked, not urgent.
+- **`--directory` gap, now documented in the CLI:** it is a client-side choice, and the privileged
+  helper can only ever create the default. A user registering with a custom directory has to create
+  it themselves regardless; the helper refusing a client-supplied path is correct and must not
+  change.
+- **On "the app should ask for the sudo password" — it should not, and it will not need to.** The
+  correct mechanism already exists here: `createVaultDirectory(volumeUUID:)` is implemented in the
+  helper, takes a UUID rather than a path, resolves the mount point itself, and chowns an
+  `O_NOFOLLOW` descriptor to the uid/gid from the XPC audit token. macOS shows its own
+  authentication once, at `SMAppService.daemon` installation; the app never sees a password.
+  `OwnershipAdvice` printing a command is the stopgap until the bundle is signed, and says so.
+- Next: exercise a real relocation into the vault (DerivedData first, `nativeConfiguration` via
+  Xcode Locations) and verify the disconnect path.
 
 ## In flight
 
-- Nothing running. 105 tests green.
+- Nothing running. 107 tests green.
 
 ## Blocked / pending — manual (ask the user)
 

@@ -47,7 +47,7 @@ at runtime.
 Model a downloaded runtime **installer** and an **installed** runtime as distinct
 catalog entries with distinct strategies (`downloadRepository` vs. the runtime's own
 `appleManaged`/`canonicalMount` entry), so a user can keep installers on external
-storage (`ExternalDrive/XcodeVault/RuntimeLibrary/...`) without re-downloading
+storage (`ExternalDrive/XCodeVault/RuntimeLibrary/...`) without re-downloading
 multi-GB runtimes, install/offload on demand, and see which Xcode versions support
 each operation (`xcodebuild -downloadPlatform` / `-downloadAllPlatforms` /
 `-importPlatform`, feature-detected — never assumed present).

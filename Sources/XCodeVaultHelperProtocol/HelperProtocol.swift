@@ -16,11 +16,26 @@ import Foundation
     /// and refuses symlinks and anything not a regular file ending in .dmg.
     func removeStrandedRuntimeDownload(fileName: String, reply: @escaping (HelperResult) -> Void)
 
-    /// Creates `<mount point>/XcodeVault` on a mounted external volume identified by UUID and
-    /// hands ownership to the *calling* user (uid/gid taken from the XPC connection's audit
+    /// Creates `<mount point>/<VaultDirectory.name>` on a mounted external volume identified by UUID
+    /// and hands ownership to the *calling* user (uid/gid taken from the XPC connection's audit
     /// credentials, never from the request). The helper resolves the UUID to a mount point itself;
     /// the client cannot pass a path.
     func createVaultDirectory(volumeUUID: String, reply: @escaping (HelperResult) -> Void)
+}
+
+/// The vault directory's name, which is part of the client↔helper contract: the helper creates it,
+/// the client expects to find it there. It lives in this module — the only one both sides link —
+/// so the two cannot drift into disagreeing about which directory the privileged verb produced.
+///
+/// The helper deliberately does not depend on `XCodeVaultCore` (minimal, auditable attack surface),
+/// and `XCodeVaultCore` is declared with no dependencies at all, so neither can see the other's
+/// literals: `VaultVolume.directoryName` repeats this string rather than referencing it. The two are
+/// kept honest by `HelperContractTests`, which links both modules and asserts they are equal — the
+/// one place in the build where that comparison is possible.
+public enum VaultDirectory {
+    /// Capital "C", matching the project's own spelling. On a case-sensitive volume this is a
+    /// different directory from `XcodeVault`, so the spelling is load-bearing, not cosmetic.
+    public static let name = "XCodeVault"
 }
 
 /// Allowlisted cleanup targets. The helper owns the path mapping; the enum exists so clients cannot

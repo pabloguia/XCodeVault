@@ -20,11 +20,17 @@ public struct VaultVolume: Sendable, Codable, Equatable, Identifiable {
     public var lastMountPoint: String
     public var registeredAt: Date
     public var sentinelID: String  // random token stored in the sentinel file
-    /// Vault directory relative to the volume root. Default "XcodeVault"; volume roots are usually
+    /// Vault directory relative to the volume root. Default "XCodeVault"; volume roots are usually
     /// root-owned, so users without the privileged helper may register a subdirectory they can write.
     public var relativeDirectory: String
 
-    public static let directoryName = "XcodeVault"
+    /// Deliberately a literal, not a reference to `VaultDirectory.name` in
+    /// `XCodeVaultHelperProtocol`: `XCodeVaultCore` is declared with no dependencies at all
+    /// ("no UI, no privileged calls, no shell"), and linking the XPC contract into the domain
+    /// layer to share one string would blur that. The drift this risks is caught instead by
+    /// `HelperContractTests.testVaultDirectoryNameMatchesTheHelperContract`.
+    /// Capital "C": on a case-sensitive volume this is a different directory from "XcodeVault".
+    public static let directoryName = "XCodeVault"
     public static let sentinelName = ".xcodevault-volume.json"
     public var lastVaultDirectory: String { lastMountPoint + "/" + relativeDirectory }
     public func vaultDirectory(atMountPoint mp: String) -> String { mp + "/" + relativeDirectory }
@@ -81,7 +87,7 @@ public struct VaultRegistry: Sendable {
     }
 
     /// Registers a mounted, qualified volume: creates `<mount>/<relativeDirectory>/` (default
-    /// `XcodeVault`) and the sentinel. Refuses unsuitable volumes, the boot volume, and any
+    /// `XCodeVault`) and the sentinel. Refuses unsuitable volumes, the boot volume, and any
     /// directory that escapes the volume.
     @discardableResult
     public func register(_ v: Volume, relativeDirectory: String = VaultVolume.directoryName, journal: Journal = Journal()) throws -> VaultVolume {

@@ -7,19 +7,19 @@ import XCTest
 /// so the assertions here are about the exact string, not about behaviour.
 final class OwnershipAdviceTests: XCTestCase {
     func testShellQuotingSurvivesVolumeNamesWithSpacesAndApostrophes() {
-        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/Simple/XcodeVault"), "'/Volumes/Simple/XcodeVault'")
-        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/My SSD/XcodeVault"), "'/Volumes/My SSD/XcodeVault'")
+        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/Simple/XCodeVault"), "'/Volumes/Simple/XCodeVault'")
+        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/My SSD/XCodeVault"), "'/Volumes/My SSD/XCodeVault'")
         // "Dev's SSD" is the case that breaks naive single-quoting: the embedded quote has to
         // close, escape, and reopen or the pasted command is unbalanced.
-        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/Dev's SSD/XcodeVault"), "'/Volumes/Dev'\\''s SSD/XcodeVault'")
+        XCTAssertEqual(OwnershipAdvice.shellQuoted("/Volumes/Dev's SSD/XCodeVault"), "'/Volumes/Dev'\\''s SSD/XCodeVault'")
     }
 
     func testCreateCommandUsesTheRealUserAndQuotesThePath() {
-        let advice = OwnershipAdvice.createVaultDirectory("/Volumes/Dev's SSD/XcodeVault")
+        let advice = OwnershipAdvice.createVaultDirectory("/Volumes/Dev's SSD/XCodeVault")
         let (user, group) = OwnershipAdvice.currentUserAndGroup()
         XCTAssertTrue(
             advice.contains(
-                "sudo install -d -o \(OwnershipAdvice.shellQuoted(user)) -g \(OwnershipAdvice.shellQuoted(group)) -m 755 '/Volumes/Dev'\\''s SSD/XcodeVault'"),
+                "sudo install -d -o \(OwnershipAdvice.shellQuoted(user)) -g \(OwnershipAdvice.shellQuoted(group)) -m 755 '/Volumes/Dev'\\''s SSD/XCodeVault'"),
                       "the pasted command must be correct verbatim: \(advice)")
         XCTAssertFalse(user.isEmpty)
         XCTAssertFalse(group.isEmpty)
@@ -166,8 +166,8 @@ final class OwnershipAdviceTests: XCTestCase {
     func testOurOwnPopulatedVaultWithADenyACEIsDiagnosedAsAnACLNotRedirected() throws {
         try XCTSkipIf(getuid() == 0, "root bypasses ACLs")
         let t = TempDir()
-        let dir = t.dir("XcodeVault")
-        _ = t.file("XcodeVault/.xcodevault-volume.json", bytes: 32)
+        let dir = t.dir("XCodeVault")
+        _ = t.file("XCodeVault/.xcodevault-volume.json", bytes: 32)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/chmod")
         p.arguments = ["+a", "\(NSUserName()) deny write,add_file,add_subdirectory,delete_child", dir]

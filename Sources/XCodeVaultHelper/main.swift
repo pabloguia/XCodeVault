@@ -78,12 +78,30 @@ final class HelperService: NSObject, XCodeVaultHelperXPC {
         guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2, Self.isMountPoint(mp) else {
             return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible")
         }
-        let dir = mp + "/XcodeVault"
+        // The last path component is validated HERE even though it is a compile-time constant no
+        // client can influence. Containment of the created directory inside the approved mount point
+        // is a property this function is responsible for, and moving the value into
+        // XCodeVaultHelperProtocol moved that property out of this file. A leading ".." is the
+        // dangerous shape and it is not hypothetical: `mp + "/.."` resolves to /Volumes, lstat sees a
+        // directory so mkdir is skipped, O_NOFOLLOW does not constrain "..", and the fchown below
+        // would hand /Volumes itself to the caller. A CI assertion in another target is not a
+        // substitute for the helper checking its own invariant.
+        // Validated on BYTES, not on Characters: `String.contains("/")` compares graphemes, so a
+        // "/" carrying a combining mark does not match it — while the kernel splits on the 0x2F
+        // byte regardless and the path escapes the mount point. An embedded NUL is the same class:
+        // it passes every String-level check and then truncates the C string, leaving `dir` as the
+        // volume root, which the fchown below would hand to the caller wholesale.
+        let name = VaultDirectory.name
+        let bytes = Array(name.utf8)
+        guard !bytes.isEmpty, !bytes.contains(0x2F), !bytes.contains(0x00), name != ".", name != ".." else {
+            return HelperResult(ok: false, message: "invalid vault directory name")
+        }
+        let dir = mp + "/" + name
         // O_NOFOLLOW|O_DIRECTORY open of a freshly created (or existing, non-symlink) directory, then
         // fchown on the descriptor: no path-based TOCTOU between check and chown.
         var st = stat()
         if lstat(dir, &st) == 0 {
-            guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "XcodeVault exists and is not a directory") }
+            guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "\(name) exists and is not a directory") }
         } else if mkdir(dir, 0o755) != 0 {
             return HelperResult(ok: false, message: "mkdir failed: \(String(cString: strerror(errno)))")
         }

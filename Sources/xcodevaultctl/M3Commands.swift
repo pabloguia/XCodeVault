@@ -8,10 +8,16 @@ struct Vault: ParsableCommand {
         subcommands: [Init.self, Status.self, Forget.self], defaultSubcommand: Status.self)
     struct Init: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Register a mounted external APFS volume as a vault (creates <mount>/XcodeVault and a sentinel).",
-            discussion: "Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> to use a folder you can write (e.g. one you created in Finder).")
+            abstract: "Register a mounted external APFS volume as a vault (creates <mount>/\(VaultVolume.directoryName) and a sentinel).",
+            discussion: """
+                Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
+                to use a folder you can write, or create the default one with the command this prints when it fails.
+
+                Note --directory is a client-side choice: the privileged helper can only ever create the default \
+                \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
+                """)
         @Argument(help: "Mount point, e.g. /Volumes/MyDrive") var mountPoint: String
-        @Option(name: .long, help: "Vault directory relative to the volume root (default: XcodeVault).") var directory: String = VaultVolume.directoryName
+        @Option(name: .long, help: "Vault directory relative to the volume root (default: \(VaultVolume.directoryName)). Not creatable by the privileged helper — see the discussion.") var directory: String = VaultVolume.directoryName
         func run() throws {
             let vols = try VolumeDiscovery.mountedVolumes()
             guard let v = vols.first(where: { $0.mountPoint == mountPoint }) else {
@@ -92,7 +98,7 @@ struct Restore: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     @Option(name: .long) var category: String = "archives"
     @Option(name: .long, help: "Vault volume: UUID, name or mount point.") var vault: String
-    @Option(name: .long, help: "Entry name inside <vault>/XcodeVault/<category>/.") var name: String
+    @Option(name: .long, help: "Entry name inside <vault>/\(VaultVolume.directoryName)/<category>/.") var name: String
     @Option(name: .long, help: "Destination path (defaults to the category's standard path).") var to: String?
     @Flag(name: .long) var apply = false
     func run() throws {

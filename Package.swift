@@ -48,7 +48,7 @@ let package = Package(
         ),
         .testTarget(
             name: "XCodeVaultCoreTests",
-            dependencies: ["XCodeVaultCore"],
+            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol"],
             resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
