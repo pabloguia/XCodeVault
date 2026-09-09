@@ -405,7 +405,7 @@ those entries "pending — manual" until someone actually runs and records the r
 ### F10 orphaned dyld caches + F11 export cost — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
 
 - Date tested: 2026-09-08 / 09
-- Gates: H10 (are regenerable system caches reclaimed by the system?), and the cost model the
+- Gates: H11 (are regenerable system caches reclaimed by the system?), and the cost model the
   `runtime export` preflight presents to the user
 - **F11 — export of an already-installed runtime: VERIFIED for the no-`-buildVersion` case,
   near-zero internal cost.** Both runs used `runtime export iOS --to …` with no `-buildVersion`, so
