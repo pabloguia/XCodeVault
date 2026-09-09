@@ -1,0 +1,81 @@
+E4a — does a byte-identical runtime image keep its seal on an external APFS volume?
+====================================================================================
+Host:  macOS 26.6.2 (25G83), Xcode 26.5 (17F42), Intel x86_64
+Date:  2026-09-09
+Repo:  XCodeVault @ 23e0e8e
+Gates: H9 (byte-identical relocation preserves runtime seal validation), part of E4/H1
+Scope: NO sudo, NO mount at the canonical location, nothing under /System touched.
+       E4 as written also requires making the copy visible at
+       /Library/Developer/CoreSimulator/... by mount, which is root-owned. That half is
+       NOT covered here and is listed as E4b at the end.
+
+PROTOCOL DEVIATION, recorded rather than silently adapted
+  EXPERIMENTS.md E4 says to copy `Cryptex/Images/bundle/SimRuntimeBundle-<UUID>`. That path
+  does not exist on this machine: Cryptex/Images/bundle is empty (0 B) and the installed
+  runtimes are disk images under /Library/Developer/CoreSimulator/Images/<UUID>.dmg. The
+  protocol predates the F1 correction. Used the real layout.
+
+STEP 1 — is the vault copy actually byte-identical? (no copy needed; one already existed)
+  internal: /Library/Developer/CoreSimulator/Images/99ABCCEF-…dmg  10597197700 B  Aug 6 15:05
+  external: /Volumes/<vault>/XCodeVault/RuntimeLibrary/iphonesimulator_26.5_23F77.dmg
+                                                     10597197700 B  Aug 6 15:05
+  sha256 (both):
+    e27aaecf549c957c7f58c0cdf9ed37b5596297ca5a6c1fd29dd8bf6eb5764a29
+
+  So `xcodebuild -exportPath` on an ALREADY-INSTALLED runtime emits a byte-exact copy of the
+  installed image. Previously inferred from size+mtime (F11); now hashed.
+
+STEP 2 — integrity of the external copy
+  $ hdiutil verify <external .dmg>
+    "checksum … is VALID"
+
+STEP 3 — does it attach, and is the APFS seal intact, with the bytes on the USB device?
+  $ hdiutil attach -readonly -nobrowse -mountrandom /private/tmp <external .dmg>
+    exit 0
+  $ mount | grep dmg
+    /dev/disk9s1 on /private/tmp/dmg.USblGU (apfs, SEALED, local, nodev, nosuid,
+      read-only, journaled, noowners, nobrowse, mounted by <user>)
+  $ ls <mount>/Library/Developer/CoreSimulator/Profiles/Runtimes/
+    iOS 26.5.simruntime
+  $ diskutil apfs list → Name: "iOS 26.5 Simulator (Case-insensitive)", 23.5 GB consumed
+
+  Mounted by a NORMAL USER, not root. Detached cleanly afterwards.
+
+STEP 4 — the other artifact shape (F12) behaves the same
+  The watchOS runtime exists on the vault as a .exportedBundle directory; its inner image
+  .../Restore/WatchOSSimulatorRuntime_Cryptex.dmg also attached `sealed`, same flags.
+
+STEP 5 — NEGATIVE CONTROL (without this, "sealed" could be a flag that merely came along)
+  Copied the watchOS inner image, flipped ONE byte at offset 2,000,000,000 (0x97 → 0x68):
+  $ hdiutil verify  → "checksum … is INVALID / image data corrupted"
+  $ hdiutil attach  → exit 1, "Apple_APFS: checksum failed with error 1000",
+                      calculated CRC32 $5024B4E2, expected $288103FB
+  Integrity is genuinely enforced at attach time. Control file deleted.
+
+RESULT
+  H9's named failure mode — SimDiskImageErrorDomain Code 5 / -67061 invalid signature on a
+  relocated image — did NOT occur. A sealed simulator runtime copied byte-identically to an
+  external USB APFS volume keeps a verifying APFS seal and mounts.
+
+WHAT THIS DOES NOT ESTABLISH — read before citing it
+  1. That CoreSimulator will USE a runtime whose bytes stay external. `simctl runtime add`
+     stages the image INTO the internal secure storage area ("cloned so no additional disk
+     space will be used" — an APFS clone is same-volume only, so from external it is a full
+     copy). There is no simctl verb that points CoreSimulator at an external path.
+  2. That the APFS `sealed` flag on a user-level `hdiutil attach` is the same gate as
+     CoreSimulator's cryptex trust-cache check, which is what produces -67061. Related, not
+     shown to be identical.
+  3. That a simulator can BOOT against externally-backed storage — H6 found the xctest
+     bundle-loading restriction classifies by device removability, not path, and that has
+     never been tested for runtime images.
+  4. Anything about Apple Silicon, or about a cross-version image.
+
+  Note also (F13, same day): the runtime re-imported FROM this external copy verified fine
+  (`Signature State: Verified`) — so CoreSimulator's own verification already accepts an
+  externally-sourced byte-identical image. It simply stages it internally first.
+
+E4b — STILL TO RUN, REQUIRES ROOT (not run here; no sudo was used in this session)
+  Make the external copy visible at the canonical location by MOUNT (not symlink) and try
+  `simctl runtime list`, create/boot a device, install and launch an app. Commands would need
+  root to touch /Library/Developer/CoreSimulator. Per H6 this is where the interesting
+  failure is expected, and per ADR-0004 the canonical mount is R&D, not a v1 feature.

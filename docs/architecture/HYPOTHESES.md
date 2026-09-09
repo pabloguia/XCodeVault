@@ -237,8 +237,25 @@ being true no longer rescues H1 — see H1's 2026-09-06 update.
 **Claim:** a sealed simulator-runtime image copied byte-identically to another APFS
 volume still passes cryptex seal/trust-cache verification and mounts.
 
-**Status: unverified.** Failure surfaces as `SimDiskImageErrorDomain Code 5` /
-`-67061 invalid signature` (F1). Nobody has published such a test. Gate: E4.
+**Status: the seal half is verified; the "CoreSimulator uses it in place" half is not
+(E4a, 2026-09-09, macOS 26.6.2 25G83 / Xcode 26.5 / Intel).** The vault copy of the installed
+iOS 26.5 image is byte-identical (sha256 `e27aaecf…`, previously only inferred from size+mtime),
+and attaching it **from the external USB APFS volume** mounts `sealed`, as a normal user, with
+`iOS 26.5.simruntime` readable inside. The `.exportedBundle` inner image behaves the same.
+Negative control: flipping one byte makes both `hdiutil verify` and `hdiutil attach` fail
+(`checksum failed with error 1000`), so `sealed` is enforced rather than carried along. The named
+failure — `SimDiskImageErrorDomain Code 5` / `-67061` — did not occur.
+
+**What is still open, and it is the part that decides the product question.** `simctl runtime add`
+*stages* an image into the internal secure storage area (the "clone" it mentions is same-volume
+only), and no simctl verb points CoreSimulator at an external path — so nothing here shows a runtime
+being *used* with its bytes left outside. Nor is a user-level `hdiutil` APFS seal shown to be the
+same gate as the cryptex trust-cache check that emits -67061. Making the copy visible at the
+canonical location by mount needs root and is recorded as **E4b**; per H6 that is where the
+interesting failure is expected anyway, since the xctest restriction classifies by device
+removability rather than path. Evidence:
+`evidence/e4a-seal-survives-external-relocation-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+Gate: E4 (E4a done, E4b pending root).
 
 ---
 

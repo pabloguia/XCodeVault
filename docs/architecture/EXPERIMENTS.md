@@ -206,3 +206,37 @@ SIP flag or a `rootless.conf` entry, which is worth reporting to Apple and worth
 make the privileged one unnecessary — and that reasoning from "no SIP flags + absent from
 rootless.conf" to "root can delete it" has already been wrong once in this repo, on a path with
 exactly those properties.
+
+## E4b — the half of E4 that needs root: CoreSimulator using an externally-backed runtime
+
+E4a (2026-09-09) settled the seal question without privilege: a byte-identical copy of an installed
+runtime image, living on an external USB APFS volume, attaches `sealed` as a normal user, with a
+negative control proving the check is enforced. Evidence:
+`docs/research/evidence/e4a-seal-survives-external-relocation-*.txt`.
+
+What it could not touch is the half that decides whether relocation is a product feature: making the
+copy visible at `/Library/Developer/CoreSimulator/...` **by mount, not symlink**, and seeing whether
+CoreSimulator accepts and uses it there. That path is root-owned, and this project does not take
+privilege it does not need — so the commands belong to the operator, not to the tool.
+
+Two reasons to keep expectations low before spending the effort:
+
+- **H6.** The sandbox/TCC restriction that breaks `xctest` bundle loading classifies by **device
+  removability, not by path** (E2): it reproduced on a real USB SSD both under `/Volumes/…` and
+  through an internal-path symlink, and did not reproduce on disk images. A canonical mount does not
+  disguise a removable device, so the restriction is expected to follow the runtime.
+- **ADR-0004** already demoted canonical mount to R&D on exactly that reasoning. E4b is a
+  falsification attempt, not a step toward shipping it.
+
+Sequence, once a root shell is available and a simulator can be spared:
+
+1. Record the baseline: `xcrun simctl runtime list -v`, `mount | grep CoreSimulator`.
+2. Unmount the internal runtime volume, mount the external copy at the same canonical path.
+3. `xcrun simctl runtime list` — does it still report `Signature State: Verified`, or does
+   `SimDiskImageErrorDomain Code 5` / `-67061` finally appear?
+4. Create a throwaway device on that runtime, boot it, install and launch a trivial app, shut down,
+   delete. Watch for the H6 signature (`Failed to create a bundle instance`) rather than a seal error.
+5. Restore: unmount, remount the internal image, verify the baseline devices return.
+
+Report either outcome. A success would reopen ADR-0004; a failure at step 4 with the H6 signature
+would close H1 for good and is the more likely result.
