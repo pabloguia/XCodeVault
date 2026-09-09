@@ -163,6 +163,16 @@ extension Runtime {
             guard let rt = rts.first(where: { $0.identifier == identifier }) else {
                 throw ValidationError("No installed runtime with identifier \(identifier).")
             }
+            // The same rule-6 check `export` does, and it matters more here: this is the verb that
+            // deletes 5–25 GB. With the volume absent and a stale installer sitting in a leftover
+            // /Volumes directory on the internal disk, `library(at:)` lists it, `hdiutil imageinfo`
+            // reads it, and the installed runtime is deleted — a source removed against a copy that
+            // is not where the user believes it is, on a disk that just lost the space twice over.
+            guard !RuntimeOperations.isNotOnAMountedVolume(destination: library) else {
+                throw ValidationError(
+                    "\(library) is under /Volumes but no volume is mounted there — most likely a mount-point directory left behind by an unclean eject. "
+                        + "The runtime is NOT deleted. Reconnect the drive and check `xcodevaultctl volumes`.")
+            }
             let lib = try RuntimeOperations.library(at: library)
             guard let inst = RuntimeOperations.installer(for: rt, in: lib) else {
                 throw ValidationError(

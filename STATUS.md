@@ -637,3 +637,57 @@ volume at a canonical path**, which is the split-brain case in `MIGRATION_ENGINE
 violation. Pre-existing, but this change made it load-bearing: `.copyOut` now tells the user to
 "budget the space at the DESTINATION". It belongs in its own change, wired through the same
 `VaultVerifier` path `vault status` uses.
+
+### Review round 4 (export destination guard) — I shipped a check that could not fire, and my tests agreed with it
+
+The guard added to `preflightExport` asked `MountStatus.filesystem(containing: destination)?.mountPoint == "/"`.
+**That condition is unsatisfiable for the case it was written for.** `/Volumes` is a firmlink onto
+the Data volume, so `statfs` reports `/System/Volumes/Data` for it and for every ordinary directory
+inside it — never `/`. Verified with my own probe rather than taken on the reviewer's word:
+
+```
+/Volumes             -> /System/Volumes/Data
+/Volumes/<vault>       -> /Volumes/<vault>
+/                    -> /
+```
+
+So on every macOS ≥ 10.15 the only path under `/Volumes` that could satisfy it is a symlink to the
+boot volume, which is a false positive with the wrong diagnosis. The split-brain case stayed open.
+
+**Both of my tests passed because they hand-built `FilesystemInfo(mountPoint: "/")` — a value
+`statfs` cannot produce for any path under `/Volumes`.** I mutation-tested four mutations and killed
+all four, and every one of them lived *inside* the injected seam. The defect was in the default
+argument, which no test exercised. **A seam does not test the thing it replaces.** Any injected
+default now needs one test that passes no seam at all.
+
+The correct implementation was already in the repo: `Doctor+Vault.checkLocationsPointAtPresentVolumes`
+takes the first component under `/Volumes/` and asks `MountStatus.isMountPoint(top)` —
+`ATTR_DIR_MOUNTSTATUS`, which is what `MIGRATION_ENGINE.md` and the safety checklist ask for. The
+rewrite uses that, and the doc comment says in as many words not to reimplement it with `statfs`.
+
+Fixed alongside: fails **closed** now (`isMountPoint` is false when the attribute cannot be read, so
+"I cannot tell" refuses) — the earlier "unknown ⇒ allow" reasoning was unsound, because `statfs` can
+fail with `EACCES`/`EIO` on a path that exists and is writable, so the existence and writability
+guards do not subsume it. Both the literal and symlink-resolved spellings are checked, since a
+symlink *into* a vault never mentions `/Volumes` and `/Volumes/<bootname>` stops mentioning it after
+resolution. `/Volumes` matching is case-insensitive, which is load-bearing only for a path that does
+not exist — measured: `resolvingSymlinksInPath` normalises `/volumes/<vault>/…` while <vault> is mounted
+but leaves a non-existent `/volumes/Ghost/…` lowercase.
+
+**The same guard now also gates `runtime offload --library`**, which is the verb that actually
+deletes 5–25 GB. With the volume absent and a stale installer in a leftover `/Volumes` directory on
+the internal disk, `library(at:)` listed it, `hdiutil imageinfo` read it, and the runtime would have
+been deleted against a copy that is not where the user believes — checklist item 1.
+
+**Still not done, and now stated rather than implied:** this checks the mount *shape*, not volume
+*identity*. A different drive mounted at `/Volumes/<vault>` passes. `VaultVerifier.resolveUsable`
+exists and `MigrationEngine` already uses it; wiring it in when the destination lies inside a
+registered vault is the next increment.
+
+**A third harness lesson.** My mutation harness counted `error: -[` lines, so a mutant that makes the
+test process *crash* (index out of range) registered as a survivor. Count crashes too. That is three
+distinct harness bugs tonight — `head -1` across suites, assertions inside `if let`, and now crashes
+— each of which reported a live mutant as dead.
+
+Round 4 tally: 19 tests in `RuntimeOperationsTests`, 168 total, 0 failures; 8 mutations, 8 killed
+after the tests were made load-bearing (3 initially survived).

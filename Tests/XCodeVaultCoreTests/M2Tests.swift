@@ -191,6 +191,93 @@ final class RuntimeOperationsTests: XCTestCase {
         XCTAssertThrowsError(try old.preflightExport(.init(platform: "iOS", destination: t.path), freeBytesAtDestination: nil))
     }
 
+    /// The canary for the bug that made the first version of this guard inert. `/Volumes` is a
+    /// firmlink onto the Data volume, so `statfs` reports `/System/Volumes/Data` for it and for every
+    /// ordinary directory inside it — never `/`. Any future rewrite reaching for a `statfs`
+    /// mount-point comparison fails here instead of shipping a check that cannot fire.
+    func testVolumesIsAFirmlinkSoStatfsNeverReportsTheRootMountPointForIt() {
+        XCTAssertNotEqual(MountStatus.filesystem(containing: "/Volumes")?.mountPoint, "/", "the firmlink assumption changed; re-read isNotOnAMountedVolume")
+        XCTAssertEqual(MountStatus.filesystem(containing: "/")?.mountPoint, "/")
+    }
+
+    /// Rule 6: a path is not a volume. When an external volume goes away uncleanly macOS can leave
+    /// its mount-point directory behind on the internal disk, and `fileExists` cannot tell that apart
+    /// from the volume being mounted — so a 10 GB installer lands on the disk this operation exists
+    /// to free, at a path that reads like the drive.
+    func testAPathUnderVolumesWhoseVolumeIsNotMountedIsRefused() {
+        let mounted: (String) -> Bool = { $0 == "/Volumes/VAULT" }
+        let nothingMounted: (String) -> Bool = { _ in false }
+        let path = "/Volumes/VAULT/XCodeVault/RuntimeLibrary"
+
+        XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: path, isMountPoint: nothingMounted))
+        XCTAssertFalse(RuntimeOperations.isNotOnAMountedVolume(destination: path, isMountPoint: mounted))
+        // Outside /Volumes the question does not arise: a boot-volume destination is a real choice.
+        XCTAssertFalse(RuntimeOperations.isNotOnAMountedVolume(destination: "/Users/x/RuntimeLibrary", isMountPoint: nothingMounted))
+        // `/Volumes` itself names no volume.
+        XCTAssertFalse(RuntimeOperations.isNotOnAMountedVolume(destination: "/Volumes", isMountPoint: nothingMounted))
+    }
+
+    /// Every one of these reaches the same directory as the plain form and defeated the first
+    /// version's raw `hasPrefix("/Volumes/")`.
+    func testTheMountedVolumeCheckSurvivesPathSpellings() {
+        let nothingMounted: (String) -> Bool = { _ in false }
+        for spelling in [
+            "/Volumes/VAULT/XCodeVault/",  // trailing slash
+            "/Volumes//VAULT/XCodeVault",  // doubled separator
+            "/Volumes/VAULT/./XCodeVault",  // dot component
+            "/Volumes/VAULT/x/../XCodeVault",  // parent component
+        ] {
+            XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: spelling, isMountPoint: nothingMounted), spelling)
+        }
+    }
+
+    /// Case-insensitivity is load-bearing only for a path that does not exist — and that is exactly
+    /// the case that matters. Measured: `resolvingSymlinksInPath` normalises `/volumes/VAULT/…` to
+    /// `/Volumes/…` while VAULT is mounted, but leaves a non-existent `/volumes/Ghost/…` lowercase,
+    /// so a case-sensitive comparison silently stops asking whether a volume is there.
+    func testALowercaseVolumesPathIsStillRecognisedWhenItDoesNotExist() {
+        let ghost = "/volumes/XCVGhost-\(UUID().uuidString)/RuntimeLibrary"
+        XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: ghost, isMountPoint: { _ in false }), ghost)
+    }
+
+    /// `/Volumes/<bootname>` is a symlink to `/` — it exists on this machine as `/Volumes/MacOS`.
+    /// Writing there is writing to the internal disk under a path that reads like a drive, so it is
+    /// refused; and because it resolves *out* of `/Volumes`, only the literal spelling can catch it.
+    /// This runs against the real `MountStatus.isMountPoint`, which answers false for a symlink.
+    func testAVolumesEntryThatIsASymlinkToTheBootVolumeIsRefused() throws {
+        try XCTSkipUnless(
+            (try? FileManager.default.destinationOfSymbolicLink(atPath: "/Volumes/MacOS")) != nil,
+            "this machine has no /Volumes/<bootname> symlink to exercise")
+        // An **existing** path on purpose: `resolvingSymlinksInPath` only resolves what exists, so a
+        // made-up path under the symlink stays under /Volumes and the resolved candidate would catch
+        // it anyway. Measured: `/Volumes/MacOS~` → `~`, which leaves
+        // `/Volumes` entirely — so here the literal spelling is the only candidate that can see it.
+        let home = NSHomeDirectory()
+        let viaSymlink = "/Volumes/MacOS" + home
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: viaSymlink), "no reachable path through the boot-volume symlink")
+        XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: viaSymlink), viaSymlink)
+    }
+
+    /// The default argument is where the inert version lived, and no test exercised it: every test
+    /// passed an explicit closure, so mutating the default to a constant survived the whole suite.
+    /// This calls `preflightExport` with no seam at all, against a path under /Volumes that is not a
+    /// volume on any machine.
+    func testTheExportPreflightRefusesAnUnmountedVolumePathThroughTheRealCheck() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 500_000_000_000, arm: false))
+        let absent = "/Volumes/XCVDefinitelyNotMounted-\(UUID().uuidString)/RuntimeLibrary"
+        XCTAssertThrowsError(try ops.preflightExport(.init(platform: "iOS", destination: absent), freeBytesAtDestination: nil)) { error in
+            let d = (error as? RuntimeOperationError)?.description ?? "\(error)"
+            XCTAssertTrue(d.contains("no volume is mounted there"), "wrong refusal: \(d)")
+            // The check must beat the existence guard: a leftover mount-point directory *exists*, so
+            // "not an existing directory" would never fire for the case this is written for.
+            XCTAssertFalse(d.contains("not an existing directory"), "the vaguer guard answered first: \(d)")
+        }
+        // A real, mounted destination outside /Volumes still passes with no seam.
+        XCTAssertNoThrow(try ops.preflightExport(.init(platform: "iOS", destination: t.path), freeBytesAtDestination: nil))
+    }
+
     /// An architecture variant is a third axis, and answering a three-axis question on two axes is
     /// exactly how the no-`-buildVersion` hole got in. `-architectureVariant arm64` against an
     /// installed universal image names a different image, so it is a real download — and

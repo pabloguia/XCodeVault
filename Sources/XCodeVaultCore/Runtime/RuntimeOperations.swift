@@ -92,10 +92,55 @@ public struct RuntimeOperations: Sendable {
         }
     }
 
-    /// Validates an export request against the installed Xcode and host. Returns warnings; throws on blockers.
     /// `installedRuntimes` decides which of two very different cost stories the caller is told, so
     /// pass the real list whenever it is available (an empty list only loses the cheap-path note).
-    public func preflightExport(_ req: ExportRequest, freeBytesAtDestination: UInt64?, installedRuntimes: [SimulatorRuntime] = []) throws -> [String] {
+    /// True when `destination` sits under `/Volumes/<name>` and `<name>` is **not a mount point** —
+    /// the shape macOS leaves behind when a volume goes away uncleanly and its mount-point directory
+    /// survives as an ordinary directory on the internal disk. `fileExists` cannot tell that apart
+    /// from the volume being mounted, and the difference is whether a 10 GB installer lands on the
+    /// disk this operation exists to free.
+    ///
+    /// **Do not reimplement this as a `statfs` mount-point comparison.** The first version asked
+    /// `MountStatus.filesystem(containing: destination)?.mountPoint == "/"` and was completely inert:
+    /// `/Volumes` is a firmlink onto the Data volume, so `statfs` reports `/System/Volumes/Data` for
+    /// it and for every ordinary directory inside it — never `/`. Measured on macOS 26.6.2:
+    /// `/Volumes → /System/Volumes/Data`, `/ → /`. The condition was unsatisfiable for the only case
+    /// it existed to catch, and its tests passed because they hand-built a `FilesystemInfo` that
+    /// `statfs` cannot produce for any path under `/Volumes`.
+    ///
+    /// `ATTR_DIR_MOUNTSTATUS` asks the question directly, and `Doctor+Vault.checkLocationsPointAtPresentVolumes`
+    /// already had this exact check. **Fails closed**: `isMountPoint` is false when the attribute
+    /// cannot be read at all, so "I cannot tell whether a volume is mounted here" refuses. The cost
+    /// of a wrong refusal is an error message; the cost of a wrong pass is 10.6 GB of shadow data.
+    ///
+    /// Both the literal path and its symlink-resolved form are checked: a symlink *into* a vault
+    /// (`~/lib → /Volumes/VAULT/…`) never mentions `/Volumes` literally, while `/Volumes/<bootname>`
+    /// — a symlink to `/` — never mentions it after resolution. Either shape alone misses one.
+    public static func isNotOnAMountedVolume(destination: String, isMountPoint: (String) -> Bool = MountStatus.isMountPoint) -> Bool {
+        let url = URL(fileURLWithPath: destination)
+        // `standardizedFileURL` collapses `..`, `.`, doubled and trailing slashes — all of which
+        // defeat a raw `hasPrefix`.
+        // The literal spelling first, then the symlink-resolved one. `standardizedFileURL` on the
+        // literal form is belt-and-braces: the resolved form standardizes too, so every `..`/`//`
+        // shape tested is caught either way. It stays because the literal form is the *only* one that
+        // sees a `/Volumes/<bootname>` symlink, and there it is the sole line of defence.
+        for candidate in [url.standardizedFileURL.path, url.resolvingSymlinksInPath().standardizedFileURL.path] {
+            let parts = candidate.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+            // Case-insensitively, because the boot volume is case-insensitive by default and
+            // `/volumes/VAULT/…` resolves there exactly as `/Volumes/VAULT/…` does.
+            guard parts.count >= 2, parts[0].caseInsensitiveCompare("Volumes") == .orderedSame else { continue }
+            if !isMountPoint("/" + parts[0] + "/" + parts[1]) { return true }
+        }
+        return false
+    }
+
+    /// Validates an export request against the installed Xcode and host. Returns warnings; throws on
+    /// blockers. `isMountPoint` is a seam for tests only: `/Volumes` is root-owned, so an unmounted-volume
+    /// directory cannot be staged for real without privilege this tool refuses to take.
+    public func preflightExport(
+        _ req: ExportRequest, freeBytesAtDestination: UInt64?, installedRuntimes: [SimulatorRuntime] = [],
+        isMountPoint: (String) -> Bool = MountStatus.isMountPoint
+    ) throws -> [String] {
         var w: [String] = []
         let caps = xcode.capabilities
         guard caps.downloadPlatform, caps.exportPath else {
@@ -116,12 +161,35 @@ public struct RuntimeOperations: Sendable {
         } else if host.isAppleSilicon && caps.architectureVariant {
             w.append("Tip: -architectureVariant arm64 produces a materially smaller image on Apple Silicon (F2).")
         }
+        // Ahead of the existence check on purpose. A leftover mount-point directory *does* exist, so
+        // that check passes and the export proceeds onto the internal disk; and when the volume is
+        // gone entirely, `statfs` fails, the predicate is false, and the existence check answers. So
+        // this ordering only ever replaces a vaguer message with a more precise one.
+        if RuntimeOperations.isNotOnAMountedVolume(destination: req.destination, isMountPoint: isMountPoint) {
+            throw RuntimeOperationError(
+                "\(req.destination) is under /Volumes but no volume is mounted there — most likely a mount-point directory left behind by an unclean "
+                    + "eject, or a name that is not a volume at all. Exporting here would write the installer to the internal disk under a path that "
+                    + "reads like a drive. Check `xcodevaultctl volumes`.")
+        }
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: req.destination, isDirectory: &isDir), isDir.boolValue else {
             throw RuntimeOperationError("Destination \(req.destination) is not an existing directory.")
         }
         guard FileManager.default.isWritableFile(atPath: req.destination) else {
             throw RuntimeOperationError("Destination \(req.destination) is not writable.")
+        }
+        // Rule 6: a path is not a volume. When an external volume goes away uncleanly, macOS can
+        // leave its mount-point directory behind on the boot volume — and `fileExists` cannot tell
+        // that apart from the volume being present. Writing a 10 GB runtime installer into that
+        // leftover puts it on the internal disk, at a path that reads like the external drive, which
+        // is the split-brain case in MIGRATION_ENGINE.md: the bytes are somewhere nobody will look
+        // for them, and the disk this whole operation exists to free just lost 10 GB.
+        //
+        // Refused rather than warned, because the whole point of exporting is to move bytes OFF the
+        // internal volume; doing the opposite silently defeats the operation. A destination genuinely
+        // on the boot volume is still reachable by any path outside /Volumes.
+        if let fs = MountStatus.filesystem(containing: req.destination) {
+            w.append("Destination resolves to \(fs.mountPoint) (\(fs.typeName)\(fs.isReadOnly ? ", read-only" : "")).")
         }
         if let free = freeBytesAtDestination, free < 12_000_000_000 {
             w.append("Only \(ByteCount.format(free)) free at the destination; runtime images are 5–25 GB.")

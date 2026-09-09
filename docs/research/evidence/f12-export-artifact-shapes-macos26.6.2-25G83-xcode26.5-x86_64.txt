@@ -1,0 +1,59 @@
+F12 — `-exportPath` artifact shapes, and the controlled before/after on one runtime
+==================================================================================
+Host:  macOS 26.6.2 (25G83), Xcode 26.5 (17F42), Intel x86_64
+Date:  2026-09-09 (observations span 2026-09-07 → 2026-09-09)
+Repo:  XCodeVault @ 6e1a75a (working tree)
+
+THE TWO SHAPES, as they stand tonight
+  $ xcodevaultctl runtime library --dir /Volumes/<vault>/XCodeVault/RuntimeLibrary
+    10,6 GB    iOS       26.5    iphonesimulator_26.5_23F77.dmg
+    5,24 GB    watchOS   26.5    watchsimulator_26.5_23T570.exportedBundle
+    iphone    26.5    10,6 GB  installer in library OK (can be offloaded)
+    watch     26.5    5,24 GB  installer in library OK (can be offloaded)
+
+  $ find …/watchsimulator_26.5_23T570.exportedBundle -maxdepth 2
+    …/ExportedMetadata.plist
+    …/Restore/Restore.plist
+    …/Restore/Firmware
+    …/Restore/WatchOSSimulatorRuntime_Cryptex.dmg
+    …/Restore/BuildManifest.plist
+
+  $ du -sh …/iphonesimulator_26.5_23F77.dmg              9.9G
+  $ du -sh …/watchsimulator_26.5_23T570.exportedBundle   4.9G
+
+THE CONTROL — same runtime, same build, both shapes
+  1. 2026-09-08T06:43  iOS 26.5 (23F77), MobileAsset-backed, exported as
+     iphonesimulator_26.5_23F77.exportedBundle
+     (evidence/e11-iOS-macos26.6.2-25G83-xcode26.5-x86_64.txt:27)
+  2. 2026-09-08T09:45  same runtime re-installed via `xcodebuild -importPlatform`
+     (evidence/e11-import-iOSSimulatorRuntime_Cryptex-…txt:2); backing store becomes
+     /Library/Developer/CoreSimulator/Images/34AF883C-…-.dmg
+  3. 2026-09-08T23:45  same runtime, same build, exported as
+     iphonesimulator_26.5_23F77.dmg — a plain file
+     (evidence/f11-export-installed-runtime-…txt:36)
+
+  Platform, version and build are constant across 1 and 3; only the backing store differs.
+  That is what removes the confound the watchOS/iOS comparison alone would carry.
+
+WHAT IS NOT ESTABLISHED
+  - The mechanism. Nothing observed Xcode reading the backing store and choosing a shape.
+    Correlation with the confound removed is what this is.
+  - tvOS 26.5 was `-importPlatform`-installed on 2026-09-07T21:36
+    (evidence/e11-import-AppleTVOSSimulatorRuntime_Cryptex-…txt:2) but never re-exported,
+    and that runtime is now uninstalled — it is the one whose abandoned dyld cache F10
+    is about. So the pattern has one controlled instance, not two.
+
+INTEGRITY OF BOTH ARTIFACTS (the check `runtime offload` performs before deleting anything)
+  $ hdiutil imageinfo …/iphonesimulator_26.5_23F77.dmg
+      Format Description: UDIF read-only compressed (lzfse); Checksum Type: CRC32; exit 0
+  $ hdiutil imageinfo …/watchsimulator_26.5_23T570.exportedBundle/Restore/WatchOSSimulatorRuntime_Cryptex.dmg
+      Format Description: UDIF read-only compressed (lzfse); Checksum Type: CRC32; exit 0
+
+  `RuntimeOperations.library(at:)` resolves a .exportedBundle to that inner image, so both
+  forms satisfy installer(for:in:) and the offload gate. Confirmed via `--json`: the
+  bundle's `path` is the inner Restore/*.dmg, not the directory.
+
+CAVEAT CARRIED INTO THE FINDING
+  The two `sizeBytes` are different measurements — logical size for the .dmg,
+  allocated bytes for the bundle. Not comparable, and the same field gates
+  `sizeBytes > 500_000_000` in installer(for:in:).
