@@ -60,3 +60,25 @@ neither the runtime bytes nor any test-execution advantage for DerivedData.
 `docs/research/evidence/e2-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
 `docs/research/FINDINGS-2026-09-05.md` §"Corrections … 2026-09-06",
 `docs/architecture/COMPATIBILITY_MATRIX.md` entries E1/E2/E8.
+
+## Addendum 2026-09-09 — E4b closes the question upstream of the reasoning above
+
+This ADR demoted canonical mount because H6 showed the sandbox restriction that breaks `xctest`
+classifies by device removability rather than path, so mounting an external volume at a canonical
+location buys nothing. That reasoning stands, but it is no longer the binding constraint.
+
+E4b found an earlier one. `/Library/Developer/CoreSimulator/Images/images.plist` — the database that
+records where each runtime image lives — **cannot be written by root**: `Operation not permitted` on
+an existing `root:wheel 644` file, no BSD flags, no ACL, absent from `rootless.conf`, while
+simdiskimaged rewrites it freely (F16). A runtime therefore cannot be pointed at an external image
+at any privilege level a product may use, and the question never reaches H6.
+
+Nothing in the decision changes; its footing does. "Canonical mount buys nothing" becomes "the
+relocation cannot be effected at all", which is a stronger and more durable reason. R&D on this
+track should now start by asking whether that entitlement boundary has any legitimate opening —
+`simctl runtime add` is the only one found so far, and it stages into the internal area by design.
+
+Two things worth keeping from the same work: a byte-identical runtime image on an external APFS
+volume **does** keep a verifying seal (E4a), so the barrier is authorization rather than integrity;
+and the Runtime Library workflow (H4/E8) is not the pragmatic compromise it looked like when this
+ADR was written — it is the only door the system leaves open.

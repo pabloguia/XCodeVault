@@ -1,0 +1,77 @@
+E4b — CoreSimulator's secure storage area refuses root, and that closes the question
+====================================================================================
+Host:  macOS 26.6.2 (25G83), Xcode 26.5 (17F42), Intel x86_64
+Date:  2026-09-09T23:24Z
+Repo:  XCodeVault @ e312618
+Gates: H9 / H1, ADR-0004
+Run:   scripts/experiments/e4b-runtime-from-external-volume.sh (as root, by the machine's owner)
+
+GOAL
+  E4a showed a byte-identical runtime image keeps a verifying APFS seal on an external USB
+  volume. The remaining question was whether CoreSimulator will READ from there. The route
+  chosen was to repoint images.plist — the database CoreSimulator consults — at the external
+  copy, since no simctl verb accepts an external path.
+
+PRECONDITIONS, all satisfied
+  free 14 GiB; vault VERIFIED by UUID+sentinel; no booted device; Xcode closed;
+  internal and external watchOS images sha256-identical (d80c9180…);
+  staging dirs empty; watchOS unmounted successfully and the mount point asserted clear.
+
+RESULT — the edit is not possible
+  repointed com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+    from file:///Library/Developer/CoreSimulator/Images/28793F5D-….dmg
+    to   file:///Volumes/<vault>/…/WatchOSSimulatorRuntime_Cryptex.dmg
+  ABORT: cannot write /Library/Developer/CoreSimulator/Images/images.plist even as root
+         ([Errno 1] Operation not permitted)
+
+  The restore then failed with the same EPERM — harmless, because nothing had been written.
+
+  Both attempts were on an EXISTING file, `root:wheel 644`, opened for writing BY ROOT:
+    - creating a new file in that directory: EPERM (run 1)
+    - overwriting the existing images.plist: EPERM (run 2)
+
+  The directory and file carry NO BSD flags (`ls -lO` → `-`), NO ACL (`ls -lde`), and
+  /Library/Developer/CoreSimulator is ABSENT from /System/Library/Sandbox/rootless.conf.
+
+THE PART THAT MAKES IT INTERESTING — the daemon writes it freely
+  images.plist `lastStateChangeAt` for watchOS moved to 2026-09-09 23:25:34, i.e. AFTER the
+  backup at 23:24:30, because the script's own `simctl runtime unmount` caused simdiskimaged
+  to rewrite the file. So the protection is not "this file is immutable". It is "only the
+  entitled daemon may write it" — an entitlement/sandbox mechanism that leaves no trace in
+  the POSIX or SIP metadata any reasonable check would consult.
+
+  Same signature as the runtime Inbox EPERM (F1, 2026-09-06) and as the file-creation refusal
+  in run 1 (F14). Three observations, one mechanism.
+
+WHAT THIS SETTLES
+  Relocating a simulator runtime by pointing CoreSimulator at an external image is not
+  possible, on this configuration, at any privilege level available to a user or to a tool
+  running as root. Not "unverified" and not "risky" — refused by the system.
+
+  H9 therefore ends split and both halves are now answered:
+    - a byte-identical copy on an external volume keeps a verifying seal (E4a: yes)
+    - CoreSimulator can be made to use it in place (E4b: NO — its database is not writable)
+
+  ADR-0004 demoted canonical mount to R&D on H6 (removable-device sandbox restrictions). This
+  is an independent, and earlier, blocker: the question never reaches H6, because the pointer
+  cannot be changed. The Runtime Library workflow (H4/E8, export → offload → import) is not
+  merely the pragmatic choice; it is the only door the system leaves open.
+
+NOT ESTABLISHED
+  - The exact mechanism. "Entitlement or sandbox rule" is inference from "root is refused but
+    the daemon is not"; nothing here identifies it.
+  - Whether SIP-disabled or a differently-entitled process could write it. Out of scope by
+    CLAUDE.md rule 1, and irrelevant to a product that will not ask users to disable SIP.
+  - Anything about Apple Silicon or other macOS versions.
+
+STATE AFTER THE RUN — verified, not assumed
+  images.plist: valid (`plutil -lint` OK), both entries point at the INTERNAL images, state 5.
+  Both runtime volumes mounted; `simctl runtime list` reports 2 images, 14.8G.
+  Zero unavailable devices — the Apple Watch returned when the runtime remounted.
+  No stray files in the secure storage area. Nothing was lost.
+
+SCRIPT DEFECT FOUND BY THIS RUN
+  The post-restore check hashed the WHOLE plist against the backup and warned on mismatch.
+  simdiskimaged rewrites that file itself, so a mismatch was guaranteed the moment the script
+  unmounted anything — a false alarm on a safety check, which is the worst kind. It now
+  compares the path entries, which is what the script actually edits.

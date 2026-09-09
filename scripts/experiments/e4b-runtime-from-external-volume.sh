@@ -175,11 +175,19 @@ restore () {
   else
     echo "RESTORE FAILED — run by hand: sudo cp -p $BACKUP $PLIST" | tee -a "$OUT"
   fi
-  if shasum -a 256 "$PLIST" "$BACKUP" | awk '{print $1}' | uniq -c | grep -q "^ *2 "; then
-    echo "verified: restored plist is byte-identical to the backup" | tee -a "$OUT"
-  else
-    echo "WARNING: restored plist does NOT match the backup" | tee -a "$OUT"
-  fi
+  # Compare the PATH ENTRIES, not the whole file. simdiskimaged writes images.plist itself — the
+  # unmount this script performs updates `lastStateChangeAt` — so a whole-file hash against a backup
+  # taken beforehand reports a mismatch that means nothing, and did on the first run. What matters
+  # is whether any image still points somewhere this script put it.
+  if python3 - "$PLIST" "$EXTERNAL_IMAGE" <<'PYV'
+import plistlib, pathlib, sys
+d = plistlib.loads(pathlib.Path(sys.argv[1]).read_bytes())
+ext = pathlib.Path(sys.argv[2]).as_uri()
+stray = [i.get("runtimeInfo", {}).get("bundleIdentifier") for i in d.get("images", []) if i["path"]["relative"] == ext]
+print("no image points at the external path" if not stray else f"STILL REPOINTED: {stray}")
+sys.exit(1 if stray else 0)
+PYV
+  then :; else echo "WARNING: an image is still pointed at the external path — restore by hand" | tee -a "$OUT"; fi
   launchctl kickstart -k system/com.apple.CoreSimulator.simdiskimaged 2>&1 | tee -a "$OUT"
   sleep 8
   { echo "-- after restore --"; snapshot; } | redact | tee -a "$OUT"

@@ -255,7 +255,15 @@ canonical location needs root and is recorded as **E4b** (amended to an images.p
 interesting failure is expected anyway, since the xctest restriction classifies by device
 removability rather than path. Evidence:
 `evidence/e4a-seal-survives-external-relocation-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
-Gate: E4 (E4a done, E4b pending root).
+**E4b, 2026-09-09: answered, negatively, and the reason is upstream of everything else.** Root
+cannot write `/Library/Developer/CoreSimulator/Images/images.plist` — `Operation not permitted` on
+an existing `root:wheel 644` file, with no BSD flags, no ACL and no `rootless.conf` entry — while
+simdiskimaged rewrites the same file freely (F16). So a runtime cannot be pointed at an external
+image at any privilege a product may use. **H9 is settled and split: the seal survives relocation,
+and the relocation cannot be effected.** The run aborted before writing anything and left the
+machine healthy: both runtimes Ready, both volumes mounted, no unavailable devices.
+
+Gate: E4 — closed (E4a positive, E4b negative).
 
 ---
 
