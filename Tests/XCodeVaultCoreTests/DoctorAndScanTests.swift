@@ -614,3 +614,405 @@ final class ScannerTests: XCTestCase {
         XCTAssertFalse(TextRenderer.scan(report).isEmpty)
     }
 }
+
+/// `checkOrphanedDyldCaches` — the rule that separates "cache that will be rebuilt" from "cache
+/// nothing will ever rebuild". The remediation is a shell command, so every test below that asserts
+/// a finding is also asserting that a user will be told to run something.
+///
+/// The first suite of these passed while the rule still produced a deletion command for a plain
+/// file, a symlink, a directory named `tmp`, and — with one upstream field renamed — every live
+/// cache on the machine. Well-formed fixtures proved nothing about any of it. The malformed-input
+/// cases below exist because of that, not for completeness.
+final class OrphanedDyldCacheTests: XCTestCase {
+    let hostBuild = "25G83"
+    let iOSid = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+    let tvOSid = "com.apple.CoreSimulator.SimRuntime.tvOS-26-5"
+
+    func host(build: String = "25G83") -> HostEnvironment {
+        HostEnvironment(
+            macOSVersion: "26.6.2", macOSBuild: build, architecture: "x86_64", homeDirectory: "/Users/x",
+            dataVolumeFreeBytes: 1, dataVolumeTotalBytes: 2, userName: "x", isRoot: false)
+    }
+    func runtime(_ rid: String, build: String? = nil) -> SimulatorRuntime {
+        SimulatorRuntime(identifier: UUID().uuidString, runtimeIdentifier: rid, build: build)
+    }
+
+    /// `dirs` become cache directories with a file inside; `files` become plain files; `links`
+    /// become symlinks. Returns the tree root.
+    /// Everything is aged 26 h by default: a cache written seconds ago is treated as a build in
+    /// flight at every level, so a test that means "this is an orphan" has to mean "and it is old".
+    /// Pass `ageHours: 0` for the in-flight cases.
+    func makeTree(_ dirs: [String], files: [String] = [], links: [String] = [], ageHours: Double = 26) throws -> String {
+        let root = NSTemporaryDirectory() + "/dyldcache-" + UUID().uuidString
+        for e in dirs {
+            try FileManager.default.createDirectory(atPath: root + "/" + e, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: root + "/" + e + "/dyld_sim_shared_cache_x86_64", contents: Data(repeating: 0, count: 4096))
+        }
+        for e in files {
+            try FileManager.default.createDirectory(atPath: (root + "/" + e as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: root + "/" + e, contents: Data(repeating: 0, count: 64))
+        }
+        for e in links {
+            try FileManager.default.createDirectory(atPath: (root + "/" + e as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(atPath: root + "/" + e, withDestinationPath: "/tmp")
+        }
+        if ageHours > 0 {
+            let when = Date().addingTimeInterval(-3600 * ageHours)
+            if let en = FileManager.default.enumerator(atPath: root) {
+                for case let sub as String in en { try? FileManager.default.setAttributes([.modificationDate: when], ofItemAtPath: root + "/" + sub) }
+            }
+        }
+        addTeardownBlock {
+            // Chmod back first: an unreadable directory cannot be removed.
+            if let en = FileManager.default.enumerator(atPath: root) {
+                for case let sub as String in en { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root + "/" + sub) }
+            }
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root)
+            try? FileManager.default.removeItem(atPath: root)
+        }
+        return root
+    }
+
+    func check(
+        _ root: String, runtimes: [SimulatorRuntime], devices: [SimulatorDevice] = [], host h: HostEnvironment? = nil, warnings: [String] = [],
+        now: Date = Date()
+    ) -> [Finding] {
+        Doctor(dyldCacheRoot: root).checkOrphanedDyldCaches(runtimes: runtimes, host: h ?? host(), devices: devices, warnings: warnings, now: now)
+    }
+    func device(_ rid: String, available: Bool) -> SimulatorDevice {
+        SimulatorDevice(udid: UUID().uuidString, name: "d", runtimeIdentifier: rid, state: "Shutdown", isAvailable: available)
+    }
+
+    /// Set an entry's mtime into the past. The rule must judge liveness by the newest write anywhere
+    /// inside, not by the directory's own mtime, so tests that mean "old" have to age both.
+    func age(_ path: String, hours: Double, filesToo: Bool = true) throws {
+        let when = Date().addingTimeInterval(-3600 * hours)
+        if filesToo, let children = try? FileManager.default.contentsOfDirectory(atPath: path) {
+            for c in children { try? FileManager.default.setAttributes([.modificationDate: when], ofItemAtPath: path + "/" + c) }
+        }
+        try FileManager.default.setAttributes([.modificationDate: when], ofItemAtPath: path)
+    }
+
+    // MARK: the rule's actual job
+
+    func testACacheWhoseRuntimeIsStillInstalledIsNotReported() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "a live runtime's cache is rebuilt on demand, not orphaned: \(f.map(\.title))")
+    }
+
+    func testACacheWhoseRuntimeIsGoneIsReported() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertEqual(f.count, 1)
+        // XCTUnwrap, never `f[0]`: subscripting an empty array traps, and a trap takes down the whole
+        // test process — every other test in the run reports nothing. Found while mutation-testing.
+        let only = try XCTUnwrap(f.first)
+        XCTAssertTrue(only.path?.hasSuffix("\(tvOSid).23L470") == true, "reported the wrong path: \(only.path ?? "nil")")
+    }
+
+    /// The case actually found on the machine: an interrupted build under `inc/` for a runtime that
+    /// has since been removed — 2.3 GiB that survived the removal and later simulator boots.
+    func testAnInterruptedBuildForARemovedRuntimeIsReported() throws {
+        let root = try makeTree(["\(hostBuild)/inc/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertEqual(f.count, 1)
+        XCTAssertTrue(try XCTUnwrap(f.first).id.hasPrefix("orphan-dyld-inc:"))
+    }
+
+    /// The most likely orphan on a machine that has taken a runtime update, and invisible while the
+    /// rule matched on identifier alone: the superseded build's cache. `iOS-26-5` is still installed,
+    /// but at build 23G99, so the 23F77 cache belongs to nothing.
+    func testACacheForASupersededBuildOfAnInstalledRuntimeIsReported() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(iOSid).23G99"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23G99")])
+        XCTAssertEqual(f.count, 1, "the superseded build's cache is orphaned: \(f.map(\.title))")
+        XCTAssertTrue(try XCTUnwrap(f.first).path?.hasSuffix(".23F77") == true)
+    }
+
+    /// When the runtime reports no build the match must widen back to the identifier. Claiming more
+    /// caches means reporting fewer, which is the direction that cannot hurt anyone.
+    func testARuntimeWithNoBuildStillClaimsItsCaches() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77"])
+        let f = check(root, runtimes: [runtime(iOSid, build: nil)])
+        XCTAssertTrue(f.isEmpty, "a build-less runtime must claim its caches, not orphan them: \(f.map(\.title))")
+    }
+
+    // MARK: guards against reporting live data
+
+    /// `runtimeIdentifier` is optional and the decoder enforces no required keys, so an upstream
+    /// rename yields a non-empty array that claims nothing. Before the `installedPrefixes` guard this
+    /// produced `sudo rm` for every live cache on the machine — the exact 9.4 GiB outcome the
+    /// empty-list guard was written to prevent, reached through a different door.
+    func testRuntimesWithNoIdentifierReportNothingRatherThanEverything() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/inc/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [SimulatorRuntime(identifier: "UUID-1", runtimeIdentifier: nil)])
+        XCTAssertTrue(f.isEmpty, "undecodable identifiers must not read as 'nothing is installed': \(f.map(\.title))")
+    }
+
+    /// `Scanner` records a failed probe in `report.warnings`. Emptiness is the fallback; this is the
+    /// real signal, and the doc comment used to claim it did not exist.
+    func testAFailedSimctlProbeReportsNothing() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")], warnings: ["simctl runtime list failed: boom"])
+        XCTAssertTrue(f.isEmpty, "a recorded probe failure must silence the rule: \(f.map(\.title))")
+    }
+
+    func testAnEmptyRuntimeListReportsNothingRatherThanEverything() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/inc/\(tvOSid).23L470"])
+        XCTAssertTrue(check(root, runtimes: []).isEmpty)
+    }
+
+    func testAnUnknownHostBuildReportsNothing() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77"])
+        XCTAssertTrue(check(root, runtimes: [runtime(iOSid, build: "23F77")], host: host(build: "unknown")).isEmpty)
+    }
+
+    /// An `inc/` entry may be a build in flight: CoreSimulator writes it before `simctl` reports the
+    /// runtime, so "not installed" alone does not mean "dead". Age is the second, independent guard.
+    func testARecentlyWrittenInterruptedBuildIsAssumedToBeInFlight() throws {
+        let root = try makeTree(["\(hostBuild)/inc/\(tvOSid).23L470"], ageHours: 0)
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "a fresh inc/ entry may be live work: \(f.map(\.title))")
+    }
+
+    // MARK: malformed trees
+
+    /// Every one of these produced a deletion command before the type checks were pushed down to
+    /// levels 2 and 3. `update_dyld_sim_shared_cache-stderr.txt` is a real filename in this tree.
+    func testFilesAndSymlinksAreNeverReported() throws {
+        let root = try makeTree(
+            ["\(hostBuild)/\(iOSid).23F77"],
+            files: ["\(hostBuild)/update_dyld_sim_shared_cache-stderr.txt", "\(hostBuild)/inc/leftover.part"],
+            links: ["\(hostBuild)/\(tvOSid).23L470", "\(hostBuild)/inc/\(tvOSid).23L999"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "only directories are caches: \(f.map { "\($0.title) @ \($0.path ?? "")" })")
+    }
+
+    /// An unrecognised sibling used to be reported as "built for macOS tmp" with a command attached.
+    func testAnUnrecognisedSiblingIsNotCalledAStaleBuild() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "tmp/junk"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "`tmp` is not a macOS build: \(f.map(\.title))")
+    }
+
+    /// The stale-build branch fires only when the layout is recognisable — a build-shaped name AND a
+    /// sibling equal to this machine's build, which is the proof we are reading the tree we think.
+    /// It has never been observed in the field, so it carries no command.
+    func testAStaleBuildTreeIsInformationalAndCarriesNoCommand() throws {
+        let root = try makeTree(["24A335/\(iOSid).23F77", "\(hostBuild)/\(iOSid).23F77"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertEqual(f.count, 1)
+        let only = try XCTUnwrap(f.first)
+        XCTAssertEqual(only.severity, .info)
+        XCTAssertFalse(only.remediation?.contains("rm ") == true, "an unverified branch must not hand out a delete: \(only.remediation ?? "")")
+    }
+
+    func testAStaleBuildIsNotReportedWhenNoSiblingMatchesThisMachine() throws {
+        let root = try makeTree(["24A335/\(iOSid).23F77"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "without a sibling for this machine's build the layout is unrecognised: \(f.map(\.title))")
+    }
+
+    /// An unreadable cache directory is skipped outright: its age cannot be established, and "we
+    /// cannot tell how old it is" must not resolve to "old enough to delete". This used to report the
+    /// orphan with "size unknown"; the age guard at this level now refuses earlier, which is the
+    /// stronger behaviour of the two.
+    func testAnUnreadableCacheDirectoryIsSkippedRatherThanReported() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root + "/\(hostBuild)/\(tvOSid).23L470")
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "an unreadable tree cannot be judged: \(f.map(\.title))")
+    }
+
+    /// A tree we could only partly measure must say so rather than print a confident total next to a
+    /// deletion command. `DiskUsage` reports this as `isLowerBound`.
+    func testAPartlyUnreadableTreeReportsALowerBoundNotATotal() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470/sub"])
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root + "/\(hostBuild)/\(tvOSid).23L470/sub")
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertEqual(f.count, 1, "\(f.map(\.title))")
+        let title = try XCTUnwrap(f.first).title
+        XCTAssertTrue(title.contains("at least") || title.contains("size unknown"), "must not state a total it could not measure: \(title)")
+    }
+
+    /// A directory that does not name a runtime is not a cache, and the rule cannot say what it is.
+    /// Level 1 got this check; levels 2 and 3 had only a type check, so `tmp` was reported as "a
+    /// finished cache for a runtime simctl no longer reports" — with a deletion command attached.
+    func testDirectoriesThatDoNotNameARuntimeAreNeverReported() throws {
+        let root = try makeTree([
+            "\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/tmp", "\(hostBuild)/v2",
+            "\(hostBuild)/inc/scratch", "\(hostBuild)/inc/inc",
+        ])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "unrecognised names must not be described as caches: \(f.map { "\($0.title) @ \($0.path ?? "")" })")
+    }
+
+    /// A cache build writes hundreds of MB for many minutes while the *directory's* mtime stays
+    /// frozen at the moment its entries were created — measured on this machine, the iOS rebuild
+    /// spanned 06:47→07:06. Judging liveness by the directory alone reports a build that is running
+    /// right now, for a runtime simctl does not report yet, as garbage to delete.
+    func testASlowInFlightBuildIsNotReportedWhenOnlyTheDirectoryMtimeIsOld() throws {
+        let root = try makeTree(["\(hostBuild)/inc/\(tvOSid).23L470"])
+        let dir = root + "/\(hostBuild)/inc/\(tvOSid).23L470"
+        // …but a file inside was written seconds ago: the build is alive.
+        try FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: dir + "/dyld_sim_shared_cache_x86_64")
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "a fresh write inside means the build is live: \(f.map(\.title))")
+    }
+
+    /// "We cannot tell how old it is" must not resolve to "old enough to delete".
+    func testAnUnreadableInFlightEntryIsNotReported() throws {
+        let root = try makeTree(["\(hostBuild)/inc/\(tvOSid).23L470"])
+        let dir = root + "/\(hostBuild)/inc/\(tvOSid).23L470"
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir)
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "an unreadable mtime is unknown, not stale: \(f.map(\.title))")
+    }
+
+    /// Exact `<rid>.<build>` matching rests on a naming scheme observed on one machine. If a
+    /// platform's directories are named differently, exact matching orphans every live cache — so it
+    /// is used only when the tree itself contains at least one exactly-named installed runtime.
+    func testExactBuildMatchingIsNotUsedWhenTheTreeDoesNotConfirmTheNamingScheme() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77-variant"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "unfamiliar naming must fall back to prefix matching, not orphan live caches: \(f.map(\.title))")
+    }
+
+    func testAnUnreadableHostBuildDirectoryIsNotTreatedAsEmpty() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root + "/" + hostBuild)
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "unreadable is unknown, not empty: \(f.map(\.title))")
+    }
+
+    /// `simctl runtime list` covers disk-image runtimes only; one bundled inside an older Xcode does
+    /// not appear there. An available device proves its runtime exists, so it claims the cache and
+    /// the rule stays quiet rather than offering to delete something live.
+    func testAnAvailableDeviceKeepsItsRuntimesCacheFromBeingCalledOrphaned() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")], devices: [device(tvOSid, available: true)])
+        XCTAssertTrue(f.isEmpty, "an available device is a second witness that the runtime exists: \(f.map(\.title))")
+    }
+
+    /// A device whose runtime is gone reports `isAvailable == false` — exactly what E11 saw when a
+    /// runtime was offloaded — so it must not keep the orphan alive.
+    func testAnUnavailableDeviceDoesNotClaimACache() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")], devices: [device(tvOSid, available: false)])
+        XCTAssertEqual(f.count, 1, "\(f.map(\.title))")
+    }
+
+    /// B1: the age guard existed on `inc/` only. Nothing establishes that a rebuild is staged through
+    /// `inc/` rather than written straight into its final directory, so a cache being written right
+    /// now — for a runtime `simctl` has not reported yet — was reported with a delete command at this
+    /// level while the identical case was guarded one level down.
+    func testAFinishedCacheBeingWrittenRightNowIsNotReported() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"], ageHours: 0)
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "a cache written seconds ago may be a live build: \(f.map(\.title))")
+    }
+
+    /// B2: naming confirmation was one Bool for the whole tree. iOS naming its directory
+    /// `<rid>.<build>` then licensed exact matching for a visionOS runtime named some other way — and
+    /// reported that live cache for deletion. Confirming one platform says nothing about another.
+    func testOnePlatformsNamingSchemeDoesNotLicenseExactMatchingForAnother() throws {
+        let visionID = "com.apple.CoreSimulator.SimRuntime.visionOS-26-5"
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(visionID).23X99-variant"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77"), runtime(visionID, build: "23X99")])
+        XCTAssertTrue(f.isEmpty, "visionOS is installed; its cache must not be orphaned by iOS's naming: \(f.map(\.title))")
+    }
+
+    /// B3: this rule's own notes and `EXPERIMENTS.md` describe CoreSimulator writing `inc/<rid>` with
+    /// no build suffix during an install. Without an equality test that live in-progress build was
+    /// reported as "a runtime simctl no longer reports" while the runtime was installed.
+    func testAnIncEntryNamedWithoutABuildSuffixIsClaimedByItsInstalledRuntime() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/inc/\(iOSid)"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "`inc/<rid>` belongs to the installed runtime: \(f.map(\.title))")
+    }
+
+    /// B4: a device knows its runtime exists but not which build, so a device entry can only
+    /// prefix-match. Adding one for a runtime `simctl` already described precisely replaced a
+    /// build-accurate claim with a vague one — and since every machine has devices for its installed
+    /// runtimes, that silently disabled superseded-build detection everywhere.
+    func testAnAvailableDeviceDoesNotSuppressASupersededBuildOrphan() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(iOSid).23G99"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23G99")], devices: [device(iOSid, available: true)])
+        XCTAssertEqual(f.count, 1, "the 23F77 cache is still orphaned: \(f.map(\.title))")
+        XCTAssertTrue(try XCTUnwrap(f.first).path?.hasSuffix(".23F77") == true)
+    }
+
+    /// B5: the displayed date came from the directory's own mtime — the same frozen value the age
+    /// guard was fixed to stop trusting — so a tree written minutes ago was shown as last touched a
+    /// year back, next to a deletion command.
+    func testTheReportedDateIsTheNewestWriteNotTheFrozenDirectoryMtime() throws {
+        let root = try makeTree(["\(hostBuild)/inc/\(tvOSid).23L470"])
+        let dir = root + "/\(hostBuild)/inc/\(tvOSid).23L470"
+        let old = Date().addingTimeInterval(-400 * 24 * 3600)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir)
+        let fileDay = Date().addingTimeInterval(-2 * 24 * 3600)
+        try FileManager.default.setAttributes([.modificationDate: fileDay], ofItemAtPath: dir + "/dyld_sim_shared_cache_x86_64")
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertEqual(f.count, 1, "\(f.map(\.title))")
+        let detail = try XCTUnwrap(f.first).detail
+        let stale = Doctor.dayStamp.string(from: old)
+        XCTAssertFalse(detail.contains(stale), "the frozen directory mtime must not be shown: \(detail)")
+        XCTAssertTrue(detail.contains(Doctor.dayStamp.string(from: fileDay)), detail)
+    }
+
+    /// `.SimRuntime.` with the trailing dot. Without it a directory whose name merely *starts* with
+    /// the marker is treated as a cache — and the finding carries a deletion command, so a name the
+    /// rule cannot parse must not be described as a runtime's cache.
+    func testANameThatOnlyResemblesTheRuntimeMarkerIsNotACache() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/com.apple.CoreSimulator.SimRuntimeBackup"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "`SimRuntimeBackup` is not a runtime cache: \(f.map(\.title))")
+    }
+
+    /// Hidden entries are skipped at every level, independently of whether the name looks like a
+    /// runtime — otherwise the check depends on `namesARuntime` happening to reject them.
+    func testHiddenDirectoriesAreSkippedEvenWhenTheyNameARuntime() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/.\(tvOSid).23L470", "\(hostBuild)/inc/.\(tvOSid).23L999"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        XCTAssertTrue(f.isEmpty, "hidden entries are not ours to judge: \(f.map(\.title))")
+    }
+
+    func testAMissingCacheRootIsNotAFinding() {
+        XCTAssertTrue(check(NSTemporaryDirectory() + "/absent-" + UUID().uuidString, runtimes: [runtime(iOSid, build: "23F77")]).isEmpty)
+    }
+
+    // MARK: the advice itself
+
+    /// The repo already learned this once: the stranded Inbox file had no BSD flags and was absent
+    /// from `rootless.conf`, and root still got EPERM — what reclaimed it was a restart. This orphan
+    /// was created after the last boot, so the restart probe has not been run. Leading with `rm`
+    /// would repeat the mistake, and F1 says in as many words that doctor must not promise a
+    /// root-only fix.
+    func testTheRemediationLeadsWithARestartAndNeverSuggestsRmDashRf() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
+        let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
+        let r = try XCTUnwrap(f.first?.remediation)
+        XCTAssertTrue(r.hasPrefix("Restart the Mac"), "the cheap, unprivileged probe comes first: \(r)")
+        XCTAssertFalse(r.contains("rm -rf"), "rmdir refuses on surprises; rm -rf takes them with it: \(r)")
+        XCTAssertTrue(r.contains("rmdir"))
+    }
+
+    func testThePathInTheRemediationIsShellQuoted() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
+        let r = try XCTUnwrap(check(root, runtimes: [runtime(iOSid, build: "23F77")]).first?.remediation)
+        XCTAssertTrue(r.contains("'\(root)/"), "the path must be single-quoted in every command: \(r)")
+    }
+
+    /// The wiring into `diagnose`. The earlier version of this test asserted the *absence* of a
+    /// finding on a report that could not produce one anyway — it passed with the `diagnose` call
+    /// deleted. This one fails if the rule is not called.
+    func testTheRuleIsReachableThroughDiagnose() throws {
+        let root = try makeTree(["\(hostBuild)/\(iOSid).23F77", "\(hostBuild)/\(tvOSid).23L470"])
+        let report = ScanReport(
+            generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host(), xcodes: [],
+            runtimes: [runtime(iOSid, build: "23F77")], devices: [], volumes: [], items: [], summary: ScanSummary(), warnings: [])
+        let f = Doctor(home: NSTemporaryDirectory(), dyldCacheRoot: root).diagnose(report: report)
+        XCTAssertTrue(f.contains { $0.id == "orphan-dyld:\(tvOSid).23L470" }, "\(f.map(\.id))")
+    }
+}

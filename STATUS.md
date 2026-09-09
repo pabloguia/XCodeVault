@@ -458,3 +458,182 @@ release/bundle scripts and cask draft exist; nothing signed yet.
    signed bundle — cannot be tested unsigned.
 3. **M5:** Developer ID signing + notarization + stapling in `scripts/release.sh`, Homebrew Cask
    formula draft, in-app uninstall (`unregister()`), diagnostic bundle (`report --json`).
+
+## 2026-09-09 (overnight) — the durable-space path, and three bugs found only by running it for real
+
+Goal of the session: free disk space. Internal free was 14 GiB at the start (up from ~8.6 after
+`mac-ssd-rescue` was deleted), and `doctor` reported it as the only WARNING.
+
+**The 10 GB is unblocked and waiting on one command.** `xcodevaultctl runtime export iOS --to
+/Volumes/<vault>/XCodeVault/RuntimeLibrary` ran to completion: a 10.6 GB installer now sits on the
+vault and internal free never moved off 14 GiB. Nothing was deleted — `runtime offload` is the
+destructive half and is deliberately left for a waking human, because it puts the two real iPhone
+devices into `Unavailable` until the runtime is re-imported (E11 showed they return automatically,
+with no data loss, once it is).
+
+- **F11 (new): exporting an *already-installed* runtime is nearly free internally.** E11's "~7 GB
+  peak, watch for ENOSPC" is the **download** case. `preflightExport` told every caller that story,
+  which on a nearly-full disk argues the user out of the one operation that frees the most space. It
+  now branches on `isAlreadyInstalled` and falls back to the expensive story when the runtime list is
+  empty. Measured twice: 1 MB peak in E11, and again tonight — 4.4 GB written to the destination in
+  the first 20 s with internal free flat, monitored with an abort guard set to kill the export if
+  internal free fell below 7 GiB.
+
+- **Bug, and the reason the 10 GB was still blocked: `RuntimeInstaller.parse` did not understand
+  Apple's own export filenames.** Xcode writes `iphonesimulator_26.5_23F77.dmg`; the parser only knew
+  the display form `iOS 26.5 Simulator Runtime.dmg`. So `platform` came back nil,
+  `installer(for:in:)` matched nothing, and `runtime offload` refused with "NO installer in library —
+  export first" while the installer sat in the library. The gate is doing its job — it will not
+  delete a runtime it cannot prove is recoverable — which is exactly why an unparsed name silently
+  blocks *every* offload. **The fixtures used hand-written display names and passed throughout**;
+  this only appeared when the real export was run and its output read. Reverting the fix fails 5
+  tests now. The SDK vocabulary was already spelled out in `installer(for:in:)` — the two lists must
+  be kept in step.
+
+- **F10 (new): a removed runtime leaves its dyld shared cache behind.** 2.3 GiB under
+  `Caches/dyld/25G83/inc/…tvOS-26-5.23L470` for a runtime that is not installed, containing a
+  mode-0600 `mkstemp` part file. New rule `checkOrphanedDyldCaches` separates this from the rest of
+  the tree, because "rebuilt on next boot" is true of a cache whose runtime is installed — deleting
+  it buys a slow boot, not disk — and false of this one. `clean`'s dyld warning now says the same,
+  since that line is usually the largest number in the plan and reads as recoverable space.
+
+**Review found three errors in my reasoning on F10; all three are worth carrying forward.**
+
+1. **I inverted this repo's own evidence.** I argued "no BSD file flags + absent from
+   `rootless.conf` ⇒ root can delete it" and cited the runtime Inbox as the *contrast* case. The
+   2026-09-06 note in FINDINGS records the Inbox file having **both** of those properties while root
+   got `Operation not permitted` three times — it is the **counterexample**, and that section ends
+   with "`doctor` must not promise a root-only fix". The first version of the rule broke an
+   instruction already written down. **Neither check predicts root-deletability on this filesystem.**
+2. **The cheap probe is a restart, not sudo.** `kern.boottime` Sep 7 17:39:10 vs orphan mtime
+   Sep 7 18:54 — it was created *after* the last boot, so "nothing reclaims it" was a claim about one
+   uptime session. What reclaimed the Inbox file was a **startup GC**. If `inc/` is reaped the same
+   way the finding shrinks to "transient until restart". The remediation now leads with the reboot
+   and offers only `rm -f` of known filenames plus `rmdir` (which refuses on surprises) if it
+   survives one. Probe order in F10: reboot → sudo → superseded-build.
+3. **A fifth `?? []`-family fail-open, through a door I had not guarded.** I guarded
+   `runtimes.isEmpty`, but `runtimeIdentifier` is optional and the decoder enforces no required keys,
+   so a non-empty array whose identifiers did not decode produced `installedPrefixes == []` → every
+   live cache on the machine reported for deletion. Also: `report.warnings` already carries
+   `simctl runtime list failed:`, so my comment claiming the failure was undetectable was false.
+   **Guard the derived collection, not the input collection.**
+
+Other fixes from the same review, each of which had produced a deletion command against live data:
+`lstat`/`S_IFDIR` was only at level 1, so a plain file (`update_dyld_sim_shared_cache-stderr.txt`,
+which really is in that tree) and a symlink were both reported; any unrecognised sibling became "a
+stale macOS build" (a directory named `tmp` got a delete command); an unreadable tree printed
+"0 bytes" next to one. The stale-build branch now requires a build-shaped name **and** a sibling
+equal to this machine's build, is `.info`, and carries no command — it has never fired on real data.
+`inc/` entries younger than an hour are assumed live, as a second guard independent of "not
+installed". Matching is now `rid + "." + build`, which makes a superseded build's cache visible.
+
+**Test-hygiene note worth keeping:** an unguarded `f[0]` after `XCTAssertEqual(f.count, 1)` traps on
+failure and takes down the whole test process, so every other test in the run reports nothing. It
+also silently broke a mutation-testing harness that keyed off "Executed N tests". Use `XCTUnwrap`.
+
+**Tracked, not fixed:** (a) an `inc/` entry that also has a newer finished sibling is probably a
+leftover rather than work in flight; (b) whether reporting a whole stale-build tree is the right
+granularity; (c) the reboot probe itself, which gates F10 and needs a human.
+
+### Review round 2 on F10/F11 — three more blockers, and a pattern worth naming
+
+Every one of these was a *fix from round 1* that moved the bug rather than removing it. That is the
+pattern: hardening one level of a walk while leaving the level below it, and answering a
+three-valued question with a Bool.
+
+1. **The unrecognised-name hole moved down a level and got worse.** Round 1 hardened level 1 so a
+   `tmp` sibling was no longer called a stale build. Levels 2 and 3 got the *type* check but not the
+   *name* check — and there the finding carries a `sudo rm`. A directory named `tmp` was reported as
+   "a finished cache for a runtime `simctl runtime list` no longer reports", which the rule cannot
+   know about a name it does not recognise. Now: a cache directory must contain `.SimRuntime.`
+   Applying a guard at one level of a nested walk is not applying it.
+2. **The age guard read the wrong mtime.** It used the *directory's* mtime, which freezes once the
+   entries are created while the build keeps writing hundreds of MB into them — measured here: the
+   iOS rebuild spanned 06:47→07:06 and the tvOS orphan's directory mtime froze 17 minutes after
+   birth. So a build running *right now*, for a runtime `simctl` has not reported yet — exactly the
+   case the guard exists for — was reported with a delete command. Now: `max(dir, newest child)`, and
+   an unreadable mtime is `continue`, not "old enough".
+3. **`isAlreadyInstalled` was a Bool answering a three-valued question, and the third value was the
+   dangerous one.** `-downloadPlatform iOS` with no `-buildVersion` fetches the **latest**. Answering
+   "already installed" because *some* iOS is present told a user with 3 GB free that a 10 GB download
+   was free — and suppressed the ENOSPC warning with it, because that warning lived in the `else`.
+   **My own new test pinned this behaviour as correct.** Now `ExportCost` has three cases and the
+   unknown one warns about both outcomes and keeps the ENOSPC line.
+
+Also fixed: exact `<rid>.<build>` matching now runs only when the tree contains at least one
+exactly-named installed runtime, so a machine whose naming differs falls back to prefix matching
+instead of orphaning every live cache for that platform; `simctl runtime list` covers disk-image
+runtimes only, so an available device now also witnesses its runtime (a runtime bundled in an older
+Xcode would otherwise get `sudo rm` offered for a live cache); the remediation was cut from 1310
+characters and no longer claims the Inbox's EPERM predicts anything here; `CleanPlanner` no longer
+calls the orphan "durable" when durability across a restart is exactly what is untested.
+
+`Doctor` gained an injectable `dyldCacheRoot`, like `home`. Two tests were passing for boilerplate
+reasons and are fixed: `testTheRuleIsReachableThroughDiagnose` asserted the *absence* of a finding on
+a report that could not produce one, so it passed with the `diagnose` call deleted; and the
+unreadable-size test asserted only "no '0 bytes'", which passes vacuously on an empty result.
+
+**Two harness lessons, both of which hid a live mutant for a whole round.** (a) `swift test --filter
+"A|B"` prints one summary line per suite, so `grep … | head -1` reports whichever ran first — a
+surviving mutant looked killed. Count `error: -[` lines instead. (b) An assertion inside `if let`
+is an optional assertion: wrapping the build-string check in `if let build = ios.build` let the
+"drop build-string matching" mutant survive. Use `XCTUnwrap`.
+
+Round 2 tally: 26 tests in `OrphanedDyldCacheTests`, 11 in `RuntimeOperationsTests`, 152 total, 0
+failures; 9 mutations attempted on the round-2 changes, 9 killed.
+
+### Review round 3 — the same pattern a third time, and what finally broke it
+
+Round 3 found three more blockers, and all three were again *round-2 fixes applied at one level of
+the walk but not another*. Naming the pattern in round 2 did not stop me repeating it in round 3;
+what stopped it was building the guards so they cannot be applied partially.
+
+1. **The age guard was `inc/`-only.** A finished cache written *this second*, for a runtime `simctl`
+   has not reported yet, got a deletion command — the exact defect round 2 removed from level 3 and
+   left standing at level 2. Nothing establishes that a rebuild is staged through `inc/` rather than
+   written straight into its final directory, and F10 does not measure that either.
+2. **`exactNamingConfirmed` was one Bool for the whole tree.** On a mixed tree, iOS naming its
+   directory `<rid>.<build>` licensed exact matching for a visionOS runtime named some other way, and
+   reported that live cache for deletion. The guard did not remove the round-2 bug; it moved it from
+   single-platform trees to mixed ones. Now confirmation is **per runtime and per level** — `<build>/`
+   and `<build>/inc/` are two naming conventions and confirming one says nothing about the other.
+3. **`inc/<rid>` with no build suffix.** My own code comment and `EXPERIMENTS.md` describe
+   CoreSimulator writing that form during an install; `FINDINGS` described `inc/<rid>.<build>`. Three
+   documents disagreed and the code failed on the form two of them documented, reporting a live
+   in-progress build as "a runtime simctl no longer reports". All three now agree, and the rule
+   claims both forms.
+
+Also fixed: the device cross-check had **erased the rule's headline capability** — a device entry can
+only prefix-match, and since every machine has devices for its installed runtimes, superseded-build
+detection was inert in production; devices are now consulted only for identifiers `simctl` does not
+report at all, which is the bundled-runtime case they exist for. The displayed "Last written" date
+came from the directory's own mtime — the same frozen value the age guard was fixed to stop trusting,
+printed next to a delete command. `exportCost` ignored `architectureVariant`, a third axis answered
+by ignoring it. The remediation went from 1205 to 515 characters by binding the path to a shell
+variable instead of repeating it four times.
+
+**A over-claim that survived by moving from the code into its citation.** Round 2 removed
+"already installed ⇒ free" from `isAlreadyInstalled`; the `.copyOut` branch then cited E11 and F11 as
+having measured it. Both runs used **no `-buildVersion`** — they measured the *unknown* branch
+resolving to a copy-out. `.copyOut` (reached only with `-buildVersion`) has never been executed
+against a real export. Code, FINDINGS §F11 and the compatibility matrix now say inferred, not
+measured. **Check that evidence citations cover the branch that cites them.**
+
+Three mutants had survived round 2 undetected and are now killed: `.SimRuntime.` without the trailing
+dot, the level-2 hidden-entry filter, and `r.version == want` — the last was dead for every input the
+test supplied, because the dashed-identifier branch already answered those cases. A test can pass for
+a reason other than the one its name gives.
+
+Round 3 tally: 34 tests in `OrphanedDyldCacheTests`, 13 in `RuntimeOperationsTests`, 162 total, 0
+failures; 9 mutations attempted, 9 killed with a corrected harness (count `error: -[` lines — the
+round-2 harness reported whichever suite ran first).
+
+**Tracked, not fixed — stated explicitly rather than left implicit (reviewer items 4/5).**
+`runtime export --to <dir>` validates the destination with `fileExists(isDirectory:)` only. No mount
+check, no volume UUID, no sentinel, though `MountStatus.isMountPoint` and `VaultVolume` exist and
+`vault init` already does all three. A stale `/Volumes/<vault>/XCodeVault/RuntimeLibrary` left by an
+unclean eject — or a volume that came back as `<vault> 1` — takes a 10.6 GB export onto the **boot
+volume at a canonical path**, which is the split-brain case in `MIGRATION_ENGINE.md` and a rule-6
+violation. Pre-existing, but this change made it load-bearing: `.copyOut` now tells the user to
+"budget the space at the DESTINATION". It belongs in its own change, wired through the same
+`VaultVerifier` path `vault status` uses.

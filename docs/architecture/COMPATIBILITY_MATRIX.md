@@ -401,3 +401,33 @@ those entries "pending — manual" until someone actually runs and records the r
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
 | E9 CoreSimulator symlink | H5 | **done (2026-09-08)** — see entry above; the reported Files-app failure did **not** reproduce. Rule 7 / ADR-0004 unchanged. Still pending: the `~/Library/Developer`-wide symlink of FB12363725 (forbidden by rule 7), Xcode.app GUI, Apple Silicon, iCloud-signed-in |
 | E11 staging space | Runtime Library UX | pending — manual |
+
+### F10 orphaned dyld caches + F11 export cost — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-08 / 09
+- Gates: H10 (are regenerable system caches reclaimed by the system?), and the cost model the
+  `runtime export` preflight presents to the user
+- **F11 — export of an already-installed runtime: VERIFIED for the no-`-buildVersion` case,
+  near-zero internal cost.** Both runs used `runtime export iOS --to …` with no `-buildVersion`, so
+  what is verified is "the latest available build is the installed one → copy-out". Exporting a
+  *pinned* build that is installed is inferred from this, not measured. Exported the
+  installed iOS 26.5 image (10.6 GB) to an external APFS volume with `-downloadPlatform iOS
+  -exportPath`. Internal free was 14 GiB before, during and after; 4.4 GB had landed at the
+  destination within the first 20 s, so this is a copy-out of the sealed image, not a re-download.
+  Second independent measurement of the same behaviour (E11 saw a 1 MB peak). The preflight now
+  branches on whether the platform is installed instead of always quoting E11's ~7 GB download peak.
+- **Blocker found and fixed while doing it:** Xcode names the exported file after the SDK
+  (`iphonesimulator_26.5_23F77.dmg`), which `RuntimeInstaller.parse` did not recognise — only the
+  display form `iOS 26.5 Simulator Runtime.dmg`. `installer(for:in:)` therefore matched nothing and
+  `runtime offload` refused every offload with "NO installer in library" while the installer was in
+  the library. Not caught by fixtures, which used hand-written display names.
+- **F10 — orphaned cache: PARTIAL, and the decisive probe has not run.** 2.3 GiB under
+  `Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470` for a runtime absent
+  from `simctl runtime list`, `Profiles/Runtimes` and `Images`. Survived the runtime's removal and
+  later simulator boots, but was created after the last boot (`kern.boottime` Sep 7 17:39 vs mtime
+  Sep 7 18:54), so it has **never been through a restart** — which is what reclaims the analogous
+  stranded Inbox file. Status: **pending E13**, not "confirmed garbage".
+- Root-deletability: **unknown, and not inferable.** No BSD flags anywhere on the ancestor chain and
+  `/Library/Developer/CoreSimulator` is absent from `rootless.conf` — but the Inbox file had both
+  properties and root was still refused. `doctor` therefore recommends a restart and no `sudo`.
+- Evidence: `docs/research/FINDINGS-2026-09-05.md` §F10, §F11

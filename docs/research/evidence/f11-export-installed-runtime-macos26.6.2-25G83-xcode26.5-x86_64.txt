@@ -1,0 +1,56 @@
+F11 — internal cost of exporting an ALREADY-INSTALLED simulator runtime
+=======================================================================
+Host:    macOS 26.6.2 (25G83), Xcode 26.5 (17F42), Intel x86_64
+Date:    2026-09-08 23:37–23:45 local
+Repo:    XCodeVault @ 580961d (working tree, uncommitted F10/F11 work)
+Command: xcodevaultctl runtime export iOS --to /Volumes/<vault>/XCodeVault/RuntimeLibrary
+         (wraps `xcodebuild -downloadPlatform iOS -exportPath <dir>`)
+
+WHY: E11 measured ~7 GB peak internal use for a 5 GB image and concluded that
+`-downloadPlatform -exportPath` downloads and INSTALLS internally before exporting. The
+export preflight repeated that to every caller. This run tests the other case — a runtime
+that is already installed — because that is the one that precedes `runtime offload`, and
+telling a user on a near-full disk that it costs 7 GB argues them out of the operation
+that frees the most space.
+
+PRECONDITION
+  $ xcrun simctl runtime list
+    iOS 26.5 (23F77) - 34AF883C-5859-4A52-BA30-1BCB0A577DD2 (Ready)
+    watchOS 26.5 (23T570) - FC8D06B4-B87E-42BE-8DF3-AD0A2020571F (Ready)
+    Total Disk Images: 2 (14.8G)
+  iOS 26.5 is installed and backed by
+  /Library/Developer/CoreSimulator/Images/34AF883C-5859-4A52-BA30-1BCB0A577DD2.dmg (9.9G)
+
+MEASUREMENT (internal volume free space, `df -k /`)
+  before start : 14 GiB
+  t + 20 s     : 14 GiB      destination file already 4,391,436,288 bytes
+  at finish    : 14 GiB      destination file 10,597,197,700 bytes (10.6 GB)
+
+  A guard ran alongside the export, polling every 20 s, set to kill the process if
+  internal free fell below 7 GiB. It never fired.
+
+RESULT
+  Internal free never moved. 4.4 GB reached the destination within the first 20 s, which is
+  a local copy rate, not a download. This is a copy-out of the sealed image.
+
+  Destination: /Volumes/<vault>/XCodeVault/RuntimeLibrary/iphonesimulator_26.5_23F77.dmg
+  $ hdiutil imageinfo <that file> | grep -i 'Format\|Checksum Type'
+    Format Description: UDIF read-only compressed (lzfse)
+    Checksum Type: CRC32
+  exit 0 — the image is readable, which is the same check `runtime offload` performs
+  before it will delete an installed runtime.
+
+CONCLUSION
+  E11's "~7 GB peak" describes the DOWNLOAD case only. For an already-installed runtime the
+  internal cost is nil and the space to budget is at the destination. `preflightExport` now
+  distinguishes three cases: copy-out, download, and — when no -buildVersion is given —
+  unknown, because `-downloadPlatform` fetches the LATEST and nothing local knows whether
+  that is the installed build.
+
+INCIDENTAL BUG FOUND
+  Xcode names the exported file after the SDK (`iphonesimulator_26.5_23F77.dmg`).
+  `RuntimeInstaller.parse` recognised only the display form (`iOS 26.5 Simulator
+  Runtime.dmg`), so `platform` parsed as nil, `installer(for:in:)` matched nothing, and
+  `runtime offload` refused with "NO installer in library — export first" while the
+  installer sat in the library. Fixed; the fixtures used hand-written display names and had
+  never exercised a real export filename.

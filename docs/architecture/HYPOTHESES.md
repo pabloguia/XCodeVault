@@ -254,3 +254,24 @@ version/build, architecture, procedure, and result. Research source priority:
 reproduced behavior, (5) Apple Developer Forums (DTS answers rank above user posts),
 (6) high-quality open-source implementations, (7) community reports. Never promote a
 forum workaround straight to "verified" — reproduce it first.
+
+## H10 — regenerable system caches are reclaimed by the system, not by us
+
+**Status: open.** Two paths under `/Library/Developer/CoreSimulator` accumulate multi-GB residue
+that no user action reclaims: the runtime Inbox (F1) and the dyld shared-cache tree (F10). For the
+Inbox the answer is known and surprising — root deletion is refused with `Operation not permitted`
+despite the path carrying no BSD flags and being absent from `rootless.conf`, and a **restart**
+reclaims it, so the reaper is a startup GC. Whether the same holds for `Caches/dyld/<build>/inc/`
+is untested.
+
+This matters beyond one directory. If startup GC is the general mechanism, then the product's
+answer for root-owned regenerable data is "tell the user to restart", the privileged helper is not
+on the critical path for reclaiming it at all, and every `sudo` suggestion in this area is both
+unnecessary and — on the evidence of the Inbox — likely to fail. If it is not general, each such
+path needs its own probe, and the absence of SIP markers is not evidence either way.
+
+**Do not treat "no BSD flags + absent from `rootless.conf` ⇒ root can delete it" as sound.** It has
+been falsified once here, on exactly such a path, and reasoning from it produced a `doctor`
+remediation that contradicted an instruction already written in FINDINGS.
+
+Gate: E13. Evidence so far: F1 (2026-09-06 note), F10.

@@ -27,8 +27,15 @@ public struct Finding: Sendable, Codable, Equatable, Identifiable {
 public struct Doctor: Sendable {
     public var home: String
     public var runner: CommandRunning
-    public init(home: String = NSHomeDirectory(), runner: CommandRunning = ProcessCommandRunner()) {
-        self.home = home; self.runner = runner
+    /// Injectable like `home`, and for the same reason: without it the rule that reads this tree can
+    /// only ever be exercised against whatever the machine happens to hold, and its wiring into
+    /// `diagnose` cannot be tested at all.
+    public var dyldCacheRoot: String
+    public init(
+        home: String = NSHomeDirectory(), runner: CommandRunning = ProcessCommandRunner(),
+        dyldCacheRoot: String = "/Library/Developer/CoreSimulator/Caches/dyld"
+    ) {
+        self.home = home; self.runner = runner; self.dyldCacheRoot = dyldCacheRoot
     }
 
     public func diagnose(report: ScanReport) -> [Finding] {
@@ -44,6 +51,7 @@ public struct Doctor: Sendable {
         f += checkRuntimeRegistry(runtimes: report.runtimes)
         f += checkStrandedInbox()
         f += checkOrphanedAssets(runtimes: report.runtimes)
+        f += checkOrphanedDyldCaches(runtimes: report.runtimes, host: report.host, devices: report.devices, warnings: report.warnings)
         f += checkUnavailableDevices(devices: report.devices)
         f += checkDerivedDataLocation(volumes: report.volumes)
         f += checkXcodeSelect(xcodes: report.xcodes)
@@ -499,6 +507,245 @@ public struct Doctor: Sendable {
         }
         return out
     }
+
+    /// Dyld shared caches whose owner no longer exists.
+    ///
+    /// Layout observed on macOS 26.6.2 / 25G83 / Xcode 26.5 / Intel (2026-09-08):
+    ///
+    ///     /Library/Developer/CoreSimulator/Caches/dyld/<hostBuild>/<runtimeIdentifier>.<build>/
+    ///     /Library/Developer/CoreSimulator/Caches/dyld/<hostBuild>/inc/<runtimeIdentifier>.<build>/
+    ///
+    /// The distinction this rule exists to draw: "rebuilt on next boot" is true of a cache whose
+    /// runtime is installed — deleting it buys a slow first boot, not free space — and false of a
+    /// cache whose runtime is gone. Only the latter is a durable win, and the category cannot say so.
+    ///
+    /// **The remediation is a restart, not `rm`, and that ordering is deliberate.** The one time this
+    /// repo reasoned "no BSD file flags + absent from `rootless.conf` ⇒ root can delete it", it was
+    /// wrong: the stranded runtime Inbox `.dmg` had *both* of those properties and root still got
+    /// `Operation not permitted` three times — and what actually reclaimed it was a reboot, because
+    /// the reaper is a startup GC (F1 2026-09-06, which ends with "doctor must not promise a
+    /// root-only fix"). The orphan measured here was created at 18:54 on the same day the machine
+    /// last booted at 17:39, so it has survived simulator boots but **never a restart**. Until that
+    /// probe runs, treating this as root-deletable garbage repeats the earlier mistake with a bigger
+    /// blast radius.
+    ///
+    /// Every guard below is a fail-closed one, and each exists because removing it produced a
+    /// destructive suggestion against live data in review.
+    func checkOrphanedDyldCaches(
+        runtimes: [SimulatorRuntime], host: HostEnvironment, devices: [SimulatorDevice] = [], warnings: [String] = [], now: Date = Date(),
+        root: String? = nil
+    ) -> [Finding] {
+        let root = root ?? dyldCacheRoot
+        // The probe either failed outright — `Scanner` records that in `report.warnings` — or
+        // returned runtimes whose identifiers did not decode. Both look like "nothing is installed",
+        // and acting on that reports every live cache on the machine as garbage.
+        guard !warnings.contains(where: { $0.hasPrefix("simctl runtime list failed") }) else { return [] }
+        guard !runtimes.isEmpty else { return [] }
+        // `runtimeIdentifier` is optional and `parseRuntimes` enforces no required keys, so a key
+        // rename upstream yields a non-empty array of runtimes that claim nothing at all.
+        var installed = runtimes.compactMap { r -> (rid: String, build: String?)? in
+            guard let rid = r.runtimeIdentifier else { return nil }
+            return (rid, r.build)
+        }
+        guard !installed.isEmpty else { return [] }
+        // `simctl runtime list` enumerates disk-image runtimes only. A runtime bundled inside an
+        // older Xcode does not appear there, so "absent from that list" is not "absent from the
+        // machine" — and on such a machine the rule would offer `sudo rm` for a live cache. An
+        // available device is a second, independent witness that its runtime exists; devices whose
+        // runtime is gone report `isAvailable == false`, so this only ever adds claims.
+        // Not verifiable here: this machine has no bundled runtime, so the case is reasoned, not
+        // measured. That is also why the direction chosen is the one that can only under-report.
+        // …but only for identifiers `simctl` does not report at all. A device knows its runtime
+        // exists; it does not know which *build*, so a device entry can only prefix-match. Adding one
+        // for a runtime `simctl` already described precisely would replace a build-accurate claim
+        // with a vague one — and since every real machine has available devices for its installed
+        // runtimes, that silently disabled superseded-build detection entirely, which is the one
+        // orphan class the exact-matching machinery exists to find.
+        let reportedRids = Set(installed.map(\.rid))
+        installed += devices.filter { $0.isAvailable && !reportedRids.contains($0.runtimeIdentifier) }
+            .map { (rid: $0.runtimeIdentifier, build: nil) }
+        // `HostEnvironment.discover` substitutes "unknown" when `sw_vers` fails; comparing against it
+        // marks every build directory stale.
+        let hostBuild = host.macOSBuild
+        guard hostBuild != "unknown", !hostBuild.isEmpty else { return [] }
+        guard let buildDirs = try? FileManager.default.contentsOfDirectory(atPath: root) else { return [] }
+        // Two name sets, not one: `<hostBuild>/` and `<hostBuild>/inc/` are separate naming
+        // conventions, and confirming a scheme in one says nothing about the other.
+        let finishedNames = Set((try? FileManager.default.contentsOfDirectory(atPath: root + "/" + hostBuild)) ?? [])
+        let incNames = Set((try? FileManager.default.contentsOfDirectory(atPath: root + "/" + hostBuild + "/inc")) ?? [])
+
+        /// Exact `<rid>.<build>` matching is what makes a *superseded build's* cache visible — the
+        /// most likely orphan on a machine that has taken a runtime update. But it rests on a naming
+        /// scheme observed on one machine, and where the scheme does not hold, exact matching orphans
+        /// every live cache for that platform.
+        ///
+        /// So the tree confirms the scheme before it is relied on — **per runtime and per level**, not
+        /// once for the whole tree. A single global flag was worse than no flag: on a mixed tree, iOS
+        /// naming its directory `<rid>.<build>` licensed exact matching for a visionOS runtime named
+        /// some other way, and reported that live cache for deletion. Confirming one platform says
+        /// nothing about another, and confirming `<hostBuild>/` says nothing about `<hostBuild>/inc/`.
+        func confirmedRids(in names: Set<String>) -> Set<String> {
+            Set(
+                installed.compactMap { entry in
+                    guard let b = entry.build, names.contains(entry.rid + "." + b) else { return nil }
+                    return entry.rid
+                })
+        }
+        let confirmedFinished = confirmedRids(in: finishedNames)
+        let confirmedInc = confirmedRids(in: incNames)
+        /// `dirName` belongs to an installed runtime. The bare `<rid>` form is claimed too: this
+        /// rule's own notes and `EXPERIMENTS.md` describe CoreSimulator writing `inc/<rid>` with no
+        /// build suffix during an install, and without the equality test that live in-progress build
+        /// was reported as "a runtime simctl no longer reports" while the runtime was installed.
+        /// The trailing dot in the prefix form keeps `…iOS-26-5` from claiming `…iOS-26-50`'s cache.
+        func isInstalled(_ dirName: String, confirmed: Set<String>) -> Bool {
+            installed.contains { entry in
+                if dirName == entry.rid { return true }
+                if confirmed.contains(entry.rid), let b = entry.build { return dirName == entry.rid + "." + b }
+                return dirName.hasPrefix(entry.rid + ".")
+            }
+        }
+        /// A cache directory always names a runtime. Anything else under these directories is not a
+        /// cache and nothing here can say what it is — so it must not be described as one, and must
+        /// certainly not carry a deletion command. Level 1 got this check as `looksLikeBuild`; levels
+        /// 2 and 3 had only a type check, so a directory called `tmp` was reported as "a finished
+        /// cache for a runtime simctl no longer reports" with `sudo rm` attached.
+        func namesARuntime(_ dirName: String) -> Bool { dirName.contains(".SimRuntime.") }
+        /// The newest mtime in `path` and its **direct children only**. Every cache directory observed
+        /// is flat, so one level is enough today — but that is an unverified layout assumption of the
+        /// same kind that produced the mixed-tree and bare-`inc/<rid>` bugs, so it is stated rather
+        /// than left implicit: a write two levels down would be invisible here, because a directory's
+        /// mtime does not change when a file inside a *child* is appended. A cache build writes multi-hundred-MB
+        /// files for many minutes while the *directory's* own mtime stays frozen at the moment its
+        /// entries were created — measured here: the iOS rebuild spanned 06:47→07:06, and the tvOS
+        /// orphan's directory mtime froze 17 minutes after its birth. Judging liveness by the
+        /// directory alone therefore reports a genuinely in-flight build as garbage.
+        func newestWrite(in path: String) -> Date? {
+            let fm = FileManager.default
+            guard let attrs = try? fm.attributesOfItem(atPath: path), let dirTime = attrs[.modificationDate] as? Date else { return nil }
+            guard let children = try? fm.contentsOfDirectory(atPath: path) else { return nil }
+            return children.reduce(dirTime) { newest, child in
+                guard let a = try? fm.attributesOfItem(atPath: path + "/" + child), let t = a[.modificationDate] as? Date else { return newest }
+                return t > newest ? t : newest
+            }
+        }
+        func isDirectory(_ path: String) -> Bool {
+            var st = stat()
+            // `lstat`, so a symlink is never mistaken for the directory it points at and then
+            // suggested for deletion.
+            return lstat(path, &st) == 0 && (st.st_mode & S_IFMT) == S_IFDIR
+        }
+
+        var out: [Finding] = []
+        func report(_ path: String, _ dirName: String, reason: String, id: String) {
+            let usage = DiskUsage.measure(path)
+            // "0 bytes" next to a deletion command is a confident lie about a tree we could not read.
+            let size: String
+            switch usage {
+            case .none: size = "size unknown"
+            // "at least 0 bytes" is still a confident-looking number for a tree we could not read.
+            case .some(let u) where u.isLowerBound && u.allocatedBytes == 0: size = "size unknown"
+            case .some(let u) where u.isLowerBound: size = "at least \(ByteCount.format(u.allocatedBytes))"
+            case .some(let u): size = ByteCount.format(u.allocatedBytes)
+            }
+            // `newestWrite`, not the directory's own mtime — the same frozen value the age guard was
+            // fixed to stop trusting. Printing it next to a deletion command would tell the user a
+            // tree written minutes ago was last touched a year back. No date at all beats a wrong one.
+            let age = newestWrite(in: path).map { " Last written \(Doctor.dayStamp.string(from: $0))." } ?? ""
+            let q = OwnershipAdvice.shellQuoted(path)
+            out.append(
+                Finding(
+                    id: id, severity: .warning, title: "Orphaned dyld cache: \(dirName) (\(size))",
+                    detail:
+                        "\(reason)\(age) Nothing will rebuild it, because the runtime it belongs to is gone — unlike the rest of this tree, "
+                        + "where deleting a cache only costs the next boot the time to rebuild it.",
+                    path: path,
+                    remediation:
+                        "Restart the Mac and re-check: this has never been observed to survive one, and a restart is what reclaimed the analogous stranded "
+                        + "runtime Inbox file (see evidence). If it survives, root deletion is unverified but worth trying — "
+                        + "`P=\(q); sudo ls -la \"$P\" && sudo rm -f \"$P\"/dyld_sim_shared_cache_* \"$P\"/update_dyld_sim_shared_cache-std*.txt && sudo rmdir \"$P\"` "
+                        + "— `rmdir` refuses if anything unexpected is inside.",
+                    evidence: "docs/research/FINDINGS-2026-09-05.md §F10"))
+        }
+
+        // A build directory is only judged stale when its name is build-version shaped AND some
+        // sibling equals this machine's build. The second half is the load-bearing one: it is proof
+        // the layout is the one we understand. Without it any unrecognised sibling — a `tmp`, a
+        // stray file, a future Apple directory — was reported as "built for macOS tmp" with a
+        // deletion command attached. This branch has never been observed to fire on real data: no
+        // machine here has had a second host-build directory, so it stays informational.
+        let looksLikeBuild = { (n: String) in n.range(of: #"^\d{2}[A-Z]\d+[a-z]?$"#, options: .regularExpression) != nil }
+        let layoutUnderstood = buildDirs.contains(hostBuild)
+
+        for buildDir in buildDirs where !buildDir.hasPrefix(".") {
+            let buildPath = root + "/" + buildDir
+            guard isDirectory(buildPath) else { continue }
+            if buildDir != hostBuild {
+                guard layoutUnderstood, looksLikeBuild(buildDir) else { continue }
+                let usage = DiskUsage.measure(buildPath)
+                out.append(
+                    Finding(
+                        id: "orphan-dyld-host:\(buildDir)", severity: .info,
+                        title: "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.format($0.allocatedBytes) } ?? "size unknown"))",
+                        detail:
+                            "This machine runs \(hostBuild). Caches under another build are not read by anything — but XCodeVault has never observed a stale "
+                            + "build directory in the field, so this is reported for inspection only and carries no command.",
+                        path: buildPath,
+                        remediation: "Inspect it. If it is genuinely a leftover from a macOS update, report what you find so this can be turned into a real rule.",
+                        evidence: "docs/research/FINDINGS-2026-09-05.md §F10 (layout), branch unverified"))
+                continue
+            }
+            // `inc` is a staging directory, not a runtime identifier — descend rather than judge it.
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: buildPath) else { continue }
+            for entry in entries where !entry.hasPrefix(".") {
+                let entryPath = buildPath + "/" + entry
+                // Levels 2 and 3 need the same type check as level 1: this tree really does contain
+                // plain files (`update_dyld_sim_shared_cache-stderr.txt`), and reporting one with a
+                // deletion command is both wrong and, for a symlink, dangerous.
+                guard isDirectory(entryPath) else { continue }
+                if entry == "inc" {
+                    guard let pendings = try? FileManager.default.contentsOfDirectory(atPath: entryPath) else { continue }
+                    for pending in pendings where !pending.hasPrefix(".") {
+                        let pendingPath = entryPath + "/" + pending
+                        guard isDirectory(pendingPath) else { continue }
+                        // Two independent guards, because "not installed" alone does not mean "not in
+                        // flight": CoreSimulator writes `inc/<rid>` during an install before `simctl`
+                        // reports the runtime, and deleting a runtime mid-build lands here too. An
+                        // entry younger than an hour is assumed to be live work.
+                        guard namesARuntime(pending) else { continue }
+                        guard !isInstalled(pending, confirmed: confirmedInc) else { continue }
+                        // Fail-closed on an unreadable mtime: "we cannot tell how old it is" must not
+                        // mean "old enough to delete".
+                        guard let lastWrite = newestWrite(in: pendingPath) else { continue }
+                        guard now.timeIntervalSince(lastWrite) >= 3600 else { continue }
+                        report(
+                            pendingPath, pending,
+                            reason: "An interrupted cache build for a runtime `simctl runtime list` no longer reports.",
+                            id: "orphan-dyld-inc:\(pending)")
+                    }
+                    continue
+                }
+                guard namesARuntime(entry), !isInstalled(entry, confirmed: confirmedFinished) else { continue }
+                // The same two guards as the `inc/` branch. Nothing establishes that a rebuild is
+                // staged through `inc/` rather than written straight into its final directory, so a
+                // cache being written *right now* — for a runtime `simctl` has not reported yet — was
+                // reported here with a deletion command while the identical case was guarded one
+                // level down. An unreadable mtime is "unknown", never "old enough".
+                guard let lastWrite = newestWrite(in: entryPath), now.timeIntervalSince(lastWrite) >= 3600 else { continue }
+                report(entryPath, entry, reason: "A finished cache for a runtime `simctl runtime list` no longer reports.", id: "orphan-dyld:\(entry)")
+            }
+        }
+        return out
+    }
+
+    /// Day resolution on purpose: a doctor finding is not a forensic timestamp, and the exact second
+    /// a root-owned cache was written is noise next to "is this from today or from last month?".
+    static let dayStamp: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 
     func checkOrphanedAssets(runtimes: [SimulatorRuntime]) -> [Finding] {
         var out: [Finding] = []

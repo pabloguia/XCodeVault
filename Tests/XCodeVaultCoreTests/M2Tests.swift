@@ -30,6 +30,27 @@ final class CleanTests: XCTestCase {
             devices: [], volumes: [], items: items, summary: ScanSummary(), warnings: [])
     }
 
+    /// The dyld-cache line is usually the largest number in the plan, and most of it is not free
+    /// space: a cache whose runtime is installed is rebuilt on the next boot of that runtime. Before
+    /// F10 the warning said only "root-owned", which reads as "you would get 10 GB back if you had
+    /// permission". The durability caveat is the load-bearing half.
+    func testTheDyldCacheWarningSaysMostOfTheTotalIsNotDurableSpace() {
+        let item = StorageItem(
+            categoryID: "coreSimulatorSystemCaches", path: "/Library/Developer/CoreSimulator/Caches/dyld", exists: true,
+            isSymlink: false, isMountPoint: false, usage: DiskUsage(
+                allocatedBytes: 10_000_000_000, logicalBytes: 10_000_000_000, fileCount: 1, directoryCount: 1,
+                symlinkCount: 0, skippedMountPoints: [], unreadable: []),
+            volumeMountPoint: "/", onBootVolume: true)
+        let plan = CleanPlanner(home: "/Users/t").plan(report: report(home: "/Users/t", items: [item]))
+        let w = plan.warnings.filter { $0.contains("dyld") }
+        XCTAssertEqual(w.count, 1, "\(plan.warnings)")
+        let only = try? XCTUnwrap(w.first)
+        XCTAssertTrue(only?.contains("NOT durable free space") == true, "\(w)")
+        XCTAssertTrue(only?.contains("rebuilt on the next boot") == true, "the reason must be stated, not just the caveat: \(w)")
+        // Durability across a restart is exactly what is untested; the warning must not imply it.
+        XCTAssertTrue(only?.contains("untested") == true, "\(w)")
+    }
+
     func testPlanIsGranularForDerivedDataAndSkipsSymlinksAndArchives() throws {
         let t = TempDir()
         t.file("Library/Developer/Xcode/DerivedData/ProjA-abc/Build/a.o", bytes: 8192)
@@ -168,6 +189,159 @@ final class RuntimeOperationsTests: XCTestCase {
         var noExport = xcode26; noExport.capabilities.exportPath = false
         let old = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: noExport, host: host(free: 1, arm: true))
         XCTAssertThrowsError(try old.preflightExport(.init(platform: "iOS", destination: t.path), freeBytesAtDestination: nil))
+    }
+
+    /// An architecture variant is a third axis, and answering a three-axis question on two axes is
+    /// exactly how the no-`-buildVersion` hole got in. `-architectureVariant arm64` against an
+    /// installed universal image names a different image, so it is a real download — and
+    /// `supportedArchitectures` says what the installed image *runs*, not which variant it *is*.
+    func testAnArchitectureVariantRequestIsNotAssumedToBeACopyOut() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+        let universal = SimulatorRuntime(
+            identifier: "U", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", version: "26.5", build: "23F77",
+            supportedArchitectures: ["arm64", "x86_64"])
+        let req = { (v: String?) in RuntimeOperations.ExportRequest(platform: "iOS", buildVersion: "23F77", architectureVariant: v, destination: t.path) }
+        XCTAssertEqual(ops.exportCost(req(nil), among: [universal]), .copyOut, "no variant requested: the installed image is the one")
+        XCTAssertEqual(
+            ops.exportCost(req("arm64"), among: [universal]), .unknownDependsOnWhatIsLatest,
+            "an arm64-only export from a universal install is a different image")
+        XCTAssertEqual(ops.exportCost(req("universal"), among: [universal]), .copyOut)
+
+        let armOnly = SimulatorRuntime(
+            identifier: "A", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", version: "26.5", build: "23F77",
+            supportedArchitectures: ["arm64"])
+        XCTAssertEqual(ops.exportCost(req("arm64"), among: [armOnly]), .copyOut)
+        XCTAssertEqual(ops.exportCost(req("universal"), among: [armOnly]), .unknownDependsOnWhatIsLatest)
+    }
+
+    /// `-buildVersion` is matched three ways because it accepts three things. The dashed suffix in
+    /// the identifier answers most real cases, which made the `version` comparison look redundant —
+    /// it is not, for a runtime whose identifier does not encode its version. Synthetic on purpose:
+    /// no such identifier exists today, and a mutation-surviving clause is either load-bearing
+    /// somewhere or dead code, with no third option.
+    func testTheVersionComparisonCoversIdentifiersThatDoNotEncodeTheVersion() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 1, arm: false))
+        let unencoded = SimulatorRuntime(
+            identifier: "L", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-legacy", version: "26.5", build: nil)
+        XCTAssertEqual(
+            ops.exportCost(.init(platform: "iOS", buildVersion: "26.5", destination: t.path), among: [unencoded]), .copyOut,
+            "the identifier does not carry `26-5`, so only the version comparison can match")
+    }
+
+    /// Xcode names exported installers after the SDK — `iphonesimulator_26.5_23F77.dmg` — not after
+    /// the display name. Only the display form parsed, so a real export yielded `platform == nil`,
+    /// `installer(for:in:)` matched nothing, and `runtime offload` refused to free a runtime whose
+    /// installer was sitting in the library. The fixtures used hand-written display names and never
+    /// caught it; this was found by exporting for real and reading the output.
+    func testInstallersAreParsedFromXcodesOwnSdkStyleFileNames() {
+        let real = RuntimeInstaller.parse(fileName: "iphonesimulator_26.5_23F77.dmg")
+        XCTAssertEqual(real.platform, "iOS")
+        XCTAssertEqual(real.version, "26.5")
+        XCTAssertEqual(real.build, "23F77")
+
+        XCTAssertEqual(RuntimeInstaller.parse(fileName: "watchsimulator_26.5_23T570.dmg").platform, "watchOS")
+        XCTAssertEqual(RuntimeInstaller.parse(fileName: "appletvsimulator_26.5_23L470.exportedBundle").platform, "tvOS")
+        XCTAssertEqual(RuntimeInstaller.parse(fileName: "xrsimulator_26.5_23M100.dmg").platform, "visionOS")
+        // The display form Apple used elsewhere must keep working.
+        XCTAssertEqual(RuntimeInstaller.parse(fileName: "iOS 26.5 Simulator Runtime.dmg").platform, "iOS")
+    }
+
+    /// End to end: the SDK-named installer must actually satisfy `installer(for:in:)`, because that
+    /// is the gate `runtime offload` gets its answer from. Parsing the name is only half the bug.
+    func testAnSdkNamedInstallerSatisfiesTheOffloadGate() throws {
+        let t = TempDir()
+        t.file("iphonesimulator_26.5_23F77.dmg", bytes: 600_000_000)
+        let lib = try RuntimeOperations.library(at: t.path)
+        let rts = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
+        let ios = try XCTUnwrap(rts.first { $0.platformName == "iphone" })
+        XCTAssertEqual(
+            RuntimeOperations.installer(for: ios, in: lib)?.fileName, "iphonesimulator_26.5_23F77.dmg",
+            "offload refuses to delete a runtime whose installer it cannot find")
+    }
+
+    /// The export preflight tells two opposite cost stories, and picking the wrong one is not
+    /// cosmetic: the expensive story ("~7 GB peak, watch for ENOSPC") on a nearly-full disk talks a
+    /// user out of the one operation that frees the most space, while the cheap story on a runtime
+    /// that is not installed invites the ENOSPC it should have warned about.
+    func testExportPreflightDistinguishesAnInstalledRuntimeFromADownload() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        // Deliberately a low-free-space host: that is where the wrong story does the damage.
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: false))
+        let installed = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
+        XCTAssertFalse(installed.isEmpty, "fixture must contain runtimes or this test proves nothing")
+
+        let iosVersion = try XCTUnwrap(installed.first { $0.runtimeIdentifier?.contains(".SimRuntime.iOS-") == true }?.version)
+        let cheap = try ops.preflightExport(
+            .init(platform: "iOS", buildVersion: iosVersion, destination: t.path), freeBytesAtDestination: 500_000_000_000, installedRuntimes: installed)
+        XCTAssertTrue(cheap.contains { $0.contains("already installed") }, "iOS \(iosVersion) is in the fixture: \(cheap)")
+        XCTAssertFalse(cheap.contains { $0.contains("ENOSPC") }, "must not warn about internal staging for a copy-out: \(cheap)")
+
+        // tvOS is absent from the fixture, so this is a real download on a 3 GB-free machine.
+        let costly = try ops.preflightExport(.init(platform: "tvOS", destination: t.path), freeBytesAtDestination: 500_000_000_000, installedRuntimes: installed)
+        XCTAssertTrue(costly.contains { $0.contains("NOT already installed") }, "\(costly)")
+        XCTAssertTrue(costly.contains { $0.contains("ENOSPC") }, "a download onto a 3 GB-free volume must warn: \(costly)")
+    }
+
+    /// An empty list is what a failed `simctl` probe looks like. It must fall back to the expensive
+    /// story — under-promising costs a user nothing, over-promising costs them a full disk.
+    func testExportPreflightWithNoRuntimeListAssumesTheExpensiveCase() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: false))
+        let w = try ops.preflightExport(.init(platform: "iOS", destination: t.path), freeBytesAtDestination: nil, installedRuntimes: [])
+        XCTAssertTrue(w.contains { $0.contains("NOT already installed") }, "\(w)")
+    }
+
+    /// The hole this replaced: `-downloadPlatform iOS` with no `-buildVersion` fetches the LATEST
+    /// runtime. Answering "already installed" because *some* iOS is present told a user with 3 GB
+    /// free that a 10 GB download was free — and, worse, suppressed the ENOSPC warning along with it,
+    /// because that warning lived in the else branch. "I cannot tell" needs its own answer.
+    func testNoBuildVersionIsNotTreatedAsFreeJustBecauseThePlatformIsInstalled() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: false))
+        let installed = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
+        let w = try ops.preflightExport(.init(platform: "iOS", destination: t.path), freeBytesAtDestination: 500_000_000_000, installedRuntimes: installed)
+        XCTAssertFalse(w.contains { $0.contains("internal use stays flat.") }, "must not promise the cheap path: \(w)")
+        XCTAssertTrue(w.contains { $0.contains("fetches the LATEST") }, "\(w)")
+        XCTAssertTrue(w.contains { $0.contains("ENOSPC") }, "3 GB free and possibly a download — the warning must survive: \(w)")
+    }
+
+    func testExportCostIsPreciseAboutPlatformAndVersion() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: FakeRunner(responses: [:]), journal: journal, xcode: xcode26, host: host(free: 1, arm: false))
+        let rts = try SimulatorDiscovery.parseRuntimes(json: Fixtures.data("simctl-runtime-list-xcode26.5.json"))
+        let ios = try XCTUnwrap(rts.first { $0.runtimeIdentifier?.contains(".SimRuntime.iOS-") == true })
+        let iosVersion = try XCTUnwrap(ios.version)
+
+        XCTAssertEqual(ops.exportCost(.init(platform: "iOS", destination: t.path), among: rts), .unknownDependsOnWhatIsLatest)
+        XCTAssertEqual(ops.exportCost(.init(platform: "tvOS", destination: t.path), among: rts), .download)
+        // A different version of an installed platform is a genuine download, not a copy-out.
+        XCTAssertEqual(
+            ops.exportCost(.init(platform: "iOS", buildVersion: "18.0", destination: t.path), among: rts), .download,
+            "iOS 18.0 is not installed just because some iOS is")
+        XCTAssertEqual(ops.exportCost(.init(platform: "iOS", buildVersion: iosVersion, destination: t.path), among: rts), .copyOut)
+        // `-buildVersion` accepts a build string too, not only an OS version. Unconditional on
+        // purpose: wrapping this in `if let` made the assertion optional, and an optional assertion
+        // let the "drop build-string matching" mutant survive a whole round.
+        let build = try XCTUnwrap(ios.build, "the fixture must carry a build or this asserts nothing")
+        XCTAssertEqual(ops.exportCost(.init(platform: "iOS", buildVersion: build, destination: t.path), among: rts), .copyOut, "build \(build)")
+
+        // The trailing `-` in the marker. No Apple platform today is a prefix of another, so this
+        // guards a case that cannot currently occur — mutation testing showed removing the dash
+        // killed no test, and a synthetic identifier is the only way to pin the intent rather than
+        // leave the character looking decorative. If Apple ever ships an `iOSFoo` platform, the
+        // failure without this would be silent: a real download reported as a free copy-out.
+        let lookalike = SimulatorRuntime(identifier: "X", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOSFoo-1-0")
+        XCTAssertEqual(
+            ops.exportCost(.init(platform: "iOS", destination: t.path), among: [lookalike]), .download,
+            "`iOS` must not match the platform `iOSFoo`")
     }
 
     func testImportPreflightEnforcesStagingSpace() throws {

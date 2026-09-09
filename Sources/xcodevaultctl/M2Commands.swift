@@ -94,7 +94,9 @@ extension Runtime {
             let (x, h) = try selectedXcode()
             let ops = RuntimeOperations(xcode: x, host: h)
             let req = RuntimeOperations.ExportRequest(platform: platform, buildVersion: buildVersion, architectureVariant: arch, destination: to)
-            let warnings = try ops.preflightExport(req, freeBytesAtDestination: MountStatus.space(at: to)?.free)
+            let warnings = try ops.preflightExport(
+                req, freeBytesAtDestination: MountStatus.space(at: to)?.free,
+                installedRuntimes: (try? SimulatorDiscovery.runtimes(developerDir: x.developerDirectory)) ?? [])
             for w in warnings { print("! \(w)") }
             if preflight { print("preflight OK"); return }
             print("Downloading \(platform) runtime installer to \(to) … (this can take a long time; output appears when xcodebuild finishes)")

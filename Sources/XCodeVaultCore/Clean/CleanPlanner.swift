@@ -81,7 +81,15 @@ public struct CleanPlanner: Sendable {
                 "Device Support symbols are re-copied (minutes) the next time a device with that OS build connects; keep the builds you still debug.")
         }
         if actions.contains(where: { $0.categoryID == "coreSimulatorSystemCaches" }) {
-            warnings.append("CoreSimulator dyld caches are root-owned: listed for accounting, executable only through the privileged helper (M3).")
+            // The byte total on this line is real but it is not all *recoverable* space, and saying so
+            // matters more here than anywhere else in the plan: it is usually the single largest line,
+            // so a user reading it as "delete this and get 10 GB back" will be disappointed twice —
+            // once when it needs root, and again when most of it returns on the next simulator boot.
+            warnings.append(
+                "CoreSimulator dyld caches are root-owned: listed for accounting, executable only through the privileged helper (M3). "
+                    + "Most of this total is NOT durable free space — a cache whose runtime is still installed is rebuilt on the next boot of that runtime, "
+                    + "so deleting it buys a slow first boot rather than disk. `doctor` reports the part that is not rebuilt on the next boot — caches whose "
+                    + "runtime is gone — though whether a restart reclaims those on its own is itself untested (F10).")
         }
         actions.sort { $0.bytes > $1.bytes }
         return CleanPlan(actions: actions, skipped: skipped, warnings: warnings)

@@ -118,12 +118,16 @@ public enum StorageCatalog {
             id: "coreSimulatorSystemCaches", name: "CoreSimulator system dyld caches", subsystem: .coreSimulator,
             pathTemplates: ["/Library/Developer/CoreSimulator/Caches/dyld"],
             description:
-                "Root-owned dyld shared caches built per runtime when simulators boot. Observed at 7.4 GB on one Xcode 26.5 machine (E1). Rebuilt on next boot.",
+                "Root-owned dyld shared caches built per runtime when simulators boot. Observed at 7.4 GB on one Xcode 26.5 machine (E1), 9.4 GiB on another. "
+                + "Rebuilt on next boot — so deleting a cache whose runtime is installed buys a slow first boot, not free space. The exception is a cache whose "
+                + "runtime was removed: nothing rebuilds that, and nothing reclaimed it over more than a day of uptime (F10) — whether a restart does is untested. "
+                + "`doctor` reports those separately. A cache for an older macOS build should be dead too, but none has been observed, so that stays conjecture.",
             regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .safeCleanup, allowedStrategies: [.safeCleanup], privilege: .root,
             evidence: nil,
             notes: [
-                "Cleanup requires the privileged helper (M3). Until a functional probe (boot after delete) is recorded in the matrix this stays experimental."
+                "Cleanup requires the privileged helper (M3). Until a functional probe (boot after delete) is recorded in the matrix this stays experimental.",
+                "Do NOT infer root-deletability from the absence of SIP flags: the stranded Inbox file had no BSD flags and was absent from rootless.conf either, and root still got EPERM — a restart reclaimed it (F1 2026-09-06, F10). The next probe here is a reboot, not sudo.",
             ]),
         StorageCategory(
             id: "runtimeInbox", name: "Runtime download staging (Inbox)", subsystem: .coreSimulator,

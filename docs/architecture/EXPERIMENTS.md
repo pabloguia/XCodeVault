@@ -162,3 +162,47 @@ own layout (source stays internal, XCodeVault relocates the rest):
 Include a control that proves the two volumes actually differ (`probe.txt` + `PROBE.txt` coexist on
 one and collapse to a single file on the other) — otherwise a passing build proves nothing about
 case sensitivity.
+
+## E13 — is the orphaned dyld cache reaped at startup? (gates F10, and the advice `doctor` gives)
+
+F10 found 2.3 GiB under `Caches/dyld/<hostBuild>/inc/<runtimeIdentifier>` belonging to a runtime
+that is no longer installed. The open question is not whether it is garbage — nothing can rebuild a
+cache for an absent runtime — but **whether the system already collects it**, because that decides
+what `doctor` should tell the user to do.
+
+The reason this is the first probe and not the second: the closest analogue in this repo is the
+stranded runtime Inbox `.dmg` (FINDINGS, 2026-09-06 note), where root deletion was refused three
+times with `Operation not permitted` and a **reboot** reclaimed the file — the reaper is a startup
+GC. The orphan measured for F10 was created at 18:54 on the same day the machine last booted at
+17:39, so it has survived simulator boots but never a restart. Until this runs, "nothing reclaims
+it" is a statement about one uptime session.
+
+**No privilege, no deletion, nothing mounted.** Script:
+`scripts/experiments/e13-dyld-cache-reboot.sh` — run it, restart, run it again, diff the two
+captures. It records per-entry size, mtime, **birth time**, and the newest file write anywhere
+inside each entry. The last of those matters: a directory's own mtime freezes once its entries are
+created while the build keeps writing into them, so it cannot distinguish "abandoned" from "in
+progress" on its own. Measured here, that gap is not small — the tvOS orphan was born 18:37:58 with
+a final write at 18:54:48, and the iOS cache rebuild spanned 06:47:15 → 07:06:28.
+
+Three outcomes, each of which settles a different question:
+
+- **Gone after the restart** → the reaper exists and covers `inc/`. F10 shrinks to "transient until
+  restart", and `doctor`'s remediation should be *only* "restart", with no `sudo` at all. The rule
+  keeps its value (it explains 2.3 GiB the user can see) but stops implying manual work.
+- **Still there** → the Inbox reaper does not cover this path. Only then does the root-deletion probe
+  (E13b) become worth running, and only then may `doctor` mention a command.
+- **Still there but shrunk / partially rebuilt** → CoreSimulator is treating it as a resumable build.
+  That would falsify the "interrupted, abandoned" reading in F10 and argue for widening the `inc/`
+  age guard well beyond its current one hour.
+
+**E13b (only if it survives):** attempt the narrow removal `doctor` currently suggests — `rm -f` of
+`dyld_sim_shared_cache_*` and `update_dyld_sim_shared_cache-std*.txt`, then `rmdir`. Record whether
+root is refused, and if so whether `chflags`/`lsof` explain it (they did not for the Inbox). A
+refusal is the more interesting result: it would mean a second path where root is blocked without a
+SIP flag or a `rootless.conf` entry, which is worth reporting to Apple and worth a rule of its own.
+
+**Do not run E13b first.** The whole point of the ordering is that a free, unprivileged probe can
+make the privileged one unnecessary — and that reasoning from "no SIP flags + absent from
+rootless.conf" to "root can delete it" has already been wrong once in this repo, on a path with
+exactly those properties.

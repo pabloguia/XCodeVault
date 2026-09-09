@@ -16,7 +16,20 @@ public struct RuntimeInstaller: Sendable, Codable, Equatable, Identifiable {
         let base = (fileName as NSString).deletingPathExtension.replacingOccurrences(of: "_", with: " ")
         let parts = base.split(separator: " ").map(String.init)
         let platforms = ["iOS", "watchOS", "tvOS", "visionOS", "xrOS"]
-        let platform = parts.first { platforms.contains($0) }
+        // Xcode's own `-exportPath` names the file after the SDK, not the display name:
+        // `iphonesimulator_26.5_23F77.dmg`, `appletvsimulator_26.5_23L470.exportedBundle`. Only the
+        // display form was recognised, so a real export parsed to `platform == nil`,
+        // `installer(for:in:)` matched nothing, and `runtime offload` reported "NO installer in
+        // library — export first" with the installer sitting right there. That is the whole point of
+        // the command: it refuses to delete a runtime it cannot prove is recoverable, so an unparsed
+        // name silently blocks every offload. Found by running the real export, not the fixtures —
+        // the test fixtures used hand-written display names and passed throughout.
+        // The same platform vocabulary is spelled out in `installer(for:in:)`; keep the two in step.
+        let sdkNames = [
+            "iphonesimulator": "iOS", "watchsimulator": "watchOS", "appletvsimulator": "tvOS",
+            "xrsimulator": "visionOS", "visionsimulator": "visionOS",
+        ]
+        let platform = parts.first { platforms.contains($0) } ?? parts.lazy.compactMap { sdkNames[$0.lowercased()] }.first
         let version = parts.first { $0.range(of: #"^\d+(\.\d+)+$"#, options: .regularExpression) != nil }
         let build = parts.first { $0.range(of: #"^\d{2}[A-Z]\d{2,4}[a-z]?$"#, options: .regularExpression) != nil }
         return (platform, version, build)
@@ -80,7 +93,9 @@ public struct RuntimeOperations: Sendable {
     }
 
     /// Validates an export request against the installed Xcode and host. Returns warnings; throws on blockers.
-    public func preflightExport(_ req: ExportRequest, freeBytesAtDestination: UInt64?) throws -> [String] {
+    /// `installedRuntimes` decides which of two very different cost stories the caller is told, so
+    /// pass the real list whenever it is available (an empty list only loses the cheap-path note).
+    public func preflightExport(_ req: ExportRequest, freeBytesAtDestination: UInt64?, installedRuntimes: [SimulatorRuntime] = []) throws -> [String] {
         var w: [String] = []
         let caps = xcode.capabilities
         guard caps.downloadPlatform, caps.exportPath else {
@@ -111,14 +126,94 @@ public struct RuntimeOperations: Sendable {
         if let free = freeBytesAtDestination, free < 12_000_000_000 {
             w.append("Only \(ByteCount.format(free)) free at the destination; runtime images are 5–25 GB.")
         }
-        w.append(
-            "Observed on Xcode 26.5 (E11): `-downloadPlatform -exportPath` downloads, INSTALLS the runtime on the internal volume, then exports a copy. Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`.")
-        if host.dataVolumeFreeBytes < 15_000_000_000 {
+        // The internal cost of an export is not one number: it depends entirely on whether the
+        // runtime is already installed, and the two cases differ by four orders of magnitude.
+        // Telling every caller the expensive story is what this branch fixes — it was scaring users
+        // away from the one operation that is nearly free, which is also the one that frees the most
+        // space (export the installer to a vault, then `runtime offload`).
+        let downloadWarning =
+            "Observed on Xcode 26.5 (E11): for a runtime that is NOT already installed, `-downloadPlatform -exportPath` downloads, INSTALLS it on the internal volume, then exports a copy. "
+            + "Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`."
+        func warnIfTight(_ why: String) {
+            if host.dataVolumeFreeBytes < 15_000_000_000 {
+                w.append("Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume, and \(why) (E11). Watch for ENOSPC.")
+            }
+        }
+        switch exportCost(req, among: installedRuntimes) {
+        case .copyOut:
             w.append(
-                "Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume. Downloads may stage internally before export (E11 — unverified); watch for ENOSPC."
-            )
+                "This exact runtime is already installed, so `-exportPath` should copy the sealed image out rather than downloading and installing it: internal use stays flat. "
+                    + "Budget the space at the DESTINATION, not internally. Both measurements behind this — 1 MB peak for iOS 26.5 (E11) and a 10.6 GB export on 2026-09-08 "
+                    + "with internal free unchanged (F11) — were run WITHOUT -buildVersion, i.e. in the case where the latest happened to be the installed build. "
+                    + "The pinned-build path is inferred from those, not separately measured.")
+        case .unknownDependsOnWhatIsLatest:
+            // Never the cheap story on its own: without -buildVersion, `-downloadPlatform` fetches the
+            // latest, and nothing local knows whether that is the build already installed. Saying
+            // "internal use stays flat" here — and suppressing the ENOSPC warning with it — is how a
+            // user with 3 GB free gets told a 10 GB download is free.
+            let why =
+                req.architectureVariant.map {
+                    "\(req.platform) is installed, but -architectureVariant \($0) may name a different image than the one installed"
+                } ?? "\(req.platform) is installed, but no -buildVersion was given and `-downloadPlatform` fetches the LATEST"
+            w.append(
+                "\(why). If what Xcode fetches is the image you already have, this is a copy-out and internal use stays flat; otherwise it is a full download "
+                    + "that installs internally first. Nothing local can tell the two apart — measured behaviour exists only for the case where they coincided (F11).")
+            warnIfTight("this may turn out to be a download that stages through an install first")
+        case .download:
+            w.append(downloadWarning)
+            warnIfTight("this runtime is not installed, so the export has to stage through an install first")
         }
         return w
+    }
+
+    /// What an export will actually cost internally. Three states, not two, because "I cannot tell"
+    /// is a real answer here and collapsing it into "free" is the one mistake in this file that can
+    /// fill a user's disk.
+    public enum ExportCost: Sendable, Equatable {
+        /// The exact runtime is installed: `-exportPath` copies the sealed image out, internal use flat.
+        case copyOut
+        /// Not installed: a download that installs internally first, then exports.
+        case download
+        /// The platform is installed but no `-buildVersion` was given, and `-downloadPlatform` fetches
+        /// the *latest*. If the installed build is already the latest this is a copy-out; if Apple has
+        /// since shipped a newer one it is a full download. Nothing local can distinguish the two.
+        case unknownDependsOnWhatIsLatest
+    }
+
+    /// Matched on the runtime identifier's `.SimRuntime.<platform>-` segment rather than
+    /// `platformIdentifier`, whose `platformName` renders `com.apple.platform.iphonesimulator` as
+    /// "iphone" and would never equal "iOS". The trailing `-` keeps `iOS` from matching a
+    /// hypothetical `iOSSomething` platform.
+    ///
+    /// A `buildVersion` narrows the match: exporting 26.4 while 26.5 is installed is a real download.
+    /// It accepts either an OS version (`26.5`) or a build string (`23F77`), so both are compared.
+    /// Version strings are also matched against the dashed form CoreSimulator uses in identifiers
+    /// (`iOS-26-5`), which is why the dots are substituted rather than matched literally.
+    func exportCost(_ req: ExportRequest, among runtimes: [SimulatorRuntime]) -> ExportCost {
+        let marker = ".SimRuntime.\(req.platform)-"
+        let matchingPlatform = runtimes.filter { $0.runtimeIdentifier?.contains(marker) == true }
+        guard !matchingPlatform.isEmpty else { return .download }
+        guard let want = req.buildVersion else { return .unknownDependsOnWhatIsLatest }
+        let matched = matchingPlatform.first { r in
+            guard let rid = r.runtimeIdentifier else { return false }
+            // Three forms because `-buildVersion` accepts more than one: the dashed suffix
+            // CoreSimulator encodes in the identifier (`iOS-26-5`), the OS version as reported
+            // (`26.5`), and the build string (`23F77`).
+            return rid.hasSuffix(marker.dropFirst(".SimRuntime.".count) + want.replacingOccurrences(of: ".", with: "-"))
+                || r.version == want || r.build == want
+        }
+        guard let matched else { return .download }
+        // An architecture variant is a third axis, and answering a three-axis question on two axes is
+        // how the no-`-buildVersion` hole got here. `-architectureVariant arm64` against a universal
+        // installed image is a different image, hence a real download — and `supportedArchitectures`
+        // describes what the installed image *runs*, not which variant it *is*, so a variant request
+        // is only ever "unknown" unless it is unambiguous.
+        if let variant = req.architectureVariant {
+            let archs = Set(matched.supportedArchitectures ?? [])
+            let unambiguous = (variant == "arm64" && archs == ["arm64"]) || (variant == "universal" && archs.count > 1)
+            if !unambiguous { return .unknownDependsOnWhatIsLatest }
+        }
+        return .copyOut
     }
 
     /// Runs the export. Long-running; the caller should stream progress. Journaled.
