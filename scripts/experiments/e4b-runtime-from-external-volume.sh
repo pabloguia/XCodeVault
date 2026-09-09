@@ -99,6 +99,16 @@ FREE_GB=$(df -k / | tail -1 | awk '{print int($4/1024/1024)}')
 FLOOR=$(( IMG_GB + 3 ))
 [ "$FREE_GB" -ge "$FLOOR" ] || fail "only ${FREE_GB} GiB free; need ${FLOOR} GiB so a staging copy of the ${IMG_GB} GB image cannot fill the disk. Free some first (\`xcodevaultctl clean --apply\` recovers user-level regenerable data)."
 
+# `runtime unmount` and `runtime delete` take the IMAGE UUID, not the runtime identifier — the
+# earlier draft passed the identifier and got "No runtime disk images or bundles found matching…",
+# which the mount assertion then correctly reported as a failed unmount.
+IMAGE_UUID=$(sim runtime list -j 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,v in d.items():
+    if v.get('runtimeIdentifier')=='$TARGET_RID': print(v.get('identifier') or k); break") || true
+[ -n "$IMAGE_UUID" ] || fail "could not resolve the image UUID for $TARGET_RID"
+
 INTERNAL_IMAGE=$(python3 -c "
 import plistlib,pathlib,urllib.parse,sys
 d=plistlib.loads(pathlib.Path('$PLIST').read_bytes())
@@ -111,7 +121,7 @@ print(urllib.parse.unquote(urllib.parse.urlparse(m[0]['path']['relative']).path)
   echo "date:     $(date -u '+%Y-%m-%dT%H:%M:%SZ')   macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion))   arch: $(uname -m)"
   echo "xcode:    $(xcodebuild -version 2>/dev/null | tr '\n' ' ')"
   echo "repo:     $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  echo "target:   $TARGET_RID"
+  echo "target:   $TARGET_RID (image $IMAGE_UUID)"
   echo "internal: $INTERNAL_IMAGE"
   echo "external: $EXTERNAL_IMAGE"
   echo "free:     $(df -h / | tail -1 | awk '{print $4}')"
@@ -155,8 +165,13 @@ restore () {
   { echo; echo "== RESTORE =="; } | tee -a "$OUT"
   # Atomic: write beside the target, then rename. A truncate-in-place here is the one failure that
   # re-import would not fix, and at 11 GiB free the re-import path is not reliably available anyway.
-  if cp -p "$BACKUP" "$PLIST.xcv-restore" && mv -f "$PLIST.xcv-restore" "$PLIST"; then
-    echo "images.plist restored atomically from $BACKUP" | tee -a "$OUT"
+  # In-place, NOT a temp-file-plus-rename. Measured 2026-09-09: creating a new file in
+  # /Library/Developer/CoreSimulator/Images/ is refused even for root ("Operation not permitted")
+  # although the directory carries no BSD flags and is absent from rootless.conf — the same
+  # signature as the runtime Inbox (F1). So atomicity is not available here, and the mitigation is
+  # the backup living OUTSIDE that directory plus the hash check below.
+  if cp -p "$BACKUP" "$PLIST"; then
+    echo "images.plist restored in place from $BACKUP" | tee -a "$OUT"
   else
     echo "RESTORE FAILED — run by hand: sudo cp -p $BACKUP $PLIST" | tee -a "$OUT"
   fi
@@ -182,7 +197,7 @@ trap 'restore; exit 143' TERM
 # Unmount first and assert the mount point is clear. Without this the already-attached /dev/diskN
 # survives the daemon restart and the experiment reports a stale mount as success.
 { echo; echo "== UNMOUNT the runtime so the daemon has to reopen a file =="; } | tee -a "$OUT"
-sim runtime unmount "$TARGET_RID" 2>&1 | tee -a "$OUT"
+sim runtime unmount "$IMAGE_UUID" 2>&1 | tee -a "$OUT"
 sleep 3
 if mount | grep -q "CoreSimulator/Volumes/watchOS"; then
   echo "STILL MOUNTED after unmount — aborting: any verdict now would be about the stale mount." | tee -a "$OUT"
@@ -191,7 +206,7 @@ fi
 echo "mount point clear." | tee -a "$OUT"
 
 python3 - "$PLIST" "$TARGET_RID" "$EXTERNAL_IMAGE" 2>&1 <<'PY' | tee -a "$OUT"
-import plistlib, sys, pathlib, os
+import plistlib, sys, pathlib
 plist, rid, new = sys.argv[1], sys.argv[2], sys.argv[3]
 p = pathlib.Path(plist)
 d = plistlib.loads(p.read_bytes())
@@ -204,11 +219,15 @@ for img in d.get("images", []):
         print(f"repointed {rid}\n  from {old}\n  to   {img['path']['relative']}")
 if hits != 1:
     print(f"ABORT: expected exactly one entry for {rid}, found {hits}"); sys.exit(1)
-# Atomic: same directory, then rename.
-tmp = p.with_suffix(p.suffix + ".xcv-new")
-tmp.write_bytes(plistlib.dumps(d, fmt=plistlib.FMT_BINARY))
-os.replace(tmp, p)
-print("images.plist rewritten atomically")
+# In place. A temp file in this directory is refused even for root (see the restore comment), so
+# the atomic rename that would normally protect against a truncated plist is not available. If this
+# write itself fails with EPERM, nothing has changed and the experiment simply cannot run.
+try:
+    p.write_bytes(plistlib.dumps(d, fmt=plistlib.FMT_BINARY))
+except PermissionError as e:
+    print(f"ABORT: cannot write {plist} even as root ({e}). The secure storage area refuses it.")
+    sys.exit(2)
+print("images.plist rewritten in place")
 PY
 [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "edit failed; restoring" | tee -a "$OUT"; exit 1; }
 
