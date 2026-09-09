@@ -52,9 +52,20 @@ fail () { echo "REFUSING: $*" | tee -a "$OUT" >&2; exit 1; }
 # simctl must run as the invoking user: under sudo it targets root's own device set, so a
 # booted-device check would read an empty set and always pass — and it would create a root-owned
 # CoreSimulator tree, which is shadow data made by the tool that forbids it.
-sim () {
-    if [ "$(id -u)" -eq 0 ]; then sudo -u "$REAL_USER" xcrun simctl "$@"; else xcrun simctl "$@"; fi
+# Anything that reads the INVOKING USER's state must run as them. Under sudo, both simctl and
+# xcodevaultctl otherwise read root's world: simctl targets /var/root's device set, and the vault
+# registry lives in ~/Library/Application Support/XCodeVault, so root sees no registered vault at
+# all. One helper rather than remembering it per call site — the previous version had it on simctl
+# and not on xcodevaultctl, so the rootless --dry-run passed and the sudo run refused with "no
+# VERIFIED vault volume". A dry run in a different privilege context is not a rehearsal.
+as_user () {
+    # -H is not optional: `sudo -u` switches the uid but leaves HOME pointing at the caller's home
+    # on macOS, so the command would run as the user while still reading /var/root. Both consumers
+    # here resolve their state through HOME (the vault registry and simctl's device set), which is
+    # the whole reason this helper exists.
+    if [ "$(id -u)" -eq 0 ]; then sudo -u "$REAL_USER" -H "$@"; else "$@"; fi
 }
+sim () { as_user xcrun simctl "$@"; }
 
 mkdir -p "$(dirname "$OUT")" && : > "$OUT" || { echo "cannot write $OUT"; exit 1; }
 
@@ -71,7 +82,7 @@ fi
 [ -f "$PLIST" ] || fail "$PLIST not found"
 [ -f "$EXTERNAL_IMAGE" ] || fail "external image not found — is the vault mounted?"
 # Volume identity through the repo's own mechanism (UUID + sentinel), not a name under /Volumes.
-"$REPO/.build/debug/xcodevaultctl" vault status 2>/dev/null | grep -q "^VERIFIED" \
+as_user "$REPO/.build/debug/xcodevaultctl" vault status 2>/dev/null | grep -q "^VERIFIED" \
   || fail "no VERIFIED vault volume — a path under /Volumes is not proof a volume is mounted (rule 6)"
 booted=$(sim list devices booted 2>/dev/null | grep -c "Booted")
 [ "$booted" -eq 0 ] || fail "$booted simulator device(s) booted — shut them down first"
