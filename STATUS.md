@@ -754,3 +754,64 @@ Supporting changes, each of which was its own defect:
 12 tests in `UnavailableDeviceAdviceTests`, 180 total, 0 failures. 7 mutations, 6 killed; the
 surviving one (dropping the `S_IFREG` check) is documented in place as redundant-today rather than
 covered by an invented test — under `lstat` both directories and symlinks fail the size floor anyway.
+
+## 2026-09-09 — E4 closed. Runtime relocation is refused by the system, not merely unproven.
+
+The user asked whether runtimes could run from the external drive. The honest answer at the time was
+"the Runtime Library stores the *installer* externally; using a runtime still costs ~10 GB
+internally", with H9/E4 as the experiment that would decide it. E4 ran, in two halves.
+
+**E4a (no privilege) — the seal survives relocation.** The vault copy of the installed iOS image is
+byte-identical (sha256 `e27aaecf…`, previously only inferred from size+mtime), and attaching it
+*from the external USB APFS volume* mounts `sealed` as a normal user with the runtime bundle
+readable. The `.exportedBundle` inner image behaves the same. Negative control: one flipped byte
+makes `hdiutil verify` and `attach` both fail. The failure H9 named — `SimDiskImageErrorDomain Code
+5` / `-67061` — did not occur.
+
+**E4b (root, run by the machine's owner) — the pointer cannot be moved.** Root cannot write
+`/Library/Developer/CoreSimulator/Images/images.plist`: `Operation not permitted` on an existing
+`root:wheel 644` file, no BSD flags, no ACL, absent from `rootless.conf`. Creating a new file in that
+directory is refused identically. **And yet simdiskimaged rewrites the file freely** — the run's own
+`simctl runtime unmount` advanced `lastStateChangeAt` past the backup taken a minute earlier. So the
+protection is *"only the entitled daemon writes here"*, by a mechanism invisible to POSIX and SIP
+metadata. With the Inbox EPERM (F1) that is three observations of one mechanism across two paths
+(F14, F16).
+
+**So H9 is settled and split, and the barrier is authorization rather than integrity.** ADR-0004
+demoted canonical mount because H6 showed the sandbox restriction follows the *device* rather than
+the path; that still holds but is no longer binding — the question never reaches H6, because the
+pointer cannot be changed at any privilege a product may use. Recorded as an ADR addendum rather
+than a reversal: the decision is unchanged, its footing is stronger. The Runtime Library workflow is
+not the pragmatic compromise it looked like — it is the only door the system leaves open.
+
+**Two protocol lessons from the run, both about rehearsals rather than guards.**
+- A `--dry-run` that executes in a different privilege context is not a rehearsal. Mine passed as a
+  user and the real run refused at the vault check, because `xcodevaultctl vault status` under sudo
+  reads root's home. Everything that reads the invoking user's state now goes through one `as_user`
+  helper with `-H` (`sudo -u` switches uid but leaves `HOME` alone on macOS).
+- Confirming a verb's contract by invoking it is not a diagnostic. I ran `simctl runtime unmount` to
+  learn which identifier it accepts; it is not read-only and it unmounted the user's runtime.
+  Restored with `runtime scan-and-mount`. F15 records the contract: `unmount`/`delete` take the
+  per-installation image UUID, which F13 showed is *not* stable across a round trip — so store
+  `runtimeIdentifier` and resolve the UUID at the moment of use.
+
+**A safety check that cried wolf.** The post-restore verification hashed the whole plist against the
+backup. simdiskimaged writes that file itself, so any run that unmounts anything was guaranteed a
+mismatch — a false alarm on a safety check, which is worse than no check. It now compares the path
+entries, which is what the script edits.
+
+**Where the disk actually goes on this machine, now that the runtime route is closed:**
+
+| | |
+|---|---|
+| `/Library/Developer/CoreSimulator/Images` | 15 GB — relocation refused (F16); movable only via offload/import |
+| `/Library/Developer/CoreSimulator/Caches` (dyld) | 9.4 GB — root-owned, mostly rebuilt on boot; the durable part is F10, gated on E13 |
+| `~/Library/Developer/CoreSimulator/Devices` | **9.1 GB — user-owned, unexplored** |
+| `~/Library/Developer/Xcode` | 2.9 GB — DerivedData/Archives, supported relocation, but F4/H6 warns against external |
+
+The device set is the largest untouched target and the only large one that is neither root-owned nor
+protected. `simctl --set <path>` exists; F1 records it as `[COMMUNITY-REPRO]` and judges it "not a
+viable foundation for transparent relocation" on the strength of two unverified claims (the Xcode
+IDE run-destination picker may not honour it; Web Inspector does not see such simulators). Neither
+was tested by us, and both predate Xcode 26. **That judgement is the next thing to verify, not
+inherit.**
