@@ -431,3 +431,41 @@ those entries "pending — manual" until someone actually runs and records the r
   `/Library/Developer/CoreSimulator` is absent from `rootless.conf` — but the Inbox file had both
   properties and root was still refused. `doctor` therefore recommends a restart and no `sudo`.
 - Evidence: `docs/research/FINDINGS-2026-09-05.md` §F10, §F11
+
+### E14a alternate device set — read-only reconnaissance — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-09
+- Gates: H12 (is the device set a relocation target?), and the F1/F2 judgement that `simctl --set`
+  is "not a viable foundation for transparent relocation"
+- Procedure: `scripts/experiments/e14a-device-set-static.sh`. Read-only throughout — `simctl help`,
+  `defaults read`, `du -shx`, `strings`, `otool`, `nm`, `file`, `log`-free. No mutation, no sudo.
+  The static half resolves `__objc_selrefs` and `__cfstring` against the shipped x86_64 `__text` of
+  `IDEiOSSupportCore` and prints the annotated instruction window, so the claim can be re-derived
+  rather than taken on trust.
+- **Result 1 — the inherited claim is partly falsified.** Xcode 26.5 has a custom-device-set code
+  path: `-[DVTiPhoneSimulatorLocator startLocating]` reads
+  `[[NSUserDefaults standardUserDefaults] dvt_filePathForKey:@"DVTSimulatorSetLocation"]` and
+  branches to `deviceSetWithPath:error:` when it is set, `defaultDeviceSetWithError:` when it is
+  not, then `_startLocatingDevicesInDeviceSet:`. One binary in all of `Xcode.app` mentions the key.
+  F2's "no evidence the IDE run-destination picker honours it" no longer stands as written.
+- **Result 2 — but nothing here shows the picker repopulating**, and the IDE does *not* pass the
+  path to Simulator.app, which reads its own `DeviceSetPath`. Silent split brain is the expected
+  failure and is a rule 6 hazard.
+- **Result 3 — the prize is 2.6 GB, not 9.1 GB.** ~6.5 GB of the device set is
+  `containermanagerd/Dead` + simulated `MobileAsset` + the unified-log store, against ~0.5 GB of app
+  containers (F18).
+- **Result 4** — `simctl help create` documents a `/Volumes/...` `.simruntime` path as a runtime
+  specifier (F19 → H13); `IDECustomDistributionArchivesLocation` and
+  `IDECustomCompilationCacheLocation` exist in Xcode 26.5's `IDEFoundation` (F21).
+- Evidence: `../research/evidence/e14a-device-set-static-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Verdict: **H12 promoted from "dismissed on hearsay" to "unverified, two gates".** Status stays
+  *unverified* — no behaviour was observed. Next: E14b phases 0–3 (kill gate), then E15.
+
+### Pending — added 2026-09-09
+
+| Experiment | Gates | Status |
+|---|---|---|
+| E14b device set on an external volume | H12 (kill gate), H6 | pending — `scripts/experiments/e14b-device-set-external.sh`, mutating, unprivileged |
+| E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
+| E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
+| E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |

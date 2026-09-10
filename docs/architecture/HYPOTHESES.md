@@ -310,3 +310,99 @@ been falsified once here, on exactly such a path, and reasoning from it produced
 remediation that contradicted an instruction already written in FINDINGS.
 
 Gate: E13. Evidence so far: F1 (2026-09-06 note), F10.
+
+---
+
+## H12 — an alternate CoreSimulator device set is a usable relocation target *(new, 2026-09-09)*
+
+**Claim:** `~/Library/Developer/CoreSimulator/Devices` (9.1 GB here) can be relocated to external
+storage via CoreSimulator's alternate device set (`simctl --set`), because it is user-owned, is not
+behind the entitlement boundary that killed runtime relocation (F16), and has an explicit,
+first-party indirection point rather than a symlink.
+
+**Status: unverified, and split into two independent questions.** F1's dismissal of `--set` was
+inherited from a 2022 forum thread and is now **partly falsified**: Xcode 26.5's IDE *does* have a
+custom-device-set code path, selected by the `NSUserDefaults` key `DVTSimulatorSetLocation`, read in
+`-[DVTiPhoneSimulatorLocator startLocating]` and feeding the same locator that populates the
+run-destination picker (F17, static). So "the IDE cannot be pointed at another set" is not true as
+stated. What remains open is different and sharper:
+
+1. **Does it work on an external physical volume at all?** H6 is the threat and it is prior to
+   everything else. E2 showed the restriction that breaks `xctest` bundle loading follows the
+   *physical external device*, and for simulator-destination testing the `.xctest` bundle is
+   installed **into the device's data container**, i.e. inside the device set. A set on a USB volume
+   is therefore a direct instance of the E2 configuration, one layer in. Gate: **E14b**, phases 0–3
+   (create a device in a set on the vault, boot it, launch a bundle from it). If a device cannot
+   boot or an installed app cannot launch from there, H12 is dead and nothing else matters.
+2. **Is it transparent?** Three clients configure the set independently: `simctl --set` (works),
+   Xcode via `DVTSimulatorSetLocation` (code path proven, behaviour untested), and Simulator.app via
+   its own `DeviceSetPath` (Xcode does **not** pass the set through — F17). `xcodebuild` has no
+   `--set` flag at all and may not even resolve the key to `com.apple.dt.Xcode`. Gate: **E15**,
+   which deliberately uses an alternate set on the *internal* disk so the transparency question is
+   not entangled with (1).
+
+**The prize is smaller than the directory size suggests, and this changes the ranking.** F18 measures
+~6.5 GB of the 9.1 GB as regenerable cache, log and on-demand asset, against ~0.5 GB of real app
+containers. Relocation moves ~9 GB; only ~2.6 GB of it is durable data that cleanup could not also
+recover. So even a fully successful H12 is worth less than F18's cleanup, and F18 needs no new
+mechanism. **Do not let a promising mechanism outrank a measured quantity.**
+
+**Failure mode to treat as fatal, not as a bug to fix:** Xcode driving one device set while the
+visible Simulator window shows another. Two independent keys, no propagation between them, and no
+UI anywhere that names the active set. That is rule 6's shadow-data hazard reached through a
+supported mechanism, and if E15 shows it, H12 should be falsified for a v1 *product* even if the
+plumbing works for a scripted CI user.
+
+Gates: E14b (kill gate), then E15. Evidence so far:
+`../research/evidence/e14a-device-set-static-macos26.6.2-25G83-xcode26.5-x86_64.txt`, F17, F18.
+
+## H13 — a runtime can be *used* from an external volume without touching `images.plist` *(new, 2026-09-09)*
+
+**Claim:** `simctl create <name> <deviceType> <path-to-.simruntime>` accepts a runtime bundle inside
+an image attached from the vault, giving a device backed by external runtime bytes without writing
+the database F16 showed is unwritable at any usable privilege.
+
+**Status: unverified, and deliberately narrow.** The claim's whole basis is that Apple's own
+`simctl help create` lists `"/Volumes/path/to/Runtimes/watchOS 3.2.simruntime"` as a valid
+`<runtime id>` (F19), and that E4a already proved the vault image attaches and exposes
+`iOS 26.5.simruntime` as a normal user. It is the only candidate found that attacks the F16 barrier
+from a direction F16 does not cover — every other route needs the pointer changed.
+
+**Expect it to fail, and say why in advance so the failure is informative.** The path form is
+pre-Xcode-14 packaging; this machine has no `Profiles/Runtimes` directory at all (F10); and
+`simctl runtime add` — the modern equivalent — *stages into the internal secure area by design*
+(H10), which is exactly the behaviour that would make this useless even if it is accepted. The
+distinguishing observation is therefore not "did the device get created" but **"did internal free
+space drop by the size of the runtime"**. A creation that succeeds and copies is a falsification,
+not a success.
+
+Cheap, unprivileged, non-destructive: attach the vault image read-only, `simctl --set <scratch>
+create` against the inner bundle path, measure internal free space, delete the scratch set, detach.
+Runs entirely outside the default device set. Gate: **E16** (to be written; fold into E14b's harness
+once E14b phase 1 has shown a scratch set works).
+
+## H7 status update 2026-09-09 — the mechanism is documented; the delivery is the blocker
+
+H7 was deferred as "unverified and deliberately deferred", with the sample's gaps cited as a reason.
+Two things changed the picture (F20):
+
+- Apple documents **"Building a passthrough file system"**, which "exposes an existing path as its
+  own file system", with sample code and `FSPathURLResource`. `mount(8)` here documents `-F` for
+  FSKit modules and `fskitd`/`fskit_agent`/`fskit_helper` are installed. The mechanism is the bind
+  mount macOS never had, and it is first-party. **[APPLE-DOC]**
+- **FSKit is the only remaining path that E4b/F16 does not foreclose.** F16 blocks rewriting the
+  pointer in `images.plist`; a passthrough file system rewrites no pointer, it changes what a path
+  resolves to. Every other relocation candidate for `/Library/Developer/CoreSimulator` needs the
+  pointer changed and is therefore already dead.
+
+Against it: third-party FSKit extensions are reported non-functional on macOS 26.1/26.2 (`fskitd`
+refusing unprivileged clients, "entitlement no", reproducing on Apple's own sample; closed "not
+planned" Dec 2025), and DTS has diagnosed a `fskitd` deadlock in the passthrough sample
+(r.172914665). 26.6 is untested by anyone we can find. The `com.apple.developer.fskit.fsmodule`
+entitlement remains required with an undocumented approval path — a business gate an open-source
+project may simply not be able to pass, which is a reason to keep it out of the critical path
+regardless of whether it works.
+
+**Status: still unverified, still R&D, but promoted from "no clear mechanism" to "blocked on
+platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
+26.x update; the check is cheap (build Apple's sample, `mount -F`).

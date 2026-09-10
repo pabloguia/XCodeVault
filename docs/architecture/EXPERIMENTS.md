@@ -264,3 +264,50 @@ Sequence, once a root shell is available and a simulator can be spared:
 
 Report either outcome. A success would reopen ADR-0004; a failure at step 4 with the H6 signature
 would close H1 for good and is the more likely result.
+
+## E14 — is the CoreSimulator *device set* a relocation target? (gates H12)
+
+Two halves, because they fail for unrelated reasons and entangling them wastes the cheap one.
+
+**E14a — read-only reconnaissance. Done 2026-09-09.**
+`scripts/experiments/e14a-device-set-static.sh`. Answers "what does the toolchain document",
+"which binary reads a custom set path and from what input", and "what is actually inside the
+device set". Evidence `evidence/e14a-device-set-static-*.txt`; findings F17–F21.
+
+**E14b — does a device set work on an external physical volume? THE KILL GATE.**
+`scripts/experiments/e14b-device-set-external.sh <set-path-on-/Volumes> --i-understand`.
+Mutating, unprivileged, writes only under the path passed; refuses any path inside
+`~/Library/Developer` or `/Library/Developer` or outside `/Volumes`; every `simctl` call carries
+`--set`, so the default device set is never addressed. Phases, cheapest first, each a kill gate:
+
+1. `simctl --set <external> list devices` — does CoreSimulatorService accept the path?
+2. `simctl --set <external> create` — does a device get made there?
+3. `boot`, then **poll `list devices` for `Booted`** — never `bootstatus -b`, which E11 recorded
+   hanging on `Data Migration` long after the device had booted. **This is the H6 gate.** For
+   simulator-destination testing the `.xctest` bundle is installed *into* the device's data
+   container, so a device set on a USB volume is the E2 configuration one layer in.
+4. install and launch a trivial `.app` from the external set — the E2 failure shape directly.
+5. accounting: confirm nothing appeared in the default set; then delete the probe device and the
+   probe set (guarded by a marker file the script itself wrote).
+
+On failure at 3 or 4 the script captures `log show` for CoreSimulator/TCC/Sandbox **before**
+cleaning up — E2 found nothing there, so an empty capture is itself the expected result and should
+be recorded rather than retried.
+
+## E15 — does `xcodebuild`/Xcode honour `DVTSimulatorSetLocation`? (gates H12's transparency half)
+
+`scripts/experiments/e15-ide-honours-device-set.sh --i-understand`. Uses an alternate set on the
+**internal** disk on purpose, so a failure here means "not transparent" and not "external storage".
+Writes one user default and restores the prior value on exit including `^C`.
+
+- A. control: build a one-device set with `simctl --set`.
+- B/C. `xcodebuild -showdestinations` with the key unset, then set, in `com.apple.dt.Xcode`.
+  **Identical output means xcodebuild does not see the key** — likely, since `xcodebuild` is not
+  bundled and has no `--set` flag.
+- D. repeat in the `xcodebuild` domain, which is what a non-bundled tool's standard domain may be.
+- E. **manual**: quit Xcode, set the key, relaunch, and read the run-destination menu, the Devices
+  and Simulators window and the Previews canvas. The direct answer is one log line —
+  `log stream --predicate 'eventMessage CONTAINS "SimDeviceSet"'` prints either
+  `Creating/fetching temporary SimDeviceSet at: <path>` or `Creating/fetching default SimDeviceSet`.
+  Then check whether Simulator.app follows or shows the default set; if it splits, that is the
+  rule 6 hazard and it fails the experiment even though both halves "work".

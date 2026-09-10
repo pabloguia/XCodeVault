@@ -815,3 +815,71 @@ viable foundation for transparent relocation" on the strength of two unverified 
 IDE run-destination picker may not honour it; Web Inspector does not see such simulators). Neither
 was tested by us, and both predate Xcode 26. **That judgement is the next thing to verify, not
 inherit.**
+
+## 2026-09-09 (later) — E14a: the device set was dismissed on hearsay, and the hearsay is wrong
+
+F1 said `simctl --set` was "not a viable foundation for transparent relocation" on the strength of a
+2022 forum thread we never tested. Xcode 26.5's own binary contradicts it:
+`-[DVTiPhoneSimulatorLocator startLocating]` reads the user default **`DVTSimulatorSetLocation`**
+and, when it is set, opens the device set at that path instead of the default one — in the very
+locator that feeds the run-destination picker. That is static evidence only: no picker was observed
+repopulating, and the IDE does **not** hand the path to Simulator.app, which reads its own
+`DeviceSetPath`. Silent split brain is the expected failure, and under rule 6 that would fail the
+experiment even if both halves technically work.
+
+**The more useful finding is a measurement, not a mechanism.** Of the 9.1 GB in
+`~/Library/Developer/CoreSimulator/Devices`, ~6.5 GB is `containermanagerd/Dead`, on-demand
+`MobileAsset` downloaded *inside* the simulators (650 MB of Siri understanding models in one
+device), and the simulated unified-log store. Real app containers are ~0.5 GB. So relocating the
+device set moves 9 GB of which ~2.6 GB is durable, while reporting and cleaning it returns ~6.5 GB
+with no new mechanism — recurring, since the caches rebuild on the next boot. Accounting first.
+
+Also recorded: `simctl help create` documents a `/Volumes/…/*.simruntime` path as a runtime
+specifier (H13 — the only candidate that attacks the F16 barrier from a direction F16 does not
+cover, and expected to fail by staging internally); FSKit's passthrough file system is
+Apple-documented and is the only canonical-relocation path F16 does not foreclose, but third-party
+FSKit is reported broken on 26.1/26.2 (H7); and Xcode 26.5's `IDEFoundation` still carries every
+`IDECustom*Location` key, including two we had not catalogued — Archives and the compilation cache.
+
+**Next three actions:** (1) **E14b phases 0–3** — create and boot a probe device in a device set on
+the vault; ~15 min, unprivileged, touches no developer data, and kills H12 outright if it fails.
+(2) E15 phases A–D, then the manual phase E. (3) Teach `scan`/`doctor` the F18 per-device split, which
+is shippable regardless of how E14b and E15 land.
+
+### Research pass after E4 — what is left, ranked, and one inherited claim overturned
+
+**F1's dismissal of `simctl --set` was partly wrong, and it mattered.** Xcode 26.5's
+`IDEiOSSupportCore` contains a `DVTSimulatorSetLocation` user-default read inside
+`-[DVTiPhoneSimulatorLocator startLocating]` — the only simulator locator Xcode has, the one that
+feeds the run-destination picker — branching to `deviceSetWithPath:error:` when the key is set.
+Independently confirmed: the symbol and the log string "Creating/fetching temporary SimDeviceSet at:
+%@" are both present in the shipped binary. So "no evidence the IDE honours a custom device set" is
+no longer accurate. What remains unknown is whether the picker repopulates, and whether `xcodebuild`
+resolves the key at all. Two cautions carried forward: the IDE calls it a *temporary* set, and Xcode
+does **not** pass the path to Simulator.app, which reads its own `DeviceSetPath` — so silent split
+brain is the expected failure, which is rule 6 and disqualifying for v1 on its own.
+
+**But H6 is prior, and probably fatal.** For simulator-destination testing the `.xctest` bundle is
+installed *into the device's data container*, so a device set on USB is E2's configuration one layer
+in. Boot-from-USB is the kill gate and it comes before the IDE question.
+
+**The ranking, with the lesson it teaches:**
+
+| # | Candidate | GB here | Status |
+|---|---|---|---|
+| 1 | Per-device regenerable data | **~4.1 verified** | measured, needs no new mechanism |
+| 2 | Device set relocation (H12) | ~9 raw, ~2.6 durable | gated on E14b phase 3 (boot from USB) |
+| 3 | External `.simruntime` at create time (H13) | up to 10/runtime | untested; folds into E14b |
+| 4 | Archives / compilation cache | 0 here | needs an archive to test |
+| 5 | FSKit passthrough (H7) | all, eventually | blocker moved from "no mechanism" to "platform reliability + entitlement" |
+| 6 | An opening in the F16 entitlement boundary | — | searched; none exists |
+
+**Rank 1 beats rank 2 on measured quantity, and that is the point.** A promising *mechanism* should
+not outrank a measured *number*. Verified independently on this machine: `Dead` app containers
+836 MB, in-simulator `MobileAsset` 3.3 GB, out of an 8.5 GB device set — user-owned, no root, and
+reclaimable without erasing a device. That is a bigger, cheaper win than relocating the set, and it
+is available today.
+
+Next experiment: `e14b-device-set-external.sh` phases 0–3 (~15 min, no sudo, writes only to the
+vault, never addresses the default device set). If the probe device does not reach `Booted`, H12 dies
+before the IDE question matters.
