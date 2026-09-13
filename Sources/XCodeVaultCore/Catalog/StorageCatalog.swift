@@ -5,7 +5,7 @@ import Foundation
 /// and cross-checked with docs/research/FINDINGS-2026-09-05.md; older Xcodes may differ — the
 /// scanner reports what exists rather than assuming.
 public enum StorageCatalog {
-    public static let version = "2026-09-06.1"
+    public static let version = "2026-09-13.1"
 
     public static let all: [StorageCategory] = [
         // ───────────── Xcode IDE (user domain) ─────────────
@@ -102,6 +102,79 @@ public enum StorageCatalog {
             // still delete-only, but it names what is being destroyed and cannot sweep up a device
             // the user is about to get back.
             cleanupCommand: "xcrun simctl delete <udid>"),
+
+        // ───── Regenerable data *inside* each device (F18, F22) ─────
+        // The three largest user-owned, root-free targets on a developer's machine. Reported per
+        // device rather than as one number, because devices are independently disposable — and
+        // declared `isBreakdownOf: "simulatorDevices"`, because these bytes are a decomposition of
+        // that category rather than storage on top of it.
+        //
+        // None is offered to `clean`, for three different reasons that the notes on each spell out:
+        // the dead containers because the system already collects them, the MobileAsset payloads
+        // because deleting them is a write behind the daemon that keeps their records, and the log
+        // store because its documented narrow verb is one we have not reproduced. No `simctl` verb
+        // reclaims any of them narrowly, so any surgical deletion would be of our own design — and
+        // none of these notes may answer that by naming a destructive command instead. See the
+        // comment on the dead-container hint below for why that last sentence is there.
+        StorageCategory(
+            id: "simulatorDeadContainers", name: "Dead app containers (per device)", subsystem: .coreSimulator,
+            pathTemplates: ["~/Library/Developer/CoreSimulator/Devices"],
+            description:
+                "Bundle containers of apps that were replaced or uninstalled, moved aside by containermanagerd. One `temp.XXXXXX` entry per superseded install; on this machine each was ~125 MB, dominated by the app's `.debug.dylib`.",
+            regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
+            recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
+            evidence:
+                "F22 (2026-09-13): a booted device reaped 19 of 19 pre-existing entries (1.5 GB → 306 MB) in a single sweep while a shutdown sibling stayed byte-identical at 676 MB; the three entries created just before the sweep were still present an hour later",
+            evidenceStatus: .verified,
+            notes: [
+                "Never cleaned by us, and this is a conclusion rather than a hesitation: the system already does it. Measured 2026-09-13 — a booted device went from 15 entries / 1.5 GB to 3 / 306 MB, while a shutdown sibling did not change by a single byte over the same hours.",
+                "What is NOT known is the cadence, and an earlier draft of this note overclaimed it. The sweep was a single bulk event, not a rolling timer: it removed everything that predated it, and the three entries created shortly before it were still there an hour later, untouched. So the honest statement is `booting gets it collected`, not `booting collects it within N minutes`. Do not promise a schedule this evidence does not show.",
+                "What the size therefore means is the opposite of what it looks like: a large number here is not a leak to reclaim, it is a device that has not been booted lately. Deleting it would buy the user nothing they were not already going to get, while racing the daemon that owns the directory on any device that is running.",
+                "The 2026-09-13 measurement is an observation with a control, not a controlled experiment: an `xcodebuild test` was driving the booted device for part of the window. It cannot separate containermanagerd's own timer from something the test triggered — but a test run only *adds* entries (four appeared mid-window and were reaped with the rest), and the untouched shutdown device is the control that makes the direction unambiguous.",
+                "This is not `simctl erase` territory. Erasing reclaims this and destroys every app, setting and container on the device with it; the point of the category is that this part is separable — and, as it turns out, self-reclaiming.",
+            ],
+            perDeviceSubpaths: ["data/Library/Caches/com.apple.containermanagerd/Dead"],
+            // Deliberately stops before naming a command. An earlier draft closed with "and if you no
+            // longer need that device, `simctl delete <udid>` is the official tool" — which is the
+            // third time this repo has had to remove permanent, journal-blind device-deletion advice
+            // from a path that has no business giving it (see `clean`'s note above, and
+            // `checkUnavailableDevices`, which is the one rule allowed to say it and only from a
+            // journal-verified state). Under an INFO finding that lists devices largest-first, that
+            // sentence reads as the actionable half. The space comes back on its own; there is no
+            // reason to put a destructive option next to that sentence at all.
+            remediationHint:
+                "Nothing to do — the system reclaims this on its own once the device is booted, so a large number here means a device you have not booted lately rather than space that is stuck. Observed as a single bulk sweep rather than a steady trickle, so it is not instant and the exact timing is not something we can promise.",
+            isBreakdownOf: "simulatorDevices"),
+        StorageCategory(
+            id: "simulatorMobileAssets", name: "In-simulator MobileAsset downloads (per device)", subsystem: .mobileAsset,
+            pathTemplates: ["~/Library/Developer/CoreSimulator/Devices"],
+            description:
+                "Assets downloaded by the simulated OS from inside the device — Siri understanding and text-to-speech models, linguistic data, ContextKit. Distinct from the host-side runtime asset store (`simulatorRuntimeAssets`), which holds the runtime image itself.",
+            regenerability: .redownloadable, deletionRisk: .high, relocationRisk: .critical,
+            recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
+            evidence:
+                "F22 (2026-09-13): 3.3 GB across two devices; on one, `UAF_Siri_Understanding` 767 MB + `UAF_Siri_TextToSpeech` 496 MB + `LinguisticData` 264 MB, each a `<sha1>.asset` bundle under `AssetsV2/`",
+            evidenceStatus: .probable,
+            notes: [
+                "Reported, not cleaned, and the risk here is higher than for Dead containers. `mobileassetd` inside the simulator keeps its own bookkeeping beside the payloads (`AssetsV2/analytics`, and per-type state); deleting the payloads from the host is a write behind the back of the daemon that owns the records — the same shape of mistake F16 documents on the host side.",
+                "Redownloadable is not free: reclaiming this costs a network round trip per asset the simulator next asks for, on Apple's schedule rather than the user's.",
+            ],
+            perDeviceSubpaths: ["data/private/var/MobileAsset"], isBreakdownOf: "simulatorDevices"),
+        StorageCategory(
+            id: "simulatorLogStore", name: "Simulated unified log store (per device)", subsystem: .coreSimulator,
+            pathTemplates: ["~/Library/Developer/CoreSimulator/Devices"],
+            description:
+                "The simulated OS's own unified-log datastore and the symbolication table that goes with it. Written continuously by a booted device, whether or not anyone reads it.",
+            regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
+            recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
+            evidence: "F18 (2026-09-09): 1.2 GB of `db/diagnostics` + 0.3 GB of `db/uuidtext` across three devices",
+            evidenceStatus: .probable,
+            notes: [
+                "Reported, not cleaned — but for a different reason than the other two: here a documented narrower verb *does* exist. `man log` defines `log erase --all`, runnable inside a device with `simctl spawn`. We have not reproduced it (F18), and an unreproduced verb is not a product feature.",
+                "Deleting the datastore from the host instead of through `log` would be the same mistake as for MobileAsset: writing behind a daemon that holds the file open on a booted device.",
+            ],
+            perDeviceSubpaths: ["data/var/db/diagnostics", "data/var/db/uuidtext"], isBreakdownOf: "simulatorDevices"),
+
         StorageCategory(
             id: "simulatorUserCaches", name: "Simulator user caches", subsystem: .coreSimulator,
             pathTemplates: ["~/Library/Developer/CoreSimulator/Caches", "~/Library/Developer/CoreSimulator/Temp"],

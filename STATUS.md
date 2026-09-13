@@ -883,3 +883,98 @@ is available today.
 Next experiment: `e14b-device-set-external.sh` phases 0–3 (~15 min, no sudo, writes only to the
 vault, never addresses the default device set). If the probe device does not reach `Booted`, H12 dies
 before the IDE question matters.
+
+## 2026-09-13 — the per-device regenerables are catalogued, and the biggest one turns out to clean itself
+
+Item 1 of the handoff (the ~5.4 GB of regenerable data inside the simulator devices) is done as
+accounting. Three categories now exist, all **report-only**: `simulatorDeadContainers`,
+`simulatorMobileAssets`, `simulatorLogStore`. `scan` resolves them per device, `doctor` prints a
+per-device breakdown with the reason it offers no cleanup, `clean` offers nothing. Catalog version
+`2026-09-13.1`. 191 tests green, `swift build` and `swift test` both exit 0.
+
+**The headline is a reversal of the premise, and a better answer than the one that was asked for.**
+The handoff said the `Dead` containers had tripled in four days and framed them as recurring
+accumulation to reclaim. They are recurring — each install of a changed app leaves a ~125 MB bundle
+container behind, 57 MB of it the app's `.debug.dylib` — but **a booted device reaps them itself**.
+Measured with a control: the booted device went 15 entries / 1.5 GB → 3 entries / 306 MB, with only
+entries younger than ~10 minutes surviving, while the device that stayed shut down did not change by
+a byte. So a large number here is not a leak; it is a device that has not been booted lately, and
+`doctor`'s remediation is "boot it" (or `simctl delete <udid>` if it is a device you no longer want).
+F22 has the table and the residual uncertainty.
+
+**A third category was added beyond the two the handoff named.** F18 had already measured the
+simulated log store (`db/diagnostics` + `db/uuidtext`, ~1.5 GB) and `scan` was not reporting it.
+Leaving it out would have been the same failure as rejecting a lowercase UDID: silently
+under-reporting, which is the one thing an accounting tool must not do.
+
+**Two mistakes worth keeping, because both are repeats of lessons already in this file.**
+
+- *I shipped a rule that could not fire, and my tests agreed with it — lesson 2, verbatim.*
+  `checkPerDeviceRegenerables` read `item.allocatedBytes`, but `doctor` scans with
+  `measureSizes: false`, so on a real machine it reported nothing at all. Every test passed, because
+  every test built its items with a measuring scanner — a value the production caller never
+  produces. Caught only by running `xcodevaultctl doctor` against the real machine. The rule now
+  measures its own paths, and the regression test constructs the report exactly as the CLI does;
+  reverting the fix makes that one test fail and no other.
+- *I ran an experiment on a device the user was testing on.* The first attempt to answer the sweep
+  question booted a simulator that an `xcodebuild test` was already driving. The measurement was
+  contaminated and discarded rather than reported. It became answerable only because the *second*
+  device was untouched — the control was luck, not design. Any future probe of this kind checks
+  `pgrep xcodebuild` and the device's state first, and says which device it will touch before
+  touching it.
+
+**Next three actions:** (1) **E14b phases 0–3** — still written, still unrun; the gate that kills H12
+if the probe device will not boot from the vault. (2) E13, the dyld-cache reboot probe, whenever the
+machine is next restarted. (3) Reproduce `log erase --all` inside a device via `simctl spawn`; it is
+the only one of the three per-device categories with a documented narrow verb, and reproducing it
+would turn `simulatorLogStore` from reported into offerable.
+
+### Safety review of the same change — what it caught, and the one thing it made me un-say
+
+`migration-safety-reviewer` returned **REQUEST CHANGES**, then **APPROVE** after fixes. Three of its
+findings were defects I had introduced and would not have found myself.
+
+- **A destructive command in an INFO remediation.** My `simulatorDeadContainers` hint ended with
+  "and if you no longer need that device, `xcrun simctl delete <udid>` is the official tool" —
+  unconditional, journal-blind, under a device list sorted largest-first, two lines below a sentence
+  saying the space comes back for free. This repo has now removed that exact pattern three times
+  (`clean`'s `delete unavailable`, `checkUnavailableDevices`, this). Worse, **my test pinned it**: it
+  banned `rm` and `simctl erase` while tolerating `simctl delete`. A test can lock in the wrong
+  behaviour as firmly as the right one. The hint now stops at "booting reclaims it"; the test bans
+  every destructive verb in any `remediationHint`.
+- **I spliced two functions into the middle of an existing doc comment**, cutting
+  `checkUnavailableDevices`'s rationale mid-sentence — the single most safety-critical explanation in
+  `Doctor`, reduced to a dangling fragment. Restored, functions moved below it.
+- **A missing gate the diff made reachable.** `planRestore` had no strategy check at all, so any
+  category whose `pathTemplates` named a live tree could be a restore *destination* — our own engine
+  writing shadow data into the CoreSimulator device set (rule 6). Pre-existing via `simulatorDevices`;
+  my three ids tripled the surface and gave it plausible-looking targets. Guard added, plus one in
+  `removeSource`, which is the only function in the product that deletes a source directory.
+
+**And one correction to how I wanted to record a deferral, which is the part worth keeping.** I
+argued that exact per-device path containment could wait because "every destructive entry point is
+gated on a strategy these categories lack." The reviewer checked that against the code and the
+conclusion held but *the reason was false*: `removeSource` and `resume` have no strategy gate and
+reach `requireContained(..., in: c.pathTemplates)` as their only path check — and `resume` recovers
+its `categoryID` by string-splitting the journal's free-text `summary`, with `?? "archives"` as a
+fallback. The true invariant was "unreachable because no gated planner can produce the journal entry
+that would name these ids", which is a much weaker guarantee spanning four functions and a
+user-writable file. Recording the convenient version would have left a future reader relying on
+something untrue. That is the failure mode this file already names twice — an inherited claim that
+nobody re-checked — arriving as a claim I was about to write down myself.
+
+**Open on this surface, in order:** (1) `resume` should read `categoryID` from the journal's `detail`
+dictionary instead of parsing a summary string — a parser standing between a journal line and a
+`removeItem`. (2) Exact `<deviceSet>/<UDID>/<subpath>` containment for per-device categories, which
+would make `pathTemplates.first!` stop being a lie for them (it is currently the default source in
+`M3Commands`). (3) `simulatorRuntimeAssets` prints its skipped line once per path, five times, right
+above the aggregated lines this change introduced.
+
+### One more correction, found by re-measuring rather than by review
+
+The first write-up of F22 said the dead containers are reaped "on a rolling, age-based schedule",
+because at 19:30 the only survivors were three entries from the preceding ten minutes. An hour later
+those same three were still there, untouched. The sweep was a **single bulk event** that removed
+everything predating it, trigger unknown — not a timer. The catalog note, the remediation text and
+F22 were all corrected, and the remediation no longer promises "within minutes". Two measurements of
+one directory supported two different models; only the second showed which to discard.

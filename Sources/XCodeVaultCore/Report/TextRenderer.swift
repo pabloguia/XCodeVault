@@ -47,6 +47,10 @@ public enum TextRenderer {
                 ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
                 : (it.isMountPoint ? "  [mount point]" : "") + (it.onBootVolume ? "" : "  [not on boot volume]")
                     + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
+                    // Without this the rows stop adding up to the Summary and nothing says why: a
+                    // breakdown row's bytes are already inside its parent's row, and are counted
+                    // once, there. Naming the parent is what keeps the reader from adding them.
+                    + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
             o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
         }
         let s = r.summary

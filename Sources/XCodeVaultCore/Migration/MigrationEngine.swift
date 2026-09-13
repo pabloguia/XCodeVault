@@ -96,6 +96,15 @@ public struct MigrationEngine: Sendable {
     /// Plans restoring a vault copy back to its original location.
     public func planRestore(categoryID: String, vaultRef: String, name: String, to destination: String) throws -> MigrationPlan {
         guard let c = StorageCatalog.category(categoryID) else { throw MigrationError("Unknown category \(categoryID).") }
+        // The same gate `planExternalize` applies, and for a sharper reason: containment here is a
+        // prefix test against `pathTemplates`, which for some categories is a whole live tree owned
+        // by a daemon (the CoreSimulator device set). Without this, a hand-made directory in the
+        // vault could be restored *into* that tree at a canonical path — our own engine manufacturing
+        // the shadow data rule 6 exists to prevent. Nothing may be restored into a category that was
+        // never eligible to leave.
+        guard c.allowedStrategies.contains(.coldStorage) else {
+            throw MigrationError("\(c.name) has no coldStorage strategy (outcome: \(c.outcomeLabel)) and cannot be a restore destination. Nothing is written.")
+        }
         try refuseIfInterrupted()
         let (vault, vaultDir) = try verifier.resolveUsable(vaultRef)
         guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { throw MigrationError("Invalid vault entry name.") }
@@ -209,6 +218,15 @@ public struct MigrationEngine: Sendable {
         let plan = outcome.plan
         guard plan.direction == .externalize else { throw MigrationError("Source removal applies to externalizations only.") }
         guard let c = StorageCatalog.category(plan.categoryID) else { throw MigrationError("Unknown category.") }
+        // A no-op for every legitimate flow: the only way to hold an externalize plan is to have
+        // passed the same check in `planExternalize`. It is here because this is the one function in
+        // the product that deletes a source directory, and until now the argument that it could not
+        // be aimed at a live tree ran through four functions and a user-writable journal file —
+        // `resume` recovers `categoryID` by splitting a free-text summary string. An invariant that
+        // a reader has to reconstruct is not one they can rely on. Checked here instead.
+        guard c.allowedStrategies.contains(.coldStorage) else {
+            throw MigrationError("\(c.name) has no coldStorage strategy; nothing of it was ever externalized. Nothing is removed.")
+        }
         if c.regenerability == .nonRegenerable && !confirmNonRegenerable {
             throw MigrationError("\(c.name) is non-regenerable; pass the explicit confirmation to remove the original.")
         }

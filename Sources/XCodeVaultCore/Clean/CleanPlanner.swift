@@ -45,11 +45,22 @@ public struct CleanPlanner: Sendable {
     ///   - granular: split DerivedData / Device Support into per-child actions so the user can keep some.
     public func plan(report: ScanReport, categories: Set<String> = [], granular: Bool = true) -> CleanPlan {
         var actions: [CleanAction] = [], skipped: [String] = [], warnings: [String] = []
+        var declined: [String: UInt64] = [:]
         for item in report.items {
             guard let c = StorageCatalog.category(item.categoryID) else { continue }
             if !categories.isEmpty && !categories.contains(c.id) { continue }
             if let cmd = c.cleanupCommand { skipped.append("\(c.name): managed by Apple's tool, not deleted through the filesystem — use `\(cmd)`"); continue }
-            guard c.allowedStrategies.contains(.safeCleanup) else { continue }
+            guard c.allowedStrategies.contains(.safeCleanup) else {
+                // Silence is the wrong answer for a category the product deliberately declines to
+                // clean: the user sees the gigabytes in `scan` and would otherwise be left to guess
+                // whether `clean` overlooked them. Accumulated per category rather than emitted per
+                // item — a per-device category has one line per device, and repeating the same
+                // paragraph three times is its own kind of unreadable. Rendered after the loop.
+                if item.exists, item.allocatedBytes > 0, c.notes.first != nil {
+                    declined[c.id, default: 0] += item.allocatedBytes
+                }
+                continue
+            }
             guard c.regenerability != .nonRegenerable else { skipped.append("\(c.name): non-regenerable, never cleaned automatically"); continue }
             guard item.exists else { continue }
             if item.isSymlink {
@@ -90,6 +101,14 @@ public struct CleanPlanner: Sendable {
                     + "Most of this total is NOT durable free space — a cache whose runtime is still installed is rebuilt on the next boot of that runtime, "
                     + "so deleting it buys a slow first boot rather than disk. `doctor` reports the part that is not rebuilt on the next boot — caches whose "
                     + "runtime is gone — though whether a restart reclaims those on its own is itself untested (F10).")
+        }
+        // One line per declined category, largest first, naming the total across every device rather
+        // than each device separately. The short reason lives here; the full one is in `doctor`,
+        // which is where a user who wants it will look.
+        for (id, bytes) in declined.sorted(by: { $0.value > $1.value }) {
+            guard let c = StorageCatalog.category(id), let why = c.notes.first else { continue }
+            let firstSentence = (why.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? why) + "."
+            skipped.append("\(c.name) — \(ByteCount.format(bytes)), not offered: \(firstSentence) Run `xcodevaultctl doctor` for the full reason.")
         }
         actions.sort { $0.bytes > $1.bytes }
         return CleanPlan(actions: actions, skipped: skipped, warnings: warnings)

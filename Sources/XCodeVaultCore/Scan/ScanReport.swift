@@ -33,6 +33,15 @@ public struct ScanSummary: Sendable, Codable, Equatable {
     public var lowerBound: Bool = false  // some paths unreadable
 }
 
+extension StorageItem {
+    /// The display name of the category this item's bytes are already counted under, when this item
+    /// is a breakdown of another category rather than storage in addition to it.
+    public func breakdownParentName(in report: ScanReport) -> String? {
+        guard let c = report.category(for: self), let parent = c.isBreakdownOf else { return nil }
+        return StorageCatalog.category(parent)?.name ?? parent
+    }
+}
+
 public struct ScanReport: Sendable, Codable, Equatable {
     public var generatedAt: Date
     public var toolVersion: String

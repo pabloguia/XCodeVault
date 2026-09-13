@@ -95,3 +95,45 @@ The category list above was written from the original brief. Research
 - **Every entry needs an "evidence" field** pointing at the matrix entry or research
   finding that justifies its strategy. A strategy with no evidence pointer is
   `unverified` by definition and must render as experimental.
+
+## Per-device categories (added 2026-09-13, catalog version `2026-09-13.1`)
+
+Three categories do not live at a fixed path. They exist once **inside every simulator device**, and
+carry `perDeviceSubpaths` instead of being resolved straight from `pathTemplates`:
+
+| id | subpath(s) under each device | measured here |
+|---|---|---|
+| `simulatorDeadContainers` | `data/Library/Caches/com.apple.containermanagerd/Dead` | 2.1 GB |
+| `simulatorMobileAssets` | `data/private/var/MobileAsset` | 3.3 GB |
+| `simulatorLogStore` | `data/var/db/diagnostics`, `data/var/db/uuidtext` | ~1.5 GB (F18) |
+
+Two rules apply to this shape and are enforced by tests:
+
+- **Resolved per device, never as one aggregate.** `pathTemplates` names the enclosing device set —
+  that is what path containment is checked against — but the reported item is always
+  `<device root>/<subpath>`. A single number for the device set would hide which device the bytes
+  belong to, and devices are independently disposable.
+- **Only UUID-shaped directory names are treated as devices**, case-insensitively. Strict-uppercase
+  matching was rejected on purpose: dropping a real device from the accounting is a worse failure
+  than the wandering the guard exists to prevent, and the names it excludes (`Backup 2026-09-01`)
+  are not hex either way.
+
+All three are `appleManaged` and **report-only** — `scan` measures them, `doctor` prints the
+per-device breakdown and the reason, `clean` offers nothing. No `simctl` verb reclaims any of them
+narrowly (`erase` destroys the device's whole data volume, `delete` destroys the device), so any
+surgical reclaim would be a filesystem deletion of our own design. The three are report-only for
+different reasons, and a category carries a `remediationHint` only when there is one we can stand
+behind:
+
+- `simulatorDeadContainers` — **measured to reap itself** on a booted device (F22), with a shutdown
+  control that did not change. A large number here means a device that has not been booted lately,
+  not a leak. Remediation: boot it — and say no more than that, because the sweep was observed as one
+  bulk event of unknown trigger, not a predictable timer.
+- `simulatorMobileAssets` — deleting the payloads would be a write behind `mobileassetd`'s own
+  bookkeeping, the F16 mistake one layer in. No remediation offered.
+- `simulatorLogStore` — a documented narrower verb exists (`log erase --all` via `simctl spawn`) but
+  we have not reproduced it, and an unreproduced verb is not a product feature. No remediation
+  offered.
+
+`remediationHint` being nil is deliberate and renders as no remediation at all: that is the honest
+rendering of not knowing, and it is never replaced by a plausible-sounding command we have not run.

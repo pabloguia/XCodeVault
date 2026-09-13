@@ -50,6 +50,33 @@ public enum CatalogRules {
         for dup in Set(ids.filter { id in ids.filter { $0 == id }.count > 1 }) {
             all.append(Violation(categoryID: dup, message: "duplicate category id"))
         }
+        // A breakdown category is excluded from every machine-wide total on the promise that its
+        // bytes are already counted inside a parent. If the parent does not exist, or is itself a
+        // breakdown, or does not actually contain the child's paths, that promise is false and the
+        // totals quietly stop being a partition of the disk — over- or under-reporting with nothing
+        // on screen to show it.
+        let byID = Dictionary(catalog.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for c in catalog {
+            guard let parentID = c.isBreakdownOf else { continue }
+            guard let parent = byID[parentID] else {
+                all.append(Violation(categoryID: c.id, message: "isBreakdownOf names unknown category \(parentID)"))
+                continue
+            }
+            if parent.isBreakdownOf != nil {
+                all.append(Violation(categoryID: c.id, message: "breakdown of a breakdown (\(parentID)): totals must stay one level deep"))
+            }
+            for t in c.pathTemplates where !parent.pathTemplates.contains(where: { t == $0 || t.hasPrefix($0 + "/") }) {
+                all.append(Violation(categoryID: c.id, message: "\(t) is not inside \(parentID), so its bytes are not counted there"))
+            }
+        }
+        for c in catalog where !c.perDeviceSubpaths.isEmpty {
+            if c.isBreakdownOf == nil {
+                all.append(Violation(categoryID: c.id, message: "per-device category must declare isBreakdownOf: its bytes sit inside the device set"))
+            }
+            for sub in c.perDeviceSubpaths where sub.hasPrefix("/") || sub.contains("..") || sub.isEmpty {
+                all.append(Violation(categoryID: c.id, message: "per-device subpath must be relative and must not escape the device root: \(sub)"))
+            }
+        }
         return all
     }
 }

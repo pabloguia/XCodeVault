@@ -2,7 +2,8 @@
 
 Ponto de partida para uma sessão nova. Projeto em `~/projects/XCodeVault`.
 
-> **Os números aqui são de 2026-09-13 e sustentam a recomendação — reverifique antes de agir.**
+> **Os números aqui são de 2026-09-13. O item 1 foi executado nessa data e o resultado está abaixo;
+> os demais continuam sendo estimativas de ponto-no-tempo — reverifique antes de agir.**
 > Em quatro dias os containers `Dead` foram de 836 MB a 2,1 GB e o espaço livre de 14 a 21 GiB.
 > Um comando: `du -shcx ~/Library/Developer/CoreSimulator/Devices/*/data/Library/Caches/com.apple.containermanagerd/Dead`
 > Se a ordem de prioridade mudar por causa disso, siga a evidência e não este documento.
@@ -38,23 +39,20 @@ copiada byte a byte para volume externo. ADR-0004 ganhou adendo, não reversão.
 
 ## O que fazer, em ordem de prioridade
 
-### 1. Os ~5,4 GB regeneráveis dentro dos devices (recomendação principal)
+### 1. ~~Os ~5,4 GB regeneráveis dentro dos devices~~ — FEITO 2026-09-13, com o resultado invertido
 
-Medido hoje em `~/Library/Developer/CoreSimulator/Devices`:
+Catalogado e reportado; **não limpável, e por um motivo melhor do que o previsto.** As três
+categorias (`simulatorDeadContainers`, `simulatorMobileAssets`, `simulatorLogStore`) são
+somente-relatório: `scan` mede por device, `doctor` imprime o detalhamento e o motivo, `clean` não
+oferece nada.
 
-| | 09/09 | 13/09 |
-|---|---|---|
-| `*/data/Library/Caches/com.apple.containermanagerd/Dead` | 836 MB | **2,1 GB** |
-| `*/data/private/var/MobileAsset` | 3,3 GB | 3,3 GB |
+O `Dead` **se limpa sozinho**: um device bootado varre as entradas por idade (15 entradas / 1,5 GB →
+3 / 306 MB, contra um device desligado que não mudou um byte). Número grande ali não é vazamento — é
+device que não é bootado há um tempo. Ver F22 e a seção de 2026-09-13 do `STATUS.md`.
 
-Os `Dead` **triplicaram em quatro dias** — é acúmulo recorrente, não um resíduo pontual. Isso é
-dado do usuário, sem root, e recuperável **sem apagar device nenhum** (`simctl erase` apagaria
-tudo; o alvo aqui é cirúrgico).
-
-Trabalho: catalogar essas categorias (skill `add-catalog-category`), fazer o `scan`/`doctor`
-reportarem, e avaliar se o `clean` deve oferecê-las — com a pergunta honesta de **se são mesmo
-seguras de apagar e se regeneram**, verificada, não assumida. Rode `migration-safety-reviewer`
-antes de commitar.
+Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de um device. É o único
+dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
+em oferecível.
 
 ### 2. E14b fases 0–3 — o portão que mata a relocação de device set
 

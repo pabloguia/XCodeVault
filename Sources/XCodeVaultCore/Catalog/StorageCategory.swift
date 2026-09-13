@@ -69,13 +69,35 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
     public var isMountGraft: Bool
     /// Official command that reclaims this category (when deletion must go through Apple's tool).
     public var cleanupCommand: String?
+    /// Set when the category does not live at a fixed path but *inside every simulator device*, at
+    /// `<device root>/<subpath>` (F22). `pathTemplates` then names the enclosing device set, which is
+    /// what containment is checked against; the concrete instances are enumerated at scan time from
+    /// the device roots actually on disk. A category with this set is reported per device, never as
+    /// one aggregate path, because the devices are independently disposable.
+    ///
+    /// Plural for the same reason `pathTemplates` is: one concept can occupy more than one directory
+    /// (the log store is `db/diagnostics` *and* `db/uuidtext`), and splitting it into two categories
+    /// to fit a singular field would report one idea as two numbers.
+    public var perDeviceSubpaths: [String]
+    /// Set when this category's bytes are already counted inside another category's total — it is a
+    /// *breakdown* of that category, not storage in addition to it. Summaries skip these items, so
+    /// the machine-wide totals stay the sum of disjoint parts; the per-item lines still show them,
+    /// which is the whole point of having them. Without this, adding a breakdown category silently
+    /// inflates every headline number by the size of the slice, which is the same class of error as
+    /// missing a directory entirely, only in the other direction.
+    public var isBreakdownOf: String?
+    /// What the user should do about a category the product reports but does not clean. Nil means
+    /// "nothing we can stand behind yet" and `doctor` then offers no remediation at all, which is
+    /// the honest rendering of not knowing — never a plausible-sounding command we have not run.
+    public var remediationHint: String?
 
     public init(
         id: String, name: String, subsystem: Subsystem, pathTemplates: [String], description: String,
         regenerability: Regenerability, deletionRisk: RiskLevel, relocationRisk: RiskLevel,
         recommendedStrategy: Strategy, allowedStrategies: [Strategy], privilege: PrivilegeLevel = .user,
         evidence: String? = nil, evidenceStatus: EvidenceStatus = .unverified, minimumXcodeMajor: Int? = nil,
-        notes: [String] = [], isMountGraft: Bool = false, cleanupCommand: String? = nil
+        notes: [String] = [], isMountGraft: Bool = false, cleanupCommand: String? = nil,
+        perDeviceSubpaths: [String] = [], remediationHint: String? = nil, isBreakdownOf: String? = nil
     ) {
         self.id = id; self.name = name; self.subsystem = subsystem; self.pathTemplates = pathTemplates
         self.description = description; self.regenerability = regenerability; self.deletionRisk = deletionRisk
@@ -83,7 +105,8 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
         self.allowedStrategies = allowedStrategies; self.privilege = privilege; self.evidence = evidence
         self.evidenceStatus = evidence == nil ? .unverified : evidenceStatus
         self.minimumXcodeMajor = minimumXcodeMajor; self.notes = notes; self.isMountGraft = isMountGraft
-        self.cleanupCommand = cleanupCommand
+        self.cleanupCommand = cleanupCommand; self.perDeviceSubpaths = perDeviceSubpaths
+        self.remediationHint = remediationHint; self.isBreakdownOf = isBreakdownOf
     }
 
     /// Rule 10 of CLAUDE.md: not supported until verified. Everything else is labeled experimental.

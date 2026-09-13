@@ -63,6 +63,7 @@ public struct Doctor: Sendable {
         f += checkOrphanedAssets(runtimes: report.runtimes)
         f += checkOrphanedDyldCaches(runtimes: report.runtimes, host: report.host, devices: report.devices, warnings: report.warnings)
         f += checkUnavailableDevices(devices: report.devices)
+        f += checkPerDeviceRegenerables(items: report.items)
         f += checkDerivedDataLocation(volumes: report.volumes)
         f += checkXcodeSelect(xcodes: report.xcodes)
         f += checkOS(host: report.host)
@@ -904,6 +905,65 @@ public struct Doctor: Sendable {
                 detail: bad.prefix(5).map { "\($0.name): \($0.availabilityError ?? "runtime missing")" }.joined(separator: "; "),
                 path: home + "/Library/Developer/CoreSimulator/Devices", remediation: remediation, evidence: evidence)
         ]
+    }
+
+    /// Reports the regenerable data sitting *inside* the simulator devices (F22): the largest
+    /// user-owned, root-free total on a typical developer's machine.
+    ///
+    /// Reporting is the whole of it. `clean` offers none of these, so this finding is the only place
+    /// the user learns the number — which makes it the one place the reason has to be stated rather
+    /// than implied. Each category supplies its own `remediationHint`, and nil is a real answer: it
+    /// renders as no remediation at all, which is the honest shape of "nothing we can stand behind",
+    /// and it is never replaced by a plausible-sounding command we have not run. Only
+    /// `simulatorDeadContainers` has one today, and it is not a deletion — a booted device reaps
+    /// that directory itself (F22, measured against a shutdown control), so the advice is to boot.
+    ///
+    /// Nothing here may hand the user a destructive command. `checkUnavailableDevices` above is the
+    /// rule that is allowed to, and only from one journal-verified state; this rule has no such
+    /// gate and must therefore never acquire such a hint. The catalog test pins that.
+    func checkPerDeviceRegenerables(items: [StorageItem]) -> [Finding] {
+        let perDevice = StorageCatalog.all.filter { !$0.perDeviceSubpaths.isEmpty }
+        return perDevice.compactMap { category -> Finding? in
+            let mine = items.filter { $0.categoryID == category.id && $0.exists && !$0.isSymlink }
+            // `doctor` scans with `measureSizes: false`, so these items usually arrive with zero
+            // bytes and the rule would report nothing at all — which is how it shipped broken the
+            // first time, with a test that injected a measuring scanner and therefore agreed. The
+            // sizes are measured here, for these paths only, so the rule does not depend on a
+            // caller's choice it cannot see: `doctor` stays cheap everywhere else, and a report that
+            // did measure is reused rather than walked twice.
+            let sized: [(udid: String, bytes: UInt64)] = mine.map { item in
+                let bytes = item.allocatedBytes > 0 ? item.allocatedBytes : (DiskUsage.measure(item.path)?.allocatedBytes ?? 0)
+                return (Doctor.deviceUDID(fromItemPath: item.path) ?? item.path, bytes)
+            }
+            // One line per device, not per subpath: a category that occupies two directories inside
+            // the same device (the log store) is still one idea and one number to the reader.
+            let perDeviceTotals = Dictionary(sized.map { ($0.udid, $0.bytes) }, uniquingKeysWith: +)
+            let total = perDeviceTotals.values.reduce(0, +)
+            guard total > 0 else { return nil }
+            // Largest first: which device holds the bytes is the actionable part, since a device the
+            // user no longer wants can be deleted outright with the official command.
+            let breakdown =
+                perDeviceTotals
+                .filter { $0.value > 0 }
+                .sorted { $0.value > $1.value }
+                .map { "  \($0.key): \(ByteCount.format($0.value))" }
+                .joined(separator: "\n")
+            return Finding(
+                id: "perDeviceRegenerable.\(category.id)",
+                severity: .info,
+                title: "\(ByteCount.format(total)) in \(category.name.lowercased()) across \(perDeviceTotals.filter { $0.value > 0 }.count) device(s)",
+                detail: category.description + "\n" + breakdown
+                    + "\n\nNot offered by `clean`: " + (category.notes.first ?? "reported for accounting only."),
+                path: nil,
+                remediation: category.remediationHint,
+                evidence: category.evidence)
+        }
+    }
+
+    /// The device UDID out of a per-device item path, for display. Returns nil rather than guessing
+    /// when the path is not shaped like one, so a surprise never renders as a confident label.
+    static func deviceUDID(fromItemPath path: String) -> String? {
+        path.split(separator: "/").map(String.init).last { Scanner.isDeviceUDID($0) }
     }
 
     func checkDerivedDataLocation(volumes: [Volume]) -> [Finding] {
