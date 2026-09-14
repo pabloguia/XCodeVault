@@ -118,7 +118,7 @@ struct Restore: ParsableCommand {
 struct Migration: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Experimental. Inspect, abort (pre-verification) or resume (post-verification) interrupted migrations.",
-        subcommands: [Status.self, Abort.self, Resume.self], defaultSubcommand: Status.self)
+        subcommands: [Status.self, Abort.self, Resume.self, Forget.self], defaultSubcommand: Status.self)
     struct Resume: ParsableCommand {
         static let configuration = CommandConfiguration(
             abstract:
@@ -143,6 +143,19 @@ struct Migration: ParsableCommand {
                 }
                 return o
             }
+        }
+    }
+    struct Forget: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract:
+                "Close out a migration this tool will not finish for you, after you have compared both copies by hand. Touches no files; only clears the journal entry so migrations can run again."
+        )
+        @Argument var operationID: String
+        @Flag(name: .customLong("i-verified-both-copies-myself"), help: "Required. Asserts you compared the vault copy and the original yourself.")
+        var confirmed = false
+        func run() throws {
+            try MigrationEngine().forget(operationID: operationID, confirmComparedBothCopies: confirmed)
+            print("Forgot \(operationID). No file was touched; both copies are exactly as you left them.")
         }
     }
     struct Abort: ParsableCommand {

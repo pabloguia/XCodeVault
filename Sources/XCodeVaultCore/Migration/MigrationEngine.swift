@@ -162,7 +162,17 @@ public struct MigrationEngine: Sendable {
         let op = plan.operationID
         try journal.record(
             id: op, kind: .migration, state: .planned, summary: "\(plan.direction.rawValue) \(plan.categoryID): \(plan.source) → \(plan.destination)",
-            paths: [plan.source, plan.destination], bytes: plan.sourceBytes, detail: ["vault": plan.vaultUUID ?? "", "phase": "PLAN"])
+            paths: [plan.source, plan.destination], bytes: plan.sourceBytes,
+            // `category` is the field `resume` reads. It used to recover the id by splitting the
+            // `summary` above on spaces and taking the second word — a parser over prose standing
+            // between a journal line and a `removeItem`, with `?? "archives"` when it failed.
+            detail: [
+                "vault": plan.vaultUUID ?? "", "phase": "PLAN", "category": plan.categoryID,
+                // `abort` needs this to know which way the copy went. An externalize's partial copy
+                // is on the vault; a restore's is at the canonical home path. Inferring it from the
+                // paths would be the same guessing the `category` field was added to stop.
+                "direction": plan.direction.rawValue,
+            ])
         try journal.record(id: op, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
         var claimed = false
         do {
@@ -278,55 +288,137 @@ public struct MigrationEngine: Sendable {
     /// Never touches the vault copy. Refuses while Xcode runs.
     public func resume(operationID: String, confirmNonRegenerable: Bool) throws -> String {
         let entries = try journal.entries().filter { $0.id == operationID && $0.kind == .migration }
-        guard let planned = entries.first, planned.paths.count == 2 else { throw MigrationError("No migration \(operationID) in the journal.") }
+        // The PLAN line specifically. This is no longer what stops a forged line from aiming the
+        // deletion — `vault`/`direction`/`category` are read from this entry too, and the lines
+        // `copyAndVerify` writes after PLAN carry none of them, so a non-PLAN line cannot satisfy
+        // the containment check below whatever paths it names. What this guard buys now is that the
+        // refusal names the real problem instead of misreporting a truncated journal as an old one
+        // (`Journal.read` drops undecodable lines silently). It becomes load-bearing again the
+        // moment any of those keys is copied onto a later line.
+        guard let planned = entries.first(where: { $0.state == .planned }), planned.paths.count == 2 else {
+            guard entries.isEmpty else {
+                throw MigrationError(
+                    "Migration \(operationID) has journal lines but no readable PLAN line, so its source, destination and category cannot be established. "
+                        + "Nothing was touched. The journal may be truncated or edited; compare the two copies by hand before deleting either.")
+            }
+            throw MigrationError("No migration \(operationID) in the journal.")
+        }
         let phases = Set(entries.compactMap { $0.detail["phase"] })
         guard phases.contains("CLEANUP") || phases.contains("VERIFIED") else {
             throw MigrationError("Migration \(operationID) was interrupted before verification; use `migration abort`.")
         }
+        // ...and it must actually be *interrupted*, the same test `abort` applies. `copyAndVerify`
+        // ends at VERIFIED/`completed` with the source deliberately intact, waiting for an explicit
+        // removal; without this guard `resume` would delete the original of a healthy, finished copy
+        // — a deletion reachable from a command whose whole abstract is "finish interrupted work".
+        guard let last = entries.last, last.state == .started || last.state == .failed else {
+            throw MigrationError(
+                "Migration \(operationID) is \(entries.last?.state.rawValue ?? "?"), not interrupted; there is no cleanup to finish. "
+                    + "To remove the original of a completed copy, do it as its own explicit step.")
+        }
         let source = planned.paths[0], destination = planned.paths[1]
-        let categoryID =
-            entries.first?.summary.split(separator: " ").dropFirst().first.map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ":")) }
-            ?? "archives"
-        guard let c = StorageCatalog.category(categoryID) else { throw MigrationError("Unknown category in journal.") }
+        // Derived, never read from the journal. `removeSource` computes this same name from the
+        // source and the operation id, so there is nothing to recover — and reading it back was the
+        // more dangerous half of this function: it is the path that reaches `removeItem`, and a
+        // single appended line setting it to the destination would have had `resume` delete the
+        // vault copy (a tree verifies as identical against itself).
+        let aside = source + ".xcodevault-removing-" + String(operationID.prefix(8))
+
+        // State is established BEFORE any refusal, so that every message below can name what is
+        // actually on disk instead of asserting it. A refusal that tells the user "your copy is at
+        // X" without stat-ing X is how a wrong sentence turns into a hand-deleted original.
+        var st = stat()
+        let destinationPresent = lstat(destination, &st) == 0
+        let asidePresent = lstat(aside, &st) == 0
+        let sourcePresent = lstat(source, &st) == 0
+        func stateSentence() -> String {
+            var held: [String] = []
+            if destinationPresent { held.append("the vault copy is at \(destination)") } else { held.append("the vault copy is NOT present at \(destination)") }
+            if asidePresent { held.append("the original was renamed aside to \(aside)") }
+            if sourcePresent { held.append("the original is at \(source)") }
+            if !asidePresent && !sourcePresent { held.append("no original is present at \(source) or alongside it") }
+            return held.joined(separator: "; ")
+        }
+
+        guard let categoryID = planned.detail["category"], !categoryID.isEmpty else {
+            throw MigrationError(
+                "Migration \(operationID) predates the journal's `category` field, so the category cannot be established without guessing. "
+                    + "Nothing was removed: \(stateSentence()). Compare the two by hand; do not delete either copy until you have. "
+                    + "Once you are satisfied, `xcodevaultctl migration forget \(operationID)` clears the entry so migrations can run again.")
+        }
+        guard let c = StorageCatalog.category(categoryID) else { throw MigrationError("Unknown category \(categoryID) in journal.") }
+        // Needed here in its own right: the `aside` branch below deletes directly rather than through
+        // `removeSource`, so that function's identical guard does not cover it.
+        guard c.allowedStrategies.contains(.coldStorage) else {
+            throw MigrationError("\(c.name) has no coldStorage strategy; no migration of it can be legitimate. Nothing is removed.")
+        }
         if c.regenerability == .nonRegenerable && !confirmNonRegenerable {
             throw MigrationError("\(c.name) is non-regenerable; pass the explicit confirmation to complete the removal.")
         }
         if isXcodeRunning() { throw MigrationError("Xcode.app is running; quit it before completing the cleanup.") }
-        var st = stat()
-        guard lstat(destination, &st) == 0 else { throw MigrationError("Vault copy \(destination) is not present (volume disconnected?). Nothing changed.") }
-        let aside = entries.compactMap { $0.detail["aside"] }.last
-        if let aside, lstat(aside, &st) == 0 {
+
+        // Re-establish that `destination` is still the verified vault volume, by UUID and sentinel —
+        // not merely that *something* exists at that path. After a crash and a reboot the external
+        // volume can lose the mount race, and a directory holding an older copy can sit at the mount
+        // point; `lstat` cannot tell those apart, and deleting against the wrong one leaves shadow
+        // data on the internal disk as the only survivor (MIGRATION_ENGINE.md §Split-brain safety).
+        let vaultUUID = planned.detail["vault"].flatMap { $0.isEmpty ? nil : $0 }
+        guard let vaultUUID else {
+            throw MigrationError(
+                "Migration \(operationID) records no vault volume, so the copy at \(destination) cannot be confirmed to be on it. "
+                    + "Nothing was removed: \(stateSentence()).")
+        }
+        let (_, vaultDir) = try verifier.resolveUsable(vaultUUID)
+        guard PathSafety.isContained(destination, in: vaultDir) else {
+            throw MigrationError("\(destination) is not on the verified vault volume any more. Nothing is removed: \(stateSentence()).")
+        }
+        guard destinationPresent else { throw MigrationError("Vault copy \(destination) is not present (volume disconnected?). Nothing changed.") }
+
+        // Read, not assumed. A restore cannot reach here today (the phase and interrupted guards
+        // both exclude it), but `direction` is a field now and asserting it costs one line.
+        let direction = planned.detail["direction"].flatMap { MigrationPlan.Direction(rawValue: $0) } ?? .externalize
+        guard direction == .externalize else {
+            throw MigrationError("Migration \(operationID) is a restore; `resume` completes the cleanup of an externalization only. Nothing is removed.")
+        }
+        let plan = MigrationPlan(
+            operationID: operationID, direction: .externalize, categoryID: c.id, source: source, destination: destination,
+            vaultUUID: vaultUUID, sourceBytes: 0, sourceFiles: 0, deepVerify: true, warnings: [])
+
+        if asidePresent {
             try journal.record(
                 id: operationID, kind: .migration, state: .started, summary: "RESUME re-verify \(aside)", paths: [aside, destination],
-                detail: ["phase": "CLEANUP", "aside": aside])
-            let report = TreeVerifier(deep: true, compareOwnership: false).verify(source: aside, destination: destination)
+                detail: ["phase": "CLEANUP", "aside": aside, "category": c.id, "vault": vaultUUID])
+            var asidePlan = plan; asidePlan.source = aside
+            let report = verifierFor(asidePlan).verify(source: aside, destination: destination)
             guard report.isIdentical else {
                 _ = rename(aside, source)
                 try journal.record(
                     id: operationID, kind: .migration, state: .failed, summary: "resume: re-verification failed; source restored to \(source)",
-                    paths: [source, destination], detail: ["phase": "VERIFIED"])
+                    paths: [source, destination], detail: ["phase": "VERIFIED", "category": c.id, "vault": vaultUUID])
                 throw MigrationError(
                     "Re-verification failed; the original was restored to \(source). \(report.mismatches.prefix(3).map(\.description).joined(separator: "; "))")
             }
+            // The non-aside branch gets this through `removeSource` → `preflightSource`; this branch
+            // deletes directly, so it would otherwise be the one `removeItem` in the product whose
+            // target was never checked against the category that is supposed to own it. Checked on
+            // `source` rather than `aside`, because the aside is a sibling of the templated path.
+            try PathSafety.requireContained(source, in: c.pathTemplates, home: home, what: c.name)
             try FileManager.default.removeItem(atPath: aside)
             try journal.record(
                 id: operationID, kind: .migration, state: .completed, summary: "resume: source removed after re-verification", paths: [source, destination],
-                detail: ["phase": "DONE"])
+                detail: ["phase": "DONE", "category": c.id, "vault": vaultUUID])
             return "Completed: \(aside) verified against the vault copy and removed."
         }
-        if lstat(source, &st) == 0 {
+        if sourcePresent {
             // Rename never happened (or was undone): run the normal removal path.
-            let plan = MigrationPlan(
-                operationID: operationID, direction: .externalize, categoryID: c.id, source: source, destination: destination, vaultUUID: nil,
-                sourceBytes: 0, sourceFiles: 0, deepVerify: true, warnings: [])
-            let report = TreeVerifier(deep: true, compareOwnership: false).verify(source: source, destination: destination)
+            let report = verifierFor(plan).verify(source: source, destination: destination)
             let outcome = MigrationOutcome(plan: plan, verification: report, sourceRemoved: false)
             _ = try removeSource(outcome, confirmNonRegenerable: confirmNonRegenerable)
             return "Completed: \(source) re-verified and removed."
         }
         try journal.record(
             id: operationID, kind: .migration, state: .completed, summary: "resume: source already removed; vault copy present", paths: [source, destination],
-            detail: ["phase": "DONE"])
+            detail: ["phase": "DONE", "category": c.id, "vault": vaultUUID])
         return "Nothing to do: the source was already removed and the vault copy is present."
     }
 
@@ -335,26 +427,201 @@ public struct MigrationEngine: Sendable {
     /// at the time and now blocks a retry). Removes only the partial destination copy and journals
     /// the abort. Refuses once VERIFIED/CLEANUP/DONE was reached: from then on the vault copy may be
     /// the only complete one. Never deletes a source.
+    /// Closes out a migration the engine will not finish itself, **touching no files at all**.
+    ///
+    /// It exists because refusing is not free. When `resume` declines — an old journal with no
+    /// `category`, an unreadable PLAN line, a vault it cannot re-confirm — the operation's last
+    /// state stays `started`, so `interrupted()` keeps returning it, so `refuseIfInterrupted` blocks
+    /// every future `planExternalize` and `planRestore`; and `abort` refuses too, because the phase
+    /// is past verification. The data was safe and the product was wedged, leaving hand-editing the
+    /// journal as the only way out — which is the exact threat the refusals were added to close.
+    ///
+    /// The caller asserts they have compared both copies themselves. That is the whole contract:
+    /// this records the assertion and writes nothing else, so the worst it can do is let a later
+    /// migration proceed.
+    public func forget(operationID: String, confirmComparedBothCopies: Bool) throws {
+        guard confirmComparedBothCopies else {
+            throw MigrationError("`forget` records that you verified both copies yourself; pass the explicit confirmation.")
+        }
+        let entries = try journal.entries().filter { $0.id == operationID && $0.kind == .migration }
+        guard let last = entries.last else { throw MigrationError("No migration \(operationID) in the journal.") }
+        guard last.state == .started || last.state == .failed else {
+            throw MigrationError("Migration \(operationID) is already \(last.state.rawValue); nothing to forget.")
+        }
+        // Exactly the complement of what `abort` accepts. Without this, `forget` takes the
+        // pre-verification failures that belong to `abort` — and since `leftoverPartialCopies`
+        // filters on `started`/`failed`, recording `.rolledBack` here would drop the operation out
+        // of `doctor`, out of `migration status`, and out of the retry hint in `planExternalize`,
+        // leaving a partial copy on the vault that nothing in the product can name again. An escape
+        // hatch that manufactures shadow data is worse than the wedge it was added to relieve.
+        let phases = Set(entries.compactMap { $0.detail["phase"] })
+        // `forget` and `abort` divide the space between them, and they have to be read together —
+        // designing them separately is what produced a pair that both refused the same operation.
+        // The rule: `forget` declines anything `abort` can still clean up. The one exception is an
+        // externalize whose vault volume is gone, because there `abort` refuses too (it will not
+        // claim "no partial copy present" about a disk it cannot see) and the user would otherwise
+        // have no verb at all.
+        if phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
+            // Pre-verification: `abort`'s territory. Ask `abort` what it would do rather than
+            // guessing — the previous version re-derived "abort cannot act" as "externalize with an
+            // absent vault", which is one of several ways it declines, so a failed restore on an
+            // unplugged drive was refused by both verbs and its residue sat at a canonical developer
+            // path with nothing in the product able to remove it.
+            let why: String
+            // Both forms below name the path. This record is the only thing that survives the
+            // operation, so "a copy may remain" without a location is a note nobody can act on.
+            let where_ = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
+            switch abortDisposition(entries: entries, operationID: operationID) {
+            case .cleanable(let planned):
+                throw MigrationError(
+                    "Migration \(operationID) never reached verification and its partial copy at \(planned.paths[1]) is reachable, so there is nothing "
+                        + "here that needs your judgement: `xcodevaultctl migration abort \(operationID)` closes it out and removes it.")
+            case .unreachable(let reason):
+                why = "a partial copy may remain at \(where_) — \(reason)"
+            case .declined(let reason):
+                why = "\(where_) was left untouched — \(reason)"
+            }
+            try journal.record(
+                id: operationID, kind: .migration, state: .rolledBack,
+                summary: "forgotten by the user; abort could not close this one: \(why)",
+                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
+            return
+        }
+        try journal.record(
+            id: operationID, kind: .migration, state: .rolledBack,
+            summary: "forgotten by the user after comparing both copies by hand; no file was touched",
+            paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
+    }
+
+    /// Whether `abort` can clean up after a pre-verification failure, and if not, why.
+    ///
+    /// Factored because the rule it encodes — **`forget` declines anything `abort` can still clean
+    /// up** — has to hold across two functions, and stating it in a comment while deriving it twice
+    /// is how the pair ended up refusing the same operation. `forget` consumes this rather than
+    /// re-deciding: any case that is not `.cleanable` is one it may close out, and the reason string
+    /// travels with it into the journal.
+    enum AbortDisposition {
+        /// `abort` will remove the partial copy described by this PLAN entry. Carried rather than
+        /// re-looked-up, so no caller has to establish for itself that a PLAN line exists.
+        case cleanable(planned: JournalEntry)
+        /// We cannot see whether a copy is there — the volume holding it is not present. Nothing may
+        /// be recorded about it, because "no partial copy present" would be a claim about a disk
+        /// that is not here. The string is the *reason* only: the remedy belongs to whoever throws,
+        /// because `forget` writes this into a permanent record and an embedded "run `migration
+        /// forget`" would tell the reader to do the thing that produced the record.
+        case unreachable(String)
+        /// We can see, and this is not where this migration's copy belongs. Refusing is the answer;
+        /// the path is left exactly as it is.
+        case declined(String)
+    }
+
+    func abortDisposition(entries: [JournalEntry], operationID: String) -> AbortDisposition {
+        // Decided here, not by each caller. This case used to be a `guard` in both `abort` and
+        // `forget` — the same duplication the enum exists to remove, one level up, and it left a
+        // migration with a torn PLAN line refused by both verbs and owned by neither.
+        guard let planned = entries.first(where: { $0.state == .planned }), planned.paths.count == 2 else {
+            return .declined(
+                "Migration \(operationID) has no readable PLAN line, so its paths, direction and category cannot be established; "
+                    + "refusing to act on the strength of the remaining lines.")
+        }
+        let source = planned.paths[0], destination = planned.paths[1]
+        let direction = planned.detail["direction"].flatMap { MigrationPlan.Direction(rawValue: $0) }
+        let category = planned.detail["category"].flatMap { StorageCatalog.category($0) }
+        let vaultDir = planned.detail["vault"].flatMap { $0.isEmpty ? nil : $0 }.flatMap { try? verifier.resolveUsable($0).1 }
+        let onVault = vaultDir.map { PathSafety.isContained(destination, in: $0) } ?? false
+        let atOwnHome = category.map { c in (try? PathSafety.requireContained(destination, in: c.pathTemplates, home: home, what: c.name)) != nil } ?? false
+        func sourcePresent() -> Bool { var st = stat(); return lstat(source, &st) == 0 }
+
+        // Also here rather than at the deletion site, for the same reason: a refusal `abort` makes
+        // that the disposition does not know about is a row where the two verbs disagree again.
+        //
+        // UNPINNED, knowingly. Moving this back out of the disposition fails no test, because
+        // nothing distinguishes it: `MountStatus.isMountPoint` reads the real mount table and the
+        // fixtures cannot make a temp directory into a mount point, while every path that could be
+        // one fails the containment checks above it first. It is here for consistency — one place
+        // decides — and not because a test proves it must be. Said out loud rather than left for
+        // someone to discover with a mutation run.
+        guard !MountStatus.isMountPoint(destination) else {
+            return .declined("\(destination) is a mount point; refusing.")
+        }
+
+        switch direction {
+        case .externalize:
+            // The source is the live tree. If it is gone the vault copy may be the only one left,
+            // and nothing may delete it. (Direction-scoped on purpose: for a restore the "source" is
+            // the vault copy, and its absence says nothing about the local partial copy.)
+            guard sourcePresent() else {
+                return .declined("Source \(source) is gone; not removing \(destination) — it may be the only copy.")
+            }
+            guard let vaultDir else {
+                return .unreachable(
+                    "the vault volume for migration \(operationID) is not present, so whether a partial copy remains on it cannot be determined")
+            }
+            guard PathSafety.isContained(destination, in: vaultDir) else {
+                return .declined("\(destination) is not inside the vault directory \(vaultDir); it is not the partial copy this externalization made. Nothing is removed.")
+            }
+            return .cleanable(planned: planned)
+        case .restore:
+            // The partial copy is at the canonical path — the containment `planRestore` applied when
+            // it accepted the destination. The vault is not needed to see it, which is what makes an
+            // unplugged drive an ordinary case here rather than a dead end.
+            guard atOwnHome else {
+                return .declined(
+                    "\(destination) is not inside \(category?.name ?? "the category")'s own location; it is not the partial copy this restore made. Nothing is removed.")
+            }
+            return .cleanable(planned: planned)
+        case .none:
+            // A PLAN line from before the `direction` key. Accept whichever containment holds; both
+            // targets are structurally constrained, so this cannot aim a deletion anywhere a
+            // legitimate plan could not have.
+            if atOwnHome { return .cleanable(planned: planned) }
+            if onVault {
+                guard sourcePresent() else {
+                    return .declined("Source \(source) is gone; not removing \(destination) — it may be the only copy.")
+                }
+                return .cleanable(planned: planned)
+            }
+            guard vaultDir != nil else {
+                return .unreachable(
+                    "migration \(operationID) predates the journal's `direction` field and its vault volume is not present, so \(destination) cannot be confirmed to be a copy this tool made")
+            }
+            return .declined("\(destination) is not where this migration would have put its copy. Nothing is removed.")
+        }
+    }
+
     public func abort(operationID: String) throws {
         let entries = try journal.entries().filter { $0.id == operationID && $0.kind == .migration }
-        guard let planned = entries.first, planned.paths.count == 2 else { throw MigrationError("No migration \(operationID) in the journal.") }
+        guard !entries.isEmpty else { throw MigrationError("No migration \(operationID) in the journal.") }
+        // Optional on purpose: whether a usable PLAN line exists is `abortDisposition`'s decision,
+        // not one this function re-makes. It is read here only to word the post-verification
+        // refusal, which deletes nothing either way.
+        let plannedForMessage = entries.first(where: { $0.state == .planned }).flatMap { $0.paths.count == 2 ? $0 : nil }
         let phases = Set(entries.compactMap { $0.detail["phase"] })
         if !phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
-            let aside = entries.compactMap { $0.detail["aside"] }.last
+            let aside = plannedForMessage.map { $0.paths[0] + ".xcodevault-removing-" + String(operationID.prefix(8)) }
+            let asideExists = aside.flatMap { a in { var st = stat(); return lstat(a, &st) == 0 }() ? a : nil }
             throw MigrationError(
-                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(planned.paths[1]) was verified and may be the only complete copy. Not deleting anything.\(aside.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")")
+                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(plannedForMessage?.paths[1] ?? "the recorded destination") was verified and may be the only complete copy. Not deleting anything.\(asideExists.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")")
         }
         guard let last = entries.last, last.state == .started || last.state == .failed else {
             throw MigrationError("Migration \(operationID) is in state \(entries.last?.state.rawValue ?? "?"); nothing to abort.")
         }
+        let planned: JournalEntry
+        switch abortDisposition(entries: entries, operationID: operationID) {
+        case .cleanable(let p): planned = p
+        case .declined(let why): throw MigrationError(why)
+        case .unreachable(let why):
+            // The remedy is appended here rather than carried in the reason, because `forget` writes
+            // that same reason into a permanent record and must not tell its reader to run `forget`.
+            throw MigrationError(
+                "Nothing was removed and nothing was recorded: \(why). Reconnect the volume and re-run; if it is gone for good, "
+                    + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records that a copy may remain on it.")
+        }
         let source = planned.paths[0], destination = planned.paths[1]
+
         var st = stat()
-        guard lstat(source, &st) == 0 else { throw MigrationError("Source \(source) is gone; not removing \(destination) — it may be the only copy.") }
         var removed = false
         if lstat(destination, &st) == 0 {
-            // Only ever remove what this operation created: the destination must be on a usable vault
-            // (present) and must not be a mount point.
-            guard !MountStatus.isMountPoint(destination) else { throw MigrationError("\(destination) is a mount point; refusing.") }
             try FileManager.default.removeItem(atPath: destination); removed = true
         }
         try journal.record(id: operationID, kind: .migration, state: .rolledBack, summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
@@ -367,7 +634,9 @@ public struct MigrationEngine: Sendable {
         var planned: [String: JournalEntry] = [:]
         var unsafe: Set<String> = []
         for e in try journal.entries() where e.kind == .migration {
-            if planned[e.id] == nil, e.paths.count == 2 { planned[e.id] = e }
+            // The PLAN line, for the same reason `resume` and `abort` insist on it: these paths are
+            // what `doctor` reports and what `abort` will delete.
+            if planned[e.id] == nil, e.state == .planned, e.paths.count == 2 { planned[e.id] = e }
             last[e.id] = e
             if let ph = e.detail["phase"], MigrationEngine.phasesWhereAbortIsUnsafe.contains(ph) { unsafe.insert(e.id) }
         }

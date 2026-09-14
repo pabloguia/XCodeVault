@@ -336,7 +336,12 @@ final class MigrationEngineTests: XCTestCase {
         let engine = f.engine()
         let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
         // Simulate a crash right after COPY started: journal has planned+started, partial copy on disk.
-        try f.journal.record(id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination])
+        // The detail `copyAndVerify` writes on every real PLAN line. Omitting it made this a
+        // simulation of a journal the product never produces — and `abort` now refuses such a line,
+        // because without the vault UUID it cannot confirm the destination is a copy it made.
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives"])
         try f.journal.record(id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination])
         try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: plan.destination + "/partial", contents: Data([1]))

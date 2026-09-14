@@ -1065,7 +1065,21 @@ final class UnavailableDeviceAdviceTests: XCTestCase {
             }
         }
         for (k, st, paths) in extra { _ = try journal.record(kind: k, state: st, summary: "x", paths: paths) }
-        if corruptLine { try "{not json\n".write(to: url, atomically: false, encoding: .utf8) }
+        // Appended, not written. `String.write(to:)` replaces the file, so this used to discard every
+        // entry recorded above it — harmless only because the one caller passes no offloads. The
+        // signature invites `doctor([...offloads...], corruptLine: true)`, and that call would have
+        // silently tested an empty journal instead of a journal with one bad line in it.
+        if corruptLine {
+            // The journal file only exists once something has been recorded, so a caller passing no
+            // offloads has nothing to append to yet.
+            if !FileManager.default.fileExists(atPath: url.path) {
+                FileManager.default.createFile(atPath: url.path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("{not json\n".utf8))
+            try handle.close()
+        }
         return (Doctor(home: dir, journal: journal), dir)
     }
 

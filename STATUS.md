@@ -1012,3 +1012,49 @@ the category. The sweep is merely what keeps it from being unbounded.
 
 **E14b is blocked, not deferred:** `/Volumes/<vault>` is not attached (only `/Volumes/MacOS`), and the
 experiment writes only to the vault. It needs the drive plugged in. Internal free space is 18 GiB.
+
+## 2026-09-14 — the journal stopped being parsed, and five review passes on one function
+
+`resume` recovered its `categoryID` by splitting the journal's free-text `summary` on spaces, with
+`?? "archives"` when that failed, and spent the result on deletion decisions. That is closed: the
+category, the vault volume and the direction are all fields on the PLAN line now, read as fields.
+
+What the sequence actually cost, and why it was worth it: **five review passes, each of which found
+that the previous fix had hardened the wrong thing.**
+
+| pass | what I thought I had done | what was true |
+|---|---|---|
+| 1 | removed the parser from a deletion path | removed it from the value that only *decides*; `aside`, which names the victim and reaches `removeItem`, was still read from the journal |
+| 2 | added the vault and PLAN-line guards | both survived their own deletion — guards with no test |
+| 3 | hardened `resume` | the same hole lived in `abort`, and `forget` (my own escape hatch) orphaned partial copies |
+| 4 | made `abort` check the vault | broke every *restore*, whose partial copy is at the canonical home path by construction — and the refusal message said it was not this migration's copy when it was exactly that |
+| 5 | factored the abort/forget rule into one function | the rule was factored for "a PLAN line exists" and re-derived for "it does not" — the same bug one level up, introduced by the pass that fixed it |
+
+Two data-loss paths were real and are closed. A line appended to the journal setting `aside` to the
+destination would have had `resume` delete the vault copy, because a tree verifies as identical
+against itself. And `abort` — the command the tool *tells* the user to run — deleted local data in
+the ordinary disconnect case: crash during COPY, reboot, the volume loses the mount race, a plain
+directory sits at the mount point, `lstat` succeeds and the mount-point check does not fire because
+the *volume* would be the mount point while the destination is several levels below it.
+
+`migration forget --i-verified-both-copies-myself` exists because refusing is not free: a refused
+`resume` left the operation `started`, which blocks every future migration, while `abort` refused
+too. The pair is now governed by one sentence — *`forget` declines anything `abort` can still clean
+up* — and, since pass five, by one function. `AbortDisposition` returns `.cleanable(planned:)`,
+`.unreachable(reason)` or `.declined(reason)`; both verbs consume it; the reason travels into the
+journal while the remedy stays with whoever throws, so a permanent record never tells its reader to
+run the command that produced it.
+
+**The mutation lessons are in `docs/process/MUTATION-TESTING-NOTES.md`**, because they generalise
+past this change. Short version: a clean mutation means "no test covers this difference" at least as
+often as "the code is equivalent"; a mutant that lands in a branch which independently accepts is
+not a mutation of the guard; a non-compiling mutant is a broken experiment, not a catch; and the
+rows worth mutating are the ones where two code paths are *supposed* to agree, because that is where
+a duplicated rule hides. Also: reading for "where is this decided twice?" found both duplications
+before any mutant did.
+
+One branch is knowingly unpinned and says so at the guard: `abortDisposition`'s mount-point refusal
+survives its own removal, because the fixtures cannot make a temp directory into a mount point and
+every path that could be one fails containment first.
+
+219 tests. `swift build` and `swift test` both exit 0.
