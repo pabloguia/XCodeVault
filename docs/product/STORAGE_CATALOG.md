@@ -125,10 +125,11 @@ surgical reclaim would be a filesystem deletion of our own design. The three are
 different reasons, and a category carries a `remediationHint` only when there is one we can stand
 behind:
 
-- `simulatorDeadContainers` — **measured to reap itself** on a booted device (F22), with a shutdown
-  control that did not change. A large number here means a device that has not been booted lately,
-  not a leak. Remediation: boot it — and say no more than that, because the sweep was observed as one
-  bulk event of unknown trigger, not a predictable timer.
+- `simulatorDeadContainers` — the system sweeps this occasionally (one bulk event observed, against
+  a shutdown control that never changed), but the trigger is unknown and **being booted is not it**:
+  the same device left booted three more hours accumulated 2 GB and reaped none of it. Grows at about
+  2 GB/hour during a tight `xcodebuild test` loop. No remediation — see F22 for the two wrong answers
+  that preceded that decision.
 - `simulatorMobileAssets` — deleting the payloads would be a write behind `mobileassetd`'s own
   bookkeeping, the F16 mistake one layer in. No remediation offered.
 - `simulatorLogStore` — a documented narrower verb exists (`log erase --all` via `simctl spawn`) but

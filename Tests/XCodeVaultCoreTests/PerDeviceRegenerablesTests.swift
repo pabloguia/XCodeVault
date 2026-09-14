@@ -319,12 +319,13 @@ final class PerDeviceRegenerablesTests: XCTestCase {
             findings.first { $0.id == "perDeviceRegenerable.simulatorDeadContainers" }, findings.map(\.id).description)
         XCTAssertEqual(dead.severity, .info)
         XCTAssertNotNil(dead.evidence)
-        // The advice is "boot it", not "delete it": a booted device reaps these itself (F22), so a
-        // large number here means a device that has not been booted lately, not a leak to reclaim.
-        let advice = try XCTUnwrap(dead.remediation)
-        XCTAssertTrue(advice.lowercased().contains("boot"), advice)
-        for forbidden in ["rm ", "simctl delete", "simctl erase"] {
-            XCTAssertFalse(advice.contains(forbidden), "destructive command in an INFO remediation: " + advice)
+        // No remediation on any of the three. This assertion has changed twice and both changes were
+        // retreats: the hint first named `simctl delete <udid>`, then said "boot the device and the
+        // system reclaims it" — falsified when the same device, left booted three hours, accumulated
+        // 2 GB and reaped none of it. There is no action to offer, so the finding offers none.
+        XCTAssertNil(dead.remediation, "an INFO finding acquired advice again: \(dead.remediation ?? "")")
+        for f in findings where f.id.hasPrefix("perDeviceRegenerable.") {
+            XCTAssertNil(f.remediation, "\(f.id) offers a remediation this evidence does not support")
         }
         XCTAssertTrue(dead.detail.contains(deviceA), "the per-device breakdown is the actionable part")
         XCTAssertTrue(dead.detail.contains(deviceB))

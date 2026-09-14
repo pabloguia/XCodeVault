@@ -978,3 +978,37 @@ those same three were still there, untouched. The sweep was a **single bulk even
 everything predating it, trigger unknown — not a timer. The catalog note, the remediation text and
 F22 were all corrected, and the remediation no longer promises "within minutes". Two measurements of
 one directory supported two different models; only the second showed which to discard.
+
+## 2026-09-13 (late) — the same finding falsified a third time, by looking again
+
+The commit above (`d67c746`) shipped a claim that is wrong, and the correction is the point of this
+entry. It said a booted device reaps the dead containers, so `doctor`'s remediation was "boot it".
+Three and a half hours later the same device — booted the whole time, never shut down — held **20
+entries / 2.0 GB**, including the three survivors of the original sweep, untouched. Nothing had been
+reaped since one event around 19:27. The shutdown control was still byte-identical.
+
+So the history of this one directory reads:
+
+| draft | claim | killed by |
+|---|---|---|
+| 1 | rolling age-based reaper | re-measuring an hour later: same three entries still there |
+| 2 | booting collects it | re-measuring three hours later: booted, 2 GB, nothing reaped |
+| 3 | *it is swept sometimes; the trigger is unknown* | — |
+
+Each of the first two was a causal claim built from a single observation of a single directory, and
+each fell to nothing more sophisticated than looking again. The pattern this file already names —
+an inherited claim nobody re-checked — turns out to apply just as well to a claim I had produced
+myself an hour earlier, which is the harder case to catch because it arrives feeling verified.
+
+Corrected: `remediationHint` is nil for all three per-device categories, `evidenceStatus` back to
+`.probable`, and F22 now carries the measurement table rather than a mechanism. The test that
+asserted the advice mentions "boot" now asserts no per-device finding offers advice at all — it had
+been pinning the wrong answer, for the second time on this same field.
+
+**What did come out of it is a better number than the one we were chasing.** The 17 new entries span
+21:55–22:44: one per ~3 minutes, ~125 MB each, produced by an ordinary `xcodebuild test` loop —
+about **2 GB an hour** during active iteration. That is measured, repeatable, and it is what justifies
+the category. The sweep is merely what keeps it from being unbounded.
+
+**E14b is blocked, not deferred:** `/Volumes/<vault>` is not attached (only `/Volumes/MacOS`), and the
+experiment writes only to the vault. It needs the drive plugged in. Internal free space is 18 GiB.

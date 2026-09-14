@@ -46,15 +46,17 @@ categorias (`simulatorDeadContainers`, `simulatorMobileAssets`, `simulatorLogSto
 somente-relatório: `scan` mede por device, `doctor` imprime o detalhamento e o motivo, `clean` não
 oferece nada.
 
-O `Dead` **se limpa sozinho**: um device bootado varre as entradas por idade (15 entradas / 1,5 GB →
-3 / 306 MB, contra um device desligado que não mudou um byte). Número grande ali não é vazamento — é
-device que não é bootado há um tempo. Ver F22 e a seção de 2026-09-13 do `STATUS.md`.
+O `Dead` **é varrido às vezes, e não se sabe por quê** — duas versões anteriores deste parágrafo
+diziam saber e ambas foram derrubadas por remedir. Uma varredura em massa foi observada (15 entradas
+/ 1,5 GB → 3 / 306 MB, contra um device desligado que não mudou um byte), mas o mesmo device,
+bootado por mais três horas, voltou a 2,0 GB sem varrer nada. Nenhuma das três categorias oferece
+remediação. O número sólido é o **crescimento**: ~2 GB/hora num loop de `xcodebuild test`. Ver F22.
 
 Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de um device. É o único
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b fases 0–3 — o portão que mata a relocação de device set
+### 2. E14b fases 0–3 — BLOQUEADO: exige o `/Volumes/<vault>` plugado
 
 `scripts/experiments/e14b-device-set-external.sh` está escrito e **não rodado**. ~15 min, sem
 sudo, escreve só no vault, nunca endereça o device set padrão. Exige `--i-understand`.

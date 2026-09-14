@@ -134,16 +134,18 @@ public enum StorageCatalog {
                 "This is not `simctl erase` territory. Erasing reclaims this and destroys every app, setting and container on the device with it; the point of the category is that this part is separable — and, as it turns out, self-reclaiming.",
             ],
             perDeviceSubpaths: ["data/Library/Caches/com.apple.containermanagerd/Dead"],
-            // Deliberately stops before naming a command. An earlier draft closed with "and if you no
-            // longer need that device, `simctl delete <udid>` is the official tool" — which is the
-            // third time this repo has had to remove permanent, journal-blind device-deletion advice
-            // from a path that has no business giving it (see `clean`'s note above, and
-            // `checkUnavailableDevices`, which is the one rule allowed to say it and only from a
-            // journal-verified state). Under an INFO finding that lists devices largest-first, that
-            // sentence reads as the actionable half. The space comes back on its own; there is no
-            // reason to put a destructive option next to that sentence at all.
-            remediationHint:
-                "Nothing to do — the system reclaims this on its own once the device is booted, so a large number here means a device you have not booted lately rather than space that is stuck. Observed as a single bulk sweep rather than a steady trickle, so it is not instant and the exact timing is not something we can promise.",
+            // No remediation — the same answer the other two give, and now for the same reason.
+            //
+            // Two drafts of this hint were wrong in opposite ways. The first named
+            // `simctl delete <udid>`, which is permanent, journal-blind device-deletion advice on an
+            // INFO finding that lists devices largest-first — the third time this repo has had to
+            // remove that pattern (see `clean`'s note above, and `checkUnavailableDevices`, the one
+            // rule allowed to say it and only from a journal-verified state). The second said "boot
+            // the device and the system reclaims it", inferred from a sweep that followed a boot;
+            // the same device, left booted for three hours after, accumulated 2 GB and reaped none
+            // of it. Nil is what is left, and it is the accurate answer rather than a fallback: the
+            // space does come back, on a schedule we have not characterised, and there is nothing a
+            // user can do to bring it forward.
             isBreakdownOf: "simulatorDevices"),
         StorageCategory(
             id: "simulatorMobileAssets", name: "In-simulator MobileAsset downloads (per device)", subsystem: .mobileAsset,
