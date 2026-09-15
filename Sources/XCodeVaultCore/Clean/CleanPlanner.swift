@@ -212,8 +212,8 @@ public struct CleanExecutor: Sendable {
         guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup) else {
             throw CleanError("\(a.path): category is not cleanable — refusing")
         }
-        do { try PathSafety.requireContained(a.path, in: c.pathTemplates, home: home, what: "cleanup category") } catch {
-            throw CleanError("\(error) — refusing")
+        guard c.containsPath(a.path, home: home) else {
+            throw CleanError("\(a.path) is not a path of \(c.name).\(c.containmentShapeHint) — refusing")
         }
         let canonical = try PathSafety.canonicalize(a.path)
         let forbidden = CatalogRules.neverSymlink.compactMap { try? PathSafety.canonicalize($0.expandingTilde(home: home)) }

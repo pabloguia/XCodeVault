@@ -65,7 +65,12 @@ struct Externalize: ParsableCommand {
     struct Out: Encodable { let plan: MigrationPlan; let outcome: MigrationOutcome? }
     func run() throws {
         guard let c = StorageCatalog.category(category) else { throw ValidationError("Unknown category \(category).") }
-        let src = source ?? c.pathTemplates.first!.expandingTilde()
+        // Not `pathTemplates.first!`: for a per-device category that names the enclosing device set,
+        // which is the one place the category is not, and the force-unwrap crashes on a category
+        // with no templates at all.
+        guard let src = source ?? c.singleStandardPath() else {
+            throw ValidationError("\(c.name) has no single standard path, so --source cannot be defaulted.\(c.containmentShapeHint)")
+        }
         let engine = MigrationEngine()
         let plan = try engine.planExternalize(categoryID: category, source: src, vaultRef: vault)
         for w in plan.warnings { print("! \(w)") }
@@ -103,7 +108,9 @@ struct Restore: ParsableCommand {
     @Flag(name: .long) var apply = false
     func run() throws {
         guard let c = StorageCatalog.category(category) else { throw ValidationError("Unknown category \(category).") }
-        let dest = to ?? c.pathTemplates.first!.expandingTilde()
+        guard let dest = to ?? c.singleStandardPath() else {
+            throw ValidationError("\(c.name) has no single standard path, so --to cannot be defaulted.\(c.containmentShapeHint)")
+        }
         let engine = MigrationEngine()
         let plan = try engine.planRestore(categoryID: category, vaultRef: vault, name: name, to: dest)
         if !apply { print("Plan: copy \(ByteCount.format(plan.sourceBytes)) \(plan.source) → \(plan.destination), deep verify. Re-run with --apply."); return }

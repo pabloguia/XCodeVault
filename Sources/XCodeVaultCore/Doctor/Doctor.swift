@@ -963,7 +963,7 @@ public struct Doctor: Sendable {
     /// The device UDID out of a per-device item path, for display. Returns nil rather than guessing
     /// when the path is not shaped like one, so a surprise never renders as a confident label.
     static func deviceUDID(fromItemPath path: String) -> String? {
-        path.split(separator: "/").map(String.init).last { Scanner.isDeviceUDID($0) }
+        path.split(separator: "/").map(String.init).last { SimulatorNaming.isDeviceUDID($0) }
     }
 
     func checkDerivedDataLocation(volumes: [Volume]) -> [Finding] {

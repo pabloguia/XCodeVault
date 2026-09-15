@@ -344,7 +344,13 @@ final class ReReviewTests: XCTestCase {
             // Pinned by message, not merely "it threw". A later refusal inserted above this guard
             // would otherwise make the test pass while the guard itself stopped being reached — the
             // mutation run that proved control gets here happens once; this assertion runs forever.
-            XCTAssertTrue("\(e)".contains("approved"), "refused for some other reason than containment: \(e)")
+            // Two clauses, both from this guard: the category-containment refusal and this site's
+            // own tail. Before, this pinned the single word "approved" from the shared
+            // `PathSafety.requireContained` text, which every containment site produced — so it
+            // discriminated the reason but not the site. This is the stronger version of the same
+            // intent.
+            XCTAssertTrue("\(e)".contains("is not a path of Archives"), "refused for some other reason than containment: \(e)")
+            XCTAssertTrue("\(e)".contains("Nothing is removed"), "not the aside-delete guard: \(e)")
         }
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: outside + ".xcodevault-removing-" + String(plan.operationID.prefix(8))),

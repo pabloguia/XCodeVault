@@ -33,9 +33,10 @@ falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seç
 1. **`log erase --all` via `simctl spawn`** dentro de um device. É o único dos três por-device com
    verbo documentado estreito; reproduzi-lo transforma `simulatorLogStore` de reportado em
    oferecível. Valor direto para o usuário.
-2. **Containment exato `<deviceSet>/<UDID>/<subpath>`** para as categorias por-device. Hoje
-   `pathTemplates.first!` **mente** para elas (é o source default em `M3Commands`) — isto é
-   correção de código, não feature, e não precisa de você nem de hardware.
+2. ~~**Containment exato `<deviceSet>/<UDID>/<subpath>`**~~ — **FEITO 2026-09-15.** Ver a seção
+   no `STATUS.md`. `StorageCategory.containsPath` é agora a única definição de "este path é esta
+   categoria"; `PathSafety.requireContained` foi removido porque todo chamador dele passava
+   `pathTemplates`, que para as por-device nomeia o device set inteiro.
 3. **E13** — `scripts/experiments/e13-dyld-cache-reboot.sh`, a sonda dos 2,48 GB de cache dyld
    órfão. Só precisa que você reinicie a máquina em algum momento.
 
@@ -160,8 +161,7 @@ Registre o resultado nos dois sentidos. Um "não bootou" é resultado tão publi
   Roda antes e depois de um restart; só precisa que o usuário reinicie em algum momento.
 - **`log erase --all` via `simctl spawn`** — é o único dos três por-device com verbo estreito
   documentado. Reproduzi-lo transformaria `simulatorLogStore` de reportado em oferecível.
-- **Containment exato** `<deviceSet>/<UDID>/<subpath>` para as categorias por-device, que faria
-  `pathTemplates.first!` parar de ser mentira para elas (hoje é o source default em `M3Commands`).
+- ~~**Containment exato**~~ — feito 2026-09-15.
 
 ## Restrições (valem sempre)
 

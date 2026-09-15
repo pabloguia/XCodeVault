@@ -1239,3 +1239,63 @@ an INCONCLUSIVE gate that tested all four properties for equality when one of th
 construction — a gate that could not fire, for the third time today. The rewrite computes its
 property sets at run time and phrases the verdict from them, so the next person to disagree with it
 can point at a table rather than at prose.
+
+## 2026-09-15 (later) — exact containment: the catalog stops calling the device set a category
+
+Three categories live *inside* every simulator device — dead app containers, MobileAsset downloads,
+the log store — and their `pathTemplates` name the enclosing CoreSimulator device set, because that
+is where the scanner starts walking. Containment was a prefix test against that template, so for
+those three it accepted the device set root, every device root, and every byte inside every device,
+app containers included. Those are neither regenerable nor ours.
+
+`StorageCategory.containsPath` is now the single definition of "this path is this category". For an
+ordinary category it is the old containment. For a per-device one it requires the shape
+`<deviceSet>/<device>/<subpath>` after canonicalization — structural, not a filesystem walk, because
+a predicate that enumerated the devices would answer differently depending on which existed at that
+instant, and callers use it to decide whether to act.
+
+`PathSafety.requireContained` is gone rather than left unused. Every caller passed `pathTemplates`,
+which is exactly the too-broad question; leaving a general-looking helper there invites the next
+caller to ask it again.
+
+**What the review caught, and it was the substance of the change rather than a detail.** My
+predicate treated any single directory name as "the device". `Scanner.isDeviceUDID` never did — it
+requires 8-4-4-4-12 hex, with a comment saying why: to keep a per-device subpath from wandering into
+a sibling directory someone left in the set. So the two disagreed, and the looser one guarded a
+delete: a hand-made `Backup 2026-09-01` in the device set satisfied containment, passed
+`preflightSource`, and a journal entry aimed at it made `abortDisposition` return `.cleanable`,
+which `abort` turns into `removeItem`. The rule now lives once, in `SimulatorNaming`, and both
+callers call it.
+
+The review also found `abortDisposition` missing the `.coldStorage` gate that `planExternalize`,
+`planRestore`, `removeSource` and `resume` all apply — and `abort` deletes directly, so nothing else
+covered it. Added.
+
+And it corrected my reasoning about the CLI. I had recorded the two `pathTemplates.first!`
+force-unwraps as defence in depth, unreachable because the strategy gate refuses first. Wrong:
+`runtimeLibrary` has no path templates at all and the unwrap ran *before* any gate, so
+`externalize --category runtimeLibrary` with no `--source` trapped. That was a live crash, not a
+hypothetical.
+
+**Mutation testing earned its keep three times here, and each time the lesson was one already in
+`MUTATION-TESTING-NOTES.md`.**
+
+1. *Where is this decided twice?* Three mutants survived the first run because two guards
+   overlapped: `below.count >= 2` and the subpath-prefix match rejected the same inputs, so
+   mutating either changed nothing while both read as load-bearing. Removed the redundant one and
+   the mutants died.
+2. *A negative test can pass for the wrong reason.* Every negative case I had written stopped inside
+   the device before the subpath had as many components as the category's, so they exercised the
+   length guard and never the comparison. A mutant that made the subpath match unconditional
+   survived all 227 tests. The fix was one deeper case.
+3. *A guard nobody distinguishes is a guard that can stop working unnoticed.* I added the
+   `.coldStorage` gate to `abortDisposition` without a test; mutating it away changed nothing. Now
+   pinned, and the mutant dies by assertion on all three categories with zero crashes.
+
+One equivalent mutant survives knowingly and says so at the guard: the length half of
+`insideDevice.count >= subComponents.count`, because `prefix(n)` past the end returns the whole
+array and compares unequal anyway. Its sibling `!subComponents.isEmpty` is the opposite — dropping
+it makes the predicate accept everything — and an earlier version of that comment claimed both were
+equivalent, which was wrong about the half that matters.
+
+231 tests. `swift build` and `swift test` both exit 0.

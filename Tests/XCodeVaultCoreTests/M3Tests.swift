@@ -366,7 +366,12 @@ final class MigrationEngineTests: XCTestCase {
         XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.home + "/Library/Developer/Xcode/ArchivesLink", vaultRef: "VU"))
         XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "NOPE"))
         XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.t.dir("elsewhere"), vaultRef: "VU")) {
-            XCTAssertTrue("\($0)".contains("not under"))
+            // Pins the containment refusal specifically, so it stays distinguishable from the
+            // other throws above. The wording changed when containment stopped being a prefix
+            // test against `pathTemplates`; what it must still do is name the category and say
+            // where the path should have been.
+            XCTAssertTrue("\($0)".contains("is not a path of Archives"), "\($0)")
+            XCTAssertTrue("\($0)".contains("Expected a path under"), "the refusal should say what it wanted: \($0)")
         }
     }
 }

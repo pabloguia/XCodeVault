@@ -67,11 +67,11 @@ public enum PathSafety {
         return p == r || p.hasPrefix(r + "/")
     }
 
-    /// Throws unless `path` is inside one of `roots` (after tilde expansion + canonicalization).
-    public static func requireContained(_ path: String, in roots: [String], home: String, what: String) throws {
-        let expanded = roots.map { $0.expandingTilde(home: home) }
-        guard expanded.contains(where: { isContained(path, in: $0) }) else {
-            throw Violation("\(path) is not inside an approved \(what) path (\(expanded.joined(separator: ", ")))")
-        }
-    }
+    // `requireContained(_:in:home:what:)` lived here until 2026-09-15 and is deliberately gone.
+    // Every caller passed a category's `pathTemplates`, which for a per-device category names the
+    // enclosing CoreSimulator device set rather than the category — so the check accepted the whole
+    // set, every device, and every app container inside them. `StorageCategory.containsPath` is now
+    // the one definition of "is this path this category", and leaving a broader helper here invited
+    // the next caller to reach for it again. Use `isContained` for plain "is A under B" questions,
+    // which is all it ever claimed to answer.
 }

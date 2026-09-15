@@ -14,8 +14,9 @@ final class PerDeviceRegenerablesTests: XCTestCase {
     private let deviceA = "AAAAAAAA-1111-2222-3333-444444444444"
     private let deviceB = "BBBBBBBB-5555-6666-7777-888888888888"
 
-    /// A device set holding two real devices, one lowercase-named device, and one directory that is
-    /// not a device at all — each carrying the same per-device subpaths.
+    /// A device set holding two real (uppercase-UDID) devices and two directories that are not
+    /// devices at all — each carrying the same per-device subpaths. There is deliberately no
+    /// lowercase-UDID device here; `SimulatorNaming.isDeviceUDID` is pinned for case separately.
     private func makeDeviceSet(_ t: TempDir) {
         let set = "Library/Developer/CoreSimulator/Devices"
         let dead = "data/Library/Caches/com.apple.containermanagerd/Dead"
@@ -74,8 +75,8 @@ final class PerDeviceRegenerablesTests: XCTestCase {
     /// Rejecting a lowercase UDID would silently drop a real device's bytes from the accounting,
     /// which is a worse failure than the one the guard exists to prevent.
     func testUDIDGuardAcceptsBothCasesAndRejectsEverythingElse() {
-        XCTAssertTrue(Scanner.isDeviceUDID("AAAAAAAA-1111-2222-3333-444444444444"))
-        XCTAssertTrue(Scanner.isDeviceUDID("aaaaaaaa-1111-2222-3333-444444444444"))
+        XCTAssertTrue(SimulatorNaming.isDeviceUDID("AAAAAAAA-1111-2222-3333-444444444444"))
+        XCTAssertTrue(SimulatorNaming.isDeviceUDID("aaaaaaaa-1111-2222-3333-444444444444"))
         for bad in [
             "NotADevice", "Backup 2026-09-01", "", "..", ".",
             "AAAAAAAA-1111-2222-3333-44444444444",  // 11 in the last group
@@ -83,7 +84,7 @@ final class PerDeviceRegenerablesTests: XCTestCase {
             "ZZZZZZZZ-1111-2222-3333-444444444444",  // not hex
             "AAAAAAAA_1111_2222_3333_444444444444",  // underscores
         ] {
-            XCTAssertFalse(Scanner.isDeviceUDID(bad), "accepted \(bad)")
+            XCTAssertFalse(SimulatorNaming.isDeviceUDID(bad), "accepted \(bad)")
         }
     }
 
@@ -206,6 +207,38 @@ final class PerDeviceRegenerablesTests: XCTestCase {
                     categoryID: id, vaultRef: t.path + "/vault", name: "x",
                     to: t.path + "/Library/Developer/CoreSimulator/Devices/\(deviceA)/data/private/var/MobileAsset/x"),
                 "\(id) was accepted as a restore destination")
+        }
+    }
+
+    /// `abort` deletes directly, so the `.coldStorage` gate that `planExternalize`, `planRestore`,
+    /// `removeSource` and `resume` all apply has to be here too. It was missing, and a mutation run
+    /// caught that adding it changed no test — a guard nothing distinguishes is a guard that can
+    /// stop working unnoticed.
+    func testAbortWillNotDeleteForACategoryThatWasNeverEligibleToLeave() throws {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl"))
+        let engine = MigrationEngine(journal: journal, home: t.path)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() {
+            guard let c = StorageCatalog.category(id) else { continue }
+            // A destination that IS a real path of the category, so nothing else can be what
+            // refuses: containment passes, the directory exists, and only the strategy gate is left.
+            let destination = set + "/" + deviceA + "/" + c.perDeviceSubpaths[0]
+            XCTAssertTrue(c.containsPath(destination, home: t.path), "fixture is wrong: \(destination) is not a path of \(c.id)")
+            let op = UUID().uuidString
+            try journal.record(
+                id: op, kind: .migration, state: .planned, summary: "planted",
+                paths: [t.path + "/vault/\(c.id)/x", destination],
+                detail: ["direction": "restore", "category": c.id, "vault": ""])
+
+            let disposition = engine.abortDisposition(entries: try journal.entries().filter { $0.id == op }, operationID: op)
+            switch disposition {
+            case .declined(let why): XCTAssertTrue(why.contains("coldStorage"), "declined for another reason: \(why)")
+            default: XCTFail("\(c.id): abort was willing to act (\(disposition))")
+            }
+            XCTAssertThrowsError(try engine.abort(operationID: op), "\(c.id): abort did not refuse")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: destination), "\(c.id): abort deleted a live per-device path")
         }
     }
 
@@ -386,5 +419,208 @@ final class PerDeviceRegenerablesTests: XCTestCase {
             journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")))
         let findings = doctor.diagnose(report: report(home: t.path, items: items(t)))
         XCTAssertFalse(findings.contains { $0.id.hasPrefix("perDeviceRegenerable.") }, "an empty device set must not produce a 0-byte finding")
+    }
+
+    // MARK: containment — what a per-device category actually IS
+
+    /// Every negative assertion below names a path that EXISTS. `containsPath` canonicalizes, and
+    /// canonicalization fails for a path whose parent is absent — so a negative case built on a
+    /// made-up path would pass because the check errored, not because it refused. This asserts the
+    /// canonicalization succeeds first, so the test cannot pass through the fail-closed door.
+    private func assertNotContained(
+        _ path: String, in c: StorageCategory, home: String, _ why: String, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        XCTAssertNotNil(try? PathSafety.canonicalize(path), "\(path) does not canonicalize; this case proves nothing", file: file, line: line)
+        XCTAssertFalse(c.containsPath(path, home: home), "\(c.id) accepted \(path) — \(why)", file: file, line: line)
+    }
+
+    /// `pathTemplates` for these names the enclosing device set, which is not the category. Before
+    /// this, containment was a prefix test against that root, so the set itself, any device root,
+    /// and every byte of every device passed as "inside the category".
+    func testTheDeviceSetAndTheDevicesAreNotTheCategory() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers") else { return XCTFail("no category") }
+        assertNotContained(set, in: dead, home: t.path, "the device set is the enclosure, not the category")
+        assertNotContained(set + "/" + deviceA, in: dead, home: t.path, "a device root is the device, not the category")
+        assertNotContained(set + "/" + deviceA + "/data", in: dead, home: t.path, "a prefix of the subpath is not the subpath")
+        assertNotContained(
+            set + "/" + deviceA + "/data/Library/Caches", in: dead, home: t.path,
+            "a parent of the subpath holds the user's other caches too")
+    }
+
+    func testTheSubpathInsideADeviceIsTheCategory() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers") else { return XCTFail("no category") }
+        let exact = set + "/" + deviceA + "/data/Library/Caches/com.apple.containermanagerd/Dead"
+        XCTAssertTrue(dead.containsPath(exact, home: t.path), "the category's own path was rejected")
+        XCTAssertTrue(dead.containsPath(exact + "/temp.aaaaaa", home: t.path), "a path inside the category was rejected")
+        XCTAssertTrue(
+            dead.containsPath(set + "/" + deviceB + "/data/Library/Caches/com.apple.containermanagerd/Dead", home: t.path),
+            "the subpath in a second device was rejected")
+    }
+
+    /// Two categories share the device set as their template. Containment must still tell them
+    /// apart, or the engine could act on one while believing it was checking the other.
+    func testOnePerDeviceCategoryDoesNotContainAnother() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers"),
+            let assets = StorageCatalog.category("simulatorMobileAssets")
+        else { return XCTFail("missing category") }
+        let assetPath = set + "/" + deviceA + "/data/private/var/MobileAsset"
+        XCTAssertTrue(assets.containsPath(assetPath, home: t.path), "MobileAsset rejected its own path")
+        assertNotContained(assetPath, in: dead, home: t.path, "MobileAsset is not dead containers")
+    }
+
+    /// The case every earlier negative here was too shallow to reach. All of them stopped inside
+    /// the device before the subpath had as many components as the category's, so they exercised
+    /// the length guard and never the comparison — a mutation that made the subpath match
+    /// unconditional survived the whole suite. This one is deep enough that only the comparison
+    /// can reject it.
+    func testADeepPathInsideTheDeviceThatIsNotTheSubpathIsRejected() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers") else { return XCTFail("no category") }
+        let deadComponents = dead.perDeviceSubpaths[0].split(separator: "/").count
+        // The log store's own directory, reached from the dead-containers category. It exists, and
+        // it is at least as deep as the subpath being matched, so the length guard cannot be what
+        // rejects it.
+        let other = set + "/" + deviceA + "/data/var/db/diagnostics/Persist"
+        XCTAssertGreaterThanOrEqual(
+            other.split(separator: "/").count - (set + "/" + deviceA).split(separator: "/").count, deadComponents,
+            "this case must be deep enough to reach the comparison, or it proves nothing")
+        assertNotContained(other, in: dead, home: t.path, "a deep path in another category is not dead containers")
+
+        // Shares the first component (`data`) with the subpath, so a check that compared only the
+        // head would accept it.
+        XCTAssertEqual(String(dead.perDeviceSubpaths[0].split(separator: "/")[0]), "data")
+    }
+
+    /// The scanner has always refused to call a non-UDID directory a device; the containment
+    /// predicate did not, so a directory a user left in the device set satisfied containment for a
+    /// per-device category and from there reached a deletion path. Both decoys already existed in
+    /// the fixture — only the scanner half was pinned.
+    func testADirectoryInTheDeviceSetThatIsNotADeviceIsNotPartOfTheCategory() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers") else { return XCTFail("no category") }
+        let sub = dead.perDeviceSubpaths[0]
+        for decoy in ["NotADevice", "Backup 2026-09-01"] {
+            assertNotContained(
+                set + "/" + decoy + "/" + sub, in: dead, home: t.path,
+                "\(decoy) is not a device, so what is under it is not ours to act on")
+        }
+        // The engine's own gate, not just the predicate.
+        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path)
+        XCTAssertThrowsError(
+            try engine.preflightSource(set + "/Backup 2026-09-01/" + sub, category: dead),
+            "preflight accepted a non-device directory as a source")
+    }
+
+    /// `containsPath` answers false when canonicalization fails, and every negative test above
+    /// leans on that being the *safe* direction rather than an accident. Nothing pinned it until a
+    /// mutation made the failure path return true and survived the whole suite.
+    func testAPathThatCannotBeCanonicalizedIsNotContained() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        t.file("Library/Developer/Xcode/DerivedData/x/y.o", bytes: 10)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let dead = StorageCatalog.category("simulatorDeadContainers"),
+            let dd = StorageCatalog.category("derivedData")
+        else { return XCTFail("missing category") }
+        // `..` is rejected by canonicalize outright; a missing parent makes realpath fail.
+        for bad in [
+            set + "/" + deviceA + "/../" + deviceA + "/" + dead.perDeviceSubpaths[0],
+            set + "/" + deviceA + "/no/such/parent/here",
+        ] {
+            XCTAssertFalse(dead.containsPath(bad, home: t.path), "per-device accepted \(bad)")
+        }
+        for bad in [t.path + "/Library/Developer/Xcode/DerivedData/../DerivedData", t.path + "/Library/Developer/Xcode/DerivedData/no/such/parent"] {
+            XCTAssertFalse(dd.containsPath(bad, home: t.path), "ordinary accepted \(bad)")
+        }
+    }
+
+    /// A category whose subpaths split to nothing would make the prefix comparison match the empty
+    /// array — accepting every path in the device set, app containers included. `CatalogRules`
+    /// rejects such a category, but it is not a startup invariant: it runs only in the
+    /// `compatibility` subcommand, so the predicate must hold the line itself.
+    func testACategoryWhoseSubpathIsEmptyContainsNothing() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        for empty in [[""], ["/"], ["//"]] {
+            let broken = StorageCategory(
+                id: "broken", name: "Broken", subsystem: .coreSimulator,
+                pathTemplates: ["~/Library/Developer/CoreSimulator/Devices"], description: "d",
+                regenerability: .regenerable, deletionRisk: .low, relocationRisk: .low,
+                recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
+                perDeviceSubpaths: empty)
+            XCTAssertFalse(
+                broken.containsPath(set + "/" + deviceA + "/data/Library/Caches", home: t.path),
+                "a category with subpaths \(empty) accepted an arbitrary path in the device set")
+        }
+    }
+
+    /// The log store is two directories. A category with several subpaths must accept each — the
+    /// plural exists so one concept is not reported as two numbers.
+    func testEverySubpathOfAMultiPartCategoryIsContained() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        guard let logs = StorageCatalog.category("simulatorLogStore") else { return XCTFail("no category") }
+        XCTAssertFalse(logs.perDeviceSubpaths.count < 2, "this test assumes a multi-subpath category")
+        for sub in logs.perDeviceSubpaths {
+            XCTAssertTrue(logs.containsPath(set + "/" + deviceA + "/" + sub, home: t.path), "\(sub) was rejected")
+        }
+    }
+
+    /// An ordinary category keeps the old meaning: its template IS its path.
+    func testAnOrdinaryCategoryStillContainsItsOwnTemplateRoot() {
+        let t = TempDir()
+        t.file("Library/Developer/Xcode/DerivedData/x/y.o", bytes: 10)
+        guard let dd = StorageCatalog.all.first(where: { $0.perDeviceSubpaths.isEmpty && $0.id == "derivedData" })
+        else { return XCTFail("no derivedData category") }
+        let root = t.path + "/Library/Developer/Xcode/DerivedData"
+        XCTAssertTrue(dd.containsPath(root, home: t.path), "an ordinary category rejected its own root")
+        XCTAssertTrue(dd.containsPath(root + "/x", home: t.path), "an ordinary category rejected a path inside it")
+    }
+
+    /// The engine's own gate, not just the predicate: `preflightSource` used to accept the whole
+    /// device set as a source for a per-device category.
+    func testPreflightRefusesTheDeviceSetAsASourceForAPerDeviceCategory() {
+        let t = TempDir()
+        makeDeviceSet(t)
+        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path)
+        let set = t.path + "/Library/Developer/CoreSimulator/Devices"
+        for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() {
+            guard let c = StorageCatalog.category(id) else { continue }
+            XCTAssertThrowsError(try engine.preflightSource(set, category: c), "\(id) accepted the device set as a source")
+            XCTAssertThrowsError(try engine.preflightSource(set + "/" + deviceA, category: c), "\(id) accepted a device root as a source")
+        }
+    }
+
+    /// The CLI defaults `--source`/`--to` to `pathTemplates.first!`. For these categories that is
+    /// the device set, which is not a place any of them lives — so there is no default to offer.
+    func testThereIsNoSingleStandardPathForAPerDeviceCategory() {
+        let t = TempDir()
+        for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() {
+            guard let c = StorageCatalog.category(id) else { continue }
+            XCTAssertNil(c.singleStandardPath(home: t.path), "\(id) offered a single standard path")
+        }
+        guard let dd = StorageCatalog.category("derivedData") else { return XCTFail("no derivedData") }
+        XCTAssertNotNil(dd.singleStandardPath(home: t.path), "an ordinary category lost its standard path")
+        // Not defence in depth, whatever the first draft of this claimed: `runtimeLibrary` has no
+        // path templates at all, so `pathTemplates.first!` trapped before any strategy gate could
+        // refuse. `xcodevaultctl externalize --category runtimeLibrary --vault X` crashed.
+        guard let rl = StorageCatalog.category("runtimeLibrary") else { return XCTFail("no runtimeLibrary") }
+        XCTAssertTrue(rl.pathTemplates.isEmpty, "this case assumes a category with no templates")
+        XCTAssertNil(rl.singleStandardPath(home: t.path), "a category with no templates offered a path")
     }
 }

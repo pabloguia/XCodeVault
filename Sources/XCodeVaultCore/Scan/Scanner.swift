@@ -110,22 +110,10 @@ public struct Scanner: Sendable {
         }
         return (
             names
-            .filter { isDeviceUDID($0) }
+            .filter { SimulatorNaming.isDeviceUDID($0) }
             .sorted()
             .map { deviceSet + "/" + $0 }
             .filter { var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFDIR }, nil)
-    }
-
-    /// 8-4-4-4-12 hex, the form CoreSimulator gives device directories.
-    ///
-    /// Case-insensitive on purpose. CoreSimulator writes these uppercase, but the two failure modes
-    /// are not symmetric: rejecting a lowercase UUID would silently drop a real device's bytes from
-    /// the accounting, which is this tool's whole job, while accepting one opens nothing — the names
-    /// this guard exists to exclude ("Backup", "old-devices") are not hex either way.
-    static func isDeviceUDID(_ name: String) -> Bool {
-        let groups = name.split(separator: "-", omittingEmptySubsequences: false)
-        guard groups.count == 5, groups.map(\.count) == [8, 4, 4, 4, 12] else { return false }
-        return groups.allSatisfy { $0.allSatisfy(\.isHexDigit) }
     }
 
     func resolve(categoryID: String, path: String, bootMountPoint: String?) -> StorageItem {

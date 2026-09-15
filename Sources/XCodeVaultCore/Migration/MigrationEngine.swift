@@ -113,7 +113,9 @@ public struct MigrationEngine: Sendable {
         guard FileManager.default.fileExists(atPath: source, isDirectory: &isDir), isDir.boolValue else {
             throw MigrationError("\(source) does not exist in the vault.")
         }
-        try PathSafety.requireContained(destination, in: c.pathTemplates, home: home, what: c.name)
+        guard c.containsPath(destination, home: home) else {
+            throw MigrationError("\(destination) is not a path of \(c.name).\(c.containmentShapeHint) Nothing is written.")
+        }
         let destination = try PathSafety.canonicalize(destination)
         var dst = stat()
         if lstat(destination, &dst) == 0 { throw MigrationError("\(destination) already exists; refusing to overwrite. Move it aside first.") }
@@ -134,8 +136,11 @@ public struct MigrationEngine: Sendable {
         guard lstat(source, &st) == 0 else { throw MigrationError("\(source) does not exist.") }
         guard (st.st_mode & S_IFMT) == S_IFDIR else { throw MigrationError("\(source) is not a directory (symlink?). Fix with doctor first.") }
         guard !MountStatus.isMountPoint(source) else { throw MigrationError("\(source) is a mount point; refusing.") }
-        do { try PathSafety.requireContained(source, in: category.pathTemplates, home: home, what: category.name) } catch {
-            throw MigrationError("\(source) is not under a \(category.name) path (\(error)).")
+        // `containsPath`, not a prefix test against `pathTemplates`: for a per-device category the
+        // templates name the enclosing device set, so a prefix test accepted the set, every device
+        // root, and every app container inside them as "a path of this category".
+        guard category.containsPath(source, home: home) else {
+            throw MigrationError("\(source) is not a path of \(category.name).\(category.containmentShapeHint)")
         }
         let canonical = try PathSafety.canonicalize(source)
         let forbidden = CatalogRules.neverSymlink.compactMap { try? PathSafety.canonicalize($0.expandingTilde(home: home)) }
@@ -402,7 +407,9 @@ public struct MigrationEngine: Sendable {
             // deletes directly, so it would otherwise be the one `removeItem` in the product whose
             // target was never checked against the category that is supposed to own it. Checked on
             // `source` rather than `aside`, because the aside is a sibling of the templated path.
-            try PathSafety.requireContained(source, in: c.pathTemplates, home: home, what: c.name)
+            guard c.containsPath(source, home: home) else {
+                throw MigrationError("\(source) is not a path of \(c.name).\(c.containmentShapeHint) Nothing is removed.")
+            }
             try FileManager.default.removeItem(atPath: aside)
             try journal.record(
                 id: operationID, kind: .migration, state: .completed, summary: "resume: source removed after re-verification", paths: [source, destination],
@@ -527,9 +534,20 @@ public struct MigrationEngine: Sendable {
         let source = planned.paths[0], destination = planned.paths[1]
         let direction = planned.detail["direction"].flatMap { MigrationPlan.Direction(rawValue: $0) }
         let category = planned.detail["category"].flatMap { StorageCatalog.category($0) }
+        // The gate `planExternalize`, `planRestore`, `removeSource` and `resume` all apply, missing
+        // only here — and `abort` deletes directly, so nothing else covers it. A journal entry
+        // naming a category that was never eligible to leave cannot describe a migration of ours,
+        // which is exactly the entry not to act on.
+        if let c = category, !c.allowedStrategies.contains(.coldStorage) {
+            return .declined(
+                "Migration \(operationID) names \(c.name), which has no coldStorage strategy, so no migration of it can be legitimate. Nothing is removed.")
+        }
         let vaultDir = planned.detail["vault"].flatMap { $0.isEmpty ? nil : $0 }.flatMap { try? verifier.resolveUsable($0).1 }
         let onVault = vaultDir.map { PathSafety.isContained(destination, in: $0) } ?? false
-        let atOwnHome = category.map { c in (try? PathSafety.requireContained(destination, in: c.pathTemplates, home: home, what: c.name)) != nil } ?? false
+        // Same correction as `preflightSource`, and it matters more here: this decides whether a
+        // destination counts as "back at its own home", and for a per-device category the old
+        // prefix test said yes for anything anywhere in the device set.
+        let atOwnHome = category.map { $0.containsPath(destination, home: home) } ?? false
         func sourcePresent() -> Bool { var st = stat(); return lstat(source, &st) == 0 }
 
         // Also here rather than at the deletion site, for the same reason: a refusal `abort` makes
