@@ -197,6 +197,20 @@ placing DerivedData on external storage, exactly as `NON_GOALS_AND_SAFETY.md` re
 Remaining unknowns: Apple Silicon, Thunderbolt NVMe, and whether the Xcode IDE's own test
 runner behaves like `xcodebuild`. Original framing kept below for the record.
 
+**Possible second instance, 2026-09-15, pending its control (E14b phase 2).** CoreSimulatorService
+failed to populate a simulator device's data container on the USB vault with EPERM and an empty
+unified-log capture that, unlike E2's, is **not** silent: `tccd` queries
+`kTCCServiceSystemPolicyRemovableVolumes` for CoreSimulatorService and the kernel logs
+`deny(1) file-write-create` on the set path, milliseconds before the copy fails. Different
+subsystem from E2, no `xctest` involved, and the first named mechanism in this repo — E2's own
+matrix entry records "mechanism unnamed" after querying the same places. If `e14b-control-internal-create.sh` shows the identical create succeeding on an
+internal alternate set, that narrows the cause to volume class — **not yet to removability**,
+because the two volumes also differ in case sensitivity, mount options and bus, none of which
+E2 controlled for a *copy* as opposed to a bundle load. It would be consistent with H6 and would
+justify an experiment that varies one factor at a time; it would not by itself be a second
+reproduction. If the control fails too, this observation is not about H6 at all. Do not cite it either way until
+the control has run.
+
 If true, mounting at a canonical path does **not** escape the
 problem and a large part of the canonical-mount thesis collapses; the product would
 have to warn that test execution against externally-located build products is
@@ -376,10 +390,36 @@ consulted it. A service-level refusal of external storage, if one exists, would 
 `create` or `boot`. **Phases 2 and 3 have still never executed, so the H6 boot gate that
 decides H12 is unrun, and nothing has moved H12 in either direction.**
 
-Gates: E14b phases 2–3 (kill gate, still pending), then E15. Evidence so far:
+**2026-09-15, attempt 2 with the corrected harness: the first real gate failed.** Phase 2's
+`simctl --set <vault> create` exited 22. The mechanism is **not in the run's own evidence** —
+the harness captures logs only on a phase 3/4 failure, so phase 2 recorded `code=22` and nothing
+else — and was read from `CoreSimulator.log` by hand afterwards, into
+`../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`: CoreSimulatorService could not copy the device's sample content
+into `<set>/<UDID>/data`, `NSPOSIXErrorDomain Code=1`, EPERM rather than EACCES, and tore the
+half-created device down. The run's evidence does exclude one alternative on its own — the
+script wrote `.xcv-e14b` into that same directory moments earlier as the same user the service
+runs as, so the directory's mode bits are not the refusal. It excludes the mode bits and nothing
+more: a sample-content copy also moves xattrs, ACLs, flags and ownership. The unified-log
+capture is **not** empty, and unlike E2's it names the mechanism: three `tccd` queries for
+`service=kTCCServiceSystemPolicyRemovableVolumes` attributed to CoreSimulatorService, then a
+kernel `deny(1) file-write-create` on the set path, then the `Code=1`. Evidence
+`../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
+This is the shape H6 predicts, but it is **not yet H6's verdict**, and H12 is **not yet
+falsified**, because two readings survive: the volume is the problem (H6), or alternate device
+sets do not work this way at all — and the latter cannot be separated from "the harness is wrong
+a third time" without a control. And even reading (A) would only narrow the cause to *volume
+class*: the control's set is internal, case-insensitive and on the boot volume, while the vault
+differs in case sensitivity, mount options, removability and bus at once. `scripts/experiments/e14b-control-internal-create.sh` runs the
+identical create on an internal `mktemp` set and decides it. Written, not yet run. Phase 3, the
+boot gate, was never reached and is now moot unless the control reads (B).
+
+Gates: E14b control, then phase 3 if it survives, then E15. Evidence so far:
 `../research/evidence/e14a-device-set-static-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
-`../research/evidence/e14b-device-set-external-macos26.6.2-25G83-xcode26.5-x86_64.txt` (invalid
-run, with an appended correction — do not cite its verdict line),
+`../research/evidence/e14b-device-set-external-attempt1-void-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+(attempt 1, void — invalid run with an appended correction; do not cite its verdict line),
+`../research/evidence/e14b-device-set-external-attempt2-macos26.6.2-25G83-xcode26.5-x86_64.txt` (attempt 2, the phase-2 failure),
+`../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` (its mechanism, captured by hand — read the PROVENANCE header),
 `../research/evidence/e14b-control-internal-macos26.6.2-25G83-xcode26.5-x86_64.txt`, F17, F18.
 
 ## H13 — a runtime can be *used* from an external volume without touching `images.plist` *(new, 2026-09-09)*

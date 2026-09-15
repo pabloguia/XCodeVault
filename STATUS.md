@@ -1115,3 +1115,59 @@ record should say so; what it should not do is let a reader cite its verdict lin
 
 E14b phases 2–3 are still unrun and are still the next thing. 219 tests. `swift build` and
 `swift test` both exit 0; no Swift changed in this session.
+
+### The re-run: the gate fired, one phase later, and named a mechanism
+
+`create` on the vault exits 22. The run's evidence file says that and nothing more, and the
+reason is a hole in the harness I then walked straight into: `EXPERIMENTS.md` specified log capture
+on a phase 3 or 4 failure, phase 2 had none, so the mechanism had to be read out of `CoreSimulator.log`
+by hand — and the first draft of this section cited it as though the run had produced it, including
+the sentence "the POSIX reading is ruled out by the evidence file itself". It is not in the evidence
+file. It is now in `evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` with a provenance header saying how it was taken, and the script
+captures on phase 2 from now on.
+
+What the log shows: the service allocated the device, could not copy its sample content into
+`<set>/<UDID>/data` — `NSPOSIXErrorDomain Code=1` — and tore the half-made device down.
+
+EPERM, not EACCES. The run's own evidence excludes exactly one alternative: the script created
+`.xcv-e14b` inside that same directory in the phase before, as the same user `CoreSimulatorService`
+runs as, so the directory's mode bits are not what refused. That is one alternative, not all of
+them — a sample-content copy also moves xattrs, ACLs, flags and ownership, and a zero-byte file
+tests none of those.
+
+And then the safety review caught the largest error of the day, which was mine and was about to be
+published: I wrote that the unified-log capture came back empty. It does not. My interactive
+`log show` returned nothing and I believed it; the harness-style capture, run minutes later over
+the same window, contains — inside 80 ms, in causal order — three `tccd` queries for
+`service=kTCCServiceSystemPolicyRemovableVolumes` attributed to CoreSimulatorService, a kernel
+`com.apple.sandbox.reporting:violation … deny(1) file-write-create` on the set path, and only then
+the `Code=1`. The ad-hoc grep was the bad instrument, and "I looked and saw nothing" became
+"there is nothing" without the step in between. Evidence `evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
+That line is the most valuable thing this session produced, and the draft I nearly committed
+recorded its absence. E2's matrix entry says "mechanism unnamed" after querying the same
+subsystems; this names one, on a code path with no `xctest` in it. **What it licenses for H6 is
+not decided here** — one observation, one volume, one machine, control unrun. Deciding that in the
+same edit that corrected the error is exactly how the last two rounds went wrong.
+
+It has E2's shape. Whether it has E2's cause is a different question, and the control cannot answer
+it either: an internal `mktemp` set differs from the vault in case sensitivity, mount options,
+removability and bus all at once, so "creates internally" narrows the cause to volume class and
+stops there. Calling that a second reproduction of H6 would be the same overreach one size smaller.
+
+**It is not recorded as that yet, and H12 is not recorded as falsified.** Two readings fit: the
+volume is the problem, or alternate device sets do not work this way at all — and the second cannot
+be told apart from "the harness is wrong a third time" by staring at it. Today has already spent
+two rounds on exactly that confusion. `e14b-control-internal-create.sh` runs the identical create
+on an internal `mktemp` set and separates them in about a minute.
+
+Worth noting what this costs if reading (A) wins: phase 3, the boot gate that the whole experiment
+was designed around, becomes unreachable. H12 would die one phase earlier than planned, on the
+device's data container rather than on booting it — and the reason would be the same removability
+that E2 found, which is the answer the plan considered most likely and least convenient.
+
+The hardened cleanup did its job on a path that had never been exercised: it took the `rm -rf`
+branch, which is only reachable when the set reports zero remaining devices rather than when a
+return code says so, and both post-cleanup probes came back empty. The count itself was not
+printed, so that is read off the code path rather than the evidence — the script now echoes it. The run exited 1, and said so on stderr — before today it
+would have exited 0 and printed nothing but `wrote`.

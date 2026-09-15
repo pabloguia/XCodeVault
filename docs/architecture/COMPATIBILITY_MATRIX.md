@@ -487,7 +487,7 @@ those entries "pending — manual" until someone actually runs and records the r
 - Accounting checked after the run: probe set removed by the marker-guarded cleanup, no `XCV-E14b`
   in the default set, default set still 10G, all three user devices still `Shutdown`. No shadow
   data, no leak into the default set (rule 6 clean).
-- Evidence: `../research/evidence/e14b-device-set-external-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+- Evidence: `../research/evidence/e14b-device-set-external-attempt1-void-macos26.6.2-25G83-xcode26.5-x86_64.txt`
   (invalid run + appended correction; do not cite its verdict line),
   `../research/evidence/e14b-control-internal-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
 - **Harness hardened after two safety reviews of the fix, before any re-run.** The reviews found
@@ -507,11 +507,67 @@ those entries "pending — manual" until someone actually runs and records the r
 - Verdict: **H12 stays *unverified*.** Not promoted, not falsified. Next: re-run E14b to reach
   phases 2–3, which are the phases that can say anything.
 
+### E14b attempt 2 — phase 2 fails on the vault: CoreSimulatorService cannot write the device's data — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date: 2026-09-15. Hypothesis: H12 (kill gate), and corroborating for H6.
+- Test: same command as attempt 1, with the corrected harness. Vault connected and VERIFIED,
+  three default-set devices `Shutdown`, no `xcodebuild` running, before and after.
+- **Phase 1 passed as the smoke test it now is. Phase 2 failed, and this one is a real gate.**
+  `simctl --set <vault> create XCV-E14b <iPhone SE 3rd gen> <iOS 26.5>` exited 22 (EINVAL):
+  "Device was allocated but was stuck in creation state."
+- **Mechanism — sourced OUT OF BAND, not by the run.** The run's own evidence records only
+  `code=22`: `EXPERIMENTS.md` specified log capture on a phase 3/4 failure, and the phase-2 path
+  went straight to cleanup, so the harness captured nothing. The mechanism below was read from
+  `CoreSimulator.log` by hand afterwards and is recorded in its own file; the script has since
+  been given a phase-2 capture so the next run sources itself. Cite the log file, not the run.
+  `Error copying sample content to path …/E14bSet/<UDID>/data : NSCocoaErrorDomain 513 …
+  NSUnderlyingError=NSPOSIXErrorDomain Code=1 "Operation not permitted"`, then "New device is
+  stuck in creation state, deleting".
+- **EPERM (1), not EACCES (13).** One alternative is excluded by the run's own evidence: the
+  script — running as the invoking user, which is also who `CoreSimulatorService` runs as —
+  created `.xcv-e14b` inside that same directory moments earlier, so the directory's mode bits
+  are not what refused. That excludes the mode bits and nothing else. A sample-content copy also
+  exercises xattrs, ACLs, BSD flags and ownership, none of which a zero-byte `creat()` touches.
+- **The unified-log capture is NOT empty, and it names the mechanism.** An interactive
+  `log show` minutes earlier returned nothing for the same window and the first draft of this
+  entry recorded "TCC capture empty" on that basis; the harness-style capture contradicts it, and
+  the ad-hoc grep was simply the worse instrument. Within 80 ms, in causal order: three `tccd`
+  `AUTHREQ_CTX` queries for `service=kTCCServiceSystemPolicyRemovableVolumes` attributed to
+  `com.apple.CoreSimulator.CoreSimulatorService` (pid 9381) at the request of `sandboxd`; then
+  `kernel [com.apple.sandbox.reporting:violation] System Policy:
+  com.apple.CoreSimulator.CoreSimu(9381) deny(1) file-write-create
+  /Volumes/<vault>/XCodeVault/E14bSet/<UDID>`; then the `Code=1` failure copying sample content.
+- **This is the first time this repo has named the mechanism.** E2's entry above says
+  "mechanism unnamed" after querying the same subsystems and finding nothing. Here a
+  removable-volumes TCC service is queried and a sandbox policy denies the write, on a code path
+  with no `xctest` anywhere in it. **What that licenses for H6 is deliberately not decided in
+  this entry** — it is one observation, on one volume, on one machine, with the internal control
+  still unrun, and today has already cost two rounds to premature conclusions.
+- **What this does NOT yet establish.** Two readings survive: (A) something about that volume is
+  the problem; (B) alternate device sets do not work this way at all, in which case the
+  observation says nothing about external storage — and reading B cannot be separated from "the
+  harness is wrong a third time" without the control. Note also what (A) would *not* buy: the
+  control's set is internal, case-insensitive, on the boot volume with default mount options,
+  while the vault is external, **Case-sensitive APFS**, `nodev,nosuid`, USB. A create that
+  succeeds internally narrows the cause to volume class and no further — it does not isolate
+  removability, and so does not by itself reproduce H6. E2 controlled case sensitivity for bundle
+  loading; nothing has controlled it for device creation. `scripts/experiments/e14b-control-internal-create.sh`
+  discriminates them: identical device type, runtime and commands, on an internal `mktemp` set.
+  **Written, not yet run.**
+- Accounting clean: cleanup counted zero remaining devices, removed the probe set, and both
+  post-cleanup probes came back empty — no stray `device_set.plist` anywhere on the volume, no
+  `XCV-E14b` in the default set, default set still 10G, all three user devices `Shutdown`.
+- Evidence: `../research/evidence/e14b-device-set-external-attempt2-macos26.6.2-25G83-xcode26.5-x86_64.txt` (the run), `../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` (the mechanism,
+  captured by hand after the fact — read its PROVENANCE header before citing it)
+- Verdict: **H12 not yet falsified, but its first real gate failed.** Falsification waits on the
+  internal control, because reading B would mean the observation is not about external storage.
+
 ### Pending — added 2026-09-09
 
 | Experiment | Gates | Status |
 |---|---|---|
-| E14b device set on an external volume | H12 (kill gate), H6 | **phases 2–3 pending** — attempt 1 (2026-09-15) aborted at phase 1 on a harness defect and produced no verdict; gate corrected, needs a re-run. Mutating, unprivileged |
+| E14b device set on an external volume | H12 (kill gate), H6 | **phase 2 failed 2026-09-15** — `create` cannot populate the device's data container on the vault (EPERM); phase 3 unreached. Attempt 1 was void (harness defect). Mutating, unprivileged |
+| E14b control — `create` in an internal alternate set | H12, H6 | **pending, written** — `scripts/experiments/e14b-control-internal-create.sh`. Decides whether the phase-2 failure is about the volume or about alternate sets. Mutating (temp dir + one device), unprivileged |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |

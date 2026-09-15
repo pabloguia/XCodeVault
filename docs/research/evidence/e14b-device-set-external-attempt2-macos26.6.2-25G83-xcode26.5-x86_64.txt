@@ -1,0 +1,160 @@
+# Experiment: E14b — CoreSimulator device set on an external volume (gates H12)
+# Date: 2026-09-15T16:49:15Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Device set path: /Volumes/<vault>/XCodeVault/E14bSet
+# Volume: /Volumes/<vault>
+
+## phase 0 — preflight, no mutation
+## volume class
+$ diskutil info /Volumes/<vault>
+   Device Identifier:         disk7s1
+   Device Node:               /dev/disk7s1
+   Whole:                     No
+   Part of Whole:             disk7
+
+   Volume Name:               <vault>
+   Mounted:                   Yes
+   Mount Point:               /Volumes/<vault>
+
+   Partition Type:            41504653-0000-11AA-AA11-00306543ECAC
+   File System Personality:   Case-sensitive APFS
+   Type (Bundle):             apfs
+   Name (User Visible):       APFS (Case-sensitive)
+   Owners:                    Enabled
+
+   OS Can Be Installed:       Yes
+   Media Type:                Generic
+   Protocol:                  USB
+   SMART Status:              Not Supported
+   Volume UUID:               <vault-uuid>
+   Disk / Partition UUID:     <vault-uuid>
+
+   Disk Size:                 1.0 TB (1024209502208 Bytes) (exactly 2000409184 512-Byte-Units)
+   Device Block Size:         4096 Bytes
+
+   Volume Used Space:         649.4 GB (649408565248 Bytes) (exactly 1268376104 512-Byte-Units)
+   Container Total Space:     1.0 TB (1024209502208 Bytes) (exactly 2000409184 512-Byte-Units)
+   Container Free Space:      374.6 GB (374591549440 Bytes) (exactly 731624120 512-Byte-Units)
+   Allocation Block Size:     4096 Bytes
+
+   Media OS Use Only:         No
+   Media Read-Only:           No
+   Volume Read-Only:          No
+
+   Device Location:           External
+   Removable Media:           Fixed
+
+   Solid State:               Info not available
+
+   This disk is an APFS Volume.  APFS Information:
+   APFS Container:            disk7
+   APFS Physical Store:       disk6s1
+   Encrypted:                 No
+   FileVault:                 No
+   Sealed:                    No
+   Locked:                    No
+
+[exit=0]
+
+## mount options (owners must be on)
+$ bash -c mount | grep -F '/Volumes/<vault>'
+/dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled)
+[exit=0]
+
+## free space
+$ df -h /Volumes/<vault> /System/Volumes/Data
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk7s1   954Gi   605Gi   349Gi    64%    789k  3.7G    0%   /Volumes/<vault>
+/dev/disk1s1   466Gi   425Gi    19Gi    96%    3.9M  203M    2%   /System/Volumes/Data
+[exit=0]
+
+## BASELINE default device set (must be unchanged at the end)
+$ bash -c xcrun simctl list devices | sed -n '1,80p'
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## BASELINE default set size
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## available runtimes / device types
+$ bash -c xcrun simctl list runtimes; xcrun simctl list devicetypes | tail -20
+== Runtimes ==
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+watchOS 26.5 (26.5 - 23T570) - com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+Apple Watch Series 8 (45mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-8-45mm)
+Apple Watch Series 8 (41mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-8-41mm)
+Apple Watch Ultra (49mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-49mm)
+Apple Watch SE (44mm) (2nd generation) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-44mm-2nd-generation)
+Apple Watch SE (40mm) (2nd generation) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-40mm-2nd-generation)
+Apple Watch Series 7 (45mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-7-45mm)
+Apple Watch Series 7 (41mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-7-41mm)
+Apple Watch Series 6 (44mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-6-44mm)
+Apple Watch Series 6 (40mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-6-40mm)
+Apple Watch SE (44mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-44mm)
+Apple Watch SE (40mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-40mm)
+Apple Watch Series 5 (44mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-5-44mm)
+Apple Watch Series 5 (40mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-5-40mm)
+Apple Watch Series 4 (44mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-4-44mm)
+Apple Watch Series 4 (40mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-4-40mm)
+Apple Watch Series 3 (42mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-3-42mm)
+Apple Watch Series 3 (38mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-3-38mm)
+Apple Watch Series 2 (42mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-2-42mm)
+Apple Watch Series 2 (38mm) (com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-2-38mm)
+iPod touch (7th generation) (com.apple.CoreSimulator.SimDeviceType.iPod-touch--7th-generation-)
+[exit=0]
+
+## phase 1 — smoke test only. This phase is NOT a gate on this volume; see below.
+## list devices in the external set
+$ xcrun simctl --set /Volumes/<vault>/XCodeVault/E14bSet list devices
+== Devices ==
+-- iOS 26.5 --
+-- watchOS 26.5 --
+[exit=0]
+
+## what got created there
+$ bash -c ls -la '/Volumes/<vault>/XCodeVault/E14bSet'
+total 0
+drwxr-xr-x@ 3 <user>  staff   96 Sep 15 13:49 .
+drwxr-xr-x@ 5 <user>  staff  160 Sep 15 13:49 ..
+-rw-r--r--@ 1 <user>  staff    0 Sep 15 13:49 .xcv-e14b
+[exit=0]
+
+## phase 2 — create a device in the external set
+# device type: com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation
+# runtime:     com.apple.CoreSimulator.SimRuntime.iOS-26-5
+## create
+$ bash -c xcrun simctl --set '/Volumes/<vault>/XCodeVault/E14bSet' create XCV-E14b 'com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation' 'com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=22):
+The operation couldn’t be completed. Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.
+Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.
+Unable to create a device for device type: iPhone SE (3rd generation) (com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation), runtime: iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+[exit=22]
+
+# probe UDID: <none>
+!! phase 2 FAILED — device not created on the external volume.
+## cleanup
+## remove probe device set
+$ rm -rf /Volumes/<vault>/XCodeVault/E14bSet
+[exit=0]
+
+## post-cleanup: anything left at the set path?
+$ bash -c ls -la '/Volumes/<vault>/XCodeVault/E14bSet' 2>&1 | head -5
+ls: /Volumes/<vault>/XCodeVault/E14bSet: No such file or directory
+[exit=0]
+
+## post-cleanup: any device set left anywhere on the volume?
+$ bash -c find '/Volumes/<vault>' -maxdepth 4 -name device_set.plist 2>/dev/null | head
+[exit=0]
+

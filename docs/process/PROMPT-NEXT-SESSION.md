@@ -25,7 +25,41 @@ Projeto em `~/projects/XCodeVault`. Responda em português; arquivos e commits e
 
 Não releia o resto de `docs/research`.
 
-## Prioridade 1 — E14b fases **2–3** (o portão que mata o H12)
+## Prioridade 1 — o controle interno do E14b (uma linha de comando, ~1 min)
+
+> **2026-09-15, segunda rodada:** o E14b rodou com o harness corrigido e **a fase 2 falhou** —
+> `simctl --set <vault> create` sai 22. **O arquivo de evidência do run só contém isso**: o harness
+> só capturava log em falha de fase 3/4. O mecanismo foi lido do `CoreSimulator.log` à mão, depois,
+> e está em `evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` com cabeçalho de proveniência — cite esse arquivo, não o run.
+> Ele mostra o CoreSimulatorService falhando ao copiar o conteúdo inicial para `<set>/<UDID>/data`
+> com `NSPOSIXErrorDomain Code=1`, EPERM. Isso exclui **uma** alternativa — os bits de permissão do
+> diretório, já que o script escreveu `.xcv-e14b` ali no passo anterior como o mesmo usuário — e só
+> ela: uma cópia de conteúdo inicial também move xattrs, ACLs e flags.
+>
+> **A captura de log unificado não está vazia — e nomeia o mecanismo.** Uma consulta manual minha
+> devolveu vazio e eu quase publiquei isso; a captura no formato do harness mostra três consultas
+> do `tccd` a `service=kTCCServiceSystemPolicyRemovableVolumes` atribuídas ao CoreSimulatorService
+> e um `deny(1) file-write-create` do kernel sobre o path do set, 40 ms antes do erro
+> (`evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`). O E2 nunca conseguiu nomear o mecanismo. **O que isso autoriza sobre o H6
+> ficou explicitamente em aberto** — rode o controle primeiro, e decida depois, em passo separado.
+>
+> **Rode isto antes de qualquer outra coisa.** Ele decide se o achado é sobre o volume (H6) ou
+> sobre sets alternativos em geral — e, no segundo caso, se o harness está errado pela terceira
+> vez. Sem ele, não cite o resultado da fase 2 em nenhuma direção.
+>
+> ```
+> scripts/experiments/e14b-control-internal-create.sh --i-understand
+> ```
+>
+> Cria `XCV-E14b-ctl` num set `mktemp` interno, apaga tudo que criou, nunca toca `/Volumes` nem o
+> set padrão. Se ele **criar**, o defeito é da **classe do volume** — e só isso: o set do controle é
+> interno, case-insensitive, no volume de boot, com opções de mount padrão, enquanto o vault difere
+> em removibilidade, case sensitivity, opções de mount e barramento **ao mesmo tempo**. Isso é
+> consistente com H6 e **não é** uma segunda reprodução dele; para chegar lá é preciso um
+> experimento que varie um fator por vez. Se ele **não criar**, o achado da fase 2 não é sobre
+> armazenamento externo e a pergunta muda de assunto.
+
+## Prioridade 2 — E14b fase 3, se o controle deixar ela existir
 
 > **Atualizado 2026-09-15.** O script já rodou uma vez e **não produziu veredito**. Ele abortou na
 > fase 1 por um portão errado dele mesmo — exigia `device_set.plist` depois de um `list` puro, e

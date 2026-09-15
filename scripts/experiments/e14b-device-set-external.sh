@@ -86,6 +86,7 @@ if [ -z "$VOLUME_UUID" ]; then
 fi
 
 OUT="$XCV_EVIDENCE_DIR/e14b-device-set-external-$(xcv_env_slug).txt"
+xcv_rotate_out "$OUT" || exit 2
 DEFAULT_SET="$HOME/Library/Developer/CoreSimulator/Devices"
 
 # The main body runs inside a pipeline, hence in a subshell: a UDID assigned there is invisible
@@ -231,7 +232,9 @@ trap 'cleanup 2>&1 | xcv_redact >> "$OUT"' INT TERM
   RUNTIME="${XCV_RUNTIME:-$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; rs=[r for r in json.load(sys.stdin)["runtimes"] if r["isAvailable"]]; print(rs[0]["identifier"] if rs else "")')}"
   echo "# device type: $DEVTYPE"
   echo "# runtime:     $RUNTIME"
-  xcv_run "create" bash -c "xcrun simctl --set '$SET_PATH' create XCV-E14b '$DEVTYPE' '$RUNTIME'"
+  # No `bash -c`: DEVTYPE and RUNTIME come from the environment, and interpolating them into a
+  # shell string lets a crafted value run arbitrary simctl against the DEFAULT set.
+  xcv_run "create" xcrun simctl --set "$SET_PATH" create XCV-E14b "$DEVTYPE" "$RUNTIME"
   UDID=$(xcrun simctl --set "$SET_PATH" list devices -j 2>/dev/null | python3 -c \
     'import json,sys
 d=json.load(sys.stdin)["devices"]
@@ -242,6 +245,18 @@ print(next((x["udid"] for v in d.values() for x in v if x["name"]=="XCV-E14b"), 
   printf '%s' "$UDID" > "$STATE"
   if [ -z "$UDID" ]; then
     echo "!! phase 2 FAILED — device not created on the external volume."
+    # Capture the reason HERE. EXPERIMENTS.md specified log capture on a phase 3/4 failure only,
+    # so the 2026-09-15 phase-2 failure recorded nothing but `code=22` and its mechanism had to be
+    # read out of band afterwards — which then got cited as if the run had sourced it.
+    echo "   Capture the reason before cleanup:"
+    xcv_run "CoreSimulator.log around the failure" bash -c \
+      "grep -a -E 'E14bSet|XCV-E14b|stuck in creation' ~/Library/Logs/CoreSimulator/CoreSimulator.log | tail -20"
+    xcv_run "unified log: TCC / Sandbox / the set path" bash -c \
+      "log show --last 10m --predicate 'subsystem == \"com.apple.TCC\" OR senderImagePath CONTAINS \"Sandbox\" OR eventMessage CONTAINS \"E14bSet\"' --style compact 2>/dev/null | tail -60"
+    # tail, not head: the failure is the newest event in the window. Measured 2026-09-15, this
+    # predicate over --last 10m returns ~1000 lines, so `head` would capture only tccd noise
+    # from the start of the window and miss the deny line entirely.
+    echo "   (an empty unified-log result is what E2 recorded too; record it, do not retry)"
     cleanup; exit 1
   fi
 

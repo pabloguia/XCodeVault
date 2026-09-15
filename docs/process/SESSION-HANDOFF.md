@@ -56,7 +56,26 @@ Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b fases **2–3** — rodado uma vez em 2026-09-15, **sem veredito**
+### 2. E14b — fase 2 falhou em 2026-09-15; o controle interno é o próximo passo
+
+`scripts/experiments/e14b-control-internal-create.sh --i-understand` — ~1 min, sem sudo, set
+`mktemp` interno, nunca toca `/Volumes` nem o set padrão. É ele que decide a leitura do achado
+abaixo. Rode antes de tudo.
+
+A fase 2 do E14b falhou no vault: `create` sai 22. **O arquivo de evidência do run só contém
+isso** — o harness só capturava log em falha de fase 3/4. O mecanismo foi lido à mão do
+`CoreSimulator.log` e está em `evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`, com proveniência declarada: o CoreSimulatorService
+falha ao copiar o conteúdo inicial para `<set>/<UDID>/data` com `NSPOSIXErrorDomain Code=1` (EPERM,
+não EACCES) e destrói o device meio-criado. Isso exclui os bits de permissão do diretório — o
+script escreveu ali no passo anterior, como o mesmo usuário — e nada além disso. A captura de log unificado **não** está
+vazia, e diferente do E2 ela **nomeia o mecanismo**: três consultas do `tccd` a
+`service=kTCCServiceSystemPolicyRemovableVolumes` atribuídas ao CoreSimulatorService, e um
+`deny(1) file-write-create` do kernel sobre o path do set, milissegundos antes da falha
+(`evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`). O que isso autoriza concluir sobre o H6 **não** foi decidido — é uma
+observação, um volume, uma máquina, controle ainda não rodado. **A fase 3, o portão de boot,
+nunca foi alcançada.**
+
+#### Histórico da primeira tentativa (void)
 
 `scripts/experiments/e14b-device-set-external.sh` rodou e abortou na fase 1, por um portão errado
 dele mesmo: exigia `device_set.plist` depois de um `list` puro, e esse arquivo só nasce no primeiro

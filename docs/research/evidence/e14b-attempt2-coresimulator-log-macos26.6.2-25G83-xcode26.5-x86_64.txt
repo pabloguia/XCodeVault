@@ -1,0 +1,81 @@
+# Experiment: E14b attempt 2 — CoreSimulator.log around the phase-2 create failure
+# Date: 2026-09-15T16:55:32Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# PROVENANCE — read this before citing anything below.
+#   This capture was taken BY HAND after the run, not by the experiment harness.
+#   e14b-device-set-external.sh only captures logs when phase 3 or 4 fails
+#   (EXPERIMENTS.md specifies it there); the phase-2 failure path goes straight to
+#   cleanup. So the attempt-2 evidence file records only 'code=22' and the mechanism
+#   below was NOT sourced by the run that is being documented. The script has since
+#   been given a phase-2 capture so the next run sources itself.
+#   Source: ~/Library/Logs/CoreSimulator/CoreSimulator.log, grepped for the probe's
+#   set path and UDID. Run timestamp 2026-09-15T16:49:15Z (13:49 local).
+
+## grep 'E14bSet|XCV-E14b|stuck in creation' — full matching window
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: Error copying sample content to path /Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C/data : Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: Failed to re-create device that was encountered in the creation state (XCV-E14b (B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, iOS 26.5, Creating)): Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: New device is stuck in creation state, deleting: XCV-E14b (B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, iOS 26.5, Creating)
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: Error Domain=NSPOSIXErrorDomain Code=22 "Invalid argument" UserInfo={NSLocalizedFailureReason=Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.}
+Sep 15 13:49:25 MacBookPro CoreSimulatorService[9381] <Error>: Error Domain=NSPOSIXErrorDomain Code=22 "Invalid argument" UserInfo={NSLocalizedFailureReason=Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.}
+Sep 15 13:49:25 MacBookPro com.apple.CoreSimulator.simctl[37524] <Error>: ERROR creating device: Error Domain=NSPOSIXErrorDomain Code=22 "Invalid argument" UserInfo={NSLocalizedFailureReason=Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.}
+Sep 15 13:49:25 MacBookPro com.apple.CoreSimulator.simctl[37524] <Error>: Error Domain=NSPOSIXErrorDomain Code=22 "Invalid argument" UserInfo={NSLocalizedFailureReason=Device was allocated but was stuck in creation state.  Check CoreSimulator.log for more information.}
+[grep exit=0]
+
+## unified log: TCC / Sandbox / any message naming the set path
+$ log show --last 45m --predicate 'subsystem == "com.apple.TCC" OR senderImagePath CONTAINS "Sandbox" OR eventMessage CONTAINS "E14bSet"'
+2026-09-15 13:49:25.648 Df tccd[227:858be] [com.apple.TCC:access] AUTHREQ_ATTRIBUTION: msgID=179.349, attribution={accessing={TCCDProcess: identifier=com.apple.CoreSimulator.CoreSimulatorService, pid=9381, auid=501, euid=501, binary_path=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService}, requesting={TCCDProcess: identifier=com.apple.sandboxd, pid=179, auid=0, euid=0, binary_path=/usr/libexec/sandboxd}, },
+2026-09-15 13:49:25.658 Df tccd[227:858be] [com.apple.TCC:access] AUTHREQ_SUBJECT: msgID=179.349, subject=com.apple.CoreSimulator.CoreSimulatorService,
+2026-09-15 13:49:25.659 E  tccd[227:86ae0] [com.apple.TCC:access] Failed to create LSApplicationRecord for file:///Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/: 'The operation couldn’t be completed. (OSStatus error -10811.)'
+2026-09-15 13:49:25.660 Df tccd[227:858be] [com.apple.TCC:access] -[TCCDAccessIdentity staticCode]: static code for: identifier com.apple.CoreSimulator.CoreSimulatorService, type: 0: 0x7ff27aae7e40 at /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc
+2026-09-15 13:49:25.670 Df tccd[640:86ae2] [com.apple.TCC:access] AUTHREQ_CTX: msgID=179.350, function=TCCAccessRequest, service=kTCCServiceSystemPolicyRemovableVolumes, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>
+2026-09-15 13:49:25.670 Df tccd[640:86ae2] [com.apple.TCC:access] AUTHREQ_ATTRIBUTION: msgID=179.350, attribution={accessing={TCCDProcess: identifier=com.apple.CoreSimulator.CoreSimulatorService, pid=9381, auid=501, euid=501, binary_path=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService}, requesting={TCCDProcess: identifier=com.apple.sandboxd, pid=179, auid=0, euid=0, binary_path=/usr/libexec/sandboxd}, },
+2026-09-15 13:49:25.680 Df tccd[640:86ae2] [com.apple.TCC:access] AUTHREQ_SUBJECT: msgID=179.350, subject=com.apple.CoreSimulator.CoreSimulatorService,
+2026-09-15 13:49:25.681 Df tccd[640:86ae2] [com.apple.TCC:access] -[TCCDAccessIdentity staticCode]: static code for: identifier com.apple.CoreSimulator.CoreSimulatorService, type: 0: 0x7f99612e9de0 at /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc
+2026-09-15 13:49:25.687 E  kernel[0:83abf] [com.apple.sandbox.reporting:violation] System Policy: com.apple.CoreSimulator.CoreSimu(9381) deny(1) file-write-create /Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C
+2026-09-15 13:49:25.694 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_CTX: msgID=179.351, function=TCCAccessRequest, service=kTCCServiceSystemPolicyRemovableVolumes, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>
+2026-09-15 13:49:25.694 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_ATTRIBUTION: msgID=179.351, attribution={accessing={TCCDProcess: identifier=com.apple.CoreSimulator.CoreSimulatorService, pid=9381, auid=501, euid=501, binary_path=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService}, requesting={TCCDProcess: identifier=com.apple.sandboxd, pid=179, auid=0, euid=0, binary_path=/usr/libexec/sandboxd}, },
+2026-09-15 13:49:25.700 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_SUBJECT: msgID=179.351, subject=com.apple.CoreSimulator.CoreSimulatorService,
+2026-09-15 13:49:25.701 Df tccd[640:860e8] [com.apple.TCC:access] -[TCCDAccessIdentity staticCode]: static code for: identifier com.apple.CoreSimulator.CoreSimulatorService, type: 0: 0x7f9964483b80 at /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc
+2026-09-15 13:49:25.707 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_CTX: msgID=179.352, function=TCCAccessRequest, service=kTCCServiceSystemPolicyRemovableVolumes, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>
+2026-09-15 13:49:25.707 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_ATTRIBUTION: msgID=179.352, attribution={accessing={TCCDProcess: identifier=com.apple.CoreSimulator.CoreSimulatorService, pid=9381, auid=501, euid=501, binary_path=/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService}, requesting={TCCDProcess: identifier=com.apple.sandboxd, pid=179, auid=0, euid=0, binary_path=/usr/libexec/sandboxd}, },
+2026-09-15 13:49:25.712 Df tccd[640:860e8] [com.apple.TCC:access] AUTHREQ_SUBJECT: msgID=179.352, subject=com.apple.CoreSimulator.CoreSimulatorService,
+2026-09-15 13:49:25.714 Df tccd[640:860e8] [com.apple.TCC:access] -[TCCDAccessIdentity staticCode]: static code for: identifier com.apple.CoreSimulator.CoreSimulatorService, type: 0: 0x7f9961273aa0 at /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc
+2026-09-15 13:49:25.725 Df com.apple.CoreSimulator.CoreSimulatorService[9381:86aec] Error copying sample content to path /Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C/data : Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+2026-09-15 13:49:25.727 Df com.apple.CoreSimulator.CoreSimulatorService[9381:86aec] Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+2026-09-15 13:49:25.729 Df com.apple.CoreSimulator.CoreSimulatorService[9381:83abf] Failed to re-create device that was encountered in the creation state (XCV-E14b (B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, iOS 26.5, Creating)): Error Domain=NSCocoaErrorDomain Code=513 "You don’t have permission to save the file “B9BD98EC-AB8C-4C93-B1C7-C32554EE429C” in the folder “E14bSet”." UserInfo={NSFilePath=/Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSURL=file:///Volumes/<vault>/XCodeVault/E14bSet/B9BD98EC-AB8C-4C93-B1C7-C32554EE429C, NSUnderlyingError=0x60000200ced0 {Error Domain=NSPOSIXErrorDomain Code=1 "Operation not permitted"}}
+(end of capture — NOT empty; see the correction below)
+
+# =====================================================================================
+# CORRECTION appended 2026-09-15, shortly after this file was written.
+# =====================================================================================
+# The boilerplate line above was printed by the capture script on the assumption that this
+# section would come back empty, as E2's did. It did not. The capture contains, within 80 ms
+# and in causal order:
+#   - three tccd AUTHREQ_CTX queries for service=kTCCServiceSystemPolicyRemovableVolumes,
+#     attributed to com.apple.CoreSimulator.CoreSimulatorService (pid 9381), requested by
+#     /usr/libexec/sandboxd;
+#   - a kernel sandbox violation: "System Policy: com.apple.CoreSimulator.CoreSimu(9381)
+#     deny(1) file-write-create /Volumes/<vault>/XCodeVault/E14bSet/<UDID>";
+#   - then the NSPOSIXErrorDomain Code=1 failure copying the device's sample content.
+#
+# An interactive `log show` run minutes earlier, with --style compact and an ad-hoc grep,
+# returned nothing for the same window, and the first draft of the documentation recorded
+# "TCC capture empty" on the strength of it. The harness-style capture is the reliable
+# instrument here; the ad-hoc one was not.
+#
+# What this does and does not settle is deliberately NOT decided in this file. It names a
+# mechanism, on one volume, on one machine, with the internal control still unrun.
+
+## the process that failed, and who it runs as
+## CoreSimulatorService identity
+$ bash -c ps -o user,pid,comm -p $(pgrep -f CoreSimulatorService.xpc | head -1)
+USER     PID COMM
+<user>  9381 /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService
+[exit=0]
+
