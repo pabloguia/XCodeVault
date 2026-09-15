@@ -56,11 +56,26 @@ Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b — fase 2 falhou em 2026-09-15; o controle interno é o próximo passo
+### 2. E14b — FECHADO em 2026-09-15. H12 falsificado para externo; o próximo é o E14c
 
-`scripts/experiments/e14b-control-internal-create.sh --i-understand` — ~1 min, sem sudo, set
-`mktemp` interno, nunca toca `/Volumes` nem o set padrão. É ele que decide a leitura do achado
-abaixo. Rode antes de tudo.
+`create` falha no vault e funciona num set alternativo **interno** (exit 0, container `data` de
+17 MB), com comandos idênticos. O mecanismo de set alternativo funciona; o volume é a variável.
+**H12 falsificado para armazenamento externo**, fase 3 inalcançável, E15 deixou de gatilhar decisão
+de v1. Evidência: `evidence/e14b-control-internal-create-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
+O H6 ganhou a **segunda reprodução independente, com mecanismo nomeado**: `tccd` consultado 3× para
+`kTCCServiceSystemPolicyRemovableVolumes` sobre o CoreSimulatorService, `deny(1) file-write-create`
+do kernel, depois EPERM — sem `xctest` em lugar nenhum. Continua **probable**: uma máquina, um
+dispositivo físico.
+
+**Próximo: E14c**, que isola removibilidade — repetir o `create` dentro de uma imagem APFS
+case-sensitive guardada no vault. O E2 já mostrou que imagens não reproduzem a falha dele nem com o
+arquivo da imagem no SSD USB. Não escrito; scratch-only, sem sudo.
+
+#### Histórico (o caminho até aqui)
+
+*(Tudo abaixo é registro do caminho até o resultado acima. **Não há nada aqui para rodar** — o
+controle `e14b-control-internal-create.sh` já rodou e está fechado.)*
 
 A fase 2 do E14b falhou no vault: `create` sai 22. **O arquivo de evidência do run só contém
 isso** — o harness só capturava log em falha de fase 3/4. O mecanismo foi lido à mão do

@@ -562,12 +562,39 @@ those entries "pending — manual" until someone actually runs and records the r
 - Verdict: **H12 not yet falsified, but its first real gate failed.** Falsification waits on the
   internal control, because reading B would mean the observation is not about external storage.
 
+### E14b control — `create` in an alternate set on the INTERNAL disk — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date: 2026-09-15. Hypothesis: H12 (decides it), H6 (corroborates).
+- Test: `scripts/experiments/e14b-control-internal-create.sh --i-understand`. Identical device
+  type and runtime to the E14b phase-2 failure, identical commands, on a `mktemp` set the script
+  asserts is on the boot volume.
+- **Result: CREATED, exit 0**, UDID recorded, and the `<UDID>/data` container — the "sample
+  content" whose copy the vault refused — was written at **17 MB**.
+- **Verdict on the pair: alternate device sets work as a mechanism; the volume is the variable.**
+  Same commands, same runtime: fails externally, succeeds internally. **H12 is falsified for
+  external storage**, and phase 3 is moot — a device that cannot be created cannot be booted.
+  E15 (the transparency half) is moot with it for a v1 product.
+- **What it does not isolate.** The control's set is internal, case-insensitive, on the boot
+  volume with default mount options; the vault is external, Case-sensitive APFS, `nodev,nosuid`,
+  USB. This narrows the cause to *volume class* by experiment. Removability is implicated by the
+  log rather than by the design: `tccd` was queried three times for
+  `kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService immediately before the
+  kernel denied the write, and neither case sensitivity nor mount flags explain a
+  removable-volumes policy being consulted. See E14c below for the clean isolation.
+- Accounting: default set 10G before and after, all three user devices present and `Shutdown` in
+  both captures, zero devices remaining in the control set, set removed. The `shutdown` step
+  returned 149 — benign, the probe was created and never booted.
+- Evidence: `../research/evidence/e14b-control-internal-create-macos26.6.2-25G83-xcode26.5-x86_64.txt`, with
+  `../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` for the mechanism.
+
 ### Pending — added 2026-09-09
 
 | Experiment | Gates | Status |
 |---|---|---|
-| E14b device set on an external volume | H12 (kill gate), H6 | **phase 2 failed 2026-09-15** — `create` cannot populate the device's data container on the vault (EPERM); phase 3 unreached. Attempt 1 was void (harness defect). Mutating, unprivileged |
-| E14b control — `create` in an internal alternate set | H12, H6 | **pending, written** — `scripts/experiments/e14b-control-internal-create.sh`. Decides whether the phase-2 failure is about the volume or about alternate sets. Mutating (temp dir + one device), unprivileged |
+| E14b device set on an external volume | H12 (kill gate), H6 | **done 2026-09-15 — H12 falsified for external storage.** `create` cannot populate the device's data container on the vault; the internal control creates it fine. Phase 3 unreachable |
+| E14b control — `create` in an internal alternate set | H12, H6 | **done 2026-09-15 — created, exit 0.** The mechanism works; the volume is the variable |
+| E14c `create` against a case-sensitive APFS disk image **stored on the vault** | H6 (isolates removability) | **pending — not written.** E2 already showed disk images do not reproduce its failure even with the image file on the USB SSD. If device creation succeeds inside such an image, removability is isolated from case sensitivity, from path, and from the physical device holding the bytes — which is what H6 needs to move past *probable*. Scratch-only (`hdiutil create -fs APFS`), unprivileged |
+| E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |

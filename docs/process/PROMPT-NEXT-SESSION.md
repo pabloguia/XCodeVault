@@ -25,7 +25,31 @@ Projeto em `~/projects/XCodeVault`. Responda em português; arquivos e commits e
 
 Não releia o resto de `docs/research`.
 
-## Prioridade 1 — o controle interno do E14b (uma linha de comando, ~1 min)
+## Prioridade 1 — E14c: isolar removibilidade com uma imagem de disco no vault
+
+> **2026-09-15, fechado:** o E14b e seu controle rodaram. `create` **falha** no vault e
+> **funciona** (exit 0, container `data` de 17 MB) num set alternativo interno, com comandos
+> idênticos. **H12 está falsificado para armazenamento externo**; a fase 3 é inalcançável e o E15
+> deixou de decidir qualquer coisa de v1. Evidência: `evidence/e14b-control-internal-create-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+>
+> E o H6 ganhou a segunda reprodução independente **com o mecanismo nomeado pela primeira vez**:
+> `tccd` consultado 3× para `kTCCServiceSystemPolicyRemovableVolumes` sobre o CoreSimulatorService,
+> depois `deny(1) file-write-create` do kernel sobre o path do set, depois o EPERM. O E2 nunca
+> conseguiu nomear isso. H6 continua **probable**, não verified — uma máquina, um dispositivo
+> físico.
+>
+> **O que falta é separar removibilidade das outras três diferenças.** O controle interno difere do
+> vault em case sensitivity, opções de mount, barramento *e* removibilidade ao mesmo tempo; quem
+> aponta para removibilidade é o log, não o desenho do experimento. O E2 já mostrou que **imagens
+> de disco não reproduzem a falha dele nem com o arquivo da imagem no SSD USB**. Então:
+>
+> **E14c — repetir o `create` dentro de uma imagem APFS case-sensitive guardada no vault.**
+> Se criar, removibilidade fica isolada de case sensitivity, de path, e do dispositivo físico que
+> guarda os bytes — que é exatamente o que falta para o H6 sair de *probable*. Não escrito ainda;
+> scratch-only (`hdiutil create -fs APFS`), sem sudo. Reaproveite o desenho do E2 e o harness do
+> `e14b-control-internal-create.sh`.
+
+## Já fechado — o controle interno do E14b (~1 min)
 
 > **2026-09-15, segunda rodada:** o E14b rodou com o harness corrigido e **a fase 2 falhou** —
 > `simctl --set <vault> create` sai 22. **O arquivo de evidência do run só contém isso**: o harness
@@ -43,13 +67,9 @@ Não releia o resto de `docs/research`.
 > (`evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`). O E2 nunca conseguiu nomear o mecanismo. **O que isso autoriza sobre o H6
 > ficou explicitamente em aberto** — rode o controle primeiro, e decida depois, em passo separado.
 >
-> **Rode isto antes de qualquer outra coisa.** Ele decide se o achado é sobre o volume (H6) ou
-> sobre sets alternativos em geral — e, no segundo caso, se o harness está errado pela terceira
-> vez. Sem ele, não cite o resultado da fase 2 em nenhuma direção.
->
-> ```
-> scripts/experiments/e14b-control-internal-create.sh --i-understand
-> ```
+> **Já rodado e fechado em 2026-09-15** (`scripts/experiments/e14b-control-internal-create.sh
+> --i-understand`). Ele decidia se o achado era sobre o volume ou sobre sets alternativos em geral;
+> a resposta foi o volume. Nada aqui para rodar de novo.
 >
 > Cria `XCV-E14b-ctl` num set `mktemp` interno, apaga tudo que criou, nunca toca `/Volumes` nem o
 > set padrão. Se ele **criar**, o defeito é da **classe do volume** — e só isso: o set do controle é
@@ -59,7 +79,7 @@ Não releia o resto de `docs/research`.
 > experimento que varie um fator por vez. Se ele **não criar**, o achado da fase 2 não é sobre
 > armazenamento externo e a pergunta muda de assunto.
 
-## Prioridade 2 — E14b fase 3, se o controle deixar ela existir
+## Já fechado — E14b fase 3 nunca será alcançada
 
 > **Atualizado 2026-09-15.** O script já rodou uma vez e **não produziu veredito**. Ele abortou na
 > fase 1 por um portão errado dele mesmo — exigia `device_set.plist` depois de um `list` puro, e
@@ -77,11 +97,13 @@ Não releia o resto de `docs/research`.
 > de path era textual, então `/Volumes/<vol>/../../Users/<você>/Library/Developer/CoreSimulator`
 > passava e teria apagado os seus três devices. **Não rode uma cópia antiga deste script.**
 
-`scripts/experiments/e14b-device-set-external.sh`, **corrigido, rodado uma vez sem veredito**.
-~15 min, sem sudo.
+`scripts/experiments/e14b-device-set-external.sh` rodou duas vezes e está encerrado: a fase 2
+falha no vault e a fase 3 é inalcançável. **Não há motivo para rodar de novo** — exceto se for para
+reproduzir o achado noutra máquina ou noutro dispositivo físico, que é justamente o que falta para
+o H6. Nesse caso:
 
 ```
-scripts/experiments/e14b-device-set-external.sh /Volumes/<vault>/XCodeVault/E14bSet --i-understand
+scripts/experiments/e14b-device-set-external.sh /Volumes/<outro-vault>/E14bSet --i-understand
 ```
 
 Leia o script inteiro antes. Ele escreve **somente** sob o `--set` que você passa, e toda invocação

@@ -1171,3 +1171,34 @@ branch, which is only reachable when the set reports zero remaining devices rath
 return code says so, and both post-cleanup probes came back empty. The count itself was not
 printed, so that is read off the code path rather than the evidence — the script now echoes it. The run exited 1, and said so on stderr — before today it
 would have exited 0 and printed nothing but `wrote`.
+
+### The control: alternate device sets work, the vault is the variable
+
+`create` on an internal `mktemp` set: exit 0, and the `<UDID>/data` container the vault refused
+gets written, 17 MB of it. Same device type, same runtime, same commands as the run that failed.
+
+So H12 is falsified for external storage. Not "the gate failed" — falsified, with its own control.
+Phase 3 never needs running: a device that cannot be created cannot be booted, and E15's
+transparency question stops mattering for anything v1 decides.
+
+The more valuable half is H6. E2 hit this class of failure in September and its matrix entry still
+says "mechanism unnamed" after querying the same subsystems. This run names it: `tccd` queried three
+times for `kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService, then the kernel
+logging `deny(1) file-write-create` on the set path, then EPERM — eighty milliseconds, no `xctest`
+within a mile of it. Second independent reproduction, different subsystem, and the first sight of a
+removable-volumes policy actually being consulted.
+
+H6 stays **probable**. One physical device, one machine, same as E2's limit. And the control's own
+limit is worth being precise about rather than letting the good news paper over it: the internal set
+differs from the vault in case sensitivity, mount options, bus *and* removability at once, so the
+experiment narrows the cause to volume class and stops. What points at removability is the log, not
+the design. E14c is the clean isolation and it is cheap — repeat this create inside a case-sensitive
+APFS disk image stored on the vault. E2 already established that disk images do not reproduce its
+failure even with the image file sitting on the USB SSD, so a create that works inside one separates
+removability from case sensitivity, from path, and from the physical device holding the bytes.
+
+Session arithmetic worth keeping: this experiment produced its result on the third run. Run one was
+void on a gate I wrote wrong, run two hit the real failure, and the reading of run two survived only
+because a review caught me reporting the mechanism from a log the experiment never captured — and
+then reporting that same log as empty when it contained the answer. The finding is good. Nothing
+about how it was nearly reported was.

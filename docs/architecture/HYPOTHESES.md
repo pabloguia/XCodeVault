@@ -197,7 +197,20 @@ placing DerivedData on external storage, exactly as `NON_GOALS_AND_SAFETY.md` re
 Remaining unknowns: Apple Silicon, Thunderbolt NVMe, and whether the Xcode IDE's own test
 runner behaves like `xcodebuild`. Original framing kept below for the record.
 
-**Possible second instance, 2026-09-15, pending its control (E14b phase 2).** CoreSimulatorService
+**Second independent reproduction, 2026-09-15, with the mechanism named for the first time
+(E14b phase 2 + its control).** Status stays **probable**, not verified: this is still one
+physical device on one machine, which is the same limit E2 had. What is new is that the failure
+reproduced in a subsystem E2 never touched — CoreSimulator device creation, no `xctest`, no
+bundle loading — and that the log names the policy. E2's matrix entry reads "mechanism unnamed"
+after querying the same subsystems; here `tccd` is queried three times for
+`service=kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService, the kernel logs
+`deny(1) file-write-create` on the set path, and the copy then fails with EPERM. The internal
+control succeeded with identical commands, so the volume is the variable. To reach *verified*,
+H6 needs what it always needed — a second physical device, Apple Silicon, Thunderbolt — plus
+E14c, the case-sensitive-disk-image-on-the-vault test that would isolate removability from the
+other three differences. Original conditional framing kept below.
+
+**Original framing, written before the control ran:** CoreSimulatorService
 failed to populate a simulator device's data container on the USB vault with EPERM and an empty
 unified-log capture that, unlike E2's, is **not** silent: `tccd` queries
 `kTCCServiceSystemPolicyRemovableVolumes` for CoreSimulatorService and the kernel logs
@@ -390,6 +403,18 @@ consulted it. A service-level refusal of external storage, if one exists, would 
 `create` or `boot`. **Phases 2 and 3 have still never executed, so the H6 boot gate that
 decides H12 is unrun, and nothing has moved H12 in either direction.**
 
+**Status as of 2026-09-15: FALSIFIED for external storage, with the control run and the
+mechanism named.** `simctl --set <vault> create` fails; the identical command, same device type
+and same runtime, succeeds in an alternate set on the internal disk and writes the 17 MB `data`
+container the vault refused. Alternate device sets work as a mechanism — what does not work is
+putting one on this volume. Phase 3 is moot: a device that cannot be created cannot be booted,
+and H12's transparency half (E15) is moot with it for a v1 product. The scope of the
+falsification is one external volume on one machine; see the removability question below, which
+is now sharper rather than settled. Evidence:
+`../research/evidence/e14b-device-set-external-attempt2-macos26.6.2-25G83-xcode26.5-x86_64.txt` (external failure),
+`../research/evidence/e14b-control-internal-create-macos26.6.2-25G83-xcode26.5-x86_64.txt` (internal control),
+`../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` (mechanism).
+
 **2026-09-15, attempt 2 with the corrected harness: the first real gate failed.** Phase 2's
 `simctl --set <vault> create` exited 22. The mechanism is **not in the run's own evidence** —
 the harness captures logs only on a phase 3/4 failure, so phase 2 recorded `code=22` and nothing
@@ -408,9 +433,20 @@ kernel `deny(1) file-write-create` on the set path, then the `Code=1`. Evidence
 This is the shape H6 predicts, but it is **not yet H6's verdict**, and H12 is **not yet
 falsified**, because two readings survive: the volume is the problem (H6), or alternate device
 sets do not work this way at all — and the latter cannot be separated from "the harness is wrong
-a third time" without a control. And even reading (A) would only narrow the cause to *volume
-class*: the control's set is internal, case-insensitive and on the boot volume, while the vault
-differs in case sensitivity, mount options, removability and bus at once. `scripts/experiments/e14b-control-internal-create.sh` runs the
+a third time" without a control.
+
+**The control ran and settled it: reading (A).** `create` succeeded on an internal `mktemp` set,
+exit 0, and produced the 17 MB `data` container whose copy failed on the vault. So the mechanism
+is fine and the volume is not. That narrows the cause to *volume class* by experiment; it does not
+by itself isolate removability, because the two volumes differ in case sensitivity, mount options,
+bus and removability at once. What points at removability is the log rather than the design:
+`tccd` was queried for `kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService, three
+times, immediately before the kernel denied the write. That is a removability-specific policy
+being consulted, which case sensitivity and mount flags do not explain. **E14c would isolate it
+properly** — repeat this create against a case-sensitive APFS disk image *stored on the vault*.
+E2 already established that disk images do not reproduce its failure even when the image file
+itself sits on the USB SSD, so an image that permits device creation would separate removability
+from case sensitivity, from path, and from the physical device holding the bytes. `scripts/experiments/e14b-control-internal-create.sh` runs the
 identical create on an internal `mktemp` set and decides it. Written, not yet run. Phase 3, the
 boot gate, was never reached and is now moot unless the control reads (B).
 

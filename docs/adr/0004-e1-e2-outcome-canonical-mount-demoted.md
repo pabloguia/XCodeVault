@@ -82,3 +82,37 @@ Two things worth keeping from the same work: a byte-identical runtime image on a
 volume **does** keep a verifying seal (E4a), so the barrier is authorization rather than integrity;
 and the Runtime Library workflow (H4/E8) is not the pragmatic compromise it looked like when this
 ADR was written — it is the only door the system leaves open.
+
+## Addendum 2026-09-15 — the alternate device set is closed too, and H6 finally has a name
+
+E14b and its control settle the last candidate that could have moved CoreSimulator device storage
+to external media. `simctl --set <vault> create` fails: CoreSimulatorService allocates the device,
+cannot write its `<UDID>/data` container, and tears it down. The identical command — same device
+type, same runtime — succeeds in an alternate set on the internal disk and writes that container at
+17 MB. So the indirection works and the volume is the variable. **H12 is falsified for external
+storage**, its boot gate is unreachable, and E15's transparency question stops gating anything a v1
+product decides.
+
+This confirms the ADR rather than reversing it. The decision already put supported Apple mechanisms
+and disconnect safety first and left everything else in the R&D tier; one more R&D candidate has now
+been tested and closed, which is what that tier is for. No product behaviour changes.
+
+What is new, and worth more than the closure, is that the mechanism finally has a name. E2 reached
+the same class of failure and its matrix entry still reads "mechanism unnamed" after querying the
+same subsystems. Here the unified log shows `tccd` queried three times for
+`service=kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService, then the kernel
+logging `deny(1) file-write-create` on the set path, then the EPERM — in eighty milliseconds, on a
+code path with no `xctest` anywhere in it. That is a second independent reproduction of H6's shape
+in a different subsystem, and the first time a removable-volumes policy has been observed being
+consulted.
+
+H6 stays **probable**, not verified: still one physical device, one machine. The control narrows
+the cause to volume class by experiment; the TCC line is what points specifically at removability,
+and it arrived from the log rather than from the design. E14c would isolate it — repeat the create
+inside a case-sensitive APFS disk image stored on the vault, since E2 already showed disk images do
+not reproduce its failure even with the image file on the USB SSD. If device creation works there,
+removability is separated from case sensitivity, from path, and from the physical device holding
+the bytes.
+
+The user-facing consequence is unchanged but now better supported: the product warns before placing
+developer storage on external media, and it cannot offer to move the device set there at all.

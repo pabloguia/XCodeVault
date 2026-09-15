@@ -1,0 +1,88 @@
+# Experiment: E14b control — simctl create in an alternate device set on the INTERNAL disk
+# Date: 2026-09-15T21:09:23Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Control set path (internal, mktemp): /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg
+# Discriminates: external volume (H6) vs alternate device sets in general.
+
+## the control path is on the internal disk
+$ bash -c df -h '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg' | tail -1
+/dev/disk1s1   466Gi   426Gi    17Gi    97%    3.9M  175M    2%   /System/Volumes/Data
+[exit=0]
+
+## BASELINE default device set (must be unchanged at the end)
+$ bash -c xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## BASELINE default set size
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## create — identical device type and runtime to the E14b run that failed
+# device type: com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation
+# runtime:     com.apple.CoreSimulator.SimRuntime.iOS-26-5
+## create
+$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg create XCV-E14b-ctl com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation com.apple.CoreSimulator.SimRuntime.iOS-26-5
+AA624025-06AA-49DC-A69D-7F4B7B799E4F
+[exit=0]
+
+# probe UDID: AA624025-06AA-49DC-A69D-7F4B7B799E4F
+## verdict
+CREATED on the internal disk. The E14b phase-2 failure is therefore about the VOLUME
+CLASS, not about alternate device sets as a mechanism — reading A.
+This does NOT isolate removability: this set is internal, case-insensitive and on the
+boot volume, while the vault differs in all of those plus mount options and bus. It is
+consistent with H6 and is not yet a reproduction of it.
+## what the set looks like
+$ bash -c ls -la '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg'
+total 0
+drwx------@   3 <user>  staff     96 Sep 15 18:09 .
+drwx------@ 796 <user>  staff  25472 Sep 15 18:09 ..
+drwxr-xr-x@   4 <user>  staff    128 Sep 15 18:09 AA624025-06AA-49DC-A69D-7F4B7B799E4F
+[exit=0]
+
+## sample content that E14b could not copy
+$ bash -c du -sh '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg/AA624025-06AA-49DC-A69D-7F4B7B799E4F/data' 2>&1
+ 17M	/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg/AA624025-06AA-49DC-A69D-7F4B7B799E4F/data
+[exit=0]
+
+## accounting — the default set must be untouched
+## default set size (compare with baseline)
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## default set device list (compare with baseline)
+$ bash -c xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## cleanup
+## shutdown -> exit 149
+## delete   -> exit 0
+# set reports 0 remaining device(s)
+## remove control set
+$ rm -rf /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg
+[exit=0]
+
+## post-cleanup: anything left?
+$ bash -c ls -la '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg' 2>&1 | head -3
+ls: /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14b-ctl.H7zYEL9okg: No such file or directory
+[exit=0]
+
