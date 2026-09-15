@@ -1299,3 +1299,77 @@ it makes the predicate accept everything — and an earlier version of that comm
 equivalent, which was wrong about the half that matters.
 
 231 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-15 (later still) — the one verb with a manual page says no
+
+`simulatorLogStore` was the per-device regenerable that looked winnable. The other two have no
+narrow verb at all; this one has `man log`, which documents `log erase`, runnable inside a device
+through `simctl spawn`. The catalog reported it and offered nothing, with a note saying the honest
+thing: an unreproduced verb is not a product feature.
+
+E18 reproduced it. All three documented forms — `--all`, `--ttl`, and no argument — come back
+`Error from logd: Operation not permitted` inside a freshly booted throwaway device. The control
+that makes that a refusal rather than a miscall is `log stats` on the same device, which exits 0 and
+prints the archive summary: the binary spawns, runs, and reads the store. The daemon declines the
+erase specifically. The host's unified log has nothing to say about it, which is the third time this
+repo has watched a refusal leave no trace.
+
+So the category stays report-only and its note now says "tried" instead of "untried", which is the
+whole gain. `evidenceStatus` moves to verified, and the matrix entry spells out what that means
+here: established that no documented verb reclaims this storage on this combination, not that the
+bytes are reclaimable. Nothing in the product becomes offerable.
+
+One arm of the run was void and is recorded as void rather than folded into the result: an earlier
+pass sent `--ttl 1`, but `--ttl` takes no argument, so it exited 64 on usage. A script that miscalls
+a verb is not evidence about the verb, and reading the output rather than the exit code is what
+caught it — the same exit-1-looks-like-a-refusal trap as the rest of this session.
+
+**The near-miss is the part worth keeping.** This script exists to run a command that, without the
+`simctl spawn <udid>` in front of it, erases the user's own Mac system logs. Its header argues at
+length that the dangerous verb appears in exactly one guarded function. The first draft then
+contained:
+
+    echo "!! `log erase --all` failed inside the device. …"
+
+Backticks inside double quotes are command substitution. That line would have run the host-wide
+erase, from inside an error message, in the script whose entire safety case is that it cannot. It
+arrived through the part of the file that reads like prose, which is exactly where reviewing for it
+does not look. Five such lines were in that draft; two of them were the real command.
+
+`ExperimentScriptSafetyTests` now fails the build on an unescaped backtick in an `echo`, and on any
+`log erase` that is not on a line with `simctl … spawn`. It runs in `swift test`, which is this
+repo's commit gate, so it is checked on every commit rather than by intention. The red-run is a test
+now rather than a memory: the rules are fed both bug forms and asserted to fire.
+
+Review sharpened it twice. It had exempted `echo` lines from the `log erase` rule, which left
+`echo "!! $(log erase --all) failed"` — the identical hazard in the other substitution syntax —
+going straight through; the exemption is gone. And extending the backtick rule to cover `$( )`
+generally was the wrong fix, which the first attempt proved by going red on `echo "   $(du -shx …)"`
+across the whole harness: substitution in an echo is ordinary shell that nobody types by accident,
+while a backtick in prose is the accident itself. The two questions are now asked separately, and
+the reason is written at the rule so the next person does not re-merge them.
+
+That lint immediately found two things that were not mine: `e8c-import-roundtrip.sh` and
+`e9-symlink-coresimulator.sh` create and boot a device **in the default device set** — the one the
+user runs real test suites against — with no confirmation gate at all. Both now require
+`--i-understand` and print what to check first. `e9 restore` stays ungated on purpose, because a
+safety net must never be harder to reach than the thing it undoes — but the comment justifying that
+said it "does not touch a device", and review checked: it quits Simulator.app and sends `pkill -9`
+to CoreSimulatorService. Still ungated, correct reason, and the warning now says so.
+
+Review also caught the accounting. The block comparing the default device set against its baseline
+sat after the verdict's `exit 1`, so on the branch that is this experiment's actual outcome it never
+ran — and the matrix entry described the comparison as though it had. It lives in `cleanup()` now,
+which runs on every exit path, and the experiment was re-run so the cited evidence has both halves.
+"The user's devices were untouched" had been an argument from design; it is a measurement again.
+
+And `evidenceStatus` went to `.verified` and came back. It is printed verbatim in the
+`compatibility` table whenever a category is not experimental, so raising it flipped a user-visible
+column to "verified" on one machine, one runtime, one device type — which is what rule 10 exists to
+stop. The note and the evidence string carry the whole gain; the enum carried only the overclaim.
+
+Still unfixed and flagged rather than changed: `e8c` waits with `simctl bootstatus -b`, which E11
+recorded hanging on Data Migration. Changing how it waits would change what it measures, and its
+evidence is already recorded, so that is a decision rather than an edit.
+
+236 tests. `swift build` and `swift test` both exit 0.

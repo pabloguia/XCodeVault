@@ -171,9 +171,24 @@ restore() {
   echo "wrote $out"
 }
 
+# phase1/phase2 create and BOOT a probe device in the DEFAULT device set — the one the user runs
+# real test suites against — so they ask first.
+#
+# `restore` stays UNGATED, and deliberately: it is the safety net that undoes the symlink, and a
+# safety net must never be harder to reach than the thing it undoes. But it is not harmless, and an
+# earlier version of this comment wrongly said it "does not touch a device": it quits Simulator.app
+# and sends `pkill -9` to CoreSimulatorService, which every booted device depends on. Do not run it
+# against a live test rig.
 case "${1:-}" in
-  phase1) phase1 ;;
-  phase2) phase2 ;;
+  phase1|phase2)
+    if [ "${2:-}" != "--i-understand" ]; then
+      echo "usage: $0 {phase1|phase2} --i-understand" >&2
+      echo "  This boots a probe device in your DEFAULT device set. Check nothing is running first:" >&2
+      echo "    pgrep -fl xcodebuild; xcrun simctl list devices" >&2
+      exit 2
+    fi
+    "$1"
+    ;;
   restore) restore ;;
-  *) echo "usage: $0 {phase1|phase2|restore}" >&2; exit 2 ;;
+  *) echo "usage: $0 {phase1 --i-understand|phase2 --i-understand|restore}" >&2; exit 2 ;;
 esac

@@ -30,9 +30,11 @@ Não releia o resto de `docs/research`.
 O E14b e o E14c fecharam. **Não há experimento de armazenamento pronto para rodar**: o único que
 falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seção.
 
-1. **`log erase --all` via `simctl spawn`** dentro de um device. É o único dos três por-device com
-   verbo documentado estreito; reproduzi-lo transforma `simulatorLogStore` de reportado em
-   oferecível. Valor direto para o usuário.
+1. ~~**`log erase --all` via `simctl spawn`**~~ — **FEITO 2026-09-15, resposta negativa.** O E18
+   rodou as três formas documentadas (`--all`, `--ttl`, sem argumento) dentro de um device
+   descartável: todas devolvem `Error from logd: Operation not permitted`. O `log stats` no mesmo
+   device sai 0, então o binário roda e lê — é o `erase` que o daemon nega. `simulatorLogStore`
+   continua só-relatório, agora porque foi tentado. Ver a entrada E18 na matriz.
 2. ~~**Containment exato `<deviceSet>/<UDID>/<subpath>`**~~ — **FEITO 2026-09-15.** Ver a seção
    no `STATUS.md`. `StorageCategory.containsPath` é agora a única definição de "este path é esta
    categoria"; `PathSafety.requireContained` foi removido porque todo chamador dele passava

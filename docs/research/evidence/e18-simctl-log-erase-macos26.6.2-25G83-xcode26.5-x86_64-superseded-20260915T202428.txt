@@ -1,0 +1,168 @@
+# Experiment: E18 — simctl spawn <device> log erase --all against the simulated log store
+# Date: 2026-09-15T23:20:42Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Probe device set (internal, mktemp): /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo
+# Device type: com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation
+# Runtime:     com.apple.CoreSimulator.SimRuntime.iOS-26-5
+# Settle time before first measurement: 120s
+
+## phase 0 — baselines. The user's devices must be untouched at the end.
+## BASELINE default device set
+$ bash -c xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## BASELINE default set size
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## free space
+$ df -h /
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk1s4s1   466Gi    12Gi    14Gi    46%    459k  151M    0%   /
+[exit=0]
+
+## phase 1 — create and boot a throwaway device
+## create
+$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo create XCV-E18 com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation com.apple.CoreSimulator.SimRuntime.iOS-26-5
+52805869-4D1C-41DC-A8DD-B7011CEBBF0B
+[exit=0]
+
+# probe UDID: 52805869-4D1C-41DC-A8DD-B7011CEBBF0B
+## boot
+$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo boot 52805869-4D1C-41DC-A8DD-B7011CEBBF0B
+[exit=0]
+
+## poll for Booted (never bootstatus -b; E11 saw it hang on Data Migration)
+  t+10s state=Booted
+## phase 2 — let the device write logs, then measure
+# A freshly booted device has a small store. What this phase can establish is whether the
+# verb reclaims, not how much it reclaims on a device with months of logs on it.
+## log store BEFORE erase
+   9.1M	/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo/52805869-4D1C-41DC-A8DD-B7011CEBBF0B/data/var/db/diagnostics
+   151M	/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo/52805869-4D1C-41DC-A8DD-B7011CEBBF0B/data/var/db/uuidtext
+   total KiB: 164016
+
+## the log store is readable from inside the device
+$ bash -c xcrun simctl --set '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo' spawn '52805869-4D1C-41DC-A8DD-B7011CEBBF0B' log stats 2>&1 | head -20
+== archive =============================================================
+size:               2.420.355.880 bytes
+                    57.863.082 bytes (uncompressed)
+start:              Tue Sep 15 20:21:02 2026
+end:                Tue Sep 15 20:23:13 2026
+statedump:          122
+
+events:             [       total        log      trace   signpost       loss ]
+                    [     299.611    217.745          0     17.454          0 ]
+
+activity:           [      create transition     action ]
+                    [      64.282          0          0 ]
+
+log messages:       [     default       info      debug      error      fault ]
+                    [     132.726     40.780      3.423     13.181     45.089 ]
+
+ttl:                [        1day      3days      7days     14days     30days ]
+                    [         370      9.768     29.565     55.795        855 ]
+
+processes:          
+[exit=0]
+
+## phase 3 — the verb, and then the narrower forms of it
+# --all is what the catalog note names. If it is refused, try the bounded form before
+# concluding the category cannot be offered: a verb that trims by age would still be a
+# real remediation, just a smaller one.
+## log erase, inside device 52805869-4D1C-41DC-A8DD-B7011CEBBF0B
+$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo spawn 52805869-4D1C-41DC-A8DD-B7011CEBBF0B log erase --all
+Error from logd: Operation not permitted
+[exit=1]
+   (refused: --all)
+## log erase, inside device 52805869-4D1C-41DC-A8DD-B7011CEBBF0B
+$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo spawn 52805869-4D1C-41DC-A8DD-B7011CEBBF0B log erase --ttl 1
+Unused argument: 1
+Too many arguments to 'erase' verb
+usage: log erase [--all | --ttl]
+
+description:
+    Erase log data from the system store. Without arguments, only data from the
+    main (Persist) store will be erased.
+
+options:
+    --all                         Erase all log data
+    --ttl                         Erase log data marked with a time-to-live
+
+[exit=64]
+   (refused: --ttl 1)
+!! every erase form was refused inside the device. That is the answer: the verb the
+   catalog note points at does not work here, and simulatorLogStore stays report-only.
+## does the log binary work at all inside the device?
+$ bash -c xcrun simctl --set '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo' spawn '52805869-4D1C-41DC-A8DD-B7011CEBBF0B' log stats 2>&1 | head -5
+== archive =============================================================
+size:               2.420.969.672 bytes
+                    75.667.176 bytes (uncompressed)
+start:              Tue Sep 15 20:21:02 2026
+end:                Tue Sep 15 20:23:49 2026
+[exit=0]
+
+## host-side sandbox/TCC around the refusal
+$ bash -c log show --last 3m --predicate 'senderImagePath CONTAINS "Sandbox" OR eventMessage CONTAINS "logd"' --style compact 2>/dev/null | tail -30
+2026-09-15 20:23:59.183 E  kernel[0:187236] [com.apple.sandbox.reporting:violation] System Policy: kavd(366) deny(1) file-read-data /private/var/db/lockdown/00008150-000D44112190C01C.plist
+2026-09-15 20:23:59.501 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:23:59.501 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-09-15 20:23:59.502 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:04.520 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:04.520 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-09-15 20:24:04.521 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:09.491 E  kernel[0:187d90] [com.apple.sandbox.reporting:violation] Sandbox: parsecd(827) deny(1) mach-lookup com.apple.apsd
+2026-09-15 20:24:09.538 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:09.538 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-09-15 20:24:09.540 Df System Monitor[1023:27f0] [com.apple.cache_delete:client] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:09.614 Df deleted[698:189333] [com.apple.cache_delete:daemon] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:09.614 Df deleted[698:189333] [com.apple.cache_delete:daemon] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-09-15 20:24:09.615 Df deleted[698:189333] [com.apple.cache_delete:daemon] com.apple.logd.cachedelete : 0
+2026-09-15 20:24:09.615 Df deleted[698:189333] [com.apple.cache_delete:daemon] 	com.apple.logd.cachedelete : 0
+2026-09-15 20:24:10.654 Df log[52144:1893dc] [com.apple.log:] log run noninteractively, parent: 52143 (bash), args: 'log' 'show' '--last' '3m' '--predicate' 'senderImagePath CONTAINS "Sandbox" OR eventMessage CONTAINS "logd"' '--style' 'compact'
+2026-09-15 20:24:10.672 Df log[52144:1893dc] [com.apple.xpc:connection] [0x7fe3ab204d00] activating connection: mach=true listener=false peer=false name=com.apple.logd.admin
+2026-09-15 20:24:10.935 E  kernel[0:188db3] [com.apple.sandbox.reporting:violation] Sandbox: biomesyncd(51673) deny(1) file-read-data /Library/Preferences/com.apple.networkd.plist
+[exit=0]
+
+## log store after the refused erase
+    15M	/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo/52805869-4D1C-41DC-A8DD-B7011CEBBF0B/data/var/db/diagnostics
+   152M	/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo/52805869-4D1C-41DC-A8DD-B7011CEBBF0B/data/var/db/uuidtext
+   total KiB: 171604
+
+## cleanup
+## shutdown -> exit 0
+## delete   -> exit 0
+# set reports 0 remaining device(s)
+## remove probe set
+$ rm -rf /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo
+[exit=0]
+
+## post-cleanup: anything left?
+$ bash -c ls -la '/private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo' 2>&1 | head -3
+ls: /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e18.ofbcCJsZJo: No such file or directory
+[exit=0]
+

@@ -169,10 +169,15 @@ public enum StorageCatalog {
                 "The simulated OS's own unified-log datastore and the symbolication table that goes with it. Written continuously by a booted device, whether or not anyone reads it.",
             regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
-            evidence: "F18 (2026-09-09): 1.2 GB of `db/diagnostics` + 0.3 GB of `db/uuidtext` across three devices",
+            evidence: "F18 (2026-09-09): 1.2 GB of `db/diagnostics` + 0.3 GB of `db/uuidtext` across three devices; E18 (2026-09-15): the documented verb is refused inside a device",
+            // Stays .probable. E18 is one machine, one runtime, one device type — and this field is
+            // printed verbatim in the `compatibility` table (TextRenderer) whenever isExperimental
+            // is false, which it is here. Raising it would flip a user-visible column to "verified"
+            // on the strength of a single combination, which NON_GOALS_AND_SAFETY.md and rule 10
+            // both forbid. The gain from E18 is carried by the note and the evidence string.
             evidenceStatus: .probable,
             notes: [
-                "Reported, not cleaned — but for a different reason than the other two: here a documented narrower verb *does* exist. `man log` defines `log erase --all`, runnable inside a device with `simctl spawn`. We have not reproduced it (F18), and an unreproduced verb is not a product feature.",
+                "Reported, not cleaned — and since E18 that is measured rather than untried. `man log` defines `log erase`, runnable inside a device with `simctl spawn`, and the earlier version of this note said only that we had not reproduced it. We have now: on a throwaway booted device, all three documented forms — `--all`, `--ttl`, and no argument — returned `Error from logd: Operation not permitted`. `log stats` on the same device succeeded, so the binary runs and can read the store; it is the erase that the daemon refuses. There is no narrower verb left to try.",
                 "Deleting the datastore from the host instead of through `log` would be the same mistake as for MobileAsset: writing behind a daemon that holds the file open on a booted device.",
             ],
             perDeviceSubpaths: ["data/var/db/diagnostics", "data/var/db/uuidtext"], isBreakdownOf: "simulatorDevices"),

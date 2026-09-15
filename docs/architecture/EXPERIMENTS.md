@@ -340,6 +340,49 @@ than the one this experiment set out for. Record it separately rather than foldi
 Not varied by either arm, and still what H6 needs to finish: **bus**. A Thunderbolt enclosure
 would separate "physically removable" from "USB". Nothing here has done that.
 
+## E18 — does `log erase` inside a device reclaim the simulated log store? (decides `simulatorLogStore`)
+
+`scripts/experiments/e18-simctl-log-erase.sh --i-understand`. Mutating, unprivileged, ~5 min.
+**Run 2026-09-15. Answer: no, in every documented form.**
+
+`simulatorLogStore` was the one per-device regenerable with a documented narrow verb — `man log`
+defines `log erase`, runnable inside a device through `simctl spawn` — and the catalog said so
+while refusing to offer it, because an unreproduced verb is not a product feature. This reproduces
+it.
+
+**The dangerous command is the same command.** `log erase --all` on the HOST erases the user's own
+Mac system logs; the `simctl spawn <udid>` in front of it is the entire safety property. The script
+has exactly one function that invokes `log`, it refuses an empty UDID, and a test in the Swift suite
+(`ExperimentScriptSafetyTests`) fails the build if `log erase` ever appears on a line without
+`simctl … spawn`. That test exists because the first draft of this script contained
+`echo "!! ``log erase --all`` failed …"` — backticks inside double quotes are command substitution,
+so the line would have run the host-wide erase from inside an error message.
+
+Method: create a throwaway device in a `mktemp` device set on the internal disk (external fails at
+`create`, E14b), boot it, let it log for 120 s, measure `data/var/db/diagnostics` +
+`data/var/db/uuidtext`, run the erase inside the device, measure again, and check the device still
+works. Every simctl invocation carries `--set`, so the default device set is never addressed.
+
+Result: `--all`, `--ttl` and no-argument all return `Error from logd: Operation not permitted`
+(exit 1). `log stats` on the same device exits 0 and reports the archive, so the binary runs and can
+read the store — the daemon declines the erase specifically. No denial appeared in the last 30 lines
+of a host-side sandbox/logd capture, but that is a truncated tail of a noisy window and the guest's
+own log was never queried, so it resembles E2's and E14b's silence rather than being shown to be it.
+
+An earlier arm passed `--ttl 1`; `--ttl` takes no argument, so that was exit 64, a usage error, and
+proved nothing. It is recorded as a broken arm rather than a refusal — a script that miscalls the
+verb is not evidence about the verb.
+
+Incidental, and **speculation rather than a finding**: on this probe `db/uuidtext` dwarfed
+`db/diagnostics` — 152 MB vs 12 MB at the first measurement, 153 vs 15 three minutes later, and
+84 MB in an earlier run at the same point, so uuidtext was still filling and the number is a moving
+one. F18 measured the opposite ratio across three long-lived devices (1.2 GB diagnostics, 0.3 GB
+uuidtext). Comparing one throwaway iPhone SE on iOS 26.5 against three devices of unstated age and
+runtime, with no time series on either, does not establish that the symbolication table "dominates
+early and is overtaken later". It is a difference worth a real measurement some day.
+
+Evidence: `../research/evidence/e18-simctl-log-erase-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
 ## E15 — does `xcodebuild`/Xcode honour `DVTSimulatorSetLocation`? (gates H12's transparency half)
 
 `scripts/experiments/e15-ide-honours-device-set.sh --i-understand`. Uses an alternate set on the

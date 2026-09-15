@@ -132,9 +132,11 @@ behind:
   that preceded that decision.
 - `simulatorMobileAssets` — deleting the payloads would be a write behind `mobileassetd`'s own
   bookkeeping, the F16 mistake one layer in. No remediation offered.
-- `simulatorLogStore` — a documented narrower verb exists (`log erase --all` via `simctl spawn`) but
-  we have not reproduced it, and an unreproduced verb is not a product feature. No remediation
-  offered.
+- `simulatorLogStore` — a documented narrower verb exists (`log erase` via `simctl spawn`), and
+  E18 (2026-09-15) ran it: all three documented forms (`--all`, `--ttl`, no argument) are refused
+  inside a device with `Error from logd: Operation not permitted`, while `log stats` on the same
+  device succeeds. So the binary runs and reads; the daemon declines the erase. No remediation
+  offered — now because it was tried, not because it was untried.
 
 `remediationHint` being nil is deliberate and renders as no remediation at all: that is the honest
 rendering of not knowing, and it is never replaced by a plausible-sounding command we have not run.

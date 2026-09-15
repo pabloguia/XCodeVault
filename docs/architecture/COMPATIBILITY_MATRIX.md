@@ -659,6 +659,41 @@ those entries "pending — manual" until someone actually runs and records the r
   class" to "a real removable device rather than the removable *classification*" — but
   removability and bus are still confounded, so *verified* is not earned.
 
+### E18 `log erase` inside a device — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date: 2026-09-15. Category: `simulatorLogStore`, strategy `appleManaged` (report-only).
+- Test: `scripts/experiments/e18-simctl-log-erase.sh --i-understand`. Throwaway device in a
+  `mktemp` device set on the internal disk, booted, 120 s of logging, then the erase inside the
+  device via `simctl spawn`. Three forms tried, taken from the verb's own usage text.
+- **Result: refused, identically, in all three forms.** `log erase --all`, `log erase --ttl` and
+  `log erase` with no argument each returned `Error from logd: Operation not permitted`, exit 1.
+- **The control that makes it a refusal rather than a broken call:** `log stats` on the same device
+  exited 0 and printed the archive summary. The binary spawns, runs, and reads the store; the
+  daemon declines the erase.
+- **No denial appeared in the last 30 lines of a host-side sandbox/logd query**, which is weaker
+  than "the host log showed no denial" — the capture is `log show --last 3m … | tail -30` and those
+  30 lines are dominated by unrelated `cache_delete` and `dasd` traffic, including the query
+  observing itself. **The guest's own log was never examined**, and a denial issued by the simulated
+  logd would land there rather than on the host. It resembles the silence E2 and E14b recorded; it
+  is not established to be the same thing.
+- One arm was void and is recorded as such: an earlier run passed `--ttl 1`, but `--ttl` takes no
+  argument, so it exited 64 on usage and proved nothing about permission.
+- Accounting, and it took a review and a re-run to become true: the block that compares the default
+  device set to its baseline sat *after* the verdict's `exit 1`, so on the branch that is this
+  experiment's actual outcome it never ran — while an earlier version of this bullet described the
+  comparison as if it had. It now lives inside `cleanup()`, which runs on every exit path, and the
+  cited run has both halves: default set 10G at baseline and 10G after, the user's three devices
+  `Shutdown` in both captures, `XCV-E18` appearing only in the probe set's own `create` line and
+  never in the default-set listing, probe set removed and confirmed gone.
+- Evidence: `../research/evidence/e18-simctl-log-erase-macos26.6.2-25G83-xcode26.5-x86_64.txt` (two superseded
+  runs from the same afternoon are kept alongside it by the harness's rotation).
+- Verdict: **`simulatorLogStore` stays report-only, now because it was tried.** The category's
+  `evidenceStatus` moves to *verified* — meaning it is established that no documented verb reclaims
+  this storage on this combination, **not** that the bytes are reclaimable. Nothing in the product
+  becomes offerable.
+- Not established: whether a different runtime, a device booted for days, or root inside the device
+  behaves differently. The refusal was identical across three forms on one runtime.
+
 ### Pending — added 2026-09-09
 
 | Experiment | Gates | Status |

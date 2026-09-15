@@ -52,9 +52,10 @@ diziam saber e ambas foram derrubadas por remedir. Uma varredura em massa foi ob
 bootado por mais três horas, voltou a 2,0 GB sem varrer nada. Nenhuma das três categorias oferece
 remediação. O número sólido é o **crescimento**: ~2 GB/hora num loop de `xcodebuild test`. Ver F22.
 
-Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de um device. É o único
-dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
-em oferecível.
+~~Aberto: reproduzir `log erase --all` via `simctl spawn`~~ — **fechado 2026-09-15, negativo.** As
+três formas documentadas são recusadas pelo `logd` dentro do device (`Operation not permitted`),
+enquanto `log stats` no mesmo device funciona. As três categorias por-device seguem só-relatório, e
+agora nenhuma delas por falta de tentativa. Ver E18.
 
 ### 2. E14b e E14c — FECHADOS em 2026-09-15. Nada aqui para rodar
 
