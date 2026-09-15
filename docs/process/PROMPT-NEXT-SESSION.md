@@ -25,7 +25,38 @@ Projeto em `~/projects/XCodeVault`. Responda em português; arquivos e commits e
 
 Não releia o resto de `docs/research`.
 
-## Prioridade 1 — E14c: isolar removibilidade com uma imagem de disco no vault
+## Prioridade 1 — escolha entre três, todas destravadas
+
+O E14b e o E14c fecharam. **Não há experimento de armazenamento pronto para rodar**: o único que
+falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seção.
+
+1. **`log erase --all` via `simctl spawn`** dentro de um device. É o único dos três por-device com
+   verbo documentado estreito; reproduzi-lo transforma `simulatorLogStore` de reportado em
+   oferecível. Valor direto para o usuário.
+2. **Containment exato `<deviceSet>/<UDID>/<subpath>`** para as categorias por-device. Hoje
+   `pathTemplates.first!` **mente** para elas (é o source default em `M3Commands`) — isto é
+   correção de código, não feature, e não precisa de você nem de hardware.
+3. **E13** — `scripts/experiments/e13-dyld-cache-reboot.sh`, a sonda dos 2,48 GB de cache dyld
+   órfão. Só precisa que você reinicie a máquina em algum momento.
+
+**E14d, bloqueado por hardware:** `create` num volume externo **não-USB** (gaveta Thunderbolt ou
+NVMe). É o único confundidor que o E14c não conseguiu quebrar — todo volume externo já testado é
+USB, então "removível" e "USB" ainda são a mesma variável. Sem uma gaveta dessas, o H6 não sai de
+*probable*.
+
+## Já fechado — E14c: o que a restrição lê é o dispositivo, não o rótulo
+
+> **2026-09-15, rodado duas vezes, resultados idênticos.** Uma imagem APFS case-sensitive cujo
+> arquivo está no vault hospeda um device que o vault recusa. Mantidos iguais: case sensitivity,
+> `Device Location=External`, opções de mount (`nodev,nosuid,journaled` nos dois), o path sob
+> `/Volumes`, e o SSD físico que guarda os bytes. Variaram `Removable Media` e `Protocol`.
+>
+> **`Removable Media` sai por direção:** o volume que o macOS chama `Removable` é o que
+> **funciona**; o que ele chama `Fixed` é o que **falha**. Sobra `Protocol` — dispositivo real
+> contra virtual, que é a forma do E2 vista do outro lado. Evidência: `evidence/e14c-image-on-vault-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+>
+> A metade "não é o path" do H6 está estabelecida nesta máquina. A metade "é removibilidade" não —
+> e o motivo é o E14d acima.
 
 > **2026-09-15, fechado:** o E14b e seu controle rodaram. `create` **falha** no vault e
 > **funciona** (exit 0, container `data` de 17 MB) num set alternativo interno, com comandos
@@ -45,9 +76,9 @@ Não releia o resto de `docs/research`.
 >
 > **E14c — repetir o `create` dentro de uma imagem APFS case-sensitive guardada no vault.**
 > Se criar, removibilidade fica isolada de case sensitivity, de path, e do dispositivo físico que
-> guarda os bytes — que é exatamente o que falta para o H6 sair de *probable*. Não escrito ainda;
-> scratch-only (`hdiutil create -fs APFS`), sem sudo. Reaproveite o desenho do E2 e o harness do
-> `e14b-control-internal-create.sh`.
+> guarda os bytes. **Rodou em 2026-09-15 e não isolou removibilidade** — excluiu case sensitivity,
+> opções de mount e a classificação `External`, e deixou removibilidade confundida com barramento.
+> Ver a seção do E14c acima. Nada aqui para rodar.
 
 ## Já fechado — o controle interno do E14b (~1 min)
 
@@ -65,7 +96,8 @@ Não releia o resto de `docs/research`.
 > do `tccd` a `service=kTCCServiceSystemPolicyRemovableVolumes` atribuídas ao CoreSimulatorService
 > e um `deny(1) file-write-create` do kernel sobre o path do set, 40 ms antes do erro
 > (`evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`). O E2 nunca conseguiu nomear o mecanismo. **O que isso autoriza sobre o H6
-> ficou explicitamente em aberto** — rode o controle primeiro, e decida depois, em passo separado.
+> ficou explicitamente em aberto na época** — o controle rodou depois e decidiu: ver a seção do
+> E14c acima. Nada aqui para rodar.
 >
 > **Já rodado e fechado em 2026-09-15** (`scripts/experiments/e14b-control-internal-create.sh
 > --i-understand`). Ele decidia se o achado era sobre o volume ou sobre sets alternativos em geral;

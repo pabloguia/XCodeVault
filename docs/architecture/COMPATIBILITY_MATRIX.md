@@ -580,12 +580,84 @@ those entries "pending — manual" until someone actually runs and records the r
   log rather than by the design: `tccd` was queried three times for
   `kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService immediately before the
   kernel denied the write, and neither case sensitivity nor mount flags explain a
-  removable-volumes policy being consulted. See E14c below for the clean isolation.
+  removable-volumes policy being consulted. **Superseded:** E14c ran and did not isolate
+  removability — see its entry below. It narrowed the discriminator, and left removability and
+  bus confounded.
 - Accounting: default set 10G before and after, all three user devices present and `Shutdown` in
   both captures, zero devices remaining in the control set, set removed. The `shutdown` step
   returned 149 — benign, the probe was created and never booted.
 - Evidence: `../research/evidence/e14b-control-internal-create-macos26.6.2-25G83-xcode26.5-x86_64.txt`, with
   `../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` for the mechanism.
+
+### E14c disk image vs the external volume — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date: 2026-09-15. Hypothesis: H6. **Run twice — 17 minutes apart, same machine, same volume,
+  same script.** Identical property tables and verdicts (byte-identical from the phase-3 header
+  through the verdict). These are repeats, not independent replications.
+- **Neither E14c run re-measured the failing arm.** The contrast comes from E14b, roughly five
+  hours earlier, across an unrelated set of mounts. There is no concurrent negative control.
+- Test: `scripts/experiments/e14c-image-on-vault.sh /Volumes/<vault>/XCodeVault --i-understand`.
+  Two arms: a case-sensitive APFS sparse image on the internal disk (arm B, the control for the
+  control), then one whose image FILE is stored on the vault (arm A). Identical device type,
+  runtime and commands to the E14b create that failed.
+- **Arm B: CREATED.** Disk images host device sets, so arm A is interpretable. Without this the
+  null reading of arm A would have had two explanations and no way to choose.
+- **Arm A: CREATED**, while the identical create fails on the vault volume itself (E14b).
+- **Property table, computed by the script from both volumes in each run:**
+
+  | property | vault | image-on-vault | |
+  |---|---|---|---|
+  | File System Personality | Case-sensitive APFS | Case-sensitive APFS | held |
+  | Device Location | External | External | held |
+  | mount options | `nodev,nosuid,journaled` | `nodev,nosuid,journaled` | held, after normalizing¹ |
+  | Removable Media | Fixed | Removable | varied |
+  | Protocol | USB | Disk Image | varied |
+
+  ¹ As measured the image also carries `nobrowse` and `mounted by <user>`. The script strips
+  both before comparing. `-nobrowse` is a flag the script itself passed, so stripping it is fair;
+  **`mounted by <user>` is not** — it is the difference between a user-initiated `hdiutil attach`
+  and a system-mounted volume, which a policy could plausibly read. It is normalized away here
+  and named rather than hidden.
+
+  Held by construction rather than measurement: the bytes live on the vault's physical device,
+  and the set path is under `/Volumes` (the two paths themselves differ).
+- **`Removable Media` is not what TCC reads — and the evidence for that is E14b's log, not this
+  experiment's direction argument.** `../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt` shows `tccd` queried three
+  times for `service=kTCCServiceSystemPolicyRemovableVolumes` about a volume `diskutil` labels
+  `Removable Media: **Fixed**`. TCC's notion of "removable" is therefore already known not to be
+  that field, with no inference required.
+- **The direction argument is corroboration, not proof, and the first draft of this entry had it
+  the other way round.** It observed that the volume labelled `Removable` works while the one
+  labelled `Fixed` fails, and concluded a policy keyed on that field would have to be inverted.
+  That only follows if the policy was *evaluated* for the image volume and allowed — and **E14c
+  captured no TCC or sandbox logs in either run**; its only instruments were create-success and
+  `diskutil`. A restriction that short-circuits on "this is a disk image" and never reaches any
+  removability field explains the same data, and under it the image's label constrains nothing.
+  So "Protocol is the discriminator" and "direction excludes Removable Media" cannot both carry
+  weight; the first is the claim, the second is consistent with it.
+- **What survives: `Protocol` — a real device versus a virtual one.** Matches E2, whose xctest
+  failure also vanished inside images stored on this same SSD.
+- **Still not varied, and still what H6 needs to finish: bus.** A Thunderbolt enclosure would
+  separate "physically removable" from "USB". Nothing here has done that. Also untested:
+  Apple Silicon, a second physical device.
+- Accounting, **the deliberate run**: both probe sets reported 0 remaining devices, both images
+  detached and removed, nothing left attached, no `XCV-E14c` in the default set, default set 10G
+  before and after, and the user's three devices `Shutdown` in both the before and after captures
+  (two snapshots, not continuous observation).
+- The earlier run's own post-cleanup probe did **not** come back empty: it listed
+  `xcv-e14c-vault-78980.sparseimage`, 0 bytes — the decoy file from the mis-written guard test
+  that triggered that run, not an image the run created. It was removed by hand afterwards, which
+  is why the later independent check found the vault clean.
+- Evidence: `../research/evidence/e14c-image-on-vault-macos26.6.2-25G83-xcode26.5-x86_64.txt` (the deliberate run — cite this one),
+  `../research/evidence/e14c-image-on-vault-run1-unannounced-macos26.6.2-25G83-xcode26.5-x86_64.txt` (an earlier run that fired
+  unannounced through a mis-written test of the script's own guard; kept with a provenance note
+  because its measurement agreed, not as a citable result).
+- Verdict: **H6 stays *probable*, and is now much sharper.** Path-independence is established on
+  this combination by E14c's two runs, and is consistent with E2 — which tested a different
+  operation (xctest bundle loading, not device creation), so the two are corroborating rather
+  than cumulative. The mechanism is narrowed from "volume
+  class" to "a real removable device rather than the removable *classification*" — but
+  removability and bus are still confounded, so *verified* is not earned.
 
 ### Pending — added 2026-09-09
 
@@ -593,7 +665,8 @@ those entries "pending — manual" until someone actually runs and records the r
 |---|---|---|
 | E14b device set on an external volume | H12 (kill gate), H6 | **done 2026-09-15 — H12 falsified for external storage.** `create` cannot populate the device's data container on the vault; the internal control creates it fine. Phase 3 unreachable |
 | E14b control — `create` in an internal alternate set | H12, H6 | **done 2026-09-15 — created, exit 0.** The mechanism works; the volume is the variable |
-| E14c `create` against a case-sensitive APFS disk image **stored on the vault** | H6 (isolates removability) | **pending — not written.** E2 already showed disk images do not reproduce its failure even with the image file on the USB SSD. If device creation succeeds inside such an image, removability is isolated from case sensitivity, from path, and from the physical device holding the bytes — which is what H6 needs to move past *probable*. Scratch-only (`hdiutil create -fs APFS`), unprivileged |
+| E14c disk image vs the external volume | H6 | **done 2026-09-15, run twice.** Create works inside an image whose file is on the vault; fails on the vault volume itself. Narrows the discriminator to `Protocol` (real device vs virtual) |
+| E14d `create` on a **non-USB external** volume (Thunderbolt/NVMe enclosure) | H6 (separates removability from bus) | **pending — no hardware.** The one confound E14c could not break: every external volume tested so far is USB. Until this runs, "removable" and "USB" are the same variable here. Needs an enclosure the project does not have |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |

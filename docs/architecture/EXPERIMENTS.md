@@ -298,6 +298,48 @@ On failure at 3 or 4 the script captures `log show` for CoreSimulator/TCC/Sandbo
 cleaning up — E2 found nothing there, so an empty capture is itself the expected result and should
 be recorded rather than retried.
 
+## E14c — is it the physical removable device, or the removable *classification*? (narrows H6)
+
+`scripts/experiments/e14c-image-on-vault.sh <directory-on-the-vault> --i-understand`. Mutating,
+unprivileged. **Run twice on 2026-09-15 with identical results; see the matrix entry.** Both arms
+created their device, so the discriminator is among the varied properties — and `Removable Media`
+is excluded by direction, leaving `Protocol`.
+
+E14b showed `simctl create` failing on the vault and succeeding in an internal alternate set,
+with `tccd` queried for `kTCCServiceSystemPolicyRemovableVolumes` and the kernel denying
+`file-write-create`. But those two volumes differed in four ways at once, so the result narrowed
+to "volume class" and only the log pointed at removability. This narrows it further using E2's
+own trick — an APFS disk image — and it measures the properties rather than assuming them.
+
+**Measured while writing the script, and it killed the first two drafts.** An attached
+case-sensitive sparse image reports `Device Location: External`, `Removable Media: Removable`,
+`Protocol: Disk Image`, and mounts `nodev,nosuid` — while the vault reports `Device Location:
+External`, `Removable Media: **Fixed**`, `Protocol: USB`. So the image is not "the non-removable
+arm" the first draft assumed, and the two volumes do not agree on `Removable Media` the way the
+second draft assumed. Draft one would have declared every run inconclusive. Phase 3 now computes
+the held-equal and varied sets from both volumes at run time and phrases its verdict from them.
+
+Two arms, cheapest and most disqualifying first:
+
+1. **Arm B — image on the INTERNAL disk.** The control for the control. If `create` fails inside
+   a disk image here, images do not host device sets at all and arm A is uninterpretable; the
+   run stops and says so. Without this arm a null result in arm A has two readings and no way to
+   choose between them.
+2. **Arm A — image whose FILE lives on the vault.** The question. The bytes are on the USB
+   device, the path is under `/Volumes`, the filesystem is case-sensitive APFS, the mount carries
+   `nodev,nosuid` — and the volume is virtual rather than a real USB device.
+
+Reading the result: if arm A creates, the discriminator is among the varied properties and not
+among the held-equal ones, which on current measurements means a real removable device rather
+than the `External` classification both volumes carry — consistent with E2, whose failure also
+vanished inside images stored on that same USB SSD. If arm A fails, the discriminator is
+something both arms share, **and that diverges from E2** — device creation failing where bundle
+loading passed would mean the two restrictions are not one mechanism, which is a larger finding
+than the one this experiment set out for. Record it separately rather than folding it into H6.
+
+Not varied by either arm, and still what H6 needs to finish: **bus**. A Thunderbolt enclosure
+would separate "physically removable" from "USB". Nothing here has done that.
+
 ## E15 — does `xcodebuild`/Xcode honour `DVTSimulatorSetLocation`? (gates H12's transparency half)
 
 `scripts/experiments/e15-ide-honours-device-set.sh --i-understand`. Uses an alternate set on the

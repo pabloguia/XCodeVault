@@ -56,7 +56,23 @@ Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b — FECHADO em 2026-09-15. H12 falsificado para externo; o próximo é o E14c
+### 2. E14b e E14c — FECHADOS em 2026-09-15. Nada aqui para rodar
+
+**H12 falsificado para armazenamento externo:** `create` falha no vault e funciona num set
+alternativo interno, comandos idênticos. Fase 3 inalcançável, E15 sem efeito em decisão de v1.
+
+**E14c estreitou o H6, rodado duas vezes:** uma imagem APFS case-sensitive cujo arquivo está no
+vault hospeda o device que o vault recusa. Case sensitivity, `Device Location=External`, opções de
+mount, a *classe* de path (ambos sob `/Volumes`; os paths em si diferem) e o SSD físico todos
+mantidos iguais. `Removable Media` variou, mas ver a ressalva abaixo
+(o volume chamado `Removable` é o que funciona). Sobra `Protocol`: dispositivo real contra virtual.
+Evidência: `evidence/e14c-image-on-vault-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
+**O que falta para o H6 sair de *probable* precisa de hardware:** um externo **não-USB** (gaveta
+Thunderbolt/NVMe). Todo externo já testado é USB, então "removível" e "USB" continuam sendo a mesma
+variável. Isso é o E14d, e o projeto não tem a gaveta.
+
+#### Histórico (o caminho até aqui)
 
 `create` falha no vault e funciona num set alternativo **interno** (exit 0, container `data` de
 17 MB), com comandos idênticos. O mecanismo de set alternativo funciona; o volume é a variável.
@@ -67,12 +83,6 @@ O H6 ganhou a **segunda reprodução independente, com mecanismo nomeado**: `tcc
 `kTCCServiceSystemPolicyRemovableVolumes` sobre o CoreSimulatorService, `deny(1) file-write-create`
 do kernel, depois EPERM — sem `xctest` em lugar nenhum. Continua **probable**: uma máquina, um
 dispositivo físico.
-
-**Próximo: E14c**, que isola removibilidade — repetir o `create` dentro de uma imagem APFS
-case-sensitive guardada no vault. O E2 já mostrou que imagens não reproduzem a falha dele nem com o
-arquivo da imagem no SSD USB. Não escrito; scratch-only, sem sudo.
-
-#### Histórico (o caminho até aqui)
 
 *(Tudo abaixo é registro do caminho até o resultado acima. **Não há nada aqui para rodar** — o
 controle `e14b-control-internal-create.sh` já rodou e está fechado.)*

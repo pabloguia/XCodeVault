@@ -197,6 +197,31 @@ placing DerivedData on external storage, exactly as `NON_GOALS_AND_SAFETY.md` re
 Remaining unknowns: Apple Silicon, Thunderbolt NVMe, and whether the Xcode IDE's own test
 runner behaves like `xcodebuild`. Original framing kept below for the record.
 
+**Narrowed by E14c, 2026-09-15, run twice with identical results.** A case-sensitive APFS disk
+image whose FILE is stored on the vault hosts a device the vault itself refuses. The script
+computes the comparison rather than asserting it, and both runs came out the same: **held equal**
+were case sensitivity, `Device Location=External`, and the mount options (`nodev,nosuid,journaled`
+on both), plus — by construction — the physical device holding the bytes and the `/Volumes` path.
+**Varied** were `Removable Media` and `Protocol`.
+
+That TCC's "removable" is not DiskArbitration's `Removable Media` is already known from E14b's
+log, independently of this experiment: `tccd` queried
+`service=kTCCServiceSystemPolicyRemovableVolumes` about a volume `diskutil` labels **`Fixed`**
+(`../research/evidence/e14b-attempt2-coresimulator-log-macos26.6.2-25G83-xcode26.5-x86_64.txt`). E14c's own direction observation — the volume labelled `Removable`
+works, the one labelled `Fixed` fails — is consistent with that but does not prove it: it would
+only follow if the policy had been evaluated for the image volume and allowed, and **E14c captured
+no TCC logs in either run**. A restriction that short-circuits on "virtual device" before reaching
+any removability field fits the same data. What survives as the discriminator is `Protocol`: a
+real device versus a virtual one, which is also exactly E2's shape.
+
+So H6's "not by path" half is **established on this combination** — the same `/Volumes` path
+*class* (the two paths themselves differ: `…/XCodeVault/E14bSet` versus the image's mount point),
+same filesystem,
+same mount options, same physical medium, and the image works. Its "by removability" half is
+sharper but not isolated: **removability and bus are still the same variable here**, because every
+external volume tested has been USB. E14d — a Thunderbolt or NVMe enclosure — is what separates
+them, and the project has no such hardware. Evidence: `../research/evidence/e14c-image-on-vault-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+
 **Second independent reproduction, 2026-09-15, with the mechanism named for the first time
 (E14b phase 2 + its control).** Status stays **probable**, not verified: this is still one
 physical device on one machine, which is the same limit E2 had. What is new is that the failure
@@ -207,7 +232,8 @@ after querying the same subsystems; here `tccd` is queried three times for
 `deny(1) file-write-create` on the set path, and the copy then fails with EPERM. The internal
 control succeeded with identical commands, so the volume is the variable. To reach *verified*,
 H6 needs what it always needed — a second physical device, Apple Silicon, Thunderbolt — plus
-E14c, the case-sensitive-disk-image-on-the-vault test that would isolate removability from the
+E14c — which has since run and did **not** isolate removability, only narrowed it; see the
+paragraph above. It was expected to separate removability from the
 other three differences. Original conditional framing kept below.
 
 **Original framing, written before the control ran:** CoreSimulatorService
@@ -442,8 +468,9 @@ by itself isolate removability, because the two volumes differ in case sensitivi
 bus and removability at once. What points at removability is the log rather than the design:
 `tccd` was queried for `kTCCServiceSystemPolicyRemovableVolumes` about CoreSimulatorService, three
 times, immediately before the kernel denied the write. That is a removability-specific policy
-being consulted, which case sensitivity and mount flags do not explain. **E14c would isolate it
-properly** — repeat this create against a case-sensitive APFS disk image *stored on the vault*.
+being consulted, which case sensitivity and mount flags do not explain. **E14c has since run and
+did not isolate it** — it excluded case sensitivity, mount options and the `External`
+classification, and left removability confounded with bus. It was meant to work — repeat this create against a case-sensitive APFS disk image *stored on the vault*.
 E2 already established that disk images do not reproduce its failure even when the image file
 itself sits on the USB SSD, so an image that permits device creation would separate removability
 from case sensitivity, from path, and from the physical device holding the bytes. `scripts/experiments/e14b-control-internal-create.sh` runs the

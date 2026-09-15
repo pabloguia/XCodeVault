@@ -1192,7 +1192,8 @@ H6 stays **probable**. One physical device, one machine, same as E2's limit. And
 limit is worth being precise about rather than letting the good news paper over it: the internal set
 differs from the vault in case sensitivity, mount options, bus *and* removability at once, so the
 experiment narrows the cause to volume class and stops. What points at removability is the log, not
-the design. E14c is the clean isolation and it is cheap — repeat this create inside a case-sensitive
+the design. E14c was expected to be the clean isolation — it ran, and it was not; see the later
+section. It is cheap, and it repeats this create inside a case-sensitive
 APFS disk image stored on the vault. E2 already established that disk images do not reproduce its
 failure even with the image file sitting on the USB SSD, so a create that works inside one separates
 removability from case sensitivity, from path, and from the physical device holding the bytes.
@@ -1202,3 +1203,39 @@ void on a gate I wrote wrong, run two hit the real failure, and the reading of r
 because a review caught me reporting the mechanism from a log the experiment never captured — and
 then reporting that same log as empty when it contained the answer. The finding is good. Nothing
 about how it was nearly reported was.
+
+### E14c: the restriction reads the device, not the label macOS puts on it
+
+A case-sensitive APFS disk image whose file sits on the vault hosts a simulator device that the
+vault itself refuses. Same path under `/Volumes`, same filesystem, same `nodev,nosuid,journaled`,
+same `Device Location=External`, same physical SSD holding every byte. Two properties varied, and
+one of them falls over on inspection: the volume macOS labels `Removable Media: Removable` is the
+one that works, and the one it labels `Fixed` is the one that fails. A policy keyed on that field
+would have to run backwards. What is left is `Protocol` — a real device against a virtual one.
+
+That is the shape E2 saw and could not name, arrived at from the other direction, and it settles
+H6's "not by path" half on this machine: the path, the filesystem, the mount options and the medium
+were all held at the vault's values and it still worked.
+
+It does not settle the other half, and the reason is worth writing down rather than filing as a
+caveat. **Every external volume this project has tested is USB.** So "removable" and "USB" have
+never been separated, and E14c could not separate them either — it replaced a real device with a
+virtual one, which changes both at once. E14d is a Thunderbolt or NVMe enclosure, and the project
+does not own one. Until then, H6 stays probable and its mechanism clause should say "a real
+external device" rather than "removability", because removability is the word the TCC service uses
+and the measurement has now excluded the field that word names.
+
+Two runs, and the first one was an accident: a test of the script's own "refuse a pre-existing
+image" guard created a decoy named with the test shell's pid instead of the script's, so the guard
+had nothing to match and the experiment ran end to end — without the device being named in advance,
+which is the one rule this repo asks for before touching a simulator. Its evidence is kept, under
+its own name and with a provenance header, because the measurement agreed with the deliberate run
+that followed; it is not the file to cite. The guard was then tested properly, in isolation.
+
+The script itself went through a safety review that returned seven required changes, three of them
+the same defect class this session keeps producing: a header paragraph contradicting a measurement
+three lines above it, a verdict branch that dropped a varied property to reach its conclusion, and
+an INCONCLUSIVE gate that tested all four properties for equality when one of them differs by
+construction — a gate that could not fire, for the third time today. The rewrite computes its
+property sets at run time and phrases the verdict from them, so the next person to disagree with it
+can point at a table rather than at prose.

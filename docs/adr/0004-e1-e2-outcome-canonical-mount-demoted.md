@@ -108,7 +108,9 @@ consulted.
 
 H6 stays **probable**, not verified: still one physical device, one machine. The control narrows
 the cause to volume class by experiment; the TCC line is what points specifically at removability,
-and it arrived from the log rather than from the design. E14c would isolate it — repeat the create
+and it arrived from the log rather than from the design. E14c was expected to isolate it; it ran
+the same day and did not — see the 2026-09-15 (later) addendum below. The prediction is kept as
+written rather than edited. It read: E14c would isolate it — repeat the create
 inside a case-sensitive APFS disk image stored on the vault, since E2 already showed disk images do
 not reproduce its failure even with the image file on the USB SSD. If device creation works there,
 removability is separated from case sensitivity, from path, and from the physical device holding
@@ -116,3 +118,30 @@ the bytes.
 
 The user-facing consequence is unchanged but now better supported: the product warns before placing
 developer storage on external media, and it cannot offer to move the device set there at all.
+
+
+## Addendum 2026-09-15 (later) — E14c ran, and narrowed rather than isolated
+
+The prediction in the addendum above was wrong in its strength, and correcting it in place would
+have hidden what the prediction was. E14c ran twice. A case-sensitive APFS disk image whose file
+sits on the vault hosts a device the vault itself refuses, with case sensitivity, `Device
+Location=External`, mount options, the `/Volumes` path class and the physical SSD all held at the
+vault's values.
+
+What it bought: case sensitivity, mount options, the `External` classification and the medium
+holding the bytes are all excluded as the discriminator. What survives is `Protocol` — a real
+device against a virtual one.
+
+What it did **not** buy, and the reason H6 stays *probable*: **every external volume this project
+has tested is USB**, so removability and bus have never been separated, and replacing a real device
+with a virtual one changes both at once. That needs a Thunderbolt or NVMe enclosure (E14d), which
+the project does not own.
+
+One wording consequence for the product: H6's mechanism clause should say "a real external device"
+rather than "removability". The measurement has excluded the DiskArbitration field that the word
+names — E14b's log shows TCC querying `kTCCServiceSystemPolicyRemovableVolumes` about a volume
+`diskutil` labels `Removable Media: Fixed` — so "removability" now means something narrower than it
+sounds, and writing it plainly costs nothing.
+
+No product behaviour changes. The warning before placing developer storage on external media, and
+the absence of any offer to move the device set there, both stand on E14b alone.

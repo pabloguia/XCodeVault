@@ -1,0 +1,250 @@
+# Experiment: E14c — APFS disk image vs the external volume itself (narrows H6)
+# Date: 2026-09-15T21:27:51Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Vault directory for the image file: /Volumes/<vault>/XCodeVault
+# Vault volume: /Volumes/<vault> (UUID <vault-uuid>, Device Location External)
+# Device type: com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation
+# Runtime:     com.apple.CoreSimulator.SimRuntime.iOS-26-5
+
+## phase 0 — preflight and baselines
+## vault volume properties
+$ bash -c diskutil info '/Volumes/<vault>' | grep -E 'Volume Name|File System Personality|Device Location|Removable Media|Protocol|Owners|Volume UUID'
+   Volume Name:               <vault>
+   File System Personality:   Case-sensitive APFS
+   Owners:                    Enabled
+   Protocol:                  USB
+   Volume UUID:               <vault-uuid>
+   Device Location:           External
+   Removable Media:           Fixed
+[exit=0]
+
+## vault mount options
+$ bash -c mount | grep -F ' /Volumes/<vault> ('
+/dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled)
+[exit=0]
+
+## free space
+$ df -h /Volumes/<vault> /System/Volumes/Data
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk7s1   954Gi   605Gi   349Gi    64%    789k  3.7G    0%   /Volumes/<vault>
+/dev/disk1s1   466Gi   426Gi    16Gi    97%    3.9M  164M    2%   /System/Volumes/Data
+[exit=0]
+
+## BASELINE default device set (must be unchanged at the end)
+$ bash -c xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## BASELINE default set size
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## phase 1 — ARM B: case-sensitive image on the INTERNAL disk
+# If create fails here, disk images do not host device sets at all and arm A cannot be
+# read either way. This phase exists so that outcome is visible instead of inferred.
+## create internal image
+$ hdiutil create -size 2048m -fs Case-sensitive APFS -volname XCV-E14c-INT -type SPARSE /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e14c-int-79026.sparseimage
+created: /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e14c-int-79026.sparseimage
+[exit=0]
+
+## [int] attach
+$ hdiutil attach /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e14c-int-79026.sparseimage -nobrowse -owners on
+/dev/disk8          	GUID_partition_scheme          	
+/dev/disk8s1        	Apple_APFS                     	
+/dev/disk9          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk9s1        	41504653-0000-11AA-AA11-0030654	/Volumes/XCV-E14c-INT
+[exit=0]
+# [int] mounted at /Volumes/XCV-E14c-INT (device /dev/disk9s1)
+## [int] volume properties
+$ bash -c diskutil info '/Volumes/XCV-E14c-INT' | grep -E 'File System Personality|Device Location|Removable Media|Protocol|Owners'
+   File System Personality:   Case-sensitive APFS
+   Owners:                    Enabled
+   Protocol:                  Disk Image
+   Device Location:           External
+   Removable Media:           Removable
+[exit=0]
+
+## [int] mount options
+$ bash -c mount | grep -F ' /Volumes/XCV-E14c-INT ('
+/dev/disk9s1 on /Volumes/XCV-E14c-INT (apfs, local, nodev, nosuid, journaled, nobrowse, mounted by <user>)
+[exit=0]
+
+## [int] create
+$ xcrun simctl --set /Volumes/XCV-E14c-INT/E14cSet create XCV-E14c-int com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation com.apple.CoreSimulator.SimRuntime.iOS-26-5
+# [int] probe UDID: 225749B4-BF5B-4216-AF49-13E1B107BDF7
+## [int] the data container the vault refused
+$ bash -c du -sh '/Volumes/XCV-E14c-INT/E14cSet/225749B4-BF5B-4216-AF49-13E1B107BDF7/data' 2>&1
+ 17M	/Volumes/XCV-E14c-INT/E14cSet/225749B4-BF5B-4216-AF49-13E1B107BDF7/data
+[exit=0]
+
+## phase 2 — ARM A: case-sensitive image whose FILE lives on the vault
+## create vault image
+$ hdiutil create -size 2048m -fs Case-sensitive APFS -volname XCV-E14c-VAULT -type SPARSE /Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage
+created: /Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage
+[exit=0]
+
+## the image file is on the external device
+$ bash -c df -h '/Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage' | tail -1; stat -f 'backing device: %Sd' '/Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage'
+/dev/disk7s1   954Gi   605Gi   349Gi    64%    789k  3.7G    0%   /Volumes/<vault>
+backing device: disk7s1
+[exit=0]
+
+## [vault] attach
+$ hdiutil attach /Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage -nobrowse -owners on
+/dev/disk10         	GUID_partition_scheme          	
+/dev/disk10s1       	Apple_APFS                     	
+/dev/disk11         	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk11s1       	41504653-0000-11AA-AA11-0030654	/Volumes/XCV-E14c-VAULT
+[exit=0]
+# [vault] mounted at /Volumes/XCV-E14c-VAULT (device /dev/disk11s1)
+## [vault] volume properties
+$ bash -c diskutil info '/Volumes/XCV-E14c-VAULT' | grep -E 'File System Personality|Device Location|Removable Media|Protocol|Owners'
+   File System Personality:   Case-sensitive APFS
+   Owners:                    Enabled
+   Protocol:                  Disk Image
+   Device Location:           External
+   Removable Media:           Removable
+[exit=0]
+
+## [vault] mount options
+$ bash -c mount | grep -F ' /Volumes/XCV-E14c-VAULT ('
+/dev/disk11s1 on /Volumes/XCV-E14c-VAULT (apfs, local, nodev, nosuid, journaled, nobrowse, mounted by <user>)
+[exit=0]
+
+## [vault] create
+$ xcrun simctl --set /Volumes/XCV-E14c-VAULT/E14cSet create XCV-E14c-vault com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation com.apple.CoreSimulator.SimRuntime.iOS-26-5
+# [vault] probe UDID: A8CF3A6D-FFBA-481E-8DE2-318D626A14DE
+## [vault] the data container
+$ bash -c du -sh '/Volumes/XCV-E14c-VAULT/E14cSet/A8CF3A6D-FFBA-481E-8DE2-318D626A14DE/data' 2>&1
+ 17M	/Volumes/XCV-E14c-VAULT/E14cSet/A8CF3A6D-FFBA-481E-8DE2-318D626A14DE/data
+[exit=0]
+
+## phase 3 — verdict, computed from what the two volumes report in THIS run
+# property                vault                      image-on-vault
+# File System Personality Case-sensitive APFS        Case-sensitive APFS
+# Device Location         External                   External
+# Removable Media         Fixed                      Removable
+# Protocol                USB                        Disk Image
+# mount options           apfs, local, nodev, nosuid, journaled apfs, local, nodev, nosuid, journaled
+# (mount options compared with this script's own -nobrowse and 'mounted by' stripped)
+# HELD EQUAL:  File System Personality=Case-sensitive APFS  Device Location=External  mount-options=apfs, local, nodev, nosuid, journaled
+# VARIED:  Removable Media(Fixed->Removable)  Protocol(USB->Disk Image)
+# Held equal by construction, not measured: the bytes live on /Volumes/<vault>'s device, and the
+# set path is under /Volumes.
+
+CREATED inside the image, while the identical create fails on the vault volume itself
+(E14b). The discriminator is therefore among the VARIED properties above and not among
+the HELD EQUAL ones — read those two lines, not this sentence.
+
+Removable Media varied (Fixed -> Removable), so it is in the candidate set. But the
+DIRECTION excludes it rather than implicating it: the volume macOS calls 'Removable' is
+the one that WORKS, and the one it calls 'Fixed' is the one that FAILS. A policy
+keyed on that field would have to be inverted to produce this, so the field whose name
+TCC's service evokes is not what the restriction reads.
+
+What survives in the candidate set is Protocol: a real device versus a virtual one.
+That also matches E2, whose failure vanished inside images stored on this same SSD.
+NOT varied by either arm, and still what H6 needs to finish: bus. A Thunderbolt
+enclosure would separate 'physically removable' from 'USB'. Nothing here has done that,
+so this NARROWS H6 — it does not verify it.
+
+## accounting — the default set must be untouched
+## default set size (compare with phase 0)
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+ 10G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## default set device list (compare with phase 0)
+$ bash -c xcrun simctl list devices
+== Devices ==
+-- iOS 26.5 --
+    iPhone 17 Pro Max (15EA64C9-8286-40CC-881A-B19C606C7F88) (Shutdown) 
+    iPhone SE (3rd generation) (855CCF05-5E74-4372-ADB5-7ADE52900AE8) (Shutdown) 
+-- watchOS 26.5 --
+    Apple Watch Ultra 3 (49mm) (0F29E552-3BA3-413D-96ED-B810CD690DC4) (Shutdown) 
+[exit=0]
+
+## cleanup
+## [int] shutdown -> exit 149
+## [int] delete   -> exit 0
+## [int] set reports 0 remaining device(s)
+## [int] detach /Volumes/XCV-E14c-INT
+$ hdiutil detach /Volumes/XCV-E14c-INT
+"disk8" ejected.
+[exit=0]
+
+## [int] remove image
+$ rm -f /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T//xcv-e14c-int-79026.sparseimage
+[exit=0]
+
+## [vault] shutdown -> exit 149
+## [vault] delete   -> exit 0
+## [vault] set reports 0 remaining device(s)
+## [vault] detach /Volumes/XCV-E14c-VAULT
+$ hdiutil detach /Volumes/XCV-E14c-VAULT
+"disk10" ejected.
+[exit=0]
+
+## [vault] remove image
+$ rm -f /Volumes/<vault>/XCodeVault/xcv-e14c-vault-79026.sparseimage
+[exit=0]
+
+## post-cleanup: anything attached naming e14c?
+$ bash -c hdiutil info 2>/dev/null | grep -i e14c || echo '(nothing)'
+(nothing)
+[exit=0]
+
+## post-cleanup: e14c images left on the vault?
+$ bash -c ls -la '/Volumes/<vault>/XCodeVault'/xcv-e14c-*.sparseimage 2>&1 | head -5
+-rw-r--r--@ 1 <user>  staff  0 Sep 15 18:27 /Volumes/<vault>/XCodeVault/xcv-e14c-vault-78980.sparseimage
+[exit=0]
+
+scripts/experiments/e14c-image-on-vault.sh: line 205: /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e14c-state.qoKTYTap43/.cleaned: No such file or directory
+## cleanup
+## post-cleanup: anything attached naming e14c?
+$ bash -c hdiutil info 2>/dev/null | grep -i e14c || echo '(nothing)'
+(nothing)
+[exit=0]
+
+## post-cleanup: e14c images left on the vault?
+$ bash -c ls -la '/Volumes/<vault>/XCodeVault'/xcv-e14c-*.sparseimage 2>&1 | head -5
+-rw-r--r--@ 1 <user>  staff  0 Sep 15 18:27 /Volumes/<vault>/XCodeVault/xcv-e14c-vault-78980.sparseimage
+[exit=0]
+
+
+# =====================================================================================
+# PROVENANCE appended 2026-09-15. The output above is unaltered.
+# =====================================================================================
+# This run was NOT deliberately started. It fired because a test of the script's
+# "refuse if the image file already exists" guard was written wrong: the test created a
+# decoy file named with the TEST SHELL's pid instead of the script's, so the guard had
+# nothing to match and the script proceeded to run the whole experiment.
+#
+# The repository rule it broke is the one about naming the simulator device before
+# touching anything: two probe devices (XCV-E14c-int, XCV-E14c-vault) were created
+# inside disk images without the user being told first. They were the script's own
+# throwaway devices, never the user's.
+#
+# The measurement itself is not in question, and that is why this file is kept rather
+# than discarded. The script executed exactly as written, both arms completed, phase 3
+# computed its property sets from this run's own `diskutil info` output, and the
+# accounting is clean: both probe sets reported 0 remaining devices, both images were
+# detached and removed, nothing was left attached, no XCV-E14c device reached the
+# default set, and the default set measured 10G before and after. Verified independently
+# after the fact: no e14c image on the vault or in $TMPDIR, no XCV-E14c volume mounted,
+# the user's three devices still Shutdown.
+#
+# A second run was then made deliberately, with the device named in advance. Prefer it
+# when citing E14c. This file is the record that the first measurement existed and that
+# it agreed — not a result to cite on its own.
