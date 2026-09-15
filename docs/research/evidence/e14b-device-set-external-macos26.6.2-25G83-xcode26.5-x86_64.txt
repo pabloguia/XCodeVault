@@ -136,3 +136,38 @@ drwxr-xr-x@ 5 <user>  staff  160 Sep 15 11:47 ..
 ## remove probe device set
 $ rm -rf /Volumes/<vault>/XCodeVault/E14bSet
 [exit=0]
+
+
+# =====================================================================================
+# CORRECTION appended 2026-09-15, after the run above. The output above is unaltered.
+# =====================================================================================
+# The line "!! phase 1 FAILED — no device_set.plist. H12 falsified at the cheapest gate."
+# is WRONG and must not be cited. H12 was not falsified by this run, and was not tested.
+#
+# What this run actually observed:
+#   - `simctl --set <external> list devices` exited 0 and printed the runtime headers.
+#   - The set directory contained only .xcv-e14b, the marker this script wrote itself.
+#
+# That exit 0 says nothing about this volume, and the first draft of this correction wrongly
+# said it meant CoreSimulatorService had "resolved the path". Measured afterwards: the command
+# exits 1 only when the path does not exist ("Provided set path does not exist") and 0 for any
+# existing directory, /tmp included — and the script creates the directory one line before
+# asking. Exit 0 reports that mkdir worked. The output being byte-identical to the internal
+# control is the tell: output invariant to the path never consulted the path.
+#
+# Why the gate was wrong: device_set.plist is materialised by the first `create`, not by a
+# bare `list`. A control run of the identical command against an empty set on the INTERNAL
+# disk produced an equally empty directory, exit 0, identical output — see
+# e14b-control-internal-macos26.6.2-25G83-xcode26.5-x86_64.txt. The check discriminates
+# empty-vs-non-empty set, not external-vs-internal, so it would have "falsified" H12 on the
+# internal disk too.
+#
+# Consequence: phases 2 and 3 never executed. The H6 boot gate — the phase that decides
+# H12 — remains unrun. Phase 1 has since been reduced to a labelled smoke test that gates
+# nothing; the obvious replacement, the list's exit status
+# of the list instead; this file is kept as the record of the invalid run.
+#
+# Confounder noted for the eventual real run: this vault is Case-sensitive APFS while the
+# internal disk is case-insensitive. E2 already controlled for this (the xctest failure did
+# not reproduce on case-sensitive disk images), so case sensitivity is not the discriminator,
+# but it is a difference between the two volumes and is recorded rather than left implicit.

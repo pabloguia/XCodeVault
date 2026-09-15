@@ -1,0 +1,43 @@
+# Experiment: E14b control — is 'no device_set.plist after a bare list' an external-volume symptom?
+# Date: 2026-09-15T14:49:02Z
+# macOS: 26.6.2 (25G83)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Purpose: the 2026-09-15 E14b run aborted at phase 1 because device_set.plist did not
+# appear in the external set after 'simctl --set <ext> list devices'. This control runs
+# the identical command against an empty set on the INTERNAL disk. If the internal set
+# is equally empty, the phase-1 gate does not discriminate external from internal and
+# the E14b abort was a harness defect, not a falsification of H12.
+# Control set path (internal, scratch): /private/tmp/claude-501/-Users-<user>-projects-XCodeVault/7b9b5265-6ccf-499b-af9e-2400a6ef0ed4/scratchpad/e14b-ctl
+
+## volume of the control path
+$ bash -c df -h '/private/tmp/claude-501/-Users-<user>-projects-XCodeVault/7b9b5265-6ccf-499b-af9e-2400a6ef0ed4/scratchpad/e14b-ctl' | tail -1
+/dev/disk1s1   466Gi   425Gi    19Gi    96%    3.9M  197M    2%   /System/Volumes/Data
+[exit=0]
+
+## list devices in the INTERNAL control set
+$ xcrun simctl --set /private/tmp/claude-501/-Users-<user>-projects-XCodeVault/7b9b5265-6ccf-499b-af9e-2400a6ef0ed4/scratchpad/e14b-ctl list devices
+== Devices ==
+-- iOS 26.5 --
+-- watchOS 26.5 --
+[exit=0]
+
+## what got created there
+$ bash -c ls -la '/private/tmp/claude-501/-Users-<user>-projects-XCodeVault/7b9b5265-6ccf-499b-af9e-2400a6ef0ed4/scratchpad/e14b-ctl'
+total 0
+drwxr-xr-x@ 2 <user>  wheel   64 Sep 15 11:49 .
+drwx------@ 4 <user>  wheel  128 Sep 15 11:49 ..
+[exit=0]
+
+## verdict
+device_set.plist ABSENT on internal too -> phase-1 gate reproduces on the internal disk.
+It discriminates empty-vs-non-empty set, not external-vs-internal. E14b's phase-1 abort
+was a harness defect. H12 is NOT falsified; phases 2 and 3 never executed.
+
+## cleanup control set
+$ rm -rf /private/tmp/claude-501/-Users-<user>-projects-XCodeVault/7b9b5265-6ccf-499b-af9e-2400a6ef0ed4/scratchpad/e14b-ctl
+[exit=0]
+

@@ -56,10 +56,25 @@ Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b fases 0–3 — DESBLOQUEADO em 2026-09-15 (vault plugado e VERIFIED)
+### 2. E14b fases **2–3** — rodado uma vez em 2026-09-15, **sem veredito**
 
-`scripts/experiments/e14b-device-set-external.sh` está escrito e **não rodado**. ~15 min, sem
-sudo, escreve só no vault, nunca endereça o device set padrão. Exige `--i-understand`.
+`scripts/experiments/e14b-device-set-external.sh` rodou e abortou na fase 1, por um portão errado
+dele mesmo: exigia `device_set.plist` depois de um `list` puro, e esse arquivo só nasce no primeiro
+`create`. Um controle no disco interno deu diretório igualmente vazio, exit 0, saída idêntica — o
+portão separava set vazio de set cheio, não externo de interno. **As fases 2 e 3 nunca rodaram.**
+A fase 1 hoje é um smoke test declarado, que não é portão de nada: medido, `simctl --set … list`
+sai 1 só quando o path não existe e 0 para qualquer diretório existente, e o script cria o
+diretório na linha anterior. Não cite exit 0 dali como aceitação de armazenamento externo.
+
+Duas revisões de segurança sobre essa correção acharam defeitos graves e antigos no script, já
+corrigidos: `mkdir -p` **adotava** diretório existente para o `rm -rf`; a recusa de path era
+textual, e `/Volumes/<vault>/../../Users/<você>/Library/Developer/CoreSimulator` passava; o
+`cleanup` apagava o set confiando num código de retorno em vez de perguntar quantos devices
+restam; e não havia `trap`. **Não rode uma cópia antiga deste script.**
+
+~15 min, sem sudo, escreve só no vault, nunca endereça o device set padrão. Exige `--i-understand`.
+Os guardas dele **não têm cobertura em CI** — `ci.yml` roda só `e1` e `e8`; foram exercidos à mão
+em 2026-09-15 e estão registrados em `COMPATIBILITY_MATRIX.md`.
 
 Se o device de teste não chegar a `Booted` a partir do USB, o H12 morre — e o H6 sugere que morre
 mesmo, porque em teste com destino de simulador o bundle `.xctest` é instalado **dentro do

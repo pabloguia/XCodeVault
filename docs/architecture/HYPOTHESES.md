@@ -353,8 +353,34 @@ UI anywhere that names the active set. That is rule 6's shadow-data hazard reach
 supported mechanism, and if E15 shows it, H12 should be falsified for a v1 *product* even if the
 plumbing works for a scripted CI user.
 
-Gates: E14b (kill gate), then E15. Evidence so far:
-`../research/evidence/e14a-device-set-static-macos26.6.2-25G83-xcode26.5-x86_64.txt`, F17, F18.
+**E14b was attempted on 2026-09-15 and produced no verdict on H12.** The script aborted at
+phase 1 on a gate of its own making: it required `device_set.plist` to exist after a bare
+`simctl --set <external> list devices`, and printed "H12 falsified at the cheapest gate". That
+line is wrong. `device_set.plist` is materialised by the first `create`, not by a `list`, and a
+control run of the identical command against an empty set on the **internal** disk produced an
+equally empty directory with exit 0 and byte-identical output. The gate discriminates
+empty-vs-non-empty set, not external-vs-internal, so it would have "falsified" H12 on the
+internal disk too. Phase 1 has since been reduced to a labelled smoke test that gates nothing:
+the obvious replacement — gating on the list's exit status — was measured and is also vacuous,
+because the script creates the directory one line before asking and that command exits 0 for any
+directory that exists.
+
+**The attempt leaves no datum about this volume at all, and the first draft of this paragraph
+claimed otherwise.** It said `simctl --set` had "resolved a path on the USB volume", which read
+as the service accepting external storage. It did not. Measured afterwards:
+`simctl --set <path> list devices` exits 1 only when the path does not exist and 0 for any
+existing directory, `/tmp` included — and the script creates the directory one line before
+asking. Exit 0 therefore reports that `mkdir` worked. The byte-identical output against the
+internal control points the same way: output invariant to the path is output that never
+consulted it. A service-level refusal of external storage, if one exists, would surface at
+`create` or `boot`. **Phases 2 and 3 have still never executed, so the H6 boot gate that
+decides H12 is unrun, and nothing has moved H12 in either direction.**
+
+Gates: E14b phases 2–3 (kill gate, still pending), then E15. Evidence so far:
+`../research/evidence/e14a-device-set-static-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
+`../research/evidence/e14b-device-set-external-macos26.6.2-25G83-xcode26.5-x86_64.txt` (invalid
+run, with an appended correction — do not cite its verdict line),
+`../research/evidence/e14b-control-internal-macos26.6.2-25G83-xcode26.5-x86_64.txt`, F17, F18.
 
 ## H13 — a runtime can be *used* from an external volume without touching `images.plist` *(new, 2026-09-09)*
 

@@ -278,9 +278,13 @@ device set". Evidence `evidence/e14a-device-set-static-*.txt`; findings F17–F2
 `scripts/experiments/e14b-device-set-external.sh <set-path-on-/Volumes> --i-understand`.
 Mutating, unprivileged, writes only under the path passed; refuses any path inside
 `~/Library/Developer` or `/Library/Developer` or outside `/Volumes`; every `simctl` call carries
-`--set`, so the default device set is never addressed. Phases, cheapest first, each a kill gate:
+`--set`, so the default device set is never addressed. Phases, cheapest first. Phase 1 is **not** a kill gate; 2 onward are:
 
-1. `simctl --set <external> list devices` — does CoreSimulatorService accept the path?
+1. `simctl --set <external> list devices` — **smoke test only.** Measured 2026-09-15: this exits
+   1 only when the path does not exist and 0 for any existing directory, and the script creates
+   the directory immediately before asking — so exit 0 reports that `mkdir` worked, not that the
+   service accepted external storage. Two gates were tried here and both were vacuous; see the
+   note in the script. The first phase that discriminates anything about the volume is 2.
 2. `simctl --set <external> create` — does a device get made there?
 3. `boot`, then **poll `list devices` for `Booted`** — never `bootstatus -b`, which E11 recorded
    hanging on `Data Migration` long after the device had booted. **This is the H6 gate.** For

@@ -1058,3 +1058,60 @@ survives its own removal, because the fixtures cannot make a temp directory into
 every path that could be one fails containment first.
 
 219 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-15 — E14b ran, proved nothing, and the gate that stopped it was mine
+
+The kill gate did not fire. The script aborted one phase earlier, on a check it had no business
+making, and printed `H12 falsified at the cheapest gate`. That line was wrong, and it was wrong in
+the most expensive direction available: a falsification is the result that ends a line of work.
+
+Phase 1 was written to ask whether CoreSimulatorService accepts a device set on the vault. It
+cannot ask that — see below — but on the day it looked like it had, because
+`simctl --set /Volumes/<vault>/... list devices` exited 0 and printed the runtime headers. The
+script then failed the phase anyway, because `device_set.plist` had not appeared in the
+directory. `device_set.plist` is written by the first `create`. A bare `list` on an empty set
+has nothing to persist, so the file is absent on any set that has never held a device, anywhere.
+
+The control took one command and settled it: the same `list` against an empty set on the **internal**
+disk produced an equally empty directory, exit 0, byte-identical output. The gate discriminates
+empty-vs-non-empty set. It does not mention externality. It would have falsified H12 on the internal
+disk, which is the definition of a check that cannot fail the way it claims to.
+
+So H12 is not falsified. It is also not advanced: **phases 2 and 3 never executed**, and phase 3 is
+the H6 boot gate that decides the whole hypothesis.
+
+Then the safety review caught me doing the milder version of the same thing, twice, in the fix. The
+first version of this section said the surviving datum "points away from refusal" because
+`simctl --set` had resolved a USB path exactly as it resolved an internal one. Measured afterwards:
+that command exits 1 only when the path does not exist and 0 for any existing directory, `/tmp`
+included — and the script creates the directory one line before asking. Exit 0 means `mkdir` worked.
+The byte-identical output I had cited as corroboration is the tell: output invariant to the path
+never consulted the path. There is no datum. And my replacement gate had inherited the defect —
+gating on that exit status is gating on `mkdir`, which is a check that cannot fail the way it claims
+to, which is precisely the sentence I had just written about the old gate.
+
+Accounting after the run was clean, which is the one thing that went right by design: the
+marker-guarded cleanup removed the probe set, nothing named `XCV-E14b` reached the default set, the
+default set was 10G before and after, and all three of the user's devices were `Shutdown` throughout.
+No shadow data. Rule 6 held.
+
+This is lesson 1 from the handoff arriving in a new costume. That lesson says a causal claim drawn
+from one observation falls on the next measurement. The variant here is narrower and worth naming
+separately: **a gate written before the behaviour is understood encodes the guess, and then reports
+the guess as a measurement.** The phase-1 check was a plausible-sounding proxy — "a real set has a
+plist" — authored at the same time as the hypothesis it was meant to test independently. Lesson 4
+already says seams do not test what they replace; this is the same failure moved from the test suite
+into the experiment harness, where a false negative does not go red, it gets published.
+
+The cheapest defence is the one that worked: **before believing a gate's failure, run it against the
+condition it is supposed to pass.** One internal-disk control, thirty seconds, and the falsification
+evaporated.
+
+Phase 1 is now labelled a smoke test that gates nothing, with both failed gates written out
+beside it so the third attempt is not a guess either. The honest statement of what it does: it
+detects that the path stopped existing between `mkdir` and `list`, and nothing else.
+The invalid evidence file is kept, unaltered, with an appended correction — the run happened and the
+record should say so; what it should not do is let a reader cite its verdict line.
+
+E14b phases 2–3 are still unrun and are still the next thing. 219 tests. `swift build` and
+`swift test` both exit 0; no Swift changed in this session.

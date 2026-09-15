@@ -461,11 +461,57 @@ those entries "pending — manual" until someone actually runs and records the r
 - Verdict: **H12 promoted from "dismissed on hearsay" to "unverified, two gates".** Status stays
   *unverified* — no behaviour was observed. Next: E14b phases 0–3 (kill gate), then E15.
 
+### E14b attempt 1 — aborted on a harness defect, no verdict — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date: 2026-09-15. Hypothesis: H12 (kill gate), H6.
+- Test: `scripts/experiments/e14b-device-set-external.sh /Volumes/<vault>/XCodeVault/E14bSet
+  --i-understand`, run by the user on the connected vault (Case-sensitive APFS, owners on,
+  349 GiB free). Three default-set devices `Shutdown`, no `xcodebuild` running, before and after.
+- **Result — no verdict on H12. The run is invalid and its printed conclusion is wrong.** The
+  script aborted at phase 1 because `device_set.plist` was absent after
+  `simctl --set <external> list devices`, and printed "H12 falsified at the cheapest gate".
+  `device_set.plist` is materialised by the first `create`, not by a `list`.
+- **Control that establishes this:** the identical command against an empty set on the *internal*
+  disk produced an equally empty directory, exit 0, identical output. The gate discriminates
+  empty-vs-non-empty set, not external-vs-internal, and would have "falsified" H12 on the
+  internal disk. Gate corrected to test the list's exit status; the invalid evidence file is kept
+  with an appended correction.
+- **What phase 1 can support: nothing about this volume.** Measured after the run,
+  `simctl --set <path> list devices` exits 1 only when the path does not exist and 0 for any
+  existing directory (`/tmp` included); the script creates the directory immediately before
+  asking, so exit 0 asserts that `mkdir` worked. It is a `stat()`, not a verdict from
+  CoreSimulatorService, and output invariant to the path is output that never consulted it. An
+  earlier draft of this entry read the exit 0 as the service accepting external storage — that
+  was the same error one level up and is corrected here.
+- **Phases 2 and 3 never executed.** The H6 boot gate that decides H12 remains unrun.
+- Accounting checked after the run: probe set removed by the marker-guarded cleanup, no `XCV-E14b`
+  in the default set, default set still 10G, all three user devices still `Shutdown`. No shadow
+  data, no leak into the default set (rule 6 clean).
+- Evidence: `../research/evidence/e14b-device-set-external-macos26.6.2-25G83-xcode26.5-x86_64.txt`
+  (invalid run + appended correction; do not cite its verdict line),
+  `../research/evidence/e14b-control-internal-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
+- **Harness hardened after two safety reviews of the fix, before any re-run.** The reviews found
+  four defects that predate this run and would have fired on it: `mkdir -p` adopted a
+  pre-existing directory for cleanup's `rm -rf`; the path refusal was textual, so
+  `/Volumes/<vault>/../../Users/<user>/Library/Developer/CoreSimulator` was accepted and would
+  have been deleted; `cleanup` gated `rm -rf` on a return code that is 0 when nothing was
+  deleted; and there was no `trap`, so an interrupt during the ten-minute phase-3 poll left a
+  booted device and the probe set behind. Now: canonicalised path plus a same-device check,
+  `mkdir` without `-p`, a "this run created it" marker the trap requires, a device-count check
+  instead of a return code before `rm -rf`, volume-UUID assertions between phases and inside the
+  poll, line-buffered redaction so an interrupted run still has evidence, and a real exit status.
+- **Test gap, stated rather than left implicit:** none of these guards are exercised by CI —
+  `.github/workflows/ci.yml` runs `e1` and `e8` only, and nothing references `e14b`. They were
+  fault-injected by hand on 2026-09-15 (five refusal paths, each verified to exit 2 before any
+  mutation). A guard verified once by hand is not a regression test.
+- Verdict: **H12 stays *unverified*.** Not promoted, not falsified. Next: re-run E14b to reach
+  phases 2–3, which are the phases that can say anything.
+
 ### Pending — added 2026-09-09
 
 | Experiment | Gates | Status |
 |---|---|---|
-| E14b device set on an external volume | H12 (kill gate), H6 | pending — `scripts/experiments/e14b-device-set-external.sh`, mutating, unprivileged |
+| E14b device set on an external volume | H12 (kill gate), H6 | **phases 2–3 pending** — attempt 1 (2026-09-15) aborted at phase 1 on a harness defect and produced no verdict; gate corrected, needs a re-run. Mutating, unprivileged |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |

@@ -25,9 +25,26 @@ Projeto em `~/projects/XCodeVault`. Responda em português; arquivos e commits e
 
 Não releia o resto de `docs/research`.
 
-## Prioridade 1 — E14b fases 0–3 (o portão que mata o H12)
+## Prioridade 1 — E14b fases **2–3** (o portão que mata o H12)
 
-`scripts/experiments/e14b-device-set-external.sh`, **escrito e nunca rodado**. ~15 min, sem sudo.
+> **Atualizado 2026-09-15.** O script já rodou uma vez e **não produziu veredito**. Ele abortou na
+> fase 1 por um portão errado dele mesmo — exigia `device_set.plist` depois de um `list` puro, e
+> esse arquivo só nasce no primeiro `create`. Um controle no disco **interno** deu diretório
+> igualmente vazio, exit 0, saída idêntica: o portão separava set vazio de set cheio, não externo
+> de interno. O portão foi corrigido; a evidência inválida ficou no repo com uma correção anexada.
+> **Não cite a linha de veredito dela.** E não cite exit 0 do `list` como aceitação: medido,
+> esse comando só sai 1 quando o path **não existe** e sai 0 para qualquer diretório existente —
+> e o script cria o diretório na linha anterior. Exit 0 ali significa que o `mkdir` funcionou.
+> **As fases 2 e 3 nunca rodaram** — o portão de boot (H6), que é o que decide o H12, segue sem
+> rodar, e nada moveu o H12 em nenhuma direção.
+>
+> A revisão de segurança dessa mesma correção achou dois defeitos graves e antigos no script, já
+> corrigidos: `mkdir -p` **adotava** um diretório existente para o `rm -rf` do cleanup, e a recusa
+> de path era textual, então `/Volumes/<vol>/../../Users/<você>/Library/Developer/CoreSimulator`
+> passava e teria apagado os seus três devices. **Não rode uma cópia antiga deste script.**
+
+`scripts/experiments/e14b-device-set-external.sh`, **corrigido, rodado uma vez sem veredito**.
+~15 min, sem sudo.
 
 ```
 scripts/experiments/e14b-device-set-external.sh /Volumes/<vault>/XCodeVault/E14bSet --i-understand

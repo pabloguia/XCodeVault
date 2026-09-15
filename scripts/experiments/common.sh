@@ -36,4 +36,6 @@ xcv_run() {
 }
 
 # Redact the current user's home directory in evidence output.
-xcv_redact() { sed -e "s#$HOME#~#g" -e "s#$(id -un)#<user>#g"; }
+# -l keeps sed line-buffered: without it an interrupted experiment loses everything still
+# sitting in the buffer and leaves a 0-byte evidence file, which is the run that most needs one.
+xcv_redact() { sed -l -e "s#$HOME#~#g" -e "s#$(id -un)#<user>#g"; }
