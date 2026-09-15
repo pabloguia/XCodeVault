@@ -2,8 +2,8 @@
 
 Ponto de partida para uma sessão nova. Projeto em `~/projects/XCodeVault`.
 
-> **Os números aqui são de 2026-09-13. O item 1 foi executado nessa data e o resultado está abaixo;
-> os demais continuam sendo estimativas de ponto-no-tempo — reverifique antes de agir.**
+> **Estado verificado em 2026-09-15** (vault, espaço, devices, árvore git). Os números de categoria
+> são desta data; o resto continua sendo ponto-no-tempo — reverifique antes de agir.**
 > Em quatro dias os containers `Dead` foram de 836 MB a 2,1 GB e o espaço livre de 14 a 21 GiB.
 > Um comando: `du -shcx ~/Library/Developer/CoreSimulator/Devices/*/data/Library/Caches/com.apple.containermanagerd/Dead`
 > Se a ordem de prioridade mudar por causa disso, siga a evidência e não este documento.
@@ -56,7 +56,7 @@ Aberto, herdado daqui: reproduzir `log erase --all` via `simctl spawn` dentro de
 dos três com verbo documentado estreito; reproduzi-lo transformaria `simulatorLogStore` de reportado
 em oferecível.
 
-### 2. E14b fases 0–3 — BLOQUEADO: exige o `/Volumes/<vault>` plugado
+### 2. E14b fases 0–3 — DESBLOQUEADO em 2026-09-15 (vault plugado e VERIFIED)
 
 `scripts/experiments/e14b-device-set-external.sh` está escrito e **não rodado**. ~15 min, sem
 sudo, escreve só no vault, nunca endereça o device set padrão. Exige `--i-understand`.
