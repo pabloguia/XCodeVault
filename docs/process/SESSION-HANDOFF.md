@@ -253,8 +253,32 @@ limpeza.
 Os itens 1–3 acima estão **fechados**, e os três fecharam negativamente. O que resta na pesquisa de
 armazenamento está bloqueado por hardware (E14d: um externo **não-USB**, para separar removibilidade
 de barramento) ou por evento (a terceira sonda do F10: se um *build de runtime* superseded deixa
-cache para trás — nenhuma máquina aqui exibiu um). Uma decisão antiga segue aberta e não é edição
-óbvia: o `e8c-import-roundtrip.sh` ainda usa `simctl bootstatus -b`, que o E11 registrou travando em
-Data Migration; mudar como ele espera muda o que ele mede, então é decisão, não conserto.
+cache para trás — nenhuma máquina aqui exibiu um).
+
+### O e8c foi reescrito em 16/09, e eu tinha errado ao chamá-lo de "decisão em aberto"
+
+As duas decisões já estavam tomadas e escritas; o script é que nunca foi atualizado. O
+`EXPERIMENTS.md:363` já dizia **"never `bootstatus -b`"**, e o `STATUS.md:125`, de 13/09, registra
+que você não reusou o e8c porque ele "unconditionally deletes the runtime + runs `simctl delete
+unavailable` at the end — both wrong here" e rodou os passos à mão. Ele ficou lá como armadilha.
+
+O `simctl delete unavailable` era o problema sério, não o `bootstatus`: ele varre **todo** device
+indisponível do set padrão, e offload de runtime é justamente o que deixa os seus iPhones
+indisponíveis — eles voltam sozinhos no reimport, a menos que algo os apague antes. O `doctor` é
+testado para recusar recomendar esse comando nesse exato estado, e o produto já removeu esse padrão
+três vezes. O experimento continuava fazendo.
+
+Agora ele é platform-general (o tipo de device vem do `supportedDeviceTypes` do simctl, não de um
+`"Apple TV"` hardcoded), faz polling por `Booted`, apaga só o device que criou pelo UDID, e
+**recusa** se o runtime do instalador já estiver instalado — porque aí "restaurar estado anterior"
+seria tirar algo seu. Exercitado contra os dois instaladores reais do vault: **exit 3, nada tocado**,
+porque iOS 26.5 e watchOS 26.5 estão os dois instalados. Para rodar de verdade é preciso um
+instalador de um runtime que você **não** tenha.
+
+A revisão de segurança achou a minha reescrita pior que o original em três pontos, todos em caminhos
+que eu não tinha executado — inclusive um `$rid` minúsculo que impedia a sonda de rodar, e o
+`runtime delete` recebendo o identificador errado (ele quer o **UUID da imagem**, coisa que o script
+original acertava). Corrigidos. E o lint desta sessão pegou um backtick sem escape que eu mesmo
+escrevi ao corrigir.
 
 Com isso, o próximo trabalho real é de produto, não de pesquisa — ver as milestones no `STATUS.md`.

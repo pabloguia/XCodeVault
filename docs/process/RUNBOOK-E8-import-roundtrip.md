@@ -31,7 +31,12 @@ refused by CoreSimulator for lack of space — see `docs/architecture/COMPATIBIL
   the image because the disk is almost full"` if headroom is short. `xcodevaultctl runtime import`
   preflight requires **free ≥ 2× image + 3 GB**; for tvOS that is ≈ 12.8 GB.
 - Installing a runtime auto-creates default devices for it; deleting the runtime afterwards
-  leaves them `unavailable` — clean with `xcrun simctl delete unavailable` (doctor flags them).
+  leaves them `unavailable`. **Do not "clean" them with `xcrun simctl delete unavailable`.** That
+  command is permanent and sweeps the whole default set, including the user's real devices, which
+  go `unavailable` for exactly this reason whenever a runtime is offloaded — and which return to
+  `Shutdown` on their own once the same-version runtime is reimported, because CoreSimulator
+  rebinds by OS version. `doctor` is tested to refuse to recommend it in this state. An earlier
+  version of this line, and of `e8c-import-roundtrip.sh`, said the opposite.
 - The external volume: USB SSD, Case-sensitive APFS, UUID `<vault-uuid>`,
   currently named `<vault>` (was `<vault>`; identify by UUID, never by name). Its root is
   root-owned; the only user-writable place macOS guarantees is
@@ -40,9 +45,13 @@ refused by CoreSimulator for lack of space — see `docs/architecture/COMPATIBIL
   `mac-ssd-rescue`, `parallels`) are off limits.
 - The harness scripts exist and work: `scripts/experiments/e11-staging-monitor.sh`
   (export or import mode, samples internal free space every 5 s, kills xcodebuild below a floor)
-  and `scripts/experiments/e8c-import-roundtrip.sh <bundle-or-dmg>` (import → verify → create
-  "Apple TV" device → boot → bootstatus → shutdown → delete device → `runtime delete` → `simctl
-  delete unavailable` → report). Evidence lands in `docs/research/evidence/`.
+  and `scripts/experiments/e8c-import-roundtrip.sh <bundle-or-dmg> --i-understand` (import →
+  check a NEW runtime appeared → verify → create a device of a type simctl says that runtime
+  supports → boot → **poll `list devices` for `Booted`**, never `bootstatus -b` → delete the probe
+  device by UDID → `runtime delete` the image UUID it imported → report which devices went
+  unavailable, deleting none). Rewritten 2026-09-16; it refuses outright if the installer is for a
+  runtime already installed, because then "restore prior state" would take something away.
+  Evidence lands in `docs/research/evidence/`.
 - Tooling gotcha from session 2: **never patch Swift sources with string replacement scripts**
   after `swift-format` has run — patterns silently miss. Use `read_for_edit` + `Edit` and verify
   with `grep` before building. Always check `swift test` exit status before committing (a
@@ -121,23 +130,31 @@ LIB="$MP/.TemporaryItems/folders.$(id -u)/TemporaryItems/XCodeVault-RuntimeLibra
    .build/debug/xcodevaultctl runtime library --dir "$LIB"                 # tvOS must show "installer in library ✓"
    RID=$(xcrun simctl runtime list -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(k for k,v in d.items() if "tvOS" in (v.get("runtimeIdentifier") or "")))')
    .build/debug/xcodevaultctl runtime offload "$RID" --library "$LIB" --yes
-   xcrun simctl delete unavailable
    xcrun simctl runtime list                                                # tvOS gone
+   xcrun simctl list devices                                                # some now `unavailable` — LEAVE THEM
    ```
-   Expect: "Installer verified", then the simctl delete output; journal gets `runtimeOffload`
-   started/completed. Internal free rises ≈ 4.9 GB (the Inbox 5 GB stays until reboot).
+   Expect: "Installer verified"; journal gets `runtimeOffload` started/completed. Internal free
+   rises ≈ 4.9 GB (the Inbox 5 GB stays until reboot). Devices bound to the offloaded runtime go
+   `unavailable` and **stay** — they come back by themselves on reimport. The `simctl delete
+   unavailable` that used to be on this line deleted them permanently instead.
 
 3. **Import round trip with functional probe** (the actual pending experiment; ≈ 10 min, run in
    the background and poll; writes `docs/research/evidence/e8c-import-*.txt` and `e11-import-*.txt`):
    ```bash
    df -k /System/Volumes/Data | awk 'NR==2{printf "%d MB\n",$4/1024}'       # need ≥ 12800 MB or the preflight refuses
-   scripts/experiments/e8c-import-roundtrip.sh "$LIB"/appletvsimulator_26.5_23L470.exportedBundle
+   scripts/experiments/e8c-import-roundtrip.sh "$LIB"/appletvsimulator_26.5_23L470.exportedBundle --i-understand
    ```
+   The `--i-understand` is required: the probe boots a device in your DEFAULT device set. Check
+   `pgrep -fl xcodebuild` and `xcrun simctl list devices` first.
    Expect, in order: preflight OK (maybe a "tight" warning); `t=…` lines with internal free
    dropping then partially recovering; `import exit=0`; `simctl runtime list -j` showing tvOS
-   Ready with `signatureState: Verified`; `simctl runtime verify` exit 0; device created; `boot`
-   exit 0 and `bootstatus -b` returning; state `Booted`; shutdown/delete exit 0; `runtime delete`
-   exit 0; `delete unavailable` exit 0; asset store back to ~0 KB.
+   Ready with `signatureState: Verified`; `simctl runtime verify` exit 0; device created with its
+   UDID echoed by `simctl create`; `boot` exit 0; then **`Booted after N s of polling`** — not
+   `bootstatus`, which E11 measured hanging on `Data Migration` for minutes after the device was
+   already up; shutdown/delete exit 0; `runtime delete` exit 0 on the image UUID; a list of devices
+   left unavailable with nothing deleted; asset store back to ~0 KB. Script exit 0.
+   A script exit of **3** means it refused and touched nothing (most likely: that runtime is already
+   installed). **4** means it could not finish and the evidence file says what is left behind.
    If the preflight refuses for space: the Inbox file from step 1 is the cause — reboot, re-check,
    re-run step 3 only (the installer is already in `$LIB`).
    If `-importPlatform` fails for any other reason: capture the full error from
