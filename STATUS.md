@@ -1398,5 +1398,127 @@ stop. The note and the evidence string carry the whole gain; the enum carried on
 Still unfixed and flagged rather than changed: `e8c` waits with `simctl bootstatus -b`, which E11
 recorded hanging on Data Migration. Changing how it waits would change what it measures, and its
 evidence is already recorded, so that is a decision rather than an edit.
+**(Wrong, and superseded 2026-09-16 — see the entry below. The decision had already been made and
+written down in `EXPERIMENTS.md:363`; only the script had failed to follow it. And the waiting was
+the least of what was wrong with that file.)**
 
 236 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-16 — three probes, three negatives, and every guard that broke broke *open*
+
+Three things were measured and none of them produced a feature. What they produced instead is a
+pattern worth naming, because it turned up six times in one day and twice in code written that same
+day to prevent it: **a guard that reports a pass over a measurement that never happened.**
+
+### E13 — a restart does not reclaim the orphaned dyld cache
+
+Captured before a reboot and again 5h46m after. The `== cache tree ==` section of the two files is
+byte-identical: same sizes, same mtimes, same birth times, same newest-write epoch inside the orphan.
+`diff` yields two hunks, both in the header. So the startup GC that collects the stranded runtime
+Inbox does not cover `Caches/dyld/<build>/inc/`.
+
+**H11 falls as a general rule.** The reaper is path-specific: it takes the Inbox and leaves the dyld
+tree, and both paths carry no BSD flags and are absent from `rootless.conf`. The two properties that
+looked like they explained the Inbox explain neither.
+
+`doctor` used to tell users to restart for this finding. It was measured to do nothing, so it stopped.
+
+**The premise the experiment was written on had expired by itself.** "Created after the last boot, so
+it has never been through a restart" was true on 2026-09-09 and false by the time the probe ran: the
+orphan is from Sep 7, the machine had booted Sep 15. Nothing edited the claim — it consisted of two
+timestamps and one of them moved. The bracketed pair was the second restart it survived, not the first.
+
+### The orphan then vanished, and not because of anything we ran
+
+A macOS update landed mid-session — 26.6.2 (25G83) to 26.7 (25G229), rebooting at 19:14. By 19:53 the
+whole `25G83` tree was gone. These caches are keyed by host build, so an update supersedes the entire
+directory. Which process removes it, installer or CoreSimulatorService, is not established; a
+unified-log query over the window returned nothing.
+
+**And then I overstated it, inside the window, in four files.** Measured at 19:53 the tree was 0B and
+free space 29 GiB, and that went into the doctor remediation, F10, H11 and the matrix as "9.4 GB
+back". Eight minutes later the two installed runtimes had rebuilt at the same sizes — iOS 4.4G,
+watchOS 2.7G, identical to the tenth — and only `inc/` stayed at 0B. The durable reclaim is the
+orphan's **2.3 GB**; free went 16 GiB to 19 GiB. Corrected everywhere, with the transient recorded so
+the figure is not requoted.
+
+That is the same overstatement F10 already records making once, about a day of uptime being a
+permanent condition — committed again four hours later about eight minutes of emptiness. Hence the
+handoff's fourth recurring lesson: **a measurement taken inside a transient window is not state.**
+
+The consolation is a clean natural experiment nobody designed: cache whose runtime is installed comes
+back by itself; cache whose runtime is absent does not. Both halves in one before/after.
+
+### E13b — written, run in inspect mode, and it lost its target
+
+It needs root, so it was written here and handed over as a command; it never elevates itself. The run
+found nothing to inspect and stopped at exit 3, nothing touched. But it stopped **by accident**:
+
+- The contents allowlist passed over an empty read. `ls -A` on a missing directory outputs nothing,
+  the loop never iterated, and it printed "every entry is a known cache artifact" — an affirmative
+  pass over a read of nothing, in the guard added that same day to prevent exactly that.
+- The `lsof` veto fired on `lsof`'s own usage banner, captured by a `2>&1` into the variable being
+  tested for emptiness. Right outcome, false reason.
+- `home_of` returned root's two `NFSHomeDirectory` values as one string, so the split-view
+  cross-check ran with an invalid `HOME` — and reported agreement, which is worse than failing.
+- The host-build mismatch was computed, printed in the header, and never branched on.
+
+Before that, review had already caught witness 4 — the one advertised as load-bearing because simctl
+cannot see a runtime bundled in an older Xcode — searching one directory level too shallow and, on
+finding nothing, printing "no Xcode here bundles <rid>". Measured afterwards: this machine has zero
+`.simruntime` bundles anywhere, so the witness is inconclusive by construction and now says so.
+Four witnesses vote, not five.
+
+`common.sh`'s `xcv_redact` had a latent root bug worth recording: it substituted `$(id -un)`, which
+under `sudo` is `root`, so it would have rewritten every occurrence of the word *root* in an
+experiment whose subject is root. Fixed, then fixed again — the first fix truncated a home containing
+a space, left the username substitution unanchored (`dev` ate `devicectl`), and trusted `SUDO_USER`
+outside a sudo session.
+
+### e8c — rewritten, and I had mislabelled it
+
+I called this an open decision. Both decisions were already made and written down.
+`EXPERIMENTS.md:363` specified "never `bootstatus -b`"; the entry at the top of this file, from
+2026-09-13, records the script being abandoned mid-session because it "unconditionally deletes the
+runtime + runs `simctl delete unavailable` at the end — both wrong here".
+
+`delete unavailable` was the serious half, not the waiting. It sweeps every unavailable device in the
+default set, and offloading a runtime is precisely what makes the user's real iPhones unavailable —
+they return on reimport unless something deletes them first. `doctor` is tested to refuse to
+recommend that command in that exact state, and this repo has removed the pattern three times. The
+experiment kept doing it.
+
+Now platform-general (device type from simctl's `supportedDeviceTypes`), polling for `Booted`, probe
+device deleted by UDID, `set -uo pipefail` which it never had, and two guards against deleting a
+runtime the user already had. Exercised against both installers in the vault: exit 3, nothing
+touched, because both are for installed runtimes.
+
+**Review found my rewrite worse than the original in three places, all on paths I had not executed.**
+A leftover lowercase `$rid` made the probe unreachable while blaming simctl. `cleanup` deleted the
+state directory phase 5's report needed, so the replacement for `delete unavailable` printed a blank
+that reads as zero. And `runtime delete` was handed the `SimRuntime` identifier when the CLI
+documents the image UUID — two simctl commands, two namespaces, which the **original** script had
+right and I collapsed. Also: the trap sat outside the pipeline body where bash resets it, so it
+protected nothing the body did.
+
+The harness lint written earlier the same day caught an unescaped backtick I introduced while making
+those fixes, naming file and line.
+
+`RUNBOOK-E8-import-roundtrip.md` was stale in five places, still instructing `delete unavailable` and
+`bootstatus`. The rewrite's premise is that script and docs had drifted; leaving it would have
+recreated the drift pointing the other way.
+
+### The pattern
+
+Every failure above is the same shape: an instrument that could not distinguish *measured and found
+nothing* from *failed to measure*, and reported the first. E14b's phase-1 gate was this. The E13
+header premise was this. The allowlist, the lsof veto, witness 4 and e8c's silent tvOS skip were all
+this. Two of them were written the same day, in code whose stated purpose was to stop it.
+
+The defence that worked was not review and not care. It was the two mechanical checks: the harness
+lint, which caught its own author, and `swift test`'s real exit code, which caught two tests pinning
+claims that had just been falsified.
+
+Five commits: `955e993`, `b82010c`, `4839a8a`, `62ab0bf`, `5dfa462`. No push.
+236 tests. `swift build` and `swift test` both exit 0, checked by exit status — the first attempt
+used `${PIPESTATUS[0]}` in zsh, which returns empty, and nearly read "Build complete!" as a pass.
