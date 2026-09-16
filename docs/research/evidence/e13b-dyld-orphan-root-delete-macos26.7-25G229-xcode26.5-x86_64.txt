@@ -1,0 +1,92 @@
+# Experiment: E13b — root deletion of an orphaned dyld shared cache (gates F10; follows E13)
+# Date: 2026-09-16T22:53:22Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+# Target:         /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+# Runtime id:     com.apple.CoreSimulator.SimRuntime.tvOS-26-5   (leaf: com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470)
+# Host build dir: 25G83   (this machine: 25G229)
+# Invoked by:     <user> (home ~), elevated to uid 0
+# Mode:           inspect only
+# Question:       does root get EPERM here, as it did on the stranded runtime Inbox?
+
+== phase 1 — is this runtime really gone? ==
+# Any witness vetoes. A witness whose INSTRUMENT failed also vetoes: 'the command errored
+# and its error text did not contain the runtime id' is not the same fact as 'absent'.
+
+## witness 1 — simctl runtime list, as <user> (HOME=~)
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+-> ran clean, and com.apple.CoreSimulator.SimRuntime.tvOS-26-5 is absent
+
+## witness 2 — simctl runtime list, as root (HOME=/var/root /private/var/root)
+[exit=0]
+-> identical to witness 1
+
+## witness 3 — an available device is a witness for its runtime
+   available devices on com.apple.CoreSimulator.SimRuntime.tvOS-26-5: none
+-> none
+
+## witness 4 — runtime bundles inside the Xcodes on this machine
+# The witness simctl cannot provide: a runtime bundled in an older Xcode is invisible to it.
+   Developer directories searched: 1
+     /Applications/Xcode.app/Contents/Developer
+   runtime bundles of ANY kind found: 0
+-- INCONCLUSIVE, and deliberately not a vote either way. Zero bundles is the TRUE answer
+   on Xcode 26.x, which ships runtimes as disk images (witness 5) rather than as bundles.
+   On such a machine this witness has nothing to discriminate with. It does not get to say
+   'no Xcode bundles this runtime' — it did not look at any bundle. If you are on a machine
+   with an older Xcode that DOES bundle runtimes, a zero here means the search is broken
+   and you should stop.
+
+## witness 5 — the disk-image catalogue
+-> read clean, and images.plist does not mention com.apple.CoreSimulator.SimRuntime.tvOS-26-5
+
+-> no witness vetoed. Note what that does and does not mean: witness 4 may have been
+   inconclusive above, in which case four witnesses voted, not five.
+
+== phase 2 — what is actually in there? surprises are reported, not deleted ==
+
+## contents
+$ ls -lO@ /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+ls: /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470: No such file or directory
+[exit=1]
+
+## ACLs
+$ ls -lde /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+ls: /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470: No such file or directory
+[exit=1]
+
+## extended attributes
+$ xattr -l /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+xattr: No such file: /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+[exit=1]
+
+## size
+$ du -shx /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470
+du: /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470: No such file or directory
+[exit=1]
+
+-> every entry is a known cache artifact.
+
+## open file handles
+lsof: WARNING: can't stat(/Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470): No such file or directory
+lsof 4.91
+ latest revision: ftp://lsof.itap.purdue.edu/pub/tools/unix/lsof/
+ latest FAQ: ftp://lsof.itap.purdue.edu/pub/tools/unix/lsof/FAQ
+ latest man page: ftp://lsof.itap.purdue.edu/pub/tools/unix/lsof/lsof_man
+ usage: [-?abhlnNoOPRtUvVX] [+|-c c] [+|-d s] [+D D] [+|-f[cgG]]
+ [-F [f]] [-g [s]] [-i [i]] [+|-L [l]] [+|-M] [-o [o]] [-p s]
+ [+|-r [t]] [-s [p:s]] [-S [t]] [-T [t]] [-u s] [+|-w] [-x [fl]] [--] [names]
+Use the ``-h'' option to get more help information.
+!! VETO: something holds a handle inside the target. lsof explained nothing on the Inbox,
+   but a live handle is a reason to stop rather than a curiosity to print.

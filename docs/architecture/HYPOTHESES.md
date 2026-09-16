@@ -353,7 +353,7 @@ split is the finding:
 | path | root deletion | restart |
 |---|---|---|
 | runtime Inbox `.dmg` (F1) | refused, `Operation not permitted` ×3 | **reclaims it** (2026-09-07, +5 GB) |
-| `Caches/dyld/<build>/inc/` (F10) | untested — E13b | **does nothing** (E13, 2026-09-16, byte-identical across a reboot) |
+| `Caches/dyld/<build>/inc/` (F10) | untested — E13b, and it lost its target | **does nothing** (E13, 2026-09-16, byte-identical across two restarts) — but a macOS **update** removed the whole host-build tree hours later, 9.4 GB, same day |
 
 Both paths carry no BSD flags and are absent from `rootless.conf`. The two properties that looked
 like they explained the Inbox's behaviour therefore explain neither, and "reclaimed by the system"
@@ -370,10 +370,23 @@ and turns on E13b.
 been falsified once here, on exactly such a path, and reasoning from it produced a `doctor`
 remediation that contradicted an instruction already written in FINDINGS.
 
-Gate: E13 — **run 2026-09-16, negative for `inc/`.** Next: E13b (root deletion on that path), which
-is now unblocked and whose *refusal* would be the more interesting outcome: a second path where root
-is blocked with no SIP flag and no `rootless.conf` entry is worth reporting to Apple.
-Evidence: F1 (2026-09-06 note), F10, `evidence/e13-dyld-reboot-20260916T{100005,155821}.txt`.
+Gate: E13 — **run 2026-09-16, negative for `inc/`**: a restart does not reclaim it.
+
+**A third mechanism then turned up by accident, and it is the one that matters for this path.** Hours
+after E13, a macOS update (26.6.2/25G83 to 26.7/25G229) left the entire previous host-build cache
+tree gone — 9.4 GB, the orphan included. These caches are keyed by host build, so an OS update
+supersedes the whole directory. Whether the installer or CoreSimulatorService does the removal is
+not established. One observation.
+
+So H11's reclamation story now has three answers for two paths, and none of them generalises:
+restart for the Inbox, OS update for the dyld tree, and root deletion untested on both.
+
+E13b (root deletion) is written and **lost its target on this machine** before it could run — the
+directory it was pointed at no longer exists. Its refusal would still be the more interesting
+outcome wherever an orphan does persist: a second path where root is blocked with no SIP flag and no
+`rootless.conf` entry is worth reporting to Apple.
+Evidence: F1 (2026-09-06 note), F10, `evidence/e13-dyld-reboot-20260916T{100005,155821}.txt`,
+`evidence/e13b-dyld-orphan-root-delete-macos26.7-25G229-x86_64.txt`.
 
 ---
 

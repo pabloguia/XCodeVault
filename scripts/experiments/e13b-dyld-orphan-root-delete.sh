@@ -157,6 +157,27 @@ case "$LEAF" in
   *$'\n'*) echo "REFUSING: newline in the directory name." >&2; exit 2;;
 esac
 
+# A cache under a host build that is NOT the running one is a different object from an orphan under
+# the current build, and this script's witnesses do not speak to it. Measured 2026-09-16: a macOS
+# update from 25G83 to 25G229 removed the entire dyld/25G83/ tree, 9.4 GB including the orphan E13
+# had been tracking. So a stale-build directory is normally reclaimed by the update itself, and one
+# that survives is a NEW finding deserving its own experiment rather than this one's unlink loop.
+#
+# The first version of this script printed "Host build dir: 25G83 (this machine: 25G229)" in its
+# header and did nothing with it, then walked all five witnesses against a directory that no longer
+# existed. Computing a discriminator and not branching on it is not a check.
+RUNNING_BUILD=$(sw_vers -buildVersion 2>/dev/null)
+if [ -z "$RUNNING_BUILD" ]; then
+  echo "REFUSING: could not read this machine's build version." >&2; exit 2
+fi
+if [ "$BUILD_DIR" != "$RUNNING_BUILD" ]; then
+  echo "REFUSING: $TARGET sits under host build $BUILD_DIR, but this machine runs $RUNNING_BUILD." >&2
+  echo "  That is not the orphan case this experiment measures. A whole stale-build tree is" >&2
+  echo "  normally removed by the macOS update that supersedes it (measured 2026-09-16)." >&2
+  echo "  If this one survived an update, that is a finding — record it; do not unlink it here." >&2
+  exit 2
+fi
+
 # The identity phase 3 re-checks before the first unlink. Minutes of du and lsof pass between here
 # and there, and the racer that matters is not a local attacker (every directory on the chain is
 # root-owned and not group-writable) but root's own CoreSimulatorService, which can make an orphan
@@ -214,9 +235,17 @@ if [ "$(id -u "$REAL_USER" 2>/dev/null)" = "0" ]; then
   echo "REFUSING: SUDO_USER=$REAL_USER resolves to uid 0." >&2; exit 2
 fi
 
-home_of() {  # <user> -> home directory, or empty. Not awk $2: a home with a space would truncate.
-  dscl . -read "/Users/$1" NFSHomeDirectory 2>/dev/null \
-    | sed -n 's/^NFSHomeDirectory: //p'
+# <user> -> home directory, or empty.
+#
+# Neither `awk '{print $2}'` nor a sed strip can parse this. dscl returns a multi-VALUE attribute,
+# space separated, and root genuinely has two: "NFSHomeDirectory: /var/root /private/var/root".
+# The text form cannot tell that from one home containing a space. Measured: the sed version set
+# HOME for witness 2 to the literal string "/var/root /private/var/root". It happened not to matter,
+# because `simctl runtime list` reads system-wide state rather than $HOME — which is worse, not
+# better: the split-view cross-check ran with a broken HOME and reported agreement.
+home_of() {
+  dscl -plist . -read "/Users/$1" NFSHomeDirectory 2>/dev/null \
+    | plutil -extract 'dsAttrTypeStandard:NFSHomeDirectory.0' raw -o - - 2>/dev/null
 }
 USER_HOME=$(home_of "$REAL_USER")
 ROOT_HOME=$(home_of root); [ -n "$ROOT_HOME" ] || ROOT_HOME=/var/root
@@ -432,6 +461,25 @@ print(chr(10).join(hits) if hits else "none")' "$RID")
   xcv_run "extended attributes" xattr -l "$TARGET"
   xcv_run "size" du -shx "$TARGET"
 
+  # The target existed when the arguments were validated. Phases 1 and 2 have run commands since,
+  # and on 2026-09-16 the directory was already gone by the time phase 2 started — so every `ls`
+  # below failed, the loop that follows never iterated, and the guard printed "every entry is a
+  # known cache artifact" over a read of nothing. An allowlist that cannot distinguish "checked N
+  # entries, all known" from "read zero entries" is not an allowlist.
+  if [ ! -d "$TARGET" ]; then
+    echo "!! VETO: $TARGET is gone since the arguments were validated. Nothing to inspect."
+    echo 3 > "$STATE/outcome"
+    exit 0
+  fi
+  ENTRY_COUNT=$(ls -A "$TARGET" 2>/dev/null | wc -l | tr -d ' ')
+  echo "## entries read: ${ENTRY_COUNT:-0}"
+  if [ "${ENTRY_COUNT:-0}" -eq 0 ]; then
+    echo "!! VETO: read zero entries. Either the directory is empty or it could not be read, and"
+    echo "   this guard cannot tell those apart — so it does not get to report a pass."
+    echo 3 > "$STATE/outcome"
+    exit 0
+  fi
+
   UNEXPECTED=0
   while IFS= read -r entry; do
     [ -n "$entry" ] || continue
@@ -454,12 +502,23 @@ print(chr(10).join(hits) if hits else "none")' "$RID")
     echo 3 > "$STATE/outcome"
     exit 0
   fi
-  echo "-> every entry is a known cache artifact."
+  echo "-> all ${ENTRY_COUNT} entries are known cache artifacts."
   echo
 
-  echo "## open file handles"
-  LSOF=$(lsof +D "$TARGET" 2>&1 | head -20)
+  # stdout ONLY. The first version captured 2>&1, so on a missing path lsof's usage banner landed in
+  # $LSOF, the variable was non-empty, and the script announced "something holds a handle inside the
+  # target". It stopped the run, correctly, for a reason that was false — a veto firing on its own
+  # error message is noise that happened to point the right way. Measured: lsof on a missing path
+  # writes nothing to stdout and exits 1.
+  LSOF_ERR=$(mktemp -t xcv-e13b-lsof) || { echo 4 > "$STATE/outcome"; exit 0; }
+  LSOF=$(lsof +D "$TARGET" 2>"$LSOF_ERR" | head -20)
+  echo "## open file handles (stdout)"
   echo "${LSOF:-<none>}"
+  if [ -s "$LSOF_ERR" ]; then
+    echo "## lsof stderr — instrument noise, NOT evidence of a handle"
+    head -5 "$LSOF_ERR" | sed 's/^/   /'
+  fi
+  rm -f "$LSOF_ERR"
   if [ -n "$LSOF" ]; then
     echo "!! VETO: something holds a handle inside the target. lsof explained nothing on the Inbox,"
     echo "   but a live handle is a reason to stop rather than a curiosity to print."
