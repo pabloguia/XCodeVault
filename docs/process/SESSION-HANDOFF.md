@@ -130,10 +130,29 @@ parcialmente derrubado** — `DVTSimulatorSetLocation` existe no `IDEiOSSupportC
 Mas o Xcode não repassa o caminho ao Simulator.app, que lê seu próprio `DeviceSetPath`: split
 brain silencioso, rule 6, desqualificante sozinho.
 
-### 3. E13 — a sonda de reboot dos 2,48 GB de cache dyld órfão
+### 3. ~~E13 — a sonda de reboot do cache dyld órfão~~ — FEITO 2026-09-16, negativo
 
-`scripts/experiments/e13-dyld-cache-reboot.sh`. Roda antes e depois de um restart, compara.
-Só precisa que o usuário reinicie em algum momento.
+**O órfão sobreviveu ao restart.** Captura antes do reboot e outra 5h46m depois: a árvore de cache
+voltou byte-a-byte idêntica — mesmos tamanhos, mesmos mtimes, mesmo `newest file write` dentro do
+órfão. O `diff` dá exatamente dois hunks, ambos no cabeçalho (timestamp/boottime e
+`internal free: 17Gi → 16Gi`, que é uso normal de seis horas, não a árvore — ela seguiu em 9.4G).
+
+Foram **dois** restarts, não um: o órfão nasceu em 7/09 e o `kern.boottime` da captura *de antes* já
+marcava 15/09. A premissa em que o experimento foi escrito ("criado depois do último boot, nunca
+passou por um restart") era verdadeira em 9/09 e tinha expirado sozinha antes de a sonda rodar —
+ninguém editou nada, só o tempo passou.
+
+Consequência de produto, já aplicada: **o `doctor` não manda mais reiniciar** para esse achado, porque
+foi medido que não adianta. E o H11 saiu de *open* para **falsificado como regra geral** — o GC de
+startup é específico por caminho: recolhe o Inbox e não recolhe o `inc/`, com os dois carecendo de
+flag BSD e ausentes do `rootless.conf`.
+
+Evidência: `evidence/e13-dyld-reboot-20260916T100005.txt` (antes) e `…T155821.txt` (depois).
+
+**O que sobrou é o E13b**, a deleção como root — que *não* rodo aqui. Escrevo o script e te entrego o
+comando. Uma recusa é o resultado mais interessante: seria o segundo caminho onde root é bloqueado sem
+flag de SIP nem entrada no `rootless.conf`, o que é comportamento de OS para reportar à Apple, não
+detalhe de limpeza.
 
 ## Restrições (valem sempre)
 

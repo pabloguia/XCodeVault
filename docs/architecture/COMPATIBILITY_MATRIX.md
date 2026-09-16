@@ -421,15 +421,23 @@ those entries "pending — manual" until someone actually runs and records the r
   display form `iOS 26.5 Simulator Runtime.dmg`. `installer(for:in:)` therefore matched nothing and
   `runtime offload` refused every offload with "NO installer in library" while the installer was in
   the library. Not caught by fixtures, which used hand-written display names.
-- **F10 — orphaned cache: PARTIAL, and the decisive probe has not run.** 2.3 GiB under
-  `Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470` for a runtime absent
-  from `simctl runtime list`, `Profiles/Runtimes` and `Images`. Survived the runtime's removal and
-  later simulator boots, but was created after the last boot (`kern.boottime` Sep 7 17:39 vs mtime
-  Sep 7 18:54), so it has **never been through a restart** — which is what reclaims the analogous
-  stranded Inbox file. Status: **pending E13**, not "confirmed garbage".
+- **F10 — orphaned cache: the restart probe has run, and it SURVIVED (E13, 2026-09-16).** 2.3 GiB
+  under `Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470` for a runtime
+  absent from `simctl runtime list`, `Profiles/Runtimes` and `Images`. Captured before a reboot and
+  again 5h46m after: the cache tree is **byte-identical**, down to the newest write inside the
+  orphan. It has in fact outlived two restarts — it was born Sep 7 and the machine had already
+  booted Sep 15 before the bracketed pair. Status: **durable on this machine**, and the startup
+  reaper that collects the stranded Inbox does **not** cover this path.
+  - Evidence: `evidence/e13-dyld-reboot-20260916T100005.txt` (before),
+    `evidence/e13-dyld-reboot-20260916T155821.txt` (after).
+  - Scope: one machine, one host build (25G83), one orphan. Not a claim about other builds.
+  - `doctor` no longer recommends a restart for this finding — it was measured to do nothing.
 - Root-deletability: **unknown, and not inferable.** No BSD flags anywhere on the ancestor chain and
   `/Library/Developer/CoreSimulator` is absent from `rootless.conf` — but the Inbox file had both
-  properties and root was still refused. `doctor` therefore recommends a restart and no `sudo`.
+  properties and root was still refused. **E13 did not touch this** — it settled the restart
+  question, not the root one. `doctor` no longer recommends a restart (measured useless here) and now
+  presents root deletion as the open probe E13b, labelled unverified, with the Inbox refusal cited in
+  the same breath.
 - Evidence: `docs/research/FINDINGS-2026-09-05.md` §F10, §F11
 
 ### E14a alternate device set — read-only reconnaissance — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64

@@ -39,8 +39,10 @@ falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seç
    no `STATUS.md`. `StorageCategory.containsPath` é agora a única definição de "este path é esta
    categoria"; `PathSafety.requireContained` foi removido porque todo chamador dele passava
    `pathTemplates`, que para as por-device nomeia o device set inteiro.
-3. **E13** — `scripts/experiments/e13-dyld-cache-reboot.sh`, a sonda dos 2,48 GB de cache dyld
-   órfão. Só precisa que você reinicie a máquina em algum momento.
+3. ~~**E13**~~ — **feito 2026-09-16, negativo: o órfão sobreviveu ao reboot byte-a-byte.** O GC de
+   startup é específico por caminho (recolhe o Inbox, não recolhe o `inc/`), o H11 caiu como regra
+   geral e o `doctor` parou de mandar reiniciar para esse achado. Sobra o **E13b**, a deleção como
+   root — precisa de root, então é script escrito aqui e comando entregue a você.
 
 **E14d, bloqueado por hardware:** `create` num volume externo **não-USB** (gaveta Thunderbolt ou
 NVMe). É o único confundidor que o E14c não conseguiu quebrar — todo volume externo já testado é
@@ -159,8 +161,8 @@ Registre o resultado nos dois sentidos. Um "não bootou" é resultado tão publi
 
 ## Depois do E14b
 
-- **E13** — `scripts/experiments/e13-dyld-cache-reboot.sh`, a sonda dos 2,48 GB de cache dyld órfão.
-  Roda antes e depois de um restart; só precisa que o usuário reinicie em algum momento.
+- ~~**E13**~~ — feito 2026-09-16. O órfão sobreviveu ao restart, árvore byte-a-byte idêntica. Sobra o
+  **E13b** (deleção como root), que exige root e portanto sai daqui como script + comando.
 - **`log erase --all` via `simctl spawn`** — é o único dos três por-device com verbo estreito
   documentado. Reproduzi-lo transformaria `simulatorLogStore` de reportado em oferecível.
 - ~~**Containment exato**~~ — feito 2026-09-15.

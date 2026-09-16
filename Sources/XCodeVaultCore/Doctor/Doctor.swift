@@ -530,15 +530,23 @@ public struct Doctor: Sendable {
     /// runtime is installed — deleting it buys a slow first boot, not free space — and false of a
     /// cache whose runtime is gone. Only the latter is a durable win, and the category cannot say so.
     ///
-    /// **The remediation is a restart, not `rm`, and that ordering is deliberate.** The one time this
+    /// **The remediation used to be "restart first", and that ordering was deliberate — then the
+    /// restart was measured and it does nothing here. See E13 below.** The one time this
     /// repo reasoned "no BSD file flags + absent from `rootless.conf` ⇒ root can delete it", it was
     /// wrong: the stranded runtime Inbox `.dmg` had *both* of those properties and root still got
     /// `Operation not permitted` three times — and what actually reclaimed it was a reboot, because
     /// the reaper is a startup GC (F1 2026-09-06, which ends with "doctor must not promise a
-    /// root-only fix"). The orphan measured here was created at 18:54 on the same day the machine
-    /// last booted at 17:39, so it has survived simulator boots but **never a restart**. Until that
-    /// probe runs, treating this as root-deletable garbage repeats the earlier mistake with a bigger
-    /// blast radius.
+    /// root-only fix").
+    ///
+    /// **That probe has since run, and the restart did not reclaim it (E13, 2026-09-16.)** Captured
+    /// before a reboot and again 5h46m after one, the whole cache tree came back byte-identical: same
+    /// sizes, same mtimes, same birth times, and the same newest write anywhere inside the orphan. So
+    /// the startup GC that collects the Inbox is **path-specific, not a general mechanism**, and the
+    /// remediation below no longer tells anyone to restart — it was measured to do nothing here.
+    ///
+    /// What that does *not* license is the opposite inference. Root deletion remains untested (E13b),
+    /// and the Inbox is the standing reason to expect it may be refused, so the command below is
+    /// offered as a probe whose result is worth reporting, not as a fix that is known to work.
     ///
     /// Every guard below is a fail-closed one, and each exists because removing it produced a
     /// destructive suggestion against live data in review.
@@ -672,10 +680,16 @@ public struct Doctor: Sendable {
                         + "where deleting a cache only costs the next boot the time to rebuild it.",
                     path: path,
                     remediation:
-                        "Restart the Mac and re-check: this has never been observed to survive one, and a restart is what reclaimed the analogous stranded "
-                        + "runtime Inbox file (see evidence). If it survives, root deletion is unverified but worth trying — "
-                        + "`P=\(q); sudo ls -la \"$P\" && sudo rm -f \"$P\"/dyld_sim_shared_cache_* \"$P\"/update_dyld_sim_shared_cache-std*.txt && sudo rmdir \"$P\"` "
-                        + "— `rmdir` refuses if anything unexpected is inside.",
+                        "Do not start with a restart: where this was measured (macOS 26.6.2 / 25G83, 2026-09-16) the tree came back byte-identical across "
+                        + "a reboot, so the startup reaper that does collect the stranded runtime Inbox does not cover this path (E13). "
+                        + "First confirm the runtime is really gone: `simctl runtime list` cannot see a runtime bundled inside an older Xcode, so if any "
+                        + "Xcode on this Mac ships \(dirName), this cache is live and deleting it costs you a rebuild for nothing. "
+                        + "Then, if you want to run the probe that is still open — root deletion is UNVERIFIED, and was refused on that Inbox file despite "
+                        + "the same absence of SIP markers — inspect first: `P=\(q); sudo ls -la \"$P\"`. Delete as a separate command: "
+                        + "`sudo rm -f \"$P\"/dyld_sim_shared_cache_* \"$P\"/update_dyld_sim_shared_cache-std*.txt && sudo rmdir \"$P\"`. "
+                        + "`rmdir` refuses if anything unexpected is inside. Copy `update_dyld_sim_shared_cache-stderr.txt` out first — that glob deletes it, "
+                        + "and it is the diagnostic worth keeping. If the delete is refused with Operation not permitted, that is the more interesting "
+                        + "outcome, not a failure: it would make this a second path where root is blocked with no BSD flag and no rootless.conf entry.",
                     evidence: "docs/research/FINDINGS-2026-09-05.md §F10"))
         }
 

@@ -1,0 +1,49 @@
+E13 — dyld cache startup-reap probe
+date:        2026-09-16T13:00:05Z (UTC)
+macOS:       26.6.2 (25G83)
+arch:        x86_64
+xcode:       Xcode 26.5 Build version 17F42 
+boottime:    { sec = 1789473665, usec = 489543 } Tue Sep 15 09:01:05 2026
+uptime:      10:00  up 1 day, 59 mins, 3 users, load averages: 10.43 7.07 4.60
+repo:        22a3cee
+
+== installed runtimes (simctl runtime list) ==
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B (Ready)
+
+Total Disk Images: 2 (14.8G)
+
+== cache tree ==
+-- /Library/Developer/CoreSimulator/Caches/dyld/25G83
+total 0
+drwxr-xr-x  12 root  admin  - 384 Sep  9 10:54 com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77
+drwxr-xr-x  10 root  admin  - 320 Sep  9 11:01 com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570
+drwxr-xr-x   3 root  admin  -  96 Sep  9 11:01 inc
+   com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77: 4.4G  mtime=Sep  9 10:54:27 2026  birth=Sep  9 10:50:56 2026
+   com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570: 2.7G  mtime=Sep  9 11:01:53 2026  birth=Sep  9 11:00:39 2026
+   inc: 2.3G  mtime=Sep  9 11:01:54 2026  birth=Aug 21 03:31:23 2026
+     inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470: 2.3G  mtime=Sep  7 18:54:48 2026  birth=Sep  7 18:37:58 2026
+       newest file write: 1788818097 /Library/Developer/CoreSimulator/Caches/dyld/25G83/inc/com.apple.CoreSimulator.SimRuntime.tvOS-26-5.23L470/dyld_sim_shared_cache_x86_64.02-alj3CU
+       total 4839720
+       -rw-r--r--  1 root  admin  - 841449472 Sep  7 18:54 dyld_sim_shared_cache_x86_64
+       -rw-r--r--  1 root  admin  - 814546944 Sep  7 18:54 dyld_sim_shared_cache_x86_64.01
+       -rw-------  1 root  admin  - 821936128 Sep  7 18:54 dyld_sim_shared_cache_x86_64.02-alj3CU
+       -rw-r--r--  1 root  wheel  -      2666 Sep  7 18:54 update_dyld_sim_shared_cache-stderr.txt
+       -rw-r--r--  1 root  wheel  -         0 Sep  7 18:37 update_dyld_sim_shared_cache-stdout.txt
+
+== totals ==
+cache tree:     9.4G
+internal free:  17Gi
+
+== how to read this ==
+Run before restarting, restart, run again, then diff the two files.
+  gone after the restart      -> the startup reaper covers inc/. F10 becomes 'transient
+                                 until restart' and doctor should say only 'restart', no sudo.
+  still there, same size      -> the Inbox reaper does not cover this path. Only now is the
+                                 root-deletion probe (E13b) worth running.
+  still there but smaller, or -> CoreSimulator is treating it as a resumable build. That
+  newest file write moved        falsifies the 'interrupted, abandoned' reading in F10 and
+                                 argues for widening doctor's one-hour in-flight guard.

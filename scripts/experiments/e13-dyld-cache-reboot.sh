@@ -8,10 +8,24 @@
 #
 # Why this probe and not a sudo one. The closest analogue in this repo is the stranded runtime Inbox
 # .dmg (FINDINGS, 2026-09-06): root deletion was refused three times with Operation not permitted,
-# and a REBOOT reclaimed the file — the reaper is a startup GC. The F10 orphan was created after the
-# machine's last boot, so it has survived simulator boots but never a restart. Reasoning from "no
-# BSD flags + absent from rootless.conf" to "root can delete it" has already been wrong once here,
-# on a path with exactly those properties.
+# and a REBOOT reclaimed the file — the reaper is a startup GC. Reasoning from "no BSD flags +
+# absent from rootless.conf" to "root can delete it" has already been wrong once here, on a path
+# with exactly those properties.
+#
+# RESULT, 2026-09-16 (this machine, macOS 26.6.2 / 25G83): the orphan SURVIVED. Captured at 10:00,
+# rebooted at 10:12, captured again at 15:58 — the whole cache tree byte-identical, including the
+# newest write inside the orphan. Branch two below. The startup reaper does not cover inc/.
+#   evidence/e13-dyld-reboot-20260916T100005.txt  (before)
+#   evidence/e13-dyld-reboot-20260916T155821.txt  (after)
+#
+# An earlier version of this header claimed the orphan "was created after the machine's last boot,
+# so it has survived simulator boots but never a restart". That was true when written on 2026-09-09
+# and false by the time the probe ran: the orphan is from Sep 7 and the machine had booted on Sep 15,
+# so it had already outlived one restart before this experiment bracketed a second. Left recorded
+# rather than deleted — the premise is the kind that goes stale silently, and a reader who re-runs
+# this on another machine should re-derive it from their own capture rather than from this comment.
+#
+# Still worth running elsewhere: one machine, one host build, one orphan.
 #
 # READ-ONLY. No sudo, no deletion, nothing mounted or unmounted. Run it, restart, run it again, diff.
 set -u

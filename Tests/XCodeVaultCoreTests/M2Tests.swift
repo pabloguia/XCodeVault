@@ -47,8 +47,11 @@ final class CleanTests: XCTestCase {
         let only = try? XCTUnwrap(w.first)
         XCTAssertTrue(only?.contains("NOT durable free space") == true, "\(w)")
         XCTAssertTrue(only?.contains("rebuilt on the next boot") == true, "the reason must be stated, not just the caveat: \(w)")
-        // Durability across a restart is exactly what is untested; the warning must not imply it.
-        XCTAssertTrue(only?.contains("untested") == true, "\(w)")
+        // This asserted `contains("untested")` until 2026-09-16, when E13 tested it: the orphaned
+        // part of the tree came back byte-identical across a reboot. The warning must now state the
+        // measurement rather than the gap, and must cite the experiment so the claim stays checkable.
+        XCTAssertTrue(only?.contains("restart does not reclaim") == true, "\(w)")
+        XCTAssertTrue(only?.contains("E13") == true, "the durability claim must cite its evidence: \(w)")
     }
 
     func testPlanIsGranularForDerivedDataAndSkipsSymlinksAndArchives() throws {

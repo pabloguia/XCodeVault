@@ -173,9 +173,27 @@ what `doctor` should tell the user to do.
 The reason this is the first probe and not the second: the closest analogue in this repo is the
 stranded runtime Inbox `.dmg` (FINDINGS, 2026-09-06 note), where root deletion was refused three
 times with `Operation not permitted` and a **reboot** reclaimed the file — the reaper is a startup
-GC. The orphan measured for F10 was created at 18:54 on the same day the machine last booted at
-17:39, so it has survived simulator boots but never a restart. Until this runs, "nothing reclaims
-it" is a statement about one uptime session.
+GC. When this was written the orphan had never been through a restart, which is what made the probe
+decisive.
+
+**Run 2026-09-16 — RESULT: it survived, and the second branch below is the one taken.** Captured
+before a reboot and again 5h46m after it; the `== cache tree ==` section of the two files is
+byte-identical — same sizes, same mtimes, same birth times, and the same `newest file write` epoch
+inside the orphan. `diff` produces exactly two hunks, both in the header: the timestamp/boottime and
+`internal free: 17Gi → 16Gi` (ordinary use over six hours; the tree itself stayed at 9.4G). tvOS is
+still absent from `simctl runtime list` in both, so it is still a genuine orphan.
+
+Two restarts, not one. The controlled pair above is the second: the orphan was born Sep 7 18:37 and
+`kern.boottime` in the *before* capture already read Sep 15 09:01, so it had outlived a restart
+before this experiment began. The premise quoted above had gone stale between being written
+(2026-09-09) and being tested — worth noting as a class of error, since nothing about it looked
+stale.
+
+**What this settles and what it does not.** `Caches/dyld/<build>/inc/` is not covered by the startup
+reaper that collects the Inbox, so the reaper is path-specific rather than a general mechanism (H11).
+The "resumable build" branch is also ruled out for this boot: the newest write did not move, so
+nothing resumed the build at startup — though installing tvOS 26.5 again might, and that is untested.
+Root deletability is untouched by this result; E13b is now unblocked, not answered.
 
 **No privilege, no deletion, nothing mounted.** Script:
 `scripts/experiments/e13-dyld-cache-reboot.sh` — run it, restart, run it again, diff the two
@@ -191,7 +209,8 @@ Three outcomes, each of which settles a different question:
   restart", and `doctor`'s remediation should be *only* "restart", with no `sudo` at all. The rule
   keeps its value (it explains 2.3 GiB the user can see) but stops implying manual work.
 - **Still there** → the Inbox reaper does not cover this path. Only then does the root-deletion probe
-  (E13b) become worth running, and only then may `doctor` mention a command.
+  (E13b) become worth running, and only then may `doctor` mention a command. **← this is what happened,
+  2026-09-16.**
 - **Still there but shrunk / partially rebuilt** → CoreSimulator is treating it as a resumable build.
   That would falsify the "interrupted, abandoned" reading in F10 and argue for widening the `inc/`
   age guard well beyond its current one hour.

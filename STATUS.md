@@ -511,6 +511,11 @@ with no data loss, once it is).
    way the finding shrinks to "transient until restart". The remediation now leads with the reboot
    and offers only `rm -f` of known filenames plus `rmdir` (which refuses on surprises) if it
    survives one. Probe order in F10: reboot → sudo → superseded-build.
+   **(2026-09-16: the reboot ran and the orphan survived byte-identical, so the "transient until
+   restart" branch is dead, the remediation no longer leads with a reboot, and the order is now
+   sudo → superseded-build. Note also that this item's own first sentence expired without anyone
+   editing it: the machine booted on Sep 15, so by the time the probe ran the orphan had already
+   outlived a restart. The claim was two timestamps, and one of them moved.)**
 3. **A fifth `?? []`-family fail-open, through a door I had not guarded.** I guarded
    `runtimes.isEmpty`, but `runtimeIdentifier` is optional and the decoder enforces no required keys,
    so a non-empty array whose identifiers did not decode produced `installedPrefixes == []` → every
@@ -533,7 +538,8 @@ also silently broke a mutation-testing harness that keyed off "Executed N tests"
 
 **Tracked, not fixed:** (a) an `inc/` entry that also has a newer finished sibling is probably a
 leftover rather than work in flight; (b) whether reporting a whole stale-build tree is the right
-granularity; (c) the reboot probe itself, which gates F10 and needs a human.
+granularity; (c) ~~the reboot probe itself, which gates F10 and needs a human~~ — **run 2026-09-16,
+and the orphan survived byte-identical (E13).** What needs a human now is E13b, the root deletion.
 
 ### Review round 2 on F10/F11 — three more blockers, and a pattern worth naming
 
@@ -567,6 +573,8 @@ runtimes only, so an available device now also witnesses its runtime (a runtime 
 Xcode would otherwise get `sudo rm` offered for a live cache); the remediation was cut from 1310
 characters and no longer claims the Inbox's EPERM predicts anything here; `CleanPlanner` no longer
 calls the orphan "durable" when durability across a restart is exactly what is untested.
+**(Superseded 2026-09-16: E13 tested it, the orphan is durable across a restart, and `CleanPlanner`
+now says so rather than hedging.)**
 
 `Doctor` gained an injectable `dyldCacheRoot`, like `home`. Two tests were passing for boilerplate
 reasons and are fixed: `testTheRuleIsReachableThroughDiagnose` asserted the *absence* of a finding on
@@ -805,7 +813,7 @@ entries, which is what the script edits.
 | | |
 |---|---|
 | `/Library/Developer/CoreSimulator/Images` | 15 GB — relocation refused (F16); movable only via offload/import |
-| `/Library/Developer/CoreSimulator/Caches` (dyld) | 9.4 GB — root-owned, mostly rebuilt on boot; the durable part is F10, gated on E13 |
+| `/Library/Developer/CoreSimulator/Caches` (dyld) | 9.4 GB — root-owned, mostly rebuilt on boot; the durable part is F10: 2.3 GB that came back byte-identical across a reboot (E13 2026-09-16), so a restart is **not** the remedy |
 | `~/Library/Developer/CoreSimulator/Devices` | **9.1 GB — user-owned, unexplored** |
 | `~/Library/Developer/Xcode` | 2.9 GB — DerivedData/Archives, supported relocation, but F4/H6 warns against external |
 
@@ -923,11 +931,21 @@ under-reporting, which is the one thing an accounting tool must not do.
   `pgrep xcodebuild` and the device's state first, and says which device it will touch before
   touching it.
 
-**Next three actions:** (1) **E14b phases 0–3** — still written, still unrun; the gate that kills H12
-if the probe device will not boot from the vault. (2) E13, the dyld-cache reboot probe, whenever the
-machine is next restarted. (3) Reproduce `log erase --all` inside a device via `simctl spawn`; it is
-the only one of the three per-device categories with a documented narrow verb, and reproducing it
-would turn `simulatorLogStore` from reported into offerable.
+**The previous three are all closed, and all three closed negatively** — E14b (H12 falsified for
+external storage), `log erase --all` (refused by `logd` inside the device, all three documented
+forms), and E13 (the dyld orphan survived a reboot byte-identical). Worth noting as a batch: none of
+the three produced a feature, and each replaced an assumption with a measurement.
+
+**Next three actions:** (1) **E13b — root deletion of the dyld orphan.** Unblocked by E13 and the
+only remaining probe on F10. Needs root, so it does not get run here: write the script, hand over the
+command. A *refusal* is the more valuable outcome — it would make this the second path where root is
+blocked with no BSD flag and no `rootless.conf` entry, which is reportable OS behaviour rather than a
+cleanup detail. (2) **E14d** — `create` on a non-USB external (Thunderbolt/NVMe enclosure), the one
+confounder E14c could not break, since every external tested here is USB. Blocked on hardware the
+project does not have. (3) **The superseded-build orphan class** (F10 probe 3): whether a runtime
+*update* leaves its old finished cache behind. It is the most likely orphan class on any machine that
+has taken an update, and no machine here has exhibited one — so this needs either a runtime update
+performed deliberately or a second machine.
 
 ### Safety review of the same change — what it caught, and the one thing it made me un-say
 

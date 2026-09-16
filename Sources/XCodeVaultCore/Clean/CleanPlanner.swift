@@ -100,7 +100,7 @@ public struct CleanPlanner: Sendable {
                 "CoreSimulator dyld caches are root-owned: listed for accounting, executable only through the privileged helper (M3). "
                     + "Most of this total is NOT durable free space — a cache whose runtime is still installed is rebuilt on the next boot of that runtime, "
                     + "so deleting it buys a slow first boot rather than disk. `doctor` reports the part that is not rebuilt on the next boot — caches whose "
-                    + "runtime is gone — though whether a restart reclaims those on its own is itself untested (F10).")
+                    + "runtime is gone — and a restart does not reclaim those either, measured byte-identical across a reboot (F10, E13).")
         }
         // One line per declined category, largest first, naming the total across every device rather
         // than each device separately. The short reason lives here; the full one is in `doctor`,

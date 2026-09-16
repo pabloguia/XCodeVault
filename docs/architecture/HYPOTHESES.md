@@ -345,24 +345,35 @@ forum workaround straight to "verified" — reproduce it first.
 
 ## H11 — regenerable system caches are reclaimed by the system, not by us
 
-**Status: open.** Two paths under `/Library/Developer/CoreSimulator` accumulate multi-GB residue
-that no user action reclaims: the runtime Inbox (F1) and the dyld shared-cache tree (F10). For the
-Inbox the answer is known and surprising — root deletion is refused with `Operation not permitted`
-despite the path carrying no BSD flags and being absent from `rootless.conf`, and a **restart**
-reclaims it, so the reaper is a startup GC. Whether the same holds for `Caches/dyld/<build>/inc/`
-is untested.
+**Status: falsified as a general rule (2026-09-16). The startup GC is path-specific.** Two paths
+under `/Library/Developer/CoreSimulator` accumulate multi-GB residue that no user action reclaims:
+the runtime Inbox (F1) and the dyld shared-cache tree (F10). They now answer *differently*, and that
+split is the finding:
 
-This matters beyond one directory. If startup GC is the general mechanism, then the product's
-answer for root-owned regenerable data is "tell the user to restart", the privileged helper is not
-on the critical path for reclaiming it at all, and every `sudo` suggestion in this area is both
-unnecessary and — on the evidence of the Inbox — likely to fail. If it is not general, each such
-path needs its own probe, and the absence of SIP markers is not evidence either way.
+| path | root deletion | restart |
+|---|---|---|
+| runtime Inbox `.dmg` (F1) | refused, `Operation not permitted` ×3 | **reclaims it** (2026-09-07, +5 GB) |
+| `Caches/dyld/<build>/inc/` (F10) | untested — E13b | **does nothing** (E13, 2026-09-16, byte-identical across a reboot) |
+
+Both paths carry no BSD flags and are absent from `rootless.conf`. The two properties that looked
+like they explained the Inbox's behaviour therefore explain neither, and "reclaimed by the system"
+is not a property of `/Library/Developer/CoreSimulator` as a whole.
+
+This matters beyond one directory, and the branch taken is the second of the two written here before
+the probe ran: **each such path needs its own probe, and the absence of SIP markers is not evidence
+either way.** The product cannot answer "root-owned regenerable data" with "tell the user to
+restart" — that answer is now known to be wrong for the larger of the two paths, and `doctor` has
+been corrected accordingly. Whether the privileged helper is on the critical path here is reopened,
+and turns on E13b.
 
 **Do not treat "no BSD flags + absent from `rootless.conf` ⇒ root can delete it" as sound.** It has
 been falsified once here, on exactly such a path, and reasoning from it produced a `doctor`
 remediation that contradicted an instruction already written in FINDINGS.
 
-Gate: E13. Evidence so far: F1 (2026-09-06 note), F10.
+Gate: E13 — **run 2026-09-16, negative for `inc/`.** Next: E13b (root deletion on that path), which
+is now unblocked and whose *refusal* would be the more interesting outcome: a second path where root
+is blocked with no SIP flag and no `rootless.conf` entry is worth reporting to Apple.
+Evidence: F1 (2026-09-06 note), F10, `evidence/e13-dyld-reboot-20260916T{100005,155821}.txt`.
 
 ---
 

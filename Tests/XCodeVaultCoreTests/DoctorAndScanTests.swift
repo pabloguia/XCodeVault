@@ -984,16 +984,32 @@ final class OrphanedDyldCacheTests: XCTestCase {
 
     // MARK: the advice itself
 
-    /// The repo already learned this once: the stranded Inbox file had no BSD flags and was absent
-    /// from `rootless.conf`, and root still got EPERM — what reclaimed it was a restart. This orphan
-    /// was created after the last boot, so the restart probe has not been run. Leading with `rm`
-    /// would repeat the mistake, and F1 says in as many words that doctor must not promise a
-    /// root-only fix.
-    func testTheRemediationLeadsWithARestartAndNeverSuggestsRmDashRf() throws {
+    /// The remediation must not promise a restart, because a restart was **measured** to do nothing
+    /// here: E13 captured the tree before a reboot and again 5h46m after, and it came back
+    /// byte-identical (2026-09-16).
+    ///
+    /// This test used to assert the opposite, in its name and its first assertion — `hasPrefix(
+    /// "Restart the Mac")`, on the reasoning that the cheap unprivileged probe comes first. That
+    /// reasoning was right and the advice was still wrong, because the premise underneath it was two
+    /// timestamps ("created after the last boot, so it has never been through a restart") that stopped
+    /// being true on their own. Nothing edited the claim; the machine rebooted. Kept as a rename
+    /// rather than a new test so the diff shows the reversal.
+    ///
+    /// The `rm -rf` guard below is unchanged and unrelated to any of that: `rmdir` refuses when
+    /// something unexpected is inside, which is the whole reason the suggested command ends in it.
+    func testTheRemediationDoesNotPromiseARestartAndNeverSuggestsRmDashRf() throws {
         let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
         let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
         let r = try XCTUnwrap(f.first?.remediation)
-        XCTAssertTrue(r.hasPrefix("Restart the Mac"), "the cheap, unprivileged probe comes first: \(r)")
+        // Polarity is pinned structurally, not by the absence of one retired sentence: a rewrite that
+        // reintroduces "Restart the Mac and re-check" in different words would slip past a blocklist.
+        XCTAssertFalse(r.hasPrefix("Restart"), "the restart was measured to do nothing here: \(r)")
+        XCTAssertFalse(
+            r.contains("never been observed to survive"),
+            "falsified 2026-09-16 — this orphan has now outlived two restarts: \(r)")
+        // Not a style rule about the wording: naming the experiment is what forces the next person
+        // rewriting this sentence to go and read the result before re-promising the fix.
+        XCTAssertTrue(r.contains("E13"), "cite the experiment that settled it: \(r)")
         XCTAssertFalse(r.contains("rm -rf"), "rmdir refuses on surprises; rm -rf takes them with it: \(r)")
         XCTAssertTrue(r.contains("rmdir"))
     }
