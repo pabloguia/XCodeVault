@@ -353,7 +353,7 @@ split is the finding:
 | path | root deletion | restart |
 |---|---|---|
 | runtime Inbox `.dmg` (F1) | refused, `Operation not permitted` ×3 | **reclaims it** (2026-09-07, +5 GB) |
-| `Caches/dyld/<build>/inc/` (F10) | untested — E13b, and it lost its target | **does nothing** (E13, 2026-09-16, byte-identical across two restarts) — but a macOS **update** removed the whole host-build tree hours later, 9.4 GB, same day |
+| `Caches/dyld/<build>/inc/` (F10) | untested — E13b, and it lost its target | **does nothing** (E13, 2026-09-16, byte-identical across two restarts) — but a macOS **update** removed the whole host-build tree hours later; the installed runtimes' caches rebuilt within the hour, the orphan did not, so ~2.3 GB durable |
 
 Both paths carry no BSD flags and are absent from `rootless.conf`. The two properties that looked
 like they explained the Inbox's behaviour therefore explain neither, and "reclaimed by the system"
@@ -377,6 +377,12 @@ after E13, a macOS update (26.6.2/25G83 to 26.7/25G229) left the entire previous
 tree gone — 9.4 GB, the orphan included. These caches are keyed by host build, so an OS update
 supersedes the whole directory. Whether the installer or CoreSimulatorService does the removal is
 not established. One observation.
+
+**Most of it then rebuilt, which is the part that bears on the product.** Within the hour the two
+installed runtimes had caches on the new build at the same sizes as before (4.4G and 2.7G); the
+orphan stayed at zero. So the update does not "reclaim 9.4 GB" — it reclaims the absent-runtime
+share, here 2.3 GB, and the rest is a slow first boot. Do not quote the figure measured inside the
+rebuild window; an early version of this note did.
 
 So H11's reclamation story now has three answers for two paths, and none of them generalises:
 restart for the Inbox, OS update for the dyld tree, and root deletion untested on both.

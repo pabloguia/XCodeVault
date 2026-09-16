@@ -936,10 +936,18 @@ external storage), `log erase --all` (refused by `logd` inside the device, all t
 forms), and E13 (the dyld orphan survived a reboot byte-identical). Worth noting as a batch: none of
 the three produced a feature, and each replaced an assumption with a measurement.
 
-**Next three actions:** (1) **E13b — root deletion of the dyld orphan.** Unblocked by E13 and the
-only remaining probe on F10. The script is written and deliberately unrun:
-`scripts/experiments/e13b-dyld-orphan-root-delete.sh`, inspect-only unless `--delete` is passed, and
-it refuses to elevate itself. Needs root, so it is handed over as a command. A *refusal* is the more valuable outcome — it would make this the second path where root is
+**E13b ran in inspect mode on 2026-09-16 and found nothing to inspect.** A macOS update (26.6.2/
+25G83 to 26.7/25G229) had removed the whole previous host-build cache tree, orphan included. Within
+the hour the installed runtimes' caches rebuilt on the new build at the same sizes and the orphan did
+not, so the durable reclaim is ~2.3 GB and not the tree's 9.4 GB — the 29 GiB free visible mid-rebuild
+was a transient and is recorded as one. **F10's open question is therefore closed by the OS rather
+than by us**, and E13b has no target on this machine.
+
+**Next three actions:** (1) **E13b stays written for a machine where an orphan persists** — nothing
+to run here. Its run did expose three fail-open guards, all fixed: an allowlist that approved an
+empty read, an `lsof` veto firing on `lsof`'s own error banner, and a `home_of` that returned root's
+two `NFSHomeDirectory` values as one string, leaving a cross-check running broken and reporting
+agreement. A *refusal* is the more valuable outcome — it would make this the second path where root is
 blocked with no BSD flag and no `rootless.conf` entry, which is reportable OS behaviour rather than a
 cleanup detail. (2) **E14d** — `create` on a non-USB external (Thunderbolt/NVMe enclosure), the one
 confounder E14c could not break, since every external tested here is USB. Blocked on hardware the

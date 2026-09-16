@@ -2,12 +2,18 @@
 
 Ponto de partida para uma sessão nova. Projeto em `~/projects/XCodeVault`.
 
-> **Estado verificado em 2026-09-15** (vault, espaço, devices, árvore git). Os números de categoria
-> são desta data; o resto continua sendo ponto-no-tempo — reverifique antes de agir.**
-> Em quatro dias os containers `Dead` foram de 836 MB a 2,1 GB e o espaço livre de 14 a 21 GiB.
+> **Estado verificado em 2026-09-16 20:01** (OS, vault, espaço, devices, cache dyld, árvore git).
+> Ponto-no-tempo — reverifique antes de agir, inclusive o que está escrito aqui.
 > Um comando: `du -shcx ~/Library/Developer/CoreSimulator/Devices/*/data/Library/Caches/com.apple.containermanagerd/Dead`
 > Se a ordem de prioridade mudar por causa disso, siga a evidência e não este documento.
 > Ao terminar um item, atualize esta página junto com o `STATUS.md`.
+>
+> **Em 16/09 isto custou caro duas vezes no mesmo dia.** A máquina foi de macOS 26.6.2 (25G83) para
+> 26.7 (25G229) no meio da sessão, e um comando apontado para o caminho medido de manhã já não
+> existia à noite. E uma medição feita durante a janela de reconstrução do cache dyld virou a
+> afirmação "9,4 GB recuperados / 29 GiB livres" — oito minutos depois eram 7,1 GB reconstruídos e
+> 19 GiB. **Número medido dentro de uma janela transitória não é estado.** Meça duas vezes, separado
+> no tempo, antes de escrever um número aqui.
 
 ## Leia antes de agir, nesta ordem
 
@@ -31,11 +37,18 @@ sem ACL, ausente do `rootless.conf`) enquanto o `simdiskimaged` o reescreve à v
 barreira é **autorização, não integridade** — o E4a provou que a imagem mantém selo APFS válido
 copiada byte a byte para volume externo. ADR-0004 ganhou adendo, não reversão.
 
-## Estado da máquina (verificado 2026-09-13)
+## Estado da máquina (medido 2026-09-16 20:01)
 
-- Interno: 21 GiB livres. Vault em `/Volumes/<vault>` (registrado, VERIFIED por UUID+sentinela).
-- Dois runtimes instalados (iOS 26.5 + watchOS 26.5, 14.8 GB). Instaladores no vault.
-- Device set: **9,9 GB** — era 8,5 GB em 09/09.
+- **macOS 26.7 (25G229)** — atualizou de 26.6.2 (25G83) nesta sessão, reboot às 19:14.
+  Xcode 26.5 (17F42).
+- Interno: **19 GiB livres** (eram 16 GiB antes da atualização).
+- Vault `/Volumes/<vault>` montado: Case-sensitive APFS, USB, External,
+  UUID `<vault-uuid>`, 349 GiB livres.
+- Dois runtimes instalados (iOS 26.5 + watchOS 26.5, 14,8 GB). Instaladores no vault.
+- Device set: **8,2 GB**.
+- Cache dyld: **7,1 GB**, todo sob `25G229` — a árvore do build anterior sumiu na atualização e os
+  caches dos runtimes instalados se reconstruíram nos mesmos tamanhos (4,4G iOS + 2,7G watchOS).
+  `inc/` está em 0B e o órfão do tvOS não voltou.
 
 ## O que fazer, em ordem de prioridade
 
@@ -149,8 +162,38 @@ flag BSD e ausentes do `rootless.conf`.
 
 Evidência: `evidence/e13-dyld-reboot-20260916T100005.txt` (antes) e `…T155821.txt` (depois).
 
-**O que sobrou é o E13b**, a deleção como root. O script existe e *não* foi rodado aqui —
-`scripts/experiments/e13b-dyld-orphan-root-delete.sh`, escrito em 2026-09-16:
+### 3b. O E13b rodou em modo inspeção e perdeu o alvo — e aí veio o achado de verdade
+
+**A atualização do macOS levou a árvore inteira.** Entre a captura do E13 (15:58, em 25G83) e o run
+do E13b (19:53, já em 25G229) a máquina atualizou e rebootou às 19:14. Às 19:53 `Caches/dyld/` tinha
+só `25G229/inc`, vazio: os 9,4 GB do build anterior, órfão incluído, não existiam mais. Esses caches
+são indexados pelo build do host, então uma atualização de OS supersede o diretório inteiro.
+
+**Mas só a parte do órfão é espaço durável, e isso é o que importa.** Oito minutos depois os dois
+runtimes instalados já tinham reconstruído no build novo, nos mesmos tamanhos (4,4G iOS, 2,7G
+watchOS); o `inc/` ficou em 0B. Ganho líquido ≈ **2,3 GB**, livre 16 → 19 GiB. O `0B` / `29 GiB`
+visível na janela entre a atualização e a reconstrução era transitório e **não pode ser citado como
+recuperação**. Uma primeira versão desta seção citou, e estava errada por uma hora.
+
+De quebra, é a confirmação mais limpa que a categoria já teve: cache de runtime **instalado** volta
+sozinho (compra boot lento, não disco); cache de runtime **ausente** não volta. As duas metades
+medidas no mesmo antes/depois, por acidente.
+
+Não estabelecido: **quem** apagou — o instalador ou o CoreSimulatorService na primeira utilização
+depois da atualização. O mtime do `dyld/` é 19:53, a hora em que o próprio run acordou o `simctl`, o
+que é compatível com as duas leituras. Consulta ao log unificado na janela não devolveu nada.
+
+**Três guardas do E13b falharam abertos nesse run, e ele parou por acidente** — todos corrigidos,
+ver o commit. A allowlist de conteúdo aprovou uma leitura vazia e imprimiu "every entry is a known
+cache artifact" sobre a leitura de nada; o veto do `lsof` disparou com o banner de erro do próprio
+`lsof`, capturado por um `2>&1`; e o `home_of` devolvia dois caminhos para root
+(`/var/root /private/var/root`), deixando a testemunha 2 com `HOME` inválido — e *não fez diferença*,
+o que é pior, porque a verificação de visão dividida rodou quebrada e reportou concordância. Além
+disso o descasamento de build era calculado, impresso e ignorado.
+
+**Onde o E13b ainda vale:** numa máquina onde um órfão persista. Aqui não há mais alvo.
+
+O script está em `scripts/experiments/e13b-dyld-orphan-root-delete.sh`, escrito em 2026-09-16:
 
 ```
 # inspeção, não apaga nada:
@@ -182,7 +225,7 @@ limpeza.
 - Teste por mutação o que escrever, e conte crashes além de falhas de asserção.
 - Responda em português; arquivos e commits em inglês.
 
-## Três lições que reincidiram e estão documentadas no STATUS
+## Quatro lições que reincidiram e estão documentadas no STATUS
 
 1. **Afirmação herdada não é fato.** Cinco rodadas de revisão nesta sessão; em três delas o
    problema era uma correção anterior que mudou de lugar em vez de sumir. E várias entradas
@@ -193,6 +236,25 @@ limpeza.
    precisa de um teste que não passe costura nenhuma.
 3. **Ensaio em contexto diferente não é ensaio.** Um `--dry-run` como usuário passou e o run real
    como root recusou, porque comandos liam o home errado. E confirmar o contrato de um verbo
-   invocando ele não é diagnóstico — `simctl runtime unmount` não é read-only.
+   invocando ele não é diagnóstico — `simctl runtime unmount` não é read-only. Em 16/09 isto
+   reincidiu duas vezes num script só: `sudo -u` sem `-H` fazia as duas testemunhas lerem o mesmo
+   store, e uma função bash foi testada no zsh interativo, onde falhou por um motivo que não existe
+   no bash.
+4. **Medição dentro de janela transitória não é estado** *(nova, 16/09, reincidiu no mesmo dia)*.
+   O cabeçalho do E13 afirmava "criado depois do último boot, nunca passou por restart" — duas
+   datas, verdadeiras quando escritas, expiradas sozinhas sem ninguém editar nada. Horas depois eu
+   medi o cache dyld em `0B` na janela entre a atualização do macOS e a reconstrução, e escrevi
+   "9,4 GB recuperados / 29 GiB livres" em quatro arquivos. Oito minutos depois eram 7,1 GB e
+   19 GiB, e o ganho real era 2,3 GB. **Antes de escrever um número que afirma permanência, meça
+   duas vezes separado no tempo, ou escreva a janela junto com o número.**
 
-Comece pelo item 1.
+## Por onde começar
+
+Os itens 1–3 acima estão **fechados**, e os três fecharam negativamente. O que resta na pesquisa de
+armazenamento está bloqueado por hardware (E14d: um externo **não-USB**, para separar removibilidade
+de barramento) ou por evento (a terceira sonda do F10: se um *build de runtime* superseded deixa
+cache para trás — nenhuma máquina aqui exibiu um). Uma decisão antiga segue aberta e não é edição
+óbvia: o `e8c-import-roundtrip.sh` ainda usa `simctl bootstatus -b`, que o E11 registrou travando em
+Data Migration; mudar como ele espera muda o que ele mede, então é decisão, não conserto.
+
+Com isso, o próximo trabalho real é de produto, não de pesquisa — ver as milestones no `STATUS.md`.

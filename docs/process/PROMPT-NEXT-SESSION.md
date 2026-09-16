@@ -42,9 +42,11 @@ falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seç
 3. ~~**E13**~~ — **feito 2026-09-16, negativo: o órfão sobreviveu ao reboot byte-a-byte.** O GC de
    startup é específico por caminho (recolhe o Inbox, não recolhe o `inc/`), o H11 caiu como regra
    geral e o `doctor` parou de mandar reiniciar para esse achado.
-4. **E13b** — `scripts/experiments/e13b-dyld-orphan-root-delete.sh`, escrito e **não rodado**: exige
-   root, então sai daqui como comando. Comece pelo modo inspeção (`--i-understand` sem `--delete`),
-   que roda como root e testa a cadeia de cinco testemunhas sem apagar nada.
+4. ~~**E13b**~~ — rodou em modo inspeção em 2026-09-16 e **perdeu o alvo**. A máquina atualizou para
+   macOS 26.7 (25G229) no meio da sessão e a árvore `dyld/25G83/` inteira sumiu com a atualização,
+   órfão incluído. Oito minutos depois os caches dos runtimes instalados já tinham reconstruído nos
+   mesmos tamanhos e o `inc/` ficou em 0B: ganho durável ≈ **2,3 GB**, não os 9,4 GB da árvore.
+   O script segue válido numa máquina onde um órfão persista.
 
 **E14d, bloqueado por hardware:** `create` num volume externo **não-USB** (gaveta Thunderbolt ou
 NVMe). É o único confundidor que o E14c não conseguiu quebrar — todo volume externo já testado é
@@ -163,8 +165,9 @@ Registre o resultado nos dois sentidos. Um "não bootou" é resultado tão publi
 
 ## Depois do E14b
 
-- ~~**E13**~~ — feito 2026-09-16. O órfão sobreviveu ao restart, árvore byte-a-byte idêntica. Sobra o
-  **E13b** (deleção como root), que exige root e portanto sai daqui como script + comando.
+- ~~**E13**~~ — feito 2026-09-16. O órfão sobreviveu ao restart, árvore byte-a-byte idêntica. O
+  **E13b** rodou em inspeção e perdeu o alvo: a atualização do macOS levou a árvore do build
+  anterior. Sobra o E13b só onde um órfão persistir.
 - **`log erase --all` via `simctl spawn`** — é o único dos três por-device com verbo estreito
   documentado. Reproduzi-lo transformaria `simulatorLogStore` de reportado em oferecível.
 - ~~**Containment exato**~~ — feito 2026-09-15.

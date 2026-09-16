@@ -433,9 +433,13 @@ those entries "pending — manual" until someone actually runs and records the r
   - Scope: one machine, one host build (25G83), one orphan. Not a claim about other builds.
   - `doctor` no longer recommends a restart for this finding — it was measured to do nothing.
   - **Superseded the same day by a macOS update.** 26.6.2 (25G83) to 26.7 (25G229): the entire
-    previous host-build tree was gone, 9.4 GB, orphan included; internal free 16 GiB to 29 GiB.
-    These caches are keyed by host build. Durable across restarts, not across an OS update.
-    Which process removes it — installer or CoreSimulatorService — is not established.
+    previous host-build tree was gone, 9.4 GB, orphan included. These caches are keyed by host build.
+    Durable across restarts, not across an OS update. Which process removes it — installer or
+    CoreSimulatorService — is not established.
+  - **But only the orphan's share is durable free space.** Eight minutes later the installed
+    runtimes had rebuilt on the new build at the same sizes (iOS 4.4G, watchOS 2.7G); `inc/` stayed
+    at 0B. Net: ~2.3 GB, internal free 16 GiB to 19 GiB. The 29 GiB visible mid-rebuild was a
+    transient and must not be quoted as a reclaim.
 - Root-deletability: **unknown, and not inferable.** No BSD flags anywhere on the ancestor chain and
   `/Library/Developer/CoreSimulator` is absent from `rootless.conf` — but the Inbox file had both
   properties and root was still refused. **E13 did not touch this** — it settled the restart

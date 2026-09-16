@@ -682,9 +682,10 @@ public struct Doctor: Sendable {
                     remediation:
                         "Do not start with a restart: where this was measured (macOS 26.6.2 / 25G83, 2026-09-16) the tree came back byte-identical across "
                         + "a reboot, so the startup reaper that does collect the stranded runtime Inbox does not cover this path (E13). "
-                        + "What DOES clear it is a macOS update: these caches are keyed by host build, and updating 26.6.2 (25G83) to 26.7 (25G229) "
-                        + "left the whole previous build's tree gone and 9.4 GB back, orphan included (2026-09-16, one observation). So this is "
-                        + "durable across restarts but not across OS updates. "
+                        + "What DOES clear it is a macOS update: these caches are keyed by host build, so updating 26.6.2 (25G83) to 26.7 (25G229) "
+                        + "removed the whole previous build's tree (2026-09-16, one observation). Only the orphan's share of that is durable free space "
+                        + "— within the hour the installed runtimes had rebuilt their caches to the same sizes on the new build, and only the orphan "
+                        + "stayed gone, because nothing rebuilds a cache for an absent runtime. "
                         + "First confirm the runtime is really gone: `simctl runtime list` cannot see a runtime bundled inside an older Xcode, so if any "
                         + "Xcode on this Mac ships \(dirName), this cache is live and deleting it costs you a rebuild for nothing. "
                         + "Then, if you want to run the probe that is still open — root deletion is UNVERIFIED, and was refused on that Inbox file despite "
