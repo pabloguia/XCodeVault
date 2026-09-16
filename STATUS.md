@@ -937,8 +937,9 @@ forms), and E13 (the dyld orphan survived a reboot byte-identical). Worth noting
 the three produced a feature, and each replaced an assumption with a measurement.
 
 **Next three actions:** (1) **E13b — root deletion of the dyld orphan.** Unblocked by E13 and the
-only remaining probe on F10. Needs root, so it does not get run here: write the script, hand over the
-command. A *refusal* is the more valuable outcome — it would make this the second path where root is
+only remaining probe on F10. The script is written and deliberately unrun:
+`scripts/experiments/e13b-dyld-orphan-root-delete.sh`, inspect-only unless `--delete` is passed, and
+it refuses to elevate itself. Needs root, so it is handed over as a command. A *refusal* is the more valuable outcome — it would make this the second path where root is
 blocked with no BSD flag and no `rootless.conf` entry, which is reportable OS behaviour rather than a
 cleanup detail. (2) **E14d** — `create` on a non-USB external (Thunderbolt/NVMe enclosure), the one
 confounder E14c could not break, since every external tested here is USB. Blocked on hardware the

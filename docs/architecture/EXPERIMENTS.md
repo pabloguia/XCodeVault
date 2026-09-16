@@ -215,11 +215,66 @@ Three outcomes, each of which settles a different question:
   That would falsify the "interrupted, abandoned" reading in F10 and argue for widening the `inc/`
   age guard well beyond its current one hour.
 
-**E13b (only if it survives):** attempt the narrow removal `doctor` currently suggests — `rm -f` of
-`dyld_sim_shared_cache_*` and `update_dyld_sim_shared_cache-std*.txt`, then `rmdir`. Record whether
-root is refused, and if so whether `chflags`/`lsof` explain it (they did not for the Inbox). A
-refusal is the more interesting result: it would mean a second path where root is blocked without a
-SIP flag or a `rootless.conf` entry, which is worth reporting to Apple and worth a rule of its own.
+**E13b — unblocked 2026-09-16, written, not yet run.** Script:
+`scripts/experiments/e13b-dyld-orphan-root-delete.sh`. It needs root, so it is handed over as a
+command rather than run here.
+
+    # inspect only, deletes nothing:
+    sudo scripts/experiments/e13b-dyld-orphan-root-delete.sh <orphan-dir> --i-understand
+    # then, if the report looks right:
+    sudo scripts/experiments/e13b-dyld-orphan-root-delete.sh <orphan-dir> --i-understand --delete
+
+Four design choices are the experiment rather than decoration:
+
+- **errno, not `rm`.** The remediation `doctor` prints uses `rm -f`, and `-f` suppresses exactly what
+  is being measured. Each unlink goes through `os.unlink` and reports the raw errno, because
+  EPERM (1) vs EACCES (13) is the discriminator — a policy refusal against ordinary permissions.
+- **Smallest file first.** The first thing unlinked is normally the zero-byte
+  `update_dyld_sim_shared_cache-stdout.txt`. If policy refuses, the answer arrives having destroyed
+  nothing; only if that succeeds does anything of size get touched. The run stops at the first
+  refusal — nothing further needs destroying to learn the same fact twice.
+- **Five witnesses before anything is touched**, any one of which vetoes: `simctl runtime list` as
+  the invoking user *and* as root (a disagreement is itself a veto), an available device on that
+  runtime, `images.plist`, and — the one `simctl` cannot provide — the `.simruntime` bundles inside
+  every Xcode on the machine. A runtime bundled in an older Xcode is invisible to `simctl`, so its
+  cache looks orphaned while being live. Path shape does not establish liveness: the *installed*
+  iOS cache passes every argument check and is stopped only here.
+- **Inspect-only is the default**, and the rehearsal runs as root. A `--dry-run` as the user would be
+  the wrong-context rehearsal this repo has already shipped once (handoff, lesson 3).
+
+It also refuses a symlink argument, refuses any directory holding a file it does not recognise
+(surprises are reported, not deleted), vetoes on an open file handle, re-checks the target's
+dev:inode immediately before the first unlink because minutes of `du` and `lsof` pass since
+validation, copies `update_dyld_sim_shared_cache-stderr.txt` aside with `cp -p` before deleting
+because `doctor`'s own glob destroys that diagnostic, verifies by re-stat instead of by exit code,
+and never elevates itself — run as a non-root user it prints the command and stops.
+
+**What has actually been run, and what has not.** Only the argument chain — everything above the root
+check — has been exercised, as a non-root user: missing arguments, a missing `--i-understand`, an
+unknown flag, a nonexistent path, a symlink argument, a path outside the cache root, the cache root
+itself, a build directory, `inc` itself, and two valid orphan paths that stop at the root check.
+**Everything from the root check onward has never executed**: the witness chain, the contents
+allowlist, the unlink loop, the accounting. Inspect mode exists so that the first root run exercises
+the witnesses without deleting anything, and its first output is data about this script as much as
+about the OS.
+
+**There is no rollback**, and a refusal partway through the loop leaves a partially deleted
+directory. "The answer arrives having destroyed nothing" holds only for a refusal on the *first*
+file, which is why the order is smallest-first and why phase 3 prints a manifest of what it did
+unlink before stopping.
+
+Witness 4 deserves its own caveat, because a first version of it was worse than useless. It searched
+one directory level too shallow for the historical bundle path, and on finding nothing printed "no
+Xcode here bundles <rid>" — an affirmative pass in the language of a result, which is the same
+instrument failure this file records elsewhere. Measured afterwards: this machine has **zero**
+`.simruntime` bundles anywhere under the selected Xcode, because Xcode 26.x ships runtimes as disk
+images. So on this machine witness 4 is inconclusive by construction and now says so rather than
+voting; four witnesses vote, not five. It vetoes only when it could not search at all.
+
+**A refusal is the more interesting result**, and the script says so rather than treating it as a
+failed run: it would mean a second path where root is blocked without a SIP flag or a `rootless.conf`
+entry, which is worth reporting to Apple and worth a rule of its own. Record `chflags`/`lsof` either
+way — neither explained the Inbox.
 
 **Do not run E13b first.** The whole point of the ordering is that a free, unprivileged probe can
 make the privileged one unnecessary — and that reasoning from "no SIP flags + absent from

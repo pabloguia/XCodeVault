@@ -41,8 +41,10 @@ falta (E14d) precisa de hardware que o projeto não tem — ver o fim desta seç
    `pathTemplates`, que para as por-device nomeia o device set inteiro.
 3. ~~**E13**~~ — **feito 2026-09-16, negativo: o órfão sobreviveu ao reboot byte-a-byte.** O GC de
    startup é específico por caminho (recolhe o Inbox, não recolhe o `inc/`), o H11 caiu como regra
-   geral e o `doctor` parou de mandar reiniciar para esse achado. Sobra o **E13b**, a deleção como
-   root — precisa de root, então é script escrito aqui e comando entregue a você.
+   geral e o `doctor` parou de mandar reiniciar para esse achado.
+4. **E13b** — `scripts/experiments/e13b-dyld-orphan-root-delete.sh`, escrito e **não rodado**: exige
+   root, então sai daqui como comando. Comece pelo modo inspeção (`--i-understand` sem `--delete`),
+   que roda como root e testa a cadeia de cinco testemunhas sem apagar nada.
 
 **E14d, bloqueado por hardware:** `create` num volume externo **não-USB** (gaveta Thunderbolt ou
 NVMe). É o único confundidor que o E14c não conseguiu quebrar — todo volume externo já testado é

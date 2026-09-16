@@ -149,10 +149,27 @@ flag BSD e ausentes do `rootless.conf`.
 
 Evidência: `evidence/e13-dyld-reboot-20260916T100005.txt` (antes) e `…T155821.txt` (depois).
 
-**O que sobrou é o E13b**, a deleção como root — que *não* rodo aqui. Escrevo o script e te entrego o
-comando. Uma recusa é o resultado mais interessante: seria o segundo caminho onde root é bloqueado sem
-flag de SIP nem entrada no `rootless.conf`, o que é comportamento de OS para reportar à Apple, não
-detalhe de limpeza.
+**O que sobrou é o E13b**, a deleção como root. O script existe e *não* foi rodado aqui —
+`scripts/experiments/e13b-dyld-orphan-root-delete.sh`, escrito em 2026-09-16:
+
+```
+# inspeção, não apaga nada:
+sudo scripts/experiments/e13b-dyld-orphan-root-delete.sh <dir-do-órfão> --i-understand
+# e então, se o relatório fizer sentido:
+sudo scripts/experiments/e13b-dyld-orphan-root-delete.sh <dir-do-órfão> --i-understand --delete
+```
+
+Ele mede **errno** em vez de usar `rm -f` (que suprime justamente a resposta procurada: EPERM=1 é
+recusa de política, EACCES=13 é permissão comum), apaga do **menor arquivo para o maior** — o primeiro
+costuma ter zero byte, então uma recusa chega sem destruir nada — e para na primeira recusa. Antes de
+tocar em qualquer coisa exige que **cinco testemunhas** concordem que o runtime sumiu, incluindo os
+bundles `.simruntime` dentro de cada Xcode, que o `simctl` não enxerga. O formato do caminho não
+estabelece que é órfão: o cache **vivo** do iOS passa por todos os guardas de caminho e só é barrado
+ali.
+
+Uma recusa é o resultado mais interessante: seria o segundo caminho onde root é bloqueado sem flag de
+SIP nem entrada no `rootless.conf` — comportamento de OS para reportar à Apple, não detalhe de
+limpeza.
 
 ## Restrições (valem sempre)
 

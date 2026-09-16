@@ -62,7 +62,39 @@ xcv_rotate_out() {
   echo "rotated previous evidence to $target" >&2
 }
 
-# Redact the current user's home directory in evidence output.
+# Redact the invoking user's home directory and short name in evidence output.
+#
 # -l keeps sed line-buffered: without it an interrupted experiment loses everything still
 # sitting in the buffer and leaves a 0-byte evidence file, which is the run that most needs one.
-xcv_redact() { sed -l -e "s#$HOME#~#g" -e "s#$(id -un)#<user>#g"; }
+#
+# Under `sudo` the naive version corrupted the file it was meant to protect. `id -un` is `root`
+# there, so `s#root#<user>#g` rewrote every occurrence of the WORD root — "root-owned" became
+# "<user>-owned", /var/root became /var/<user> — in exactly the experiments whose subject is root
+# (E13b). Meanwhile `$HOME` was /var/root, so the user's real home was not redacted at all: the
+# substitution was both destructive and ineffective. So: resolve the identity to redact from
+# SUDO_USER *when actually running as root* (see the third defect below), and never substitute the
+# name `root`, which is a subject in these experiments and not an identity to hide.
+# Three further defects, found in review on the same day and all the same family as the one above —
+# a substitution that is broader than the thing it means to hide:
+#   - `awk '{print $2}'` truncated a home containing a space (/Users/two words -> /Users/two), and the
+#     -d test below then fell back to $HOME, which under sudo is root's. The real home went unredacted:
+#     exactly the failure the rewrite existed to end.
+#   - the username substitution was unanchored, so a short name ate words. With u=dev, `devicectl`
+#     became `<user>icectl`. `root` got a special case; dev, sim, core, test, admin, ci did not.
+#   - SUDO_USER was trusted whether or not this was a sudo session, so an inherited value redacted
+#     the wrong identity in an ordinary non-root run of e1/e2/e8.
+xcv_redact() {
+  local u h esc
+  if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then u="$SUDO_USER"; else u=$(id -un); fi
+  h=$(dscl . -read "/Users/$u" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')
+  [ -n "$h" ] && [ -d "$h" ] || h="$HOME"
+  # The home goes into a regex, so its metacharacters have to stop being metacharacters. A dot in a
+  # username (john.doe) is the realistic case; a # would break the expression outright.
+  esc=$(printf '%s' "$h" | sed 's/[][\.*^$#\/]/\\&/g')
+  if [ "$u" = "root" ]; then
+    sed -l -e "s#$esc#~#g"
+  else
+    # [[:<:]] / [[:>:]] are BSD sed word boundaries: redact the name, not every word containing it.
+    sed -l -e "s#$esc#~#g" -e "s#[[:<:]]$u[[:>:]]#<user>#g"
+  fi
+}
