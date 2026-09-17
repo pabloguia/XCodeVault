@@ -1,0 +1,72 @@
+name: Compatibility result
+description: You ran an experiment on a machine that is not the author's — the contribution this project most needs
+labels: ["compatibility", "evidence"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Every claim in `docs/architecture/COMPATIBILITY_MATRIX.md` was measured on one
+        Mac, one macOS build, one Xcode and one external volume, which is why several findings are
+        only marked `probable`. A second machine is what changes that.
+
+        The protocol is `docs/architecture/EXPERIMENTS.md`. Note that some experiments create or
+        destroy simulator devices and require `--i-understand`; read the script's header first, and
+        do not run one on a machine whose simulator state matters to you.
+  - type: input
+    id: experiment
+    attributes:
+      label: Experiment
+      description: "Which one, from docs/architecture/EXPERIMENTS.md."
+      placeholder: "E2 — xctest from an external volume"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and build
+      placeholder: "15.6 (24G84)"
+    validations:
+      required: true
+  - type: input
+    id: xcode
+    attributes:
+      label: Xcode version
+      placeholder: "Xcode 16.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - arm64 (Apple silicon)
+        - x86_64 (Intel)
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Storage hardware
+      description: |
+        For anything involving an external volume: the connection (USB-C, Thunderbolt, USB-A), the
+        filesystem (APFS, HFS+, exFAT), and whether it is a spinning disk, an SSD in an enclosure,
+        or a bus-powered stick. E2's finding is that the failure follows the *device*, so this is
+        the field that matters most.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: "Did it reproduce the recorded finding, contradict it, or do something else?"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        Paste the evidence file, or attach it. The harness (`scripts/experiments/common.sh`)
+        redacts your home directory, account name, volume labels and volume UUIDs on the way out.
+        Check the output before posting anyway — if a label of yours is also an ordinary word you
+        may have opted it out with `XCV_REDACT_KEEP`, and folder names need `XCV_PRIVATE_DIRS`.
+    validations:
+      required: true

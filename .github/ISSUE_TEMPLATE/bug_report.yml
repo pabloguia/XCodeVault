@@ -1,0 +1,72 @@
+name: Bug report
+description: Something XCodeVault did, or refused to do, that looks wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report a security vulnerability here.** Use the Security tab → Report a
+        vulnerability. This project ships a root helper; see `SECURITY.md`.
+
+        The three environment fields below are required because every compatibility claim in this
+        project is indexed by them. A report without them cannot be recorded in the matrix.
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and build
+      description: "Output of `sw_vers -productVersion` and `sw_vers -buildVersion`."
+      placeholder: "26.7 (25G229)"
+    validations:
+      required: true
+  - type: input
+    id: xcode
+    attributes:
+      label: Xcode version
+      description: "First line of `xcodebuild -version`. If you have several installed, say which one `xcode-select -p` points at."
+      placeholder: "Xcode 26.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      description: "Output of `uname -m`."
+      options:
+        - arm64 (Apple silicon)
+        - x86_64 (Intel)
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: "Output of `git rev-parse --short HEAD`."
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: |
+        The command you ran and its output. Every read command accepts `--json`, which is usually
+        the more useful thing to paste.
+
+        If the output names a volume, a path under your home directory, or a device you would
+        rather not publish, redact it — but say that you did, and keep the shape of what you
+        removed (`/Volumes/<vault>` rather than deleting the line).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: Relevant machine state
+      description: |
+        Optional but often decisive. `xcodevaultctl doctor` and `xcodevaultctl volumes` cover most
+        of it. If an external volume is involved, say whether it was mounted at the time, and
+        whether it had ever been disconnected mid-operation.
