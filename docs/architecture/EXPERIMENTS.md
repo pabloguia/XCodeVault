@@ -543,9 +543,30 @@ rather than "the cleanup never got there". A sixth failure was a verification wi
 against a deferral that needed longer. Hence the bench: it asserts its precondition and captures
 output, and both are the assertions the failures needed.
 
-**Not propagated.** Nine other scripts still have the old shape. They are left alone deliberately:
-most mutate devices behind `--i-understand`, and changing a script one cannot run is how the previous
-attempt went wrong. Convert one at a time, each validated the way this one was.
+**`e12-case-sensitivity.sh` converted next (2026-09-17), and one subtlety that does not transfer.**
+E12 calls its own `cleanup` **twice by design** — once to clear leftovers before setup, once as
+teardown — so the idempotence guard could not go on `cleanup` itself the way it did in E2; it would
+have turned the teardown call into a no-op. The guard lives on a separate `on_exit` wrapper while
+`cleanup` stays repeatable. Copying E2's shape wholesale would have broken it silently.
+
+Validated for the normal path: the run after conversion matches the run before on **19 of 20
+sections**, the one difference being the SwiftPM build's step count, which moves when this repository
+gains a file. Clean teardown, exit 0, and live per-case progress restored.
+
+**Its interrupt path was NOT independently demonstrated, and that is worth stating rather than
+implying.** Three attempts all ended with a complete transcript and a normal teardown: the signal
+either arrived after the last long command or the run finished before it mattered. One attempt looked
+like a success — the mount disappeared while the process was still alive — until it became clear that
+this is *also* exactly what a normal teardown does, so the observation cannot discriminate between
+the two. A clean discriminator exists and was not reached in the time given: interrupt during case A
+and check whether the transcript is missing its `## teardown` marker. E12 therefore inherits the
+structural guarantee established on the bench and demonstrated on E2 (a genuine partial transcript,
+763 bytes against 1212), rather than carrying its own proof.
+
+**Still not propagated.** Eight scripts have the old shape. They are left alone deliberately: most
+mutate devices behind `--i-understand`, and changing a script one cannot run is how the first attempt
+went wrong. Convert one at a time, each validated the way these two were — and pick a discriminator
+that a normal completion cannot also satisfy.
 
 **Consequences to accept until it is fixed.** An interrupted run can leave: sparse disk images
 attached under `/Volumes`, work directories on the internal disk and on the vault, and — for

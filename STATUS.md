@@ -1668,3 +1668,28 @@ condition that was true for the wrong reason"; this one was "verified too early"
 One at a time, each validated the way this one was.
 
 236 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-17 (later still) — E12 converted, and a discriminator that could not discriminate
+
+Second script off the pipeline shape. One subtlety did not transfer from E2: E12 calls its own
+`cleanup` **twice by design**, to clear leftovers before setup and again as teardown, so the
+idempotence guard could not go on `cleanup` — it would have turned the teardown into a no-op. It
+lives on a separate `on_exit` wrapper instead. Copying the previous script's shape wholesale would
+have broken this one silently.
+
+Normal path validated: 19 of 20 sections identical to the pre-conversion run, the one difference
+being the SwiftPM step count, which moves when this repository gains a file. Clean teardown, exit 0,
+live progress restored.
+
+**The interrupt path was not demonstrated for E12, and the write-up says so.** Three attempts all
+completed normally. One of them looked like proof — the mount vanished while the process was still
+alive, which is the signature of a prompt trap — until it became clear that a *normal teardown* does
+exactly the same thing, so the observation cannot tell the two apart. That is the third instrument
+failure of this kind in two days, and the cheapest one to name: **a discriminator that a successful
+run also satisfies is not a discriminator.** The one that would work here is whether the transcript
+is missing its `## teardown` marker, and reaching it needs the signal to land during case A.
+
+E12 inherits the structural guarantee from the bench and from E2, where a genuine partial transcript
+was produced. It does not carry its own proof, and the docs no longer imply it does.
+
+236 tests. `swift build` and `swift test` both exit 0.

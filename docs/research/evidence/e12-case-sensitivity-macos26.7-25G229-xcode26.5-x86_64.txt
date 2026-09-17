@@ -1,9 +1,9 @@
 # Experiment: E12 — developer data on case-sensitive APFS
-# Date: 2026-09-17T00:54:26Z
+# Date: 2026-09-17T13:15:08Z
 # macOS: 26.7 (25G229)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
-# Script: scripts/experiments/e12-case-sensitivity.sh @ 859791a
+# Script: scripts/experiments/e12-case-sensitivity.sh @ 47b0462
 # Runner: <user>; sudo: not used — hdiutil needs no privileges for a sparse image
 
 ## internal volume is case-insensitive (the baseline this is measured against)
@@ -58,7 +58,7 @@ $ sh -c cd '~/projects/XCodeVault' && swift build --scratch-path /private/tmp/xc
 [113/116] Write Objects.LinkFileList
 [114/116] Linking XCodeVault
 [115/116] Applying XCodeVault
-Build complete! (62.76s)
+Build complete! (55.66s)
 [exit=0]
 
 ## dependency source was cloned there (this is the risky half)
@@ -97,7 +97,7 @@ $ sh -c ls -d /private/tmp/xcv-e12-mnt/DerivedData/Build/Products/Debug-iphonesi
 ## bytes written to the case-sensitive volume
 $ du -sh /private/tmp/xcv-e12-mnt/spm-build /private/tmp/xcv-e12-mnt/DerivedData
 202M	/private/tmp/xcv-e12-mnt/spm-build
-141M	/private/tmp/xcv-e12-mnt/DerivedData
+134M	/private/tmp/xcv-e12-mnt/DerivedData
 [exit=0]
 
 ## teardown
