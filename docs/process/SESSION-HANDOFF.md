@@ -29,7 +29,19 @@ git remote add origin git@github.com:<usuário>/XCodeVault.git
 git push -u origin master
 ```
 
-Antes de rodar isso, três coisas valem conferir:
+**O histórico foi reescrito** em 17/09 para tirar os identificadores da máquina de todos os 86
+commits — autoria, mensagens e datas preservadas, SHAs todos novos. O registro, o mapa de SHAs e a
+verificação estão em `docs/process/HISTORY-REWRITE-2026-09-17.md`. Enquanto o push não acontecer,
+isso é reversível:
+
+```bash
+git reset --hard refs/original/refs/heads/master
+```
+
+O backup também existe fora do repositório, em `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`.
+Os dois podem ser apagados depois que o push estiver feito e o resultado parecer certo.
+
+Antes de rodar o push, três coisas valem conferir:
 
 - **É irreversível.** Um repositório público é clonado e indexado em minutos. Toda a árvore e todo o
   histórico ficam públicos ao mesmo tempo.

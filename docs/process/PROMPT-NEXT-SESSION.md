@@ -13,7 +13,7 @@ Projeto em `~/projects/XCodeVault`. Responda em português; arquivos e commits e
 - Interno: **21 GiB livres**. Device set: **10 GB**.
 - Três simuladores, **todos `Shutdown`**. Nenhum `xcodebuild`/`xctest` rodando.
 - Categorias por-device: `Dead` 2,1 GB · `MobileAsset` 3,3 GB · log store 1,9 GB.
-- Árvore git limpa em `3a21954`. Sem push em nenhum commit.
+- Árvore git limpa em `eff78c1`. Sem push em nenhum commit.
 
 ## Leia antes de agir, nesta ordem
 

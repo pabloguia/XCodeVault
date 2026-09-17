@@ -1008,7 +1008,7 @@ one directory supported two different models; only the second showed which to di
 
 ## 2026-09-13 (late) — the same finding falsified a third time, by looking again
 
-The commit above (`d67c746`) shipped a claim that is wrong, and the correction is the point of this
+The commit above (`923208f`) shipped a claim that is wrong, and the correction is the point of this
 entry. It said a booted device reaps the dead containers, so `doctor`'s remediation was "boot it".
 Three and a half hours later the same device — booted the whole time, never shut down — held **20
 entries / 2.0 GB**, including the three survivors of the original sweep, untouched. Nothing had been
@@ -1519,7 +1519,7 @@ The defence that worked was not review and not care. It was the two mechanical c
 lint, which caught its own author, and `swift test`'s real exit code, which caught two tests pinning
 claims that had just been falsified.
 
-Five commits: `955e993`, `b82010c`, `4839a8a`, `62ab0bf`, `5dfa462`. No push.
+Five commits: `1cdbc95`, `149300e`, `9eaf171`, `2bf6e77`, `3c23d72`. No push.
 236 tests. `swift build` and `swift test` both exit 0, checked by exit status — the first attempt
 used `${PIPESTATUS[0]}` in zsh, which returns empty, and nearly read "Build complete!" as a pass.
 
@@ -1588,7 +1588,7 @@ needs root (E4b), or needs an event (E11, E1b, and F10's third probe). Those ent
 **26.6.2-only and should be read that way**. That is a narrower claim than "the matrix is current",
 and it is the one the evidence supports.
 
-Two commits: `859791a`, `bf21c25`. No push.
+Two commits: `15eee32`, `8da354c`. No push.
 236 tests. `swift build` and `swift test` both exit 0.
 
 ## 2026-09-17 — the harness's cleanup traps do not run, and five fixes treated symptoms
@@ -1751,3 +1751,30 @@ stands on the weaker evidenced claim — shadow device sets — and the README n
 handoff.
 
 236 tests. `swift build` and `swift test` both exit 0, checked by exit code. 21 redaction checks.
+
+## 2026-09-17 (ainda) — o histórico reescrito, e duas varreduras que mentiram
+
+A reescrita rodou: 86 commits, identificadores da máquina fora de todos eles, autoria e mensagens
+preservadas, `HEAD^{tree}` byte a byte idêntica à de antes — o filtro é no-op sobre o estado atual e
+só toca ancestrais. Registro e mapa de SHAs em `docs/process/HISTORY-REWRITE-2026-09-17.md`.
+
+**Ensaiar num clone descartável pagou-se duas vezes.** O primeiro ensaio destruiu a linha de
+copyright da `LICENSE` e reescreveu um fixture de teste até ele virar tautologia — e foi assim que
+apareceu o pior erro do dia, meu: `test-common.sh`, que eu tinha acabado de escrever, usava o UUID
+real do vault como fixture. Reintroduzi na árvore o valor que o redator existe para tirar, horas
+depois da varredura que o tinha removido de todo o resto. O segundo ensaio achou um `sed` escrito
+para um backslash contra um arquivo que tem dois, e um runbook que faz grep pelos primeiros oito
+caracteres do UUID, que a regra de valor completo não enxerga.
+
+**Duas varreduras de verificação deram "zero" sem ter varrido nada.** A primeira usou `git grep`
+sobre as 86 revisões de uma vez, estourou o limite de argumentos em silêncio e devolveu zero para
+tudo. A segunda tinha um `break` num cabeçalho curto e parava no meio da lista. As duas foram
+pegas pelo mesmo expediente: **um controle positivo** — procurar algo que *tem* que estar lá e
+conferir que aparece. Na primeira, `XCodeVault` também deu zero; na segunda, a `LICENSE` sumiu de
+um resultado que sabidamente a contém.
+
+Isto é a quarta falha de instrumento em três dias, e a regra já não é sobre experimentos: **uma
+verificação que não distingue "limpo" de "não rodei" não é uma verificação.** A varredura final
+declara `566/566 blobs, controle 392` antes de qualquer conclusão.
+
+236 testes, 21 checks de redação, `swift build` e `swift test` com exit 0.
