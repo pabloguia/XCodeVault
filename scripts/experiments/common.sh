@@ -62,7 +62,32 @@ xcv_rotate_out() {
   echo "rotated previous evidence to $target" >&2
 }
 
-# Redact the invoking user's home directory and short name in evidence output.
+# Escape a literal string for use on the left-hand side of a sed s### expression. The `#`
+# delimiter is included because these substitutions use it, and a volume label may legitimately
+# contain one. A dot in a username (john.doe) is the realistic case; an unescaped `#` would
+# break the expression outright.
+xcv_re_escape() { printf '%s' "$1" | sed 's/[][\.*^$#\/]/\\&/g'; }
+
+# The directory scanned for volumes and the UUID lookup are indirected so the tests can drive
+# xcv_redact against a fixture tree instead of whatever happens to be plugged into the machine
+# running them. The defaults are the real ones: detection is what you get when nobody configures
+# anything, which is the property that matters (see the note on failing closed, below).
+XCV_VOLUMES_DIR="${XCV_VOLUMES_DIR:-/Volumes}"
+xcv_volume_uuid() { diskutil info "$1" 2>/dev/null | sed -n 's/^ *Volume UUID: *//p' | head -1; }
+
+# The identity to redact, as two lines: short name, then home directory. Split out for the same
+# reason as the two above — every one of the defects listed against xcv_redact below was a defect
+# in *this* resolution, and none of them was reachable by a test while it was inlined.
+xcv_identity() {
+    local u h
+    if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then u="$SUDO_USER"; else u=$(id -un); fi
+    h=$(dscl . -read "/Users/$u" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')
+    [ -n "$h" ] && [ -d "$h" ] || h="$HOME"
+    printf '%s\n%s\n' "$u" "$h"
+}
+
+# Redact the invoking user's home directory and short name in evidence output, along with the
+# labels and UUIDs of any mounted volumes and any folders named in XCV_PRIVATE_DIRS.
 #
 # -l keeps sed line-buffered: without it an interrupted experiment loses everything still
 # sitting in the buffer and leaves a 0-byte evidence file, which is the run that most needs one.
@@ -83,18 +108,58 @@ xcv_rotate_out() {
 #     became `<user>icectl`. `root` got a special case; dev, sim, core, test, admin, ci did not.
 #   - SUDO_USER was trusted whether or not this was a sudo session, so an inherited value redacted
 #     the wrong identity in an ordinary non-root run of e1/e2/e8.
+#
+# Extended 2026-09-17 (ADR-0005). Evidence files are now published, so the volume label, the
+# volume UUID and private folder names are no longer tidiness — they are the publication surface.
+#
+# Volumes are DETECTED, not configured. A redactor that has to be remembered is one that leaks the
+# single time it is forgotten, and every future evidence file is public. Every mount under
+# /Volumes is somebody's drive: its label and UUID are redacted. This does not touch the findings
+# that name a runtime volume, because CoreSimulator mounts those under
+# /Library/Developer/CoreSimulator/Volumes, not /Volumes — E1 and E8 are unaffected.
+#
+# The boot volume is redacted too, as <bootvolume> rather than <vault>: it is not a vault, but its
+# name is just as personal, and the `/Volumes/<bootname>` finding survives the substitution intact.
+#
+# Two escape hatches, both space-separated:
+#   XCV_REDACT_KEEP   volume labels to leave alone. Needed when a label is also an ordinary word —
+#                     a drive named "Backup" would otherwise redact the word backup everywhere —
+#                     or when the label is deliberately part of the finding.
+#   XCV_PRIVATE_DIRS  folder basenames to redact as <private-dir>.
 xcv_redact() {
-  local u h esc
-  if [ "$(id -u)" = "0" ] && [ -n "${SUDO_USER:-}" ]; then u="$SUDO_USER"; else u=$(id -un); fi
-  h=$(dscl . -read "/Users/$u" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')
-  [ -n "$h" ] && [ -d "$h" ] || h="$HOME"
-  # The home goes into a regex, so its metacharacters have to stop being metacharacters. A dot in a
-  # username (john.doe) is the realistic case; a # would break the expression outright.
-  esc=$(printf '%s' "$h" | sed 's/[][\.*^$#\/]/\\&/g')
-  if [ "$u" = "root" ]; then
-    sed -l -e "s#$esc#~#g"
-  else
+    local u h esc vol label uuid lesc keep marker ident
+    ident=$(xcv_identity)
+    u=${ident%%$'\n'*}
+    h=${ident#*$'\n'}
+    esc=$(xcv_re_escape "$h")
+
+    local -a args=(-l -e "s#$esc#~#g")
     # [[:<:]] / [[:>:]] are BSD sed word boundaries: redact the name, not every word containing it.
-    sed -l -e "s#$esc#~#g" -e "s#[[:<:]]$u[[:>:]]#<user>#g"
-  fi
+    [ "$u" = "root" ] || args+=(-e "s#[[:<:]]$(xcv_re_escape "$u")[[:>:]]#<user>#g")
+
+    keep=" ${XCV_REDACT_KEEP:-} "
+    for vol in "$XCV_VOLUMES_DIR"/*; do
+        # An unmatched glob leaves the pattern itself; a dangling mount point is not a volume.
+        [ -e "$vol" ] || continue
+        label=${vol##*/}
+        [ -n "$label" ] || continue
+        case "$keep" in *" $label "*) continue ;; esac
+        # The boot volume appears here as a symlink to /.
+        if [ -L "$vol" ] && [ "$(readlink "$vol")" = "/" ]; then marker="<bootvolume>"; else marker="<vault>"; fi
+        lesc=$(xcv_re_escape "$label")
+        # The path form first, then the bare label: a label that starts with a non-word character
+        # has no left word boundary, and the path form is the only rule that can still catch it.
+        args+=(-e "s#/Volumes/$lesc#/Volumes/$marker#g" -e "s#[[:<:]]$lesc[[:>:]]#$marker#g")
+        uuid=$(xcv_volume_uuid "$vol")
+        # A volume UUID is an identifier of the owner's hardware; the docs that say "identify by
+        # UUID, never by name" still mean it — the concrete value is simply not ours to publish.
+        [ -n "$uuid" ] && args+=(-e "s#$(xcv_re_escape "$uuid")#<vault-uuid>#g")
+    done
+
+    for label in ${XCV_PRIVATE_DIRS:-}; do
+        [ -n "$label" ] || continue
+        args+=(-e "s#[[:<:]]$(xcv_re_escape "$label")[[:>:]]#<private-dir>#g")
+    done
+
+    sed "${args[@]}"
 }

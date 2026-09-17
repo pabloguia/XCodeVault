@@ -19,9 +19,20 @@ jobs:
         run: |
           sw_vers; uname -m; xcodebuild -version; swift --version
       - name: Build
-        run: swift build -v 2>&1 | tail -20
+        # `set -o pipefail` is load-bearing: without it the pipeline reports tail's status, so a
+        # failing build would pass CI silently. This workflow has never executed (ADR-0005), so
+        # nothing has ever caught that.
+        run: |
+          set -o pipefail
+          swift build -v 2>&1 | tail -20
       - name: Unit tests
-        run: swift test 2>&1 | tail -60
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tail -60
+      - name: Redaction helper tests
+        # These guard xcv_redact, which every evidence file below is filtered through before it is
+        # uploaded as a public artifact.
+        run: bash scripts/experiments/test-common.sh
       - name: Lint (swift-format)
         run: |
           fmt=$(xcrun --find swift-format 2>/dev/null) || { echo "swift-format not in this toolchain; skipping"; exit 0; }
