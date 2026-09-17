@@ -1,5 +1,14 @@
 # Preparar o XCodeVault para publicação pública
 
+> **Sessão concluída em 2026-09-17. Este documento é o registro do briefing, não instruções vigentes.**
+> A decisão e os números corrigidos estão em `docs/adr/0005-public-open-source-release.md`.
+> O inventário da tabela abaixo foi **medido antes** da execução e tinha cinco erros, corrigidos
+> naquele ADR — em particular `mac-ssd-rescue` não é uma pasta pessoal (é a ferramenta de prior-art
+> que o `doctor` detecta), a contagem de seriais de disco era zero, e quase todos os UUIDs listados
+> são identificadores gerados pelo CoreSimulator, que devem ser preservados.
+> Os marcadores `<vault>`, `<user>` e `<vault-uuid>` no texto abaixo são resultado da própria
+> redação que este briefing pediu; onde a frase ficou estranha, essa é a causa.
+
 Prompt para uma sessão limpa. O inventário abaixo foi **medido em 2026-09-17**; reverifique antes de
 agir, porque nesta semana um número medido de manhã já estava errado à noite.
 
@@ -35,7 +44,7 @@ Pergunte antes de assumir qualquer uma:
    e permissiva; Apache-2.0 acrescenta concessão explícita de patentes e exigência de NOTICE) e
    recomende uma. Nada mais depende disso, mas é o item que torna a publicação legítima.
 
-2. **Autoria no histórico.** Os 79 commits carregam `Pablo Jose Almeida da Guia <<user>@gmail.com>`.
+2. **Autoria no histórico.** Todos os commits carregam o nome e o e-mail pessoal do autor.
    Publicar publica isso. Reescrever só é possível **antes do primeiro push**, e exige reescrever
    todos os commits. Me diga as opções (manter; trocar para um e-mail `@users.noreply.github.com`;
    trocar nome e e-mail) e o custo de cada uma. **Não reescreva nada sem eu decidir.**

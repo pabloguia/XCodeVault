@@ -201,8 +201,8 @@ real directory (as required)
 $ sh -c xcrun devicectl list devices 2>&1 | tail -5
 Name                       Hostname                                    Identifier                             State                Model                         
 ------------------------   -----------------------------------------   ------------------------------------   ------------------   ------------------------------
-<watch-name>        <watch-host>.coredevice.local          <watch-device-uuid>   available (paired)   Apple Watch Ultra 2 (Watch7,5)
-<phone-name>   <phone-host>.coredevice.local   <phone-device-uuid>   available (paired)   iPhone 17 Pro Max (iPhone18,2)
+<watch-name>               <watch-host>.coredevice.local               <watch-device-uuid>                    available (paired)   Apple Watch Ultra 2 (Watch7,5)
+<phone-name>               <phone-host>.coredevice.local               <phone-device-uuid>                    available (paired)   iPhone 17 Pro Max (iPhone18,2)
 [exit=0]
 
 ## step 7 — probe cleanup

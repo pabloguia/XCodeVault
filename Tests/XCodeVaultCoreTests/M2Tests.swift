@@ -239,8 +239,9 @@ final class RuntimeOperationsTests: XCTestCase {
     }
 
     /// Case-insensitivity is load-bearing only for a path that does not exist — and that is exactly
-    /// the case that matters. Measured: `resolvingSymlinksInPath` normalises `/volumes/VAULT/…` to
-    /// `/Volumes/…` while VAULT is mounted, but leaves a non-existent `/volumes/Ghost/…` lowercase,
+    /// the case that matters. Measured on a machine with an external volume mounted:
+    /// `resolvingSymlinksInPath` normalises a lowercase `/volumes/<that volume>/…` to `/Volumes/…`,
+    /// but leaves a non-existent `/volumes/Ghost/…` lowercase,
     /// so a case-sensitive comparison silently stops asking whether a volume is there.
     func testALowercaseVolumesPathIsStillRecognisedWhenItDoesNotExist() {
         let ghost = "/volumes/XCVGhost-\(UUID().uuidString)/RuntimeLibrary"
@@ -257,8 +258,9 @@ final class RuntimeOperationsTests: XCTestCase {
             "this machine has no /Volumes/<bootname> symlink to exercise")
         // An **existing** path on purpose: `resolvingSymlinksInPath` only resolves what exists, so a
         // made-up path under the symlink stays under /Volumes and the resolved candidate would catch
-        // it anyway. Measured: `/Volumes/MacOS~` → `~`, which leaves
-        // `/Volumes` entirely — so here the literal spelling is the only candidate that can see it.
+        // it anyway. Measured: `/Volumes/MacOS` + the home directory resolves to the home directory
+        // itself, which leaves `/Volumes` entirely — so here the literal spelling is the only
+        // candidate that can see it.
         let home = NSHomeDirectory()
         let viaSymlink = "/Volumes/MacOS" + home
         try XCTSkipUnless(FileManager.default.fileExists(atPath: viaSymlink), "no reachable path through the boot-volume symlink")

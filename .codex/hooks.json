@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'~/projects/XCodeVault/.codex/hooks/helper-guard.sh'",
+            "command": "\"${CODEX_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/.codex/hooks/helper-guard.sh",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'~/projects/XCodeVault/.codex/hooks/swift-format-lint.sh'",
+            "command": "\"${CODEX_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/.codex/hooks/swift-format-lint.sh",
             "timeout": 20
           }
         ]
