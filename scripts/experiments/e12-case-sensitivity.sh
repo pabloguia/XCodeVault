@@ -56,7 +56,15 @@ on_exit() {
   # including a partial transcript from an interrupted run, which says what happened where a missing
   # one says nothing.
   if [ -f "$out.raw" ]; then
-    xcv_redact < "$out.raw" > "$out" 2>/dev/null && rm -f "$out.raw" 2>/dev/null
+    # `2>/dev/null &&` used to hide the one failure that matters: if xcv_redact errors, the `&&`
+    # short-circuits and `$out.raw` — un-redacted — survives inside the published evidence
+    # directory. Let the error be seen, and move the raw file out of the evidence tree either way.
+    if xcv_redact < "$out.raw" > "$out"; then
+      rm -f "$out.raw"
+    else
+      mv -f "$out.raw" "${TMPDIR:-/tmp}/$(basename "$out").raw" 2>/dev/null || rm -f "$out.raw"
+      echo "REDACTION FAILED: raw transcript moved out of $(dirname "$out"); do not publish it." >&2
+    fi
   fi
 }
 

@@ -48,7 +48,7 @@ about deciding whether to build the feature (we already decided not to).
     volume) is a rename, not a copy — instantaneous, no extra disk space needed, no data
     duplicated.
 - **A physical device is paired and available** (2026-09-08): an iPhone 17 Pro Max
-  (a paired iPhone) and an Apple Watch Ultra 2 (`xcrun devicectl list devices`). If
+  and an Apple Watch Ultra 2 (`xcrun devicectl list devices`). If
   still paired/available at execution time, use the iPhone for the FB12363725 secondary check
   (§ Procedure step 8); if not connected, note it as not tested rather than skipping silently.
 - Repository conventions from session 4 (2026-09-07/08, `RUNBOOK-E8-import-roundtrip.md`,

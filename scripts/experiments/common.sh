@@ -71,7 +71,7 @@ xcv_re_escape() { printf '%s' "$1" | sed 's/[][\.*^$#\/]/\\&/g'; }
 # The directory scanned for volumes and the UUID lookup are indirected so the tests can drive
 # xcv_redact against a fixture tree instead of whatever happens to be plugged into the machine
 # running them. The defaults are the real ones: detection is what you get when nobody configures
-# anything, which is the property that matters (see the note on failing closed, below).
+# anything, which is the property that matters.
 XCV_VOLUMES_DIR="${XCV_VOLUMES_DIR:-/Volumes}"
 xcv_volume_uuid() { diskutil info "$1" 2>/dev/null | sed -n 's/^ *Volume UUID: *//p' | head -1; }
 
@@ -121,44 +121,87 @@ xcv_identity() {
 # The boot volume is redacted too, as <bootvolume> rather than <vault>: it is not a vault, but its
 # name is just as personal, and the `/Volumes/<bootname>` finding survives the substitution intact.
 #
-# Two escape hatches, both space-separated:
+# **The limit of detection, stated plainly.** It can only see what is mounted when it runs. A
+# volume that was attached during the experiment but unplugged before the transcript is filtered
+# is not detected, and a stale mention of a volume that is no longer attached passes through
+# untouched. So this fails closed for mounted volumes and open for everything else. Filter the
+# transcript while the volume is still attached; for an experiment that ends by ejecting it, that
+# means redacting before the eject, not after.
+#
+# Two escape hatches, both whitespace-separated lists of single tokens:
 #   XCV_REDACT_KEEP   volume labels to leave alone. Needed when a label is also an ordinary word —
 #                     a drive named "Backup" would otherwise redact the word backup everywhere —
 #                     or when the label is deliberately part of the finding.
 #   XCV_PRIVATE_DIRS  folder basenames to redact as <private-dir>.
 xcv_redact() {
-    local u h esc vol label uuid lesc keep marker ident
+    local u h esc vol label uuid lesc lb rb k ident
     ident=$(xcv_identity)
     u=${ident%%$'\n'*}
     h=${ident#*$'\n'}
     esc=$(xcv_re_escape "$h")
 
-    local -a args=(-l -e "s#$esc#~#g")
+    # The home is a path PREFIX, not a word. Unanchored, `/Users/dev` rewrites `/Users/devops`
+    # into `~ops` — the same "substitution broader than the thing it hides" defect that was found
+    # and fixed for the account name on the next line, and left in place one line above it.
+    # Anchored to a following non-word character or to end of line.
+    local -a args=(-l -e "s#$esc\([^[:alnum:]_]\)#~\1#g" -e "s#$esc\$#~#g")
     # [[:<:]] / [[:>:]] are BSD sed word boundaries: redact the name, not every word containing it.
     [ "$u" = "root" ] || args+=(-e "s#[[:<:]]$(xcv_re_escape "$u")[[:>:]]#<user>#g")
 
-    keep=" ${XCV_REDACT_KEEP:-} "
+    # Both lists are whitespace-separated single tokens. `read -ra` splits on IFS without pathname
+    # expansion — an unquoted `for` over the raw variable would glob against the working directory —
+    # and comparing tokens exactly stops a KEEP entry of "My Vault" from also keeping a volume
+    # called "My". A label containing a space cannot be expressed in either list.
+    local -a keeps=() priv=()
+    [ -n "${XCV_REDACT_KEEP:-}" ] && read -ra keeps <<< "$XCV_REDACT_KEEP"
+    [ -n "${XCV_PRIVATE_DIRS:-}" ] && read -ra priv <<< "$XCV_PRIVATE_DIRS"
+
     for vol in "$XCV_VOLUMES_DIR"/*; do
         # An unmatched glob leaves the pattern itself; a dangling mount point is not a volume.
         [ -e "$vol" ] || continue
         label=${vol##*/}
         [ -n "$label" ] || continue
-        case "$keep" in *" $label "*) continue ;; esac
-        # The boot volume appears here as a symlink to /.
-        if [ -L "$vol" ] && [ "$(readlink "$vol")" = "/" ]; then marker="<bootvolume>"; else marker="<vault>"; fi
-        lesc=$(xcv_re_escape "$label")
-        # The path form first, then the bare label: a label that starts with a non-word character
-        # has no left word boundary, and the path form is the only rule that can still catch it.
-        args+=(-e "s#/Volumes/$lesc#/Volumes/$marker#g" -e "s#[[:<:]]$lesc[[:>:]]#$marker#g")
+
+        # The UUID rule is emitted BEFORE XCV_REDACT_KEEP is consulted. KEEP exists because a label
+        # can be an ordinary English word; a volume UUID never is, and it is precisely the
+        # identifier the docs tell you to use in place of the name. Opting a label out must not
+        # silently opt out the hardware identifier standing behind it.
         uuid=$(xcv_volume_uuid "$vol")
-        # A volume UUID is an identifier of the owner's hardware; the docs that say "identify by
-        # UUID, never by name" still mean it — the concrete value is simply not ours to publish.
         [ -n "$uuid" ] && args+=(-e "s#$(xcv_re_escape "$uuid")#<vault-uuid>#g")
+
+        # `${#a[@]}` rather than expanding directly: macOS ships bash 3.2, where "${a[@]}" on an
+        # empty array is an unbound-variable error under `set -u`.
+        if [ ${#keeps[@]} -gt 0 ]; then
+            for k in "${keeps[@]}"; do [ "$k" = "$label" ] && continue 2; done
+        fi
+        lesc=$(xcv_re_escape "$label")
+
+        # The boot volume is redacted in its `/Volumes/` form ONLY, and never as a bare label.
+        # Its name is an ordinary path component: on a machine whose boot volume is called `MacOS`,
+        # a bare-label rule rewrites every `Contents/MacOS/` in every bundle path — including the
+        # binary paths that ARE the finding in E14a, E14b and E13b. Word boundaries do not save it,
+        # because `/` is not a word character. Redacting a name is not worth destroying evidence.
+        if [ -L "$vol" ] && [ "$(readlink "$vol")" = "/" ]; then
+            args+=(-e "s#/Volumes/$lesc#/Volumes/<bootvolume>#g")
+            continue
+        fi
+
+        # A word boundary only fires where the label's own edge is a word character: [[:<:]] needs
+        # one to its right, [[:>:]] one to its left. A label like `Backup.` or `-Drive` has a
+        # non-word edge, so the boundary there matches nothing and the whole bare-label rule
+        # silently does nothing. Emit each boundary only where it can fire; where it cannot, the
+        # label's own punctuation is the delimiter and the rule over-redacts rather than leaking.
+        case "$label" in [[:alnum:]_]*) lb='[[:<:]]' ;; *) lb='' ;; esac
+        case "$label" in *[[:alnum:]_]) rb='[[:>:]]' ;; *) rb='' ;; esac
+        args+=(-e "s#/Volumes/$lesc#/Volumes/<vault>#g" -e "s#$lb$lesc$rb#<vault>#g")
     done
 
-    for label in ${XCV_PRIVATE_DIRS:-}; do
+    for label in ${priv[@]+"${priv[@]}"}; do
         [ -n "$label" ] || continue
-        args+=(-e "s#[[:<:]]$(xcv_re_escape "$label")[[:>:]]#<private-dir>#g")
+        lesc=$(xcv_re_escape "$label")
+        case "$label" in [[:alnum:]_]*) lb='[[:<:]]' ;; *) lb='' ;; esac
+        case "$label" in *[[:alnum:]_]) rb='[[:>:]]' ;; *) rb='' ;; esac
+        args+=(-e "s#$lb$lesc$rb#<private-dir>#g")
     done
 
     sed "${args[@]}"

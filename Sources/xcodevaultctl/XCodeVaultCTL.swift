@@ -58,16 +58,19 @@ struct Status: ParsableCommand {
 }
 
 struct Report: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Full scan + doctor findings, suitable for a GitHub issue (home directory redacted).")
+    static let configuration = CommandConfiguration(
+        abstract: "Full scan + doctor findings, suitable for a GitHub issue (home directory, account name, volume labels and volume UUIDs redacted).")
     @OptionGroup var global: GlobalOptions
     struct Bundle: Encodable { let scan: ScanReport; let findings: [Finding] }
     func run() throws {
         let report = XCodeVaultCore.Scanner().scan()
         let doctor = XCodeVaultCore.Doctor()
         let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
-        let home = report.host.homeDirectory
-        let user = report.host.userName
-        func redact(_ s: String) -> String { s.replacingOccurrences(of: home, with: "~").replacingOccurrences(of: user, with: "<user>") }
+        // Plain `replacingOccurrences` was both weaker and more destructive than it looked: it had
+        // no word boundary on the account name (an account called `dev` turned `devicectl` into
+        // `<user>icectl`), no anchor on the home, and nothing at all for volume labels or volume
+        // UUIDs — which this report carries, since it embeds the full volume list. See Redaction.
+        let redact = Redaction(home: report.host.homeDirectory, user: report.host.userName, volumes: report.volumes)
         if global.json {
             print(redact(try JSONOutput.encode(Bundle(scan: report, findings: findings))))
         } else {

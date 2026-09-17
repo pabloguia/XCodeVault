@@ -248,21 +248,28 @@ final class RuntimeOperationsTests: XCTestCase {
         XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: ghost, isMountPoint: { _ in false }), ghost)
     }
 
-    /// `/Volumes/<bootname>` is a symlink to `/` — it exists on this machine as `/Volumes/MacOS`.
-    /// Writing there is writing to the internal disk under a path that reads like a drive, so it is
-    /// refused; and because it resolves *out* of `/Volumes`, only the literal spelling can catch it.
-    /// This runs against the real `MountStatus.isMountPoint`, which answers false for a symlink.
+    /// `/Volumes/<bootname>` is a symlink to `/`. Writing there is writing to the internal disk
+    /// under a path that reads like a drive, so it is refused; and because it resolves *out* of
+    /// `/Volumes`, only the literal spelling can catch it. This runs against the real
+    /// `MountStatus.isMountPoint`, which answers false for a symlink.
+    ///
+    /// The entry is **discovered**, not named. It used to be the literal `/Volumes/MacOS`, which is
+    /// what the author's boot volume happens to be called — so the test silently skipped on every
+    /// other Mac, including one with the default `Macintosh HD`. A test that can only run on one
+    /// machine is worth very little in a project whose stated need is runs on other machines.
     func testAVolumesEntryThatIsASymlinkToTheBootVolumeIsRefused() throws {
-        try XCTSkipUnless(
-            (try? FileManager.default.destinationOfSymbolicLink(atPath: "/Volumes/MacOS")) != nil,
-            "this machine has no /Volumes/<bootname> symlink to exercise")
+        let fm = FileManager.default
+        let bootEntry = ((try? fm.contentsOfDirectory(atPath: "/Volumes")) ?? [])
+            .map { "/Volumes/" + $0 }
+            .first { (try? fm.destinationOfSymbolicLink(atPath: $0)) == "/" }
+        let boot = try XCTUnwrap(bootEntry, "this machine has no /Volumes/<bootname> symlink to exercise")
         // An **existing** path on purpose: `resolvingSymlinksInPath` only resolves what exists, so a
         // made-up path under the symlink stays under /Volumes and the resolved candidate would catch
-        // it anyway. Measured: `/Volumes/MacOS` + the home directory resolves to the home directory
+        // it anyway. Measured: the boot symlink + the home directory resolves to the home directory
         // itself, which leaves `/Volumes` entirely — so here the literal spelling is the only
         // candidate that can see it.
         let home = NSHomeDirectory()
-        let viaSymlink = "/Volumes/MacOS" + home
+        let viaSymlink = boot + home
         try XCTSkipUnless(FileManager.default.fileExists(atPath: viaSymlink), "no reachable path through the boot-volume symlink")
         XCTAssertTrue(RuntimeOperations.isNotOnAMountedVolume(destination: viaSymlink), viaSymlink)
     }

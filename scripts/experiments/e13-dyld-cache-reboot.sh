@@ -36,6 +36,11 @@ ROOT=/Library/Developer/CoreSimulator/Caches/dyld
 
 # The header the other experiments print via common.sh, inlined: common.sh runs `sudo -n true` to
 # report privilege state, and this experiment promises no sudo at all — including a probe of it.
+#
+# common.sh is nonetheless *sourced* below, for xcv_redact alone. Sourcing runs no command: only
+# xcv_header probes sudo, and this script never calls it. Evidence is published (ADR-0005), and
+# this was one of two experiments writing into the evidence directory unredacted.
+source "$(dirname "$0")/common.sh"
 {
   echo "E13 — dyld cache startup-reap probe"
   echo "date:        $(date -u '+%Y-%m-%dT%H:%M:%SZ') (UTC)"
@@ -88,7 +93,7 @@ ROOT=/Library/Developer/CoreSimulator/Caches/dyld
   echo "  still there but smaller, or -> CoreSimulator is treating it as a resumable build. That"
   echo "  newest file write moved        falsifies the 'interrupted, abandoned' reading in F10 and"
   echo "                                 argues for widening doctor's one-hour in-flight guard."
-} | tee "$OUT"
+} | xcv_redact | tee "$OUT"
 
 echo
 echo "Written to $OUT"

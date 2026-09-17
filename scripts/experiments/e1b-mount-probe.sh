@@ -6,6 +6,10 @@
 set -u
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# Every evidence file is published (ADR-0005). This one is written as root, which is exactly the
+# case xcv_redact's SUDO_USER handling exists for — without it the transcript carries the invoking
+# user's real home while `id -un` says `root`.
+source "$(dirname "$0")/common.sh"
 out="${1:-$ROOT/docs/research/evidence/e1b-mount-$(sw_vers -productVersion)-$(sw_vers -buildVersion)-$(uname -m).txt}"
 probe=/Library/Developer/xcv-probe
 img=/tmp/xcv-e1b-probe.sparseimage
@@ -35,6 +39,6 @@ trap cleanup EXIT
     echo "!! mount over $probe refused — record this: it would falsify H8"
   fi
   echo "\$ rmdir $probe"; rmdir "$probe"; echo "[exit=$?]"
-} 2>&1 | tee -a "$out"
+} 2>&1 | xcv_redact | tee -a "$out"
 chown "${SUDO_UID:-0}:${SUDO_GID:-0}" "$out" 2>/dev/null
 echo "wrote $out"

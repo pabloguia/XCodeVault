@@ -54,8 +54,8 @@ swift build
 .build/debug/xcodevaultctl volumes        # mounted volumes and whether they qualify
 ```
 
-`scan`, `status`, `report`, `doctor`, `xcode`, `runtime list`, `volumes` and `compatibility` are
-read-only and never change anything. `clean`, `locations set-*`, `runtime delete/import/offload`,
+`scan`, `status`, `report`, `doctor`, `xcode`, `runtime list`, `volumes`, `journal` and
+`compatibility` are read-only and never change anything. `clean`, `locations set-*`, `runtime delete/import/offload`,
 `externalize` and `restore` do change things; each shows a plan first, and every change is recorded
 in a journal you can inspect with `journal`.
 

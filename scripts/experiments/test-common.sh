@@ -30,7 +30,8 @@ redact() { printf '%s\n' "$1" | xcv_redact; }
 # to be plugged into the machine running the tests.
 FIX=$(mktemp -d)
 trap 'rm -rf "$FIX"' EXIT
-mkdir -p "$FIX/volumes/VAULT" "$FIX/volumes/Backup" "$FIX/volumes/Weird.Name+1"
+mkdir -p "$FIX/volumes/VAULT" "$FIX/volumes/Backup" "$FIX/volumes/Weird.Name+1" \
+         "$FIX/volumes/Trailing." "$FIX/volumes/My"
 ln -s / "$FIX/volumes/BootName"
 export XCV_VOLUMES_DIR="$FIX/volumes"
 
@@ -40,6 +41,7 @@ export XCV_VOLUMES_DIR="$FIX/volumes"
 xcv_volume_uuid() {
     case "${1##*/}" in
         VAULT) echo "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D" ;;
+        Backup) echo "BBBBBBBB-1111-2222-3333-444444444444" ;;
         *) echo "" ;;
     esac
 }
@@ -127,6 +129,60 @@ check "XCV_PRIVATE_DIRS respects word boundaries" \
 # ---- xcv_re_escape ------------------------------------------------------------------------------------
 check "xcv_re_escape escapes a dot" '\.' "$(xcv_re_escape '.')"
 check "xcv_re_escape leaves a plain word alone" 'plain' "$(xcv_re_escape 'plain')"
+
+
+# ---- regressions from the pre-publication review -------------------------------------------------
+# Every case below is a defect this suite did not catch when it was first written. The redactor had
+# 21 green checks and was corrupting every app-bundle path on the author's machine.
+
+# A boot volume's name is an ordinary path component. On a machine whose boot volume is called
+# `MacOS` — as the author's is — a bare-label rule rewrites `Contents/MacOS/` in every bundle path,
+# including the binary paths that are the whole finding in E14a, E14b and E13b. Word boundaries do
+# not help: `/` is not a word character.
+check "the boot volume's name is not redacted as a path component" \
+    "/Applications/X.app/Contents/BootName/X" "$(redact "/Applications/X.app/Contents/BootName/X")"
+
+check "the boot volume is still redacted under /Volumes" \
+    "/Volumes/<bootvolume>/Users" "$(redact "/Volumes/BootName/Users")"
+
+# XCV_REDACT_KEEP exists because a label can be an ordinary English word. A volume UUID never is,
+# so keeping the label must not keep the hardware identifier behind it.
+check "XCV_REDACT_KEEP keeps the label but not the volume UUID" \
+    "Backup at <vault-uuid>" \
+    "$(XCV_REDACT_KEEP="Backup" redact "Backup at BBBBBBBB-1111-2222-3333-444444444444")"
+
+# [[:>:]] needs a word character to its left, so a label ending in punctuation had no working
+# trailing boundary and the bare-label rule silently matched nothing.
+check "a label ending in a non-word character is redacted bare" \
+    "<vault> is mounted" "$(redact "Trailing. is mounted")"
+
+check "a label ending in a non-word character is redacted in path form" \
+    "/Volumes/<vault>/x" "$(redact "/Volumes/Trailing./x")"
+
+# The home is a path prefix, not a word: unanchored it turned /Users/dev + "ops" into "~ops".
+check "a longer home-like path is not rewritten" \
+    "/Users/devops/x" "$(redact "/Users/devops/x")"
+
+check "the home is redacted at end of line" \
+    "cd ~" "$(redact "cd /Users/dev")"
+
+# KEEP compares whole tokens rather than substrings: keeping "Backups" must not keep "Backup".
+check "XCV_REDACT_KEEP does not keep a label that is merely a prefix of an entry" \
+    "<vault> drive" "$(XCV_REDACT_KEEP="Backups" redact "Backup drive")"
+
+# And the limit that follows from a whitespace-separated list, asserted rather than assumed: a
+# two-word entry is two entries, so a label containing a space cannot be expressed in KEEP at all.
+# Documented in common.sh; pinned here so nobody "fixes" the splitting and is surprised.
+check "a two-word XCV_REDACT_KEEP entry is two separate labels" \
+    "My drive" "$(XCV_REDACT_KEEP="My Vault" redact "My drive")"
+
+# The private-dirs loop was unquoted, so it globbed against the working directory.
+check "XCV_PRIVATE_DIRS is not glob-expanded" \
+    "in <private-dir> here" "$(XCV_PRIVATE_DIRS="*" redact "in * here")"
+
+# A metacharacter label was only ever tested in path form.
+check "a metacharacter label is redacted bare too" \
+    "<vault> mounted" "$(redact "Weird.Name+1 mounted")"
 
 printf '\n%d checks, %d failures\n' "$run" "$fails"
 [ "$fails" -eq 0 ]
