@@ -78,9 +78,23 @@ The pre-rewrite history is preserved in two places, neither of which is publishe
 - `refs/original/refs/heads/master` inside this repository, written by `git filter-branch`.
 - `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`, outside the repository.
 
-Both can be deleted once the first push has happened and the result looks right. Until then, the
-rewrite is reversible:
+`refs/original` holds the **un-redacted** history, inside the repository. An ordinary
+`git push origin master` does not send it — a push transmits only what the pushed ref reaches — but
+`git push --mirror` sends every ref, and would publish exactly what this work removed. Delete it
+before the first push:
 
 ```bash
-git reset --hard refs/original/refs/heads/master
+git update-ref -d refs/original/refs/heads/master
+git reflog expire --expire=now --all && git gc --prune=now
+```
+
+That leaves the bundle as the only copy, which is the right place for it: outside the repository,
+where no git command can publish it by accident. Keep it until the push has happened and the result
+looks right. Never move it inside the working tree.
+
+Restoring from either one:
+
+```bash
+git reset --hard refs/original/refs/heads/master                      # before step 1 above
+git fetch ~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle master:pre-rewrite   # after
 ```

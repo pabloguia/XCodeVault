@@ -25,9 +25,25 @@ publicados. Detalhes e o inventário corrigido estão no ADR; as lições estão
 nenhum remote existe.
 
 ```bash
+# 1. apagar o backup do histórico NÃO redigido que vive dentro do repositório
+git update-ref -d refs/original/refs/heads/master
+git reflog expire --expire=now --all && git gc --prune=now
+
+# 2. só então
 git remote add origin git@github.com:<usuário>/XCodeVault.git
 git push -u origin master
 ```
+
+> **Por que o passo 1 não é opcional.** `refs/original/refs/heads/master` é o histórico **antes** da
+> redação — com o home, o rótulo do volume, o UUID e os aparelhos pareados. `git push -u origin
+> master` **não** o envia (o push só manda o que é alcançável pela ref empurrada), mas
+> `git push --mirror` enviaria tudo, e publicaria exatamente o que esta sessão removeu. O backup
+> continua existindo fora do repositório, em
+> `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`; **não apague esse arquivo antes de
+> conferir o push**, e nunca o coloque dentro do repositório.
+>
+> Para restaurar a partir do bundle, se precisar:
+> `git fetch ~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle master:pre-rewrite`
 
 **O histórico foi reescrito** em 17/09 para tirar os identificadores da máquina de todos os 86
 commits — autoria, mensagens e datas preservadas, SHAs todos novos. O registro, o mapa de SHAs e a
