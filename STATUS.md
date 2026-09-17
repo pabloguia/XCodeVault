@@ -1720,11 +1720,14 @@ which is an argument for doing the sweep after the redaction as well as before i
 placeholder would have left a measured fact reading as a claim about a volume that never existed —
 the failure mode the brief warned about, arriving from the direction it did not warn about.
 
-**A substitution broke a test without failing it visibly.** `Dev's SSD` is the fixture for
-shell-quoting an embedded apostrophe. The first pass rewrote the input string but not the expected
-output, because quoting splits the name across `'\''` and the pattern no longer matched. The test
-would have compared a renamed input against the old expectation. Caught by re-grepping for the
-residue, not by reading the diff.
+**A substitution broke a test without failing it visibly.** The fixture for shell-quoting an
+embedded apostrophe was a volume name built from the owner's own first name. The first pass rewrote
+the input string but not the expected output, because shell-quoting splits the name across a
+backslash-escaped quote and the pattern no longer matched. The test would have compared a renamed
+input against the old expectation. Caught by re-grepping for the residue, not by reading the diff —
+and then a second time, in the history filter, where a pattern written for one literal backslash
+matched a file that has two. The lesson both times: **do not hand-escape a pattern you can avoid
+escaping.** Matching `/Volumes/<name>` needs no backslashes and covers both spellings.
 
 **`xcv_redact` now detects volumes instead of being configured with them.** Labels, volume UUIDs and
 `XCV_PRIVATE_DIRS` folder names, with the boot volume marked `<bootvolume>` rather than `<vault>`.
