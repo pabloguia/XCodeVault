@@ -1,0 +1,111 @@
+# Experiment: E12 — developer data on case-sensitive APFS
+# Date: 2026-09-17T00:54:26Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# Script: scripts/experiments/e12-case-sensitivity.sh @ 859791a
+# Runner: <user>; sudo: not used — hdiutil needs no privileges for a sparse image
+
+## internal volume is case-insensitive (the baseline this is measured against)
+$ sh -c diskutil info / | grep -i 'File System Personality' | sed 's/^ *//'
+File System Personality:   APFS
+[exit=0]
+
+## setup — disposable case-sensitive APFS image
+## create
+$ hdiutil create -size 6g -fs Case-sensitive APFS -volname XCVE12 -type SPARSE /private/tmp/xcv-e12
+created: /private/tmp/xcv-e12.sparseimage
+[exit=0]
+
+## attach at a private mount point
+$ hdiutil attach /private/tmp/xcv-e12.sparseimage -nobrowse -mountpoint /private/tmp/xcv-e12-mnt
+/dev/disk8          	GUID_partition_scheme          	
+/dev/disk8s1        	EFI                            	
+/dev/disk8s2        	Apple_APFS                     	
+/dev/disk9          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk9s1        	41504653-0000-11AA-AA11-0030654	/private/tmp/xcv-e12-mnt
+[exit=0]
+
+## confirm we are on the image we just made, not somebody else's volume
+$ sh -c diskutil info '/private/tmp/xcv-e12-mnt' | grep -i 'Volume Name' | sed 's/^ *//'
+Volume Name:               XCVE12
+[exit=0]
+
+## what we got
+$ sh -c diskutil info /private/tmp/xcv-e12-mnt | grep -Ei 'File System Personality|Owners|Mount Point' | sed 's/^ *//'
+Mount Point:               /private/tmp/xcv-e12-mnt
+File System Personality:   Case-sensitive APFS
+Owners:                    Disabled
+[exit=0]
+
+## control — prove the two volumes really differ, rather than assuming it
+## two names differing only in case, on the case-sensitive volume
+$ sh -c mkdir -p /private/tmp/xcv-e12-mnt/casecheck && printf 'lower\n' > /private/tmp/xcv-e12-mnt/casecheck/probe.txt && printf 'upper\n' > /private/tmp/xcv-e12-mnt/casecheck/PROBE.txt && ls /private/tmp/xcv-e12-mnt/casecheck/
+PROBE.txt
+probe.txt
+[exit=0]
+
+## the same two names on the internal case-insensitive volume
+$ sh -c d=$(mktemp -d); printf 'lower\n' > $d/probe.txt; printf 'upper\n' > $d/PROBE.txt; ls $d; echo '--- surviving content ---'; cat $d/probe.txt; rm -rf $d
+probe.txt
+--- surviving content ---
+upper
+[exit=0]
+
+## case A — SwiftPM: build output AND dependency source on the case-sensitive volume
+## swift build --scratch-path
+$ sh -c cd '~/projects/XCodeVault' && swift build --scratch-path /private/tmp/xcv-e12-mnt/spm-build 2>&1 | tail -4
+[113/116] Write Objects.LinkFileList
+[114/116] Linking XCodeVault
+[115/116] Applying XCodeVault
+Build complete! (62.76s)
+[exit=0]
+
+## dependency source was cloned there (this is the risky half)
+$ sh -c ls /private/tmp/xcv-e12-mnt/spm-build/checkouts/ /private/tmp/xcv-e12-mnt/spm-build/repositories/ 2>&1
+/private/tmp/xcv-e12-mnt/spm-build/checkouts/:
+swift-argument-parser
+
+/private/tmp/xcv-e12-mnt/spm-build/repositories/:
+swift-argument-parser-54a11a8d
+[exit=0]
+
+## the produced binary runs
+$ sh -c /private/tmp/xcv-e12-mnt/spm-build/debug/xcodevaultctl --version
+0.1.0-dev
+[exit=0]
+
+## case B — xcodebuild: source on the internal volume, DerivedData on the case-sensitive one
+## xcodegen
+$ sh -c cd '/private/tmp/xcv-e12-scratch' && xcodegen generate 2>&1 | tail -1
+Created project at /tmp/xcv-e12-scratch/E12Probe.xcodeproj
+[exit=0]
+
+## xcodebuild -derivedDataPath
+$ sh -c cd '/private/tmp/xcv-e12-scratch' && xcodebuild build -project E12Probe.xcodeproj -scheme E12Probe -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/xcv-e12-mnt/DerivedData 2>&1 | tail -4
+    /usr/bin/touch -c /tmp/xcv-e12-mnt/DerivedData/Build/Products/Debug-iphonesimulator/E12Probe.app
+
+** BUILD SUCCEEDED **
+
+[exit=0]
+
+## the .app was produced on the case-sensitive volume
+$ sh -c ls -d /private/tmp/xcv-e12-mnt/DerivedData/Build/Products/Debug-iphonesimulator/E12Probe.app
+/private/tmp/xcv-e12-mnt/DerivedData/Build/Products/Debug-iphonesimulator/E12Probe.app
+[exit=0]
+
+## bytes written to the case-sensitive volume
+$ du -sh /private/tmp/xcv-e12-mnt/spm-build /private/tmp/xcv-e12-mnt/DerivedData
+202M	/private/tmp/xcv-e12-mnt/spm-build
+141M	/private/tmp/xcv-e12-mnt/DerivedData
+[exit=0]
+
+## teardown
+## image detached and removed
+$ sh -c ls -d /private/tmp/xcv-e12-mnt 2>&1 || echo 'volume gone'; ls -l /private/tmp/xcv-e12.sparseimage 2>&1 || echo 'image gone'
+ls: /private/tmp/xcv-e12-mnt: No such file or directory
+volume gone
+ls: /private/tmp/xcv-e12.sparseimage: No such file or directory
+image gone
+[exit=0]
+

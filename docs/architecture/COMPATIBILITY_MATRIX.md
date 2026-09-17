@@ -771,3 +771,60 @@ something this pass deliberately did not do:
 So: **the read-only half of the matrix is re-verified on 26.7; the mutating half remains
 26.6.2-only** and should be read as such until someone runs it. That is a narrower claim than "the
 matrix is current", and it is the accurate one.
+
+### E2 + E12 re-run on the vault — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-16
+- Extends the re-baseline above to the two experiments that need the external volume but no device
+  and no root. `xcodebuild test -destination 'platform=macOS'` throughout — **no simulator is
+  touched**. E2 writes only under `/Volumes/<vault>/.TemporaryItems/folders.<uid>/`, the per-user temp
+  directory macOS guarantees is writable; the user's own folders on the vault are never opened.
+  E12 does not touch the vault at all: it runs on a disposable sparse image under `/private/tmp`, and
+  refuses any path outside `/private/tmp/xcv-e12*`.
+
+**E2 — all nine cases reproduce exactly. 9/9 verdicts identical to 25G83.**
+
+| case | DerivedData on | 26.6.2 | 26.7 |
+|---|---|---|---|
+| A | internal disk (control) | PASS | **PASS** |
+| B | the vault, `/Volumes/<vault>` | FAIL (65) | **FAIL (65)** |
+| E | internal path that is a *symlink* to the vault | FAIL (65) | **FAIL (65)** |
+| C | APFS disk image at `/Volumes` | PASS | **PASS** |
+| D | the same image at a `$HOME` path | PASS | **PASS** |
+| D2 | the image, hidden `.TemporaryItems`-like path | PASS | **PASS** |
+| C2 | **case-sensitive** APFS image at `/Volumes` | PASS | **PASS** |
+| C3 | the image attached `-owners on` | PASS | **PASS** |
+| F | image whose **backing file is on the external device** | PASS | **PASS** |
+
+Two of these carry the argument:
+
+- **E fails.** A symlink from an internal path to the vault fails exactly as the vault does, so the
+  restriction follows the **device**, not the text of the path. Path rewriting cannot evade it.
+- **F passes.** A disk image whose backing file sits on the USB SSD works: the bytes traverse the
+  same physical device, through the same I/O path, and the test runs. That exonerates the hardware
+  and the bus from being the cause, and leaves the volume's own DiskArbitration classification.
+
+That is an independent corroboration of E14c, reached by a different mechanism (xctest bundle loading
+rather than `simctl create`) and on a different OS build. H6 keeps its `probable` status — still one
+machine, one physical device — but it now has two mechanisms agreeing across two macOS versions.
+
+**E12 — case-sensitive APFS still fine. 19 of 20 sections identical.** Both surfaces pass on 26.7:
+SwiftPM `--scratch-path` with dependency *source* on the case-sensitive volume (the riskier half),
+and `xcodebuild -derivedDataPath` with source left internal — `** BUILD SUCCEEDED **`, and the
+produced binary runs. The single differing section is the SwiftPM build's step count
+(112/115 → 113/116), which moved because this repository gained a file, not because anything about
+case sensitivity did.
+
+- Evidence: `e2-macos26.7-25G229-xcode26.5-x86_64.txt`,
+  `e12-case-sensitivity-macos26.7-25G229-xcode26.5-x86_64.txt`
+- Cleanup verified after the run: no `XCVE2` image left attached, the vault scratch directory
+  removed, the internal scratch and mount point removed, and the user's folders on the vault
+  (`XCodeVault`, `backup-ios`, `parallels`) untouched.
+- Harness note: `e2-external-xctest.sh` has **no `trap`**. It cleaned up correctly here, but a death
+  mid-run would leave sparse images attached — not destructive, and not fixed in this pass because
+  the script was being re-run as-is to re-verify a recorded result, and editing the instrument during
+  a re-verification is how a comparison stops being one.
+
+**Matrix status after this pass:** five of roughly twenty-one entries re-verified on 26.7 (E1, E8,
+E14a, E2, E12). Everything still outstanding mutates devices, needs root, or needs an event — see
+the list in the entry above.
