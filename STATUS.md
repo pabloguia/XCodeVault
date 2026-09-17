@@ -1693,3 +1693,58 @@ E12 inherits the structural guarantee from the bench and from E2, where a genuin
 was produced. It does not carry its own proof, and the docs no longer imply it does.
 
 236 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-17 (publication prep) — the tree is publishable; the push is not mine to make
+
+ADR-0005's three open sub-decisions are closed: **MIT**, **authorship kept as it is**, and
+**evidence redacted with the history rewritten to match**. A fourth, unanticipated: the agent
+tooling under `.claude/` and `.codex/` is published, because it is where this project's review
+discipline is actually written down.
+
+**The inventory I was handed was wrong in five ways, and four of them would have cost something.**
+It is recorded in ADR-0005 rather than here, because the distinction it kept missing recurs:
+*personal* is not the same as *specific*. `mac-ssd-rescue` was listed as a personal folder; it is
+the prior-art tool `doctor` detects, load-bearing in `Doctor.swift` and eight tests, and redacting
+it would have broken the product. The "30 files of device UUIDs" were almost entirely
+CoreSimulator's own identifiers, which the same brief correctly said to preserve. The four files of
+disk serials were `serial queue` and `PropertyListSerialization`. And the brief stated there were no
+emails or full names in the tree while itself containing both.
+
+**What the inventory missed entirely was the thing most worth redacting.** The E9 evidence listed a
+paired iPhone and Apple Watch by name, hostname and CoreDevice identifier — personal hardware, in a
+way that a volume label is not. Found by grepping for the residue of a *different* substitution,
+which is an argument for doing the sweep after the redaction as well as before it.
+
+**Two comments were rewritten rather than substituted.** `M2Tests` records how
+`resolvingSymlinksInPath` behaved on a machine with that volume mounted. Swapping the name for a
+placeholder would have left a measured fact reading as a claim about a volume that never existed —
+the failure mode the brief warned about, arriving from the direction it did not warn about.
+
+**A substitution broke a test without failing it visibly.** `Dev's SSD` is the fixture for
+shell-quoting an embedded apostrophe. The first pass rewrote the input string but not the expected
+output, because quoting splits the name across `'\''` and the pattern no longer matched. The test
+would have compared a renamed input against the old expectation. Caught by re-grepping for the
+residue, not by reading the diff.
+
+**`xcv_redact` now detects volumes instead of being configured with them.** Labels, volume UUIDs and
+`XCV_PRIVATE_DIRS` folder names, with the boot volume marked `<bootvolume>` rather than `<vault>`.
+Failing closed costs a false positive — a drive labelled "Backup" redacts the word — and
+`XCV_REDACT_KEEP` opts out. Three helpers were split out (`xcv_re_escape`, `xcv_volume_uuid`,
+`xcv_identity`) purely so the thing could be tested: **all three defects this helper shipped in
+September were in the identity resolution, and none was reachable by a test while it was inlined.**
+21 checks now, including what must *survive* redaction.
+
+**CI has a bug that only publication would ever have exposed.** `swift build -v 2>&1 | tail -20`
+reports `tail`'s exit status, and GitHub Actions does not set `pipefail` — so a failing build would
+have passed on the very first push, in a workflow added specifically to catch that. Fixed. It is the
+same trap as `${PIPESTATUS[0]}` in zsh, one layer out.
+
+**The README had stopped being true in two places.** It said every command is read-only, which
+`clean`, `runtime delete`, `locations set-*`, `externalize` and `restore` have contradicted since
+M2; and it said the prior tool "breaks the Simulator", which E9 could not reproduce. The prohibition
+stands on the weaker evidenced claim — shadow device sets — and the README now makes that one.
+
+**Not done, deliberately: no remote, no push.** Those are the owner's. The command is in the
+handoff.
+
+236 tests. `swift build` and `swift test` both exit 0, checked by exit code. 21 redaction checks.

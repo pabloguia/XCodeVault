@@ -15,6 +15,36 @@ Ponto de partida para uma sessão nova. Projeto em `~/projects/XCodeVault`.
 > 19 GiB. **Número medido dentro de uma janela transitória não é estado.** Meça duas vezes, separado
 > no tempo, antes de escrever um número aqui.
 
+## Publicação — preparada em 2026-09-17, **falta só o push**
+
+O repositório está publicável. As três sub-decisões do ADR-0005 estão fechadas (MIT; autoria
+mantida; evidências redigidas e histórico reescrito) e há uma quarta: `.claude/` e `.codex/` são
+publicados. Detalhes e o inventário corrigido estão no ADR; as lições estão no `STATUS.md`.
+
+**O que falta é meu, não da próxima sessão:** criar o remote e empurrar. Nada foi empurrado, e
+nenhum remote existe.
+
+```bash
+git remote add origin git@github.com:<usuário>/XCodeVault.git
+git push -u origin master
+```
+
+Antes de rodar isso, três coisas valem conferir:
+
+- **É irreversível.** Um repositório público é clonado e indexado em minutos. Toda a árvore e todo o
+  histórico ficam públicos ao mesmo tempo.
+- **Ative o private vulnerability reporting** (Settings ▸ Code security) antes ou logo depois. O
+  `SECURITY.md` aponta para esse canal e não publica endereço de e-mail nenhum.
+- **A autoria continua visível**, por decisão: nome e e-mail pessoal em todos os commits.
+
+Uma inconsistência que a publicação expõe e que não me cabia resolver sozinho: **este arquivo e os
+`PROMPT-*.md` estão em português, e todo o resto do repositório está em inglês.** Para um leitor
+externo isso é ruído. Traduzi-los, ou marcá-los como notas internas, é uma decisão em aberto.
+
+O `PROMPT-PUBLICATION-PREP.md` ficou com um cabeçalho dizendo que está superado: seu inventário
+tinha cinco erros, corrigidos no ADR-0005. Ele pode ser apagado sem perda — o que havia de durável
+nele já está no ADR.
+
 ## Leia antes de agir, nesta ordem
 
 1. `CLAUDE.md` — regras não-negociáveis de segurança (especialmente 3, 5, 6, 7).
