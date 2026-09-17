@@ -1522,3 +1522,68 @@ claims that had just been falsified.
 Five commits: `955e993`, `b82010c`, `4839a8a`, `62ab0bf`, `5dfa462`. No push.
 236 tests. `swift build` and `swift test` both exit 0, checked by exit status — the first attempt
 used `${PIPESTATUS[0]}` in zsh, which returns empty, and nearly read "Build complete!" as a pass.
+
+## 2026-09-16 (later) — the matrix had one combination in it, and it had stopped being the one in use
+
+Every entry in `COMPATIBILITY_MATRIX.md` said macOS **26.6.2 (25G83)**. The machine moved to
+**26.7 (25G229)** mid-session and nothing noticed. A file whose entire purpose is recording which
+macOS/Xcode combinations a claim is verified on had exactly one combination in it, and that
+combination was no longer the one running.
+
+Re-ran the five experiments that need neither a device, nor root, nor an event: **E1, E8, E14a, E2,
+E12**. No simulator touched — E2 runs `-destination 'platform=macOS'` and E12 runs on a disposable
+sparse image under `/private/tmp` that it refuses to place anywhere else. No `sudo`. E2 writes only
+under the vault's per-user `.TemporaryItems`; the user's own folders there were never opened, and
+cleanup was verified afterwards.
+
+**All five survive the bump.** E8 has zero substantive differences. E1's findings hold — no BSD flags
+on the ancestor chain, CoreSimulator still absent from `rootless.conf`, no nested mounts. E14a matches
+on 22 of 25 finding sections. E12 on 19 of 20. E2 reproduces **9 of 9** case verdicts.
+
+### E2 gives H6 a second mechanism, and rules out the hardware
+
+Two of E2's nine cases carry the argument, and they are the reason this was worth re-running rather
+than just re-dating:
+
+- **Case E fails.** An *internal* path that is a symlink to the vault fails exactly as the vault does.
+  The restriction follows the **device**, not the text of the path — path rewriting cannot evade it.
+- **Case F passes.** A disk image whose **backing file sits on the USB SSD** works. The bytes traverse
+  the same physical device, through the same I/O path, and the test runs. That exonerates the hardware
+  and the bus, and leaves the volume's own DiskArbitration classification as the variable.
+
+E14c reached the same narrowing through `simctl create`; E2 reaches it through `.xctest` bundle
+loading, on a different OS build. H6 stays **probable** — one machine, one physical device — but it
+is no longer a single observation. E14d (a non-USB external) is still what would move it, and still
+needs hardware the project does not have.
+
+### The instrument was wrong first, for the third time today
+
+A raw `diff` of the old and new captures reported 64 differences for E1 and 39 for E14a. That reads
+like the findings moved. They had not: those were machine *inventory*. The two runtime `.dmg` files
+are back under `Images/` where they had been offloaded, so `du` totals and the runtime UUID changed;
+the device set shrank 9.1 GB → 8.2 GB. Comparing whole files conflates "the machine changed" with
+"the experiment concluded differently". The verdicts recorded come from comparing the finding-bearing
+sections with sizes, timestamps and UUIDs normalised out, and the matrix entry says so, because the
+next person will reach for `diff` too.
+
+E12's one differing section makes the same point in miniature: the SwiftPM step count moved from
+112/115 to 113/116, because **this repository gained a file**, not because anything about case
+sensitivity did.
+
+### A gap recorded rather than fixed
+
+`e2-external-xctest.sh` has no `trap`: a death mid-run leaves sparse images attached. Not destructive,
+and deliberately not fixed in this pass — the script was being re-run *as it stands* to re-verify a
+recorded result, and editing the instrument during a re-verification is how a comparison stops being
+one. Fix it before the next E2, not during.
+
+### Where the matrix actually stands
+
+**Five of roughly twenty-one entries re-verified on 26.7.** Everything outstanding mutates devices
+(E14b, E14c, E18, E9, E8c, E15 — all gated, and the user runs real suites against the default set),
+needs root (E4b), or needs an event (E11, E1b, and F10's third probe). Those entries remain
+**26.6.2-only and should be read that way**. That is a narrower claim than "the matrix is current",
+and it is the one the evidence supports.
+
+Two commits: `859791a`, `bf21c25`. No push.
+236 tests. `swift build` and `swift test` both exit 0.

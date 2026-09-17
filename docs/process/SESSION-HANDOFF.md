@@ -37,11 +37,12 @@ sem ACL, ausente do `rootless.conf`) enquanto o `simdiskimaged` o reescreve à v
 barreira é **autorização, não integridade** — o E4a provou que a imagem mantém selo APFS válido
 copiada byte a byte para volume externo. ADR-0004 ganhou adendo, não reversão.
 
-## Estado da máquina (medido 2026-09-16 20:01)
+## Estado da máquina (medido 2026-09-16 22:15)
 
 - **macOS 26.7 (25G229)** — atualizou de 26.6.2 (25G83) nesta sessão, reboot às 19:14.
   Xcode 26.5 (17F42).
-- Interno: **19 GiB livres** (eram 16 GiB antes da atualização).
+- Interno: **20 GiB livres** (eram 16 GiB antes da atualização; 19 GiB duas horas antes desta
+  medição — o número se move o tempo todo, não o cite como estado sem a hora).
 - Vault `/Volumes/<vault>` montado: Case-sensitive APFS, USB, External,
   UUID `<vault-uuid>`, 349 GiB livres.
 - Dois runtimes instalados (iOS 26.5 + watchOS 26.5, 14,8 GB). Instaladores no vault.
@@ -82,7 +83,20 @@ mantidos iguais. `Removable Media` variou, mas ver a ressalva abaixo
 (o volume chamado `Removable` é o que funciona). Sobra `Protocol`: dispositivo real contra virtual.
 Evidência: `evidence/e14c-image-on-vault-macos26.6.2-25G83-xcode26.5-x86_64.txt`.
 
-**O que falta para o H6 sair de *probable* precisa de hardware:** um externo **não-USB** (gaveta
+**Segunda confirmação independente, 2026-09-16, por outro mecanismo e noutro OS.** O E2 re-rodado
+no macOS 26.7 dá o mesmo resultado por um caminho diferente — carregamento de bundle `.xctest` em
+vez de `simctl create` — e dois dos nove casos dele carregam o argumento:
+
+- **Caso E falha:** um caminho *interno* que é symlink para o vault falha exatamente como o vault.
+  A restrição segue o **dispositivo**, não o texto do caminho. Reescrever path não escapa dela.
+- **Caso F passa:** uma imagem de disco cujo **arquivo de lastro está no SSD USB** funciona. Os
+  bytes atravessam o mesmo dispositivo físico, pelo mesmo caminho de I/O, e o teste roda. Isso
+  **inocenta o hardware e o barramento** e deixa a classificação DiskArbitration do volume.
+
+Então o H6 tem hoje dois mecanismos concordando em duas versões de macOS. Continua **probable** —
+uma máquina, um dispositivo físico — mas não é mais uma observação só.
+
+**O que ainda falta para sair de *probable* precisa de hardware:** um externo **não-USB** (gaveta
 Thunderbolt/NVMe). Todo externo já testado é USB, então "removível" e "USB" continuam sendo a mesma
 variável. Isso é o E14d, e o projeto não tem a gaveta.
 
@@ -249,6 +263,39 @@ limpeza.
    duas vezes separado no tempo, ou escreva a janela junto com o número.**
 
 ## Por onde começar
+
+### Re-baseline no macOS 26.7 — feito 2026-09-16, cinco entradas
+
+Toda entrada do `COMPATIBILITY_MATRIX` dizia **26.6.2 (25G83)**, e a máquina foi para 26.7 (25G229)
+no meio da sessão sem nada perceber. Um arquivo cuja função é registrar *em quais combinações isto
+foi verificado* tinha uma combinação só, e ela tinha deixado de ser a em uso.
+
+Re-rodados os cinco que não precisam de device, root nem evento — **E1, E8, E14a, E2, E12**. Nenhum
+simulador tocado, nenhum `sudo`. **Todos sobrevivem ao bump:**
+
+| | resultado no 26.7 |
+|---|---|
+| E1 | achados idênticos — sem flags BSD, ausente do `rootless.conf`, sem mounts aninhados |
+| E8 | **zero** diferenças substantivas |
+| E14a | 22/25 seções de achado idênticas |
+| E2 | **9/9 veriditos idênticos** — ver o H6 acima |
+| E12 | 19/20 seções idênticas; case-sensitive APFS segue ok nas duas superfícies |
+
+**Cuidado ao repetir isto:** um `diff` cru acusou 64 diferenças no E1 e 39 no E14a, e *parece* que os
+achados mudaram. Não mudaram — era inventário da máquina (os `.dmg` de runtime voltaram ao `Images/`,
+o device set encolheu). Compare as seções que carregam achado, com tamanhos e timestamps
+normalizados fora, e não o arquivo inteiro.
+
+**Lacuna registrada e não consertada:** o `e2-external-xctest.sh` não tem `trap` — morrer no meio
+deixa imagens esparsas montadas. Não é destrutivo. Não mexi de propósito: ele estava sendo re-rodado
+*como está* para re-verificar um resultado registrado, e editar o instrumento durante a
+re-verificação é como uma comparação deixa de ser uma.
+
+**Estado do matrix: 5 de ~21 entradas re-verificadas no 26.7.** O resto muta device, precisa de root,
+ou precisa de um evento — e deve ser lido como 26.6.2-only até alguém rodar. Isso é menos do que "o
+matrix está atualizado", e é o que foi medido.
+
+### O resto
 
 Os itens 1–3 acima estão **fechados**, e os três fecharam negativamente. O que resta na pesquisa de
 armazenamento está bloqueado por hardware (E14d: um externo **não-USB**, para separar removibilidade
