@@ -828,8 +828,11 @@ case sensitivity did.
     `{ … } | xcv_redact | tee | grep` shape, a cleanup trap does not run on interruption at all —
     parent or body, and under `SIGTERM` to the parent, `SIGTERM` to the whole pipeline, or `SIGINT`
     to the process group. A parent trap does cover the normal exit path; a body trap covers nothing.
-    The fix is structural and is recorded, unapplied, in `EXPERIMENTS.md` under "Harness". An attempt
-    on this script was reverted rather than left half-applied.
+    The fix is structural: body as a function with a redirect instead of a pipeline, so the shell
+    holding the trap is the one receiving signals. **Applied to this script and validated on
+    2026-09-17** — the nine-case re-run gave 9/9 identical verdicts, and an interrupted run detached
+    the image, removed both scratch directories and kept a partial transcript. Bench and table in
+    `EXPERIMENTS.md` under "Harness"; nine other scripts still carry the old shape.
 
 **Matrix status after this pass:** five of roughly twenty-one entries re-verified on 26.7 (E1, E8,
 E14a, E2, E12). Everything still outstanding mutates devices, needs root, or needs an event — see

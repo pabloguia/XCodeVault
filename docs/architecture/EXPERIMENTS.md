@@ -508,16 +508,44 @@ the subshell is where the resources live — and `e8c-import-roundtrip.sh` was c
 review advice on 2026-09-16, which silently gave up the one path that did work in a script that
 boots a device in the user's default device set. Reverted 2026-09-17 once the table above existed.
 
-**What the real fix requires, and why it is not applied.** Take the body out of the pipeline: make
-it a function and call it with `> "$out.raw"` instead of `| …`, because a function call with a
-redirect does not fork, so it runs in the shell whose trap actually receives signals; redaction and
-the console filter then run afterwards over the file. This was attempted on `e2-external-xctest.sh`
-and **reverted**: five successive attempts fixed symptoms rather than the cause (a parent trap that
-broke the body's, a retry loop for a busy volume, a cleanup log to dodge SIGPIPE), and the structural
-version that finally followed produced a transcript truncated to 80 bytes for a reason that was not
-isolated before the diagnostics started contradicting each other. These scripts delete directories
-and detach images; half-fixed is worse than a documented gap whose worst case is a sparse image left
-mounted.
+**The fix, applied to `e2-external-xctest.sh` on 2026-09-17 and validated.** Take the body out of
+the pipeline: make it a function and call it with `> "$out.raw"` instead of `| …`. A function call
+with a redirect does not fork, so it runs in the shell whose trap receives signals; redaction and the
+console filter run afterwards over the file. Measured with `scripts/harness-trap-bench.sh`, which
+builds both shapes and runs each under five conditions:
+
+| shape | normal exit | Ctrl-C (group SIGINT) | SIGTERM |
+|---|---|---|---|
+| `{ … } \| redact \| tee \| grep` | cleans | **leaks** | **leaks** |
+| `main > file` | cleans | **cleans** | cleans, **deferred** |
+
+"Deferred" is measured rather than assumed: with SIGTERM the handler runs when the current
+foreground command finishes, so an interrupt during an `xcodebuild` waits for that build to end. The
+bench logged `ACQ t=0`, TERM at t≈1, `CLEANED t=6` against a six-second body. Ctrl-C is prompt
+because the signal reaches the foreground child too. The same bench showed cleanup firing **twice**
+on a signal — once from the handler, once from `EXIT` — so an idempotence guard is required rather
+than tidy.
+
+Validated on the real experiment, not only the bench: the full nine-case E2 re-run after the change
+produced **9 of 9 identical verdicts** and a transcript of the same length, with the image detached,
+both scratch directories removed and exit 0. An interrupted run was checked separately: image
+detached, scratch removed, and a **partial transcript preserved** (763 bytes against 1212 for a
+complete run), which is the wanted behaviour — a partial evidence file says what happened where a
+missing one says nothing. It also restored live progress, which the buffered filter in the old shape
+had cost.
+
+**A false start worth recording, because it cost a day.** Five earlier attempts fixed symptoms rather
+than the cause — a parent trap that broke the body's, a retry loop for a volume that was not busy, a
+cleanup log written to dodge a SIGPIPE that was not happening — and were reverted. Two of those
+failures were the *test*, not the script: one run measured a stale image left mounted by the previous
+run, and three ran with stdout on `/dev/null`, so "no cleanup message" was read as "nothing to clean"
+rather than "the cleanup never got there". A sixth failure was a verification window of 15 seconds
+against a deferral that needed longer. Hence the bench: it asserts its precondition and captures
+output, and both are the assertions the failures needed.
+
+**Not propagated.** Nine other scripts still have the old shape. They are left alone deliberately:
+most mutate devices behind `--i-understand`, and changing a script one cannot run is how the previous
+attempt went wrong. Convert one at a time, each validated the way this one was.
 
 **Consequences to accept until it is fixed.** An interrupted run can leave: sparse disk images
 attached under `/Volumes`, work directories on the internal disk and on the vault, and — for

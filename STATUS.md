@@ -1630,3 +1630,41 @@ what an interrupted run can leave behind and the one-line command to check for i
 instrument traps to avoid on the next attempt.
 
 236 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-17 (later) — the harness fix, done the way yesterday's failure prescribed
+
+Yesterday's five attempts at `e2-external-xctest.sh` all failed, and twice the test was the thing
+that was wrong. So this one started with a bench instead of an edit:
+`scripts/harness-trap-bench.sh` builds both script shapes and runs each under five conditions,
+with the two failures from yesterday encoded as assertions rather than as care — it proves the
+resource does not already exist before each case, and it captures the run's output so a missing
+cleanup message can be read.
+
+| shape | normal exit | Ctrl-C (group SIGINT) | SIGTERM |
+|---|---|---|---|
+| `{ … } \| redact \| tee \| grep` | cleans | **leaks** | **leaks** |
+| `main > file` | cleans | **cleans** | cleans, **deferred** |
+
+"Deferred" is measured: the handler runs when the current foreground command finishes, so an
+interrupt during an `xcodebuild` waits for that build. The bench logged `ACQ t=0`, TERM at t≈1,
+`CLEANED t=6` against a six-second body — and logged cleanup firing **twice** on a signal, once from
+the handler and once from `EXIT`, which makes the idempotence guard mandatory rather than tidy.
+
+Applied to E2 and validated on the real experiment: the full nine-case re-run gave **9 of 9 identical
+verdicts** and the same transcript length, image detached, both scratch directories removed, exit 0.
+An interrupted run was checked separately — image detached, scratch removed, and a partial transcript
+preserved (763 bytes against 1212), which is the wanted outcome: a partial evidence file says what
+happened where a missing one says nothing. It also restored live per-case progress, which the
+buffered filter in the old shape had cost; a twenty-minute run no longer looks identical to a hang.
+
+**A sixth failure, and it was mine again.** The first interrupt test reported a leak. It had not
+leaked — I measured 15 seconds after the signal, against a deferral I had just finished measuring on
+the bench. The captured log said `cleanup: detaching …` and `wrote …`, which is exactly what the
+capture requirement exists for. Two of yesterday's three instrument failures were "verified a
+condition that was true for the wrong reason"; this one was "verified too early".
+
+**Not propagated, deliberately.** Nine scripts still carry the old shape. Most mutate devices behind
+`--i-understand`, and converting a script one cannot run is how the previous attempt went wrong.
+One at a time, each validated the way this one was.
+
+236 tests. `swift build` and `swift test` both exit 0.

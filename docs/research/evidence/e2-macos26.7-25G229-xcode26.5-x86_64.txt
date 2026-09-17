@@ -1,5 +1,5 @@
 # Experiment: E2 external-volume xctest restriction: device vs path
-# Date: 2026-09-17T00:57:51Z
+# Date: 2026-09-17T10:02:07Z
 # macOS: 26.7 (25G229)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -33,7 +33,7 @@ Protocol:                  USB
 Device Location:           External
 Removable Media:           Fixed
 xcodebuild exit=65 verdict=FAIL
-	xctest (98262) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+	xctest (69778) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
 ** TEST FAILED **
 --- swift test --scratch-path (second runner) ---
 E2-EVIDENCE framework-loaded-from: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-B/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
@@ -50,7 +50,7 @@ Protocol:                  USB
 Device Location:           External
 Removable Media:           Fixed
 xcodebuild exit=65 verdict=FAIL
-	xctest (98855) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+	xctest (70457) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
 ** TEST FAILED **
 --- swift test --scratch-path (second runner) ---
 E2-EVIDENCE framework-loaded-from: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/XCodeVault-experiments/E2/DD-E/spm/x86_64-apple-macosx/debug/E2FixturePackageTests.xctest
