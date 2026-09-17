@@ -824,6 +824,12 @@ case sensitivity did.
   mid-run would leave sparse images attached — not destructive, and not fixed in this pass because
   the script was being re-run as-is to re-verify a recorded result, and editing the instrument during
   a re-verification is how a comparison stops being one.
+  - **Followed up 2026-09-17, and adding one would not have helped.** Measured: in this harness's
+    `{ … } | xcv_redact | tee | grep` shape, a cleanup trap does not run on interruption at all —
+    parent or body, and under `SIGTERM` to the parent, `SIGTERM` to the whole pipeline, or `SIGINT`
+    to the process group. A parent trap does cover the normal exit path; a body trap covers nothing.
+    The fix is structural and is recorded, unapplied, in `EXPERIMENTS.md` under "Harness". An attempt
+    on this script was reverted rather than left half-applied.
 
 **Matrix status after this pass:** five of roughly twenty-one entries re-verified on 26.7 (E1, E8,
 E14a, E2, E12). Everything still outstanding mutates devices, needs root, or needs an event — see

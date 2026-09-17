@@ -1576,6 +1576,9 @@ sensitivity did.
 and deliberately not fixed in this pass — the script was being re-run *as it stands* to re-verify a
 recorded result, and editing the instrument during a re-verification is how a comparison stops being
 one. Fix it before the next E2, not during.
+**(2026-09-17: attempted, reverted, and the premise was wrong. Adding a trap would not have helped —
+measured, a cleanup trap in this harness's pipeline shape does not run on interruption at all,
+whichever side of the `{` it sits on. See the 2026-09-17 entry at the end of this file.)**
 
 ### Where the matrix actually stands
 
@@ -1586,4 +1589,44 @@ needs root (E4b), or needs an event (E11, E1b, and F10's third probe). Those ent
 and it is the one the evidence supports.
 
 Two commits: `859791a`, `bf21c25`. No push.
+236 tests. `swift build` and `swift test` both exit 0.
+
+## 2026-09-17 — the harness's cleanup traps do not run, and five fixes treated symptoms
+
+Asked to fix the missing `trap` in `e2-external-xctest.sh`. Five successive attempts failed, each
+plausibly and each treating a symptom: a parent trap that deleted the mount list out from under the
+body's own cleanup; a retry loop for a volume that turned out not to be busy; a cleanup log written
+to a file to dodge a SIGPIPE that was not happening. Twice the *test harness* was the thing that was
+wrong — one run measured a stale image left mounted by the previous run, and three ran with stdout on
+`/dev/null`, so the cleanup's own messages were invisible and "no detaching line" was read as
+"nothing to detach" rather than "the cleanup never got there".
+
+The cause, once measured in isolation rather than reasoned about:
+
+| trap position | normal exit | any interruption |
+|---|---|---|
+| parent (before the `{`) | **runs** | does not run |
+| body (first line after the `{`) | does not run | does not run |
+
+Interruption tried four ways against both placements — `SIGTERM` to the parent alone, `SIGTERM` to
+the whole pipeline, `SIGINT` to the process group (Ctrl-C). None cleaned up. Every script here wraps
+its body in `{ … } | xcv_redact | tee | grep`, and a brace group in a pipeline is a subshell.
+
+**A regression of my own, found by that table.** `e8c-import-roundtrip.sh` had its trap moved *inside*
+the body on 2026-09-16, on review advice that read as obviously right — the subshell is where the
+device's lifecycle lives. It is the one placement that works in no case at all, and that script boots
+a device in the user's default device set. Moved back to the parent, with the measurement written
+beside it.
+
+**The e2 fix was reverted.** The structural version — body as a function called with `> file` instead
+of piped, so the shell holding the trap is the one receiving signals — produced a transcript
+truncated to 80 bytes for a reason I did not isolate before my diagnostics began contradicting each
+other. These scripts delete directories and detach images; half-fixed is worse than a documented gap
+whose worst case is a sparse image left mounted. Reverted to the committed state, test residue
+cleaned, tree clean.
+
+Recorded in `EXPERIMENTS.md` under "Harness": the table, the reproduction, the ten affected scripts,
+what an interrupted run can leave behind and the one-line command to check for it, and the two
+instrument traps to avoid on the next attempt.
+
 236 tests. `swift build` and `swift test` both exit 0.

@@ -120,6 +120,30 @@ xcv_rotate_out "$OUT" || exit 2
 # The body runs in a pipeline, so the trap cannot see its variables. One file per fact.
 STATE=$(mktemp -d -t xcv-e8c-state) || exit 2
 
+# The trap lives HERE, in the parent, not inside the `{ … }` body below.
+#
+# Measured 2026-09-17 on this machine (bash 3.2, macOS 26.7), with a minimal reproduction —
+# `{ trap cleanup EXIT INT TERM HUP; echo BODY; sleep 60; } 2>&1 | cat`:
+#
+#     trap position   normal exit   any interruption
+#     parent          RUNS          does not run
+#     body            does not run  does not run
+#
+# Interruption was tried four ways: SIGTERM to the parent alone, SIGTERM to the whole pipeline, and
+# SIGINT to the process group (what Ctrl-C sends), against both placements. None cleaned up.
+#
+# So a body trap is useless in every case, and a parent trap is worth having for the normal exit
+# path. A previous version of this file put the trap inside the body on review advice — "the
+# subshell is where the device's lifecycle lives" — which sounds right and is wrong: it silently
+# gave up the one path that did work. This script BOOTS A DEVICE IN THE USER'S DEFAULT SET, so that
+# regression mattered.
+#
+# What is still true and not fixed: an interrupted run can leave the probe device booted. The whole
+# harness shares this (ten scripts use the body-in-a-pipeline shape) and the fix is structural —
+# take the body out of the pipeline so the shell that owns the trap is the one receiving signals.
+# That is recorded in EXPERIMENTS.md under "Harness", unvalidated, rather than half-applied here.
+trap 'cleanup 2>&1 | xcv_redact >> "$OUT"' EXIT INT TERM HUP
+
 # --- instruments ---------------------------------------------------------------------------------
 
 # Runtime identifiers currently registered, one per line.
@@ -205,12 +229,6 @@ cleanup() {
 }
 
 {
-  # The trap belongs HERE, inside the pipeline body, because this subshell is where the device's
-  # lifecycle lives. Installed outside it, bash resets it to default on entry and it protected
-  # nothing: a SIGPIPE from `tee` (a full disk during a 10 GB import) or a `set -u` abort would have
-  # left a booted device in the user's DEFAULT set while the parent walked on and exited 0.
-  trap 'cleanup' EXIT INT TERM HUP
-
   xcv_header "E8c: import from an exported installer + functional probe + restore prior state"
   echo "# installer: $DMG ($(du -sk "$DMG" 2>/dev/null | cut -f1) KB)"
   echo "# The probe device is created in the DEFAULT device set and deleted by UDID on every exit"

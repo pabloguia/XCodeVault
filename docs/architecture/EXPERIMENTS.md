@@ -474,3 +474,63 @@ Writes one user default and restores the prior value on exit including `^C`.
   `Creating/fetching temporary SimDeviceSet at: <path>` or `Creating/fetching default SimDeviceSet`.
   Then check whether Simulator.app follows or shows the default set; if it splits, that is the
   rule 6 hazard and it fails the experiment even though both halves "work".
+
+---
+
+## Harness — cleanup traps do not run on interruption, and the reason is structural
+
+**Measured 2026-09-17**, bash 3.2 on macOS 26.7 (25G229). Every script here has the same shape: the
+body is a brace group piped through redaction and a filter —
+
+```
+{ … } 2>&1 | xcv_redact | tee "$out" | grep -E '…'
+```
+
+A brace group in a pipeline runs in a subshell. With a minimal reproduction —
+`{ trap cleanup EXIT INT TERM HUP; echo BODY; sleep 60; } 2>&1 | cat` — the result is:
+
+| trap position | normal exit | any interruption |
+|---|---|---|
+| **parent** (before the `{`) | **runs** | **does not run** |
+| **body** (first line after the `{`) | **does not run** | **does not run** |
+
+Interruption was tried four ways against both placements: `SIGTERM` to the parent alone, `SIGTERM`
+to the whole pipeline (every stage carries the script's command line, so `pkill -f` matches them
+all), and `SIGINT` to the process group, which is what Ctrl-C sends. None of them cleaned up.
+
+**What follows from the table.** A trap in the parent is worth having — it covers the normal exit
+path, which is how these scripts almost always end. A trap inside the body is worth nothing in any
+case. Ten scripts here use this shape; all but one put the trap in the parent, which is the better
+of the two.
+
+**Do not "fix" a cleanup by moving its trap inside the body.** It reads as the obvious correction —
+the subshell is where the resources live — and `e8c-import-roundtrip.sh` was changed that way on
+review advice on 2026-09-16, which silently gave up the one path that did work in a script that
+boots a device in the user's default device set. Reverted 2026-09-17 once the table above existed.
+
+**What the real fix requires, and why it is not applied.** Take the body out of the pipeline: make
+it a function and call it with `> "$out.raw"` instead of `| …`, because a function call with a
+redirect does not fork, so it runs in the shell whose trap actually receives signals; redaction and
+the console filter then run afterwards over the file. This was attempted on `e2-external-xctest.sh`
+and **reverted**: five successive attempts fixed symptoms rather than the cause (a parent trap that
+broke the body's, a retry loop for a busy volume, a cleanup log to dodge SIGPIPE), and the structural
+version that finally followed produced a transcript truncated to 80 bytes for a reason that was not
+isolated before the diagnostics started contradicting each other. These scripts delete directories
+and detach images; half-fixed is worse than a documented gap whose worst case is a sparse image left
+mounted.
+
+**Consequences to accept until it is fixed.** An interrupted run can leave: sparse disk images
+attached under `/Volumes`, work directories on the internal disk and on the vault, and — for
+`e8c` — a probe device booted in the default device set. All are inert and removable by hand; none
+is data loss. After interrupting any experiment, check:
+
+```
+mount | grep -i XCV ; xcrun simctl list devices | grep xcv-probe ; ls ~/.xcodevault-e2-scratch
+```
+
+**Two traps to avoid when re-attempting this.** First, assert the precondition: a test that starts
+with a stale image already mounted measures the previous run, and reports a leak that is not this
+run's. Second, capture the output: three of the attempts above ran with stdout on `/dev/null`, so
+the cleanup's own messages — the thing that says whether it ran at all — were invisible, and the
+absence of a "detaching" line was read as "nothing to detach" rather than "the cleanup never got
+there".
