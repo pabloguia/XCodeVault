@@ -25,37 +25,21 @@ publicados. Detalhes e o inventário corrigido estão no ADR; as lições estão
 nenhum remote existe.
 
 ```bash
-# 1. apagar o backup do histórico NÃO redigido que vive dentro do repositório
-git update-ref -d refs/original/refs/heads/master
-git reflog expire --expire=now --all && git gc --prune=now
-
-# 2. só então
 git remote add origin git@github.com:<usuário>/XCodeVault.git
+```
+
+```bash
 git push -u origin master
 ```
 
-> **Por que o passo 1 não é opcional.** `refs/original/refs/heads/master` é o histórico **antes** da
-> redação — com o home, o rótulo do volume, o UUID e os aparelhos pareados. `git push -u origin
-> master` **não** o envia (o push só manda o que é alcançável pela ref empurrada), mas
-> `git push --mirror` enviaria tudo, e publicaria exatamente o que esta sessão removeu. O backup
-> continua existindo fora do repositório, em
-> `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`; **não apague esse arquivo antes de
-> conferir o push**, e nunca o coloque dentro do repositório.
+> **O backup do histórico não redigido já saiu do repositório** (17/09): `refs/original` foi
+> apagado e os objetos podados, então o commit pré-reescrita não existe mais aqui e nenhum
+> `git push`, nem mesmo `--mirror`, consegue publicá-lo. A única cópia é
+> `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`, fora do repositório — **não apague esse
+> arquivo antes de conferir o push, e nunca o mova para dentro da árvore.**
 >
-> Para restaurar a partir do bundle, se precisar:
+> Para restaurar a partir dele, se precisar:
 > `git fetch ~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle master:pre-rewrite`
-
-**O histórico foi reescrito** em 17/09 para tirar os identificadores da máquina de todos os 86
-commits — autoria, mensagens e datas preservadas, SHAs todos novos. O registro, o mapa de SHAs e a
-verificação estão em `docs/process/HISTORY-REWRITE-2026-09-17.md`. Enquanto o push não acontecer,
-isso é reversível:
-
-```bash
-git reset --hard refs/original/refs/heads/master
-```
-
-O backup também existe fora do repositório, em `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`.
-Os dois podem ser apagados depois que o push estiver feito e o resultado parecer certo.
 
 Antes de rodar o push, três coisas valem conferir:
 
