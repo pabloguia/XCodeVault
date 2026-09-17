@@ -722,3 +722,52 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
+
+---
+
+### Re-baseline: E1 + E8 + E14a re-run — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-16
+- Why: every other entry in this file is macOS **26.6.2 (25G83)**, and this machine moved to 26.7
+  mid-session without anything noticing. A matrix whose entire purpose is "which combinations is this
+  verified on" had one combination in it, and that combination had stopped being the one in use.
+- Scope: the three experiments that are read-only and need neither root, nor the vault, nor a device.
+  Nothing was created, deleted, booted or mounted; no `sudo`. The evidence filenames carry the
+  environment slug, so the 25G83 captures sit untouched beside the new ones.
+
+**Result: all three survive the OS bump. No finding in this file changes.**
+
+| experiment | verdict on 26.7 | evidence |
+|---|---|---|
+| E1 mountability / SIP | **unchanged** — no BSD flags anywhere on the ancestor chain, `/Library/Developer/CoreSimulator` still absent from `rootless.conf`, no nested mount points, `AssetsV2` still on `/System/Volumes/Data` | `e1-macos26.7-25G229-xcode26.5-x86_64.txt` |
+| E8 feature detection | **unchanged — zero substantive differences.** Every `xcodebuild`/`simctl` capability answer is byte-identical outside the header | `e8-macos26.7-25G229-xcode26.5-x86_64.txt` |
+| E14a device-set recon | **unchanged** — 22 of 25 finding sections identical, including `simctl --set` docs, `DVTSimulatorSetLocation` in `IDEiOSSupportCore`, Simulator.app's own `DeviceSetPath`, FSKit availability, and the Locations default keys. The 3 that differ are `du`/`df` size sections | `e14a-device-set-static-macos26.7-25G229-xcode26.5-x86_64.txt` |
+
+**Method note, because the first instrument was wrong.** A raw `diff` of the old and new captures
+reported 64 differences for E1 and 39 for E14a, which reads like the findings moved. They had not:
+the diffs were machine *inventory* — the two runtime `.dmg` files are now present under `Images/`
+where they had been offloaded before, so `du` totals and the runtime UUID changed (`90F2566D…` →
+`99ABCCEF…`, the churn F10's round-trip already recorded), and the device set shrank 9.1 GB → 8.2 GB.
+Comparing whole files conflates "the machine changed" with "the experiment concluded differently".
+The verdicts above come from comparing the finding-bearing sections with sizes and timestamps
+normalised out.
+
+**`doctor` on 26.7:** runs clean, 4 findings — low free space (22.25 GB), and the three per-device
+report-only categories. The orphaned-dyld-cache rule correctly does **not** fire, because the orphan
+no longer exists: the rule is not reporting a stale finding.
+
+**What was NOT re-verified, and why.** Three of roughly twenty-one entries were re-run. The rest need
+something this pass deliberately did not do:
+
+- **E14b, E14c, E18, E9, E8c, E15** — all mutate devices or the device set, all gated behind
+  `--i-understand`. Re-running them on 26.7 is legitimate but is a device-touching session of its own,
+  and the user runs real test suites against the default set.
+- **E2, E12** — need the vault and build a bundle onto it. Runnable (the vault is mounted and
+  verified), heavier, and they mutate the vault. Best candidates if this goes further.
+- **E13/E13b** — already 26.7-era by accident; the orphan they targeted was removed by this very
+  update, which is recorded in the F10 entry above.
+- **E4b, E6, E11, E1b** — need root, a forced unmount, or an install event.
+
+So: **the read-only half of the matrix is re-verified on 26.7; the mutating half remains
+26.6.2-only** and should be read as such until someone runs it. That is a narrower claim than "the
+matrix is current", and it is the accurate one.

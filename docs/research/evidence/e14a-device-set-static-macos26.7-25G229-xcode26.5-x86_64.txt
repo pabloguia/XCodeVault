@@ -1,0 +1,231 @@
+# Experiment: E14a — alternate device set, read-only reconnaissance
+# Date: 2026-09-17T00:41:11Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+## 1. simctl's own documentation of --set
+## simctl help (usage line)
+$ bash -c xcrun simctl help 2>&1 | head -2
+usage: simctl [--set <path>] [--profiles <path>] <subcommand> ...
+       simctl help [subcommand]
+[exit=0]
+
+## simctl help create (runtime id may be a PATH)
+$ bash -c xcrun simctl help create 2>&1
+Create a new device.
+Usage: simctl create <name> <device type id> [<runtime id>]
+
+	<device type id>    A valid available device type. Find these by running "xcrun simctl list devicetypes".
+	                    Examples: ("iPhone X", "com.apple.CoreSimulator.SimDeviceType.iPhone-X")
+	<runtime id>        A valid and available runtime. Find these by running "xcrun simctl list runtimes".
+	                    If no runtime is specified the newest runtime compatible with the device type is chosen.
+	                    Examples: ("watchOS3", "watchOS3.2", "watchOS 3.2", "com.apple.CoreSimulator.SimRuntime.watchOS-3-2",
+	                               "/Volumes/path/to/Runtimes/watchOS 3.2.simruntime")
+
+[exit=0]
+
+## simctl help clone (destination device set)
+$ bash -c xcrun simctl help clone 2>&1
+Clone an existing device.
+Usage: simctl clone <device> <new name> [<destination device set>]
+[exit=0]
+
+## man simctl?
+$ bash -c man -w simctl 2>&1 || echo 'no man page'
+No manual entry for simctl
+no man page
+[exit=0]
+
+## 2. Who reads a custom device set path?
+## Simulator.app: device-set keys and API
+$ bash -c strings -a '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app/Contents/MacOS/Simulator' | grep -iE '^(DeviceSetPath|TestingDeviceSetPath|CurrentDeviceUDID)$|deviceSetWithPath|buildDeviceSet' | sort -u
+-[SimulatorAppDelegate buildDeviceSet]
+CurrentDeviceUDID
+DeviceSetPath
+TestingDeviceSetPath
+buildDeviceSet
+deviceSetWithPath:error:
+[exit=0]
+
+## CoreSimulator.framework: any CORESIMULATOR_* env var?
+$ bash -c strings -a '/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/CoreSimulator' | grep -oE 'CORESIMULATOR_[A-Z_]+' | sort -u; echo '(none listed above = no such env var in the framework)'
+(none listed above = no such env var in the framework)
+[exit=0]
+
+## CoreSimulator.framework: SIMULATOR_* env vars present, for contrast
+$ bash -c strings -a '/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/CoreSimulator' | grep -E '^SIMULATOR_[A-Z_]+$' | sort -u | head -20
+SIMULATOR_ARCHS
+SIMULATOR_BOOT_TIME
+SIMULATOR_CAPABILITIES
+SIMULATOR_DEVICE_NAME
+SIMULATOR_EXTENDED_DISPLAY_PROPERTIES
+SIMULATOR_HOST_HOME
+SIMULATOR_LOG_ROOT
+SIMULATOR_MAINSCREEN_HEIGHT
+SIMULATOR_MAINSCREEN_PITCH
+SIMULATOR_MAINSCREEN_SCALE
+SIMULATOR_MAINSCREEN_WIDTH
+SIMULATOR_MEMORY_WARNINGS
+SIMULATOR_MODEL_IDENTIFIER
+SIMULATOR_PRODUCT_CLASS
+SIMULATOR_ROOT
+SIMULATOR_RUNTIME_BUILD_VERSION
+SIMULATOR_RUNTIME_VERSION
+SIMULATOR_SHARED_RESOURCES_DIRECTORY
+SIMULATOR_UDID
+SIMULATOR_VERSION_INFO
+[exit=0]
+
+## simctl binary: env vars it honours
+$ bash -c strings -a /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl | grep -E 'SIMCTL_|CORESIMULATOR_|deviceSetWithPath|defaultDeviceSetWithError' | sort -u
+If you want to set environment variables in the resulting environment, set them in the calling environment with a SIMCTL_CHILD_ prefix.
+RC_ALLOW_SIMCTL_SPAWN
+SIMCTL_CHILD_
+defaultDeviceSetWithError:
+deviceSetWithPath:error:
+[exit=0]
+
+## Which Xcode binaries mention DVTSimulatorSetLocation
+$ bash -c cd /Applications/Xcode.app/Contents && find . -maxdepth 12 -type f -perm -u+x -size +50k 2>/dev/null | while read -r f; do strings -a "$f" 2>/dev/null | grep -q DVTSimulatorSetLocation && echo "$f"; done
+./PlugIns/IDEiOSSupportCore.framework/Versions/A/IDEiOSSupportCore
+[exit=1]
+
+## 3. Static proof of the IDE's custom-device-set code path
+$ python3 <cfstring/selref annotator> /Applications/Xcode.app/Contents/PlugIns/IDEiOSSupportCore.framework/Versions/A/IDEiOSSupportCore DVTSimulatorSetLocation
+cstring @0x9bcf5   CFString @0xc1eb8
+
+referenced from: ___42-[DVTiPhoneSimulatorLocator startLocating]_block_invoke_2:
+00072b2f  movq	0x5c81a(%rip), %rsi                        <<< sel:defaultErrorPresenter
+00072b44  movq	0x5db45(%rip), %rsi                        <<< sel:presentError:completionQueue:completionHandler:
+00072b76  movq	0x5cc6b(%rip), %rsi                        <<< sel:logAspect
+00072bcb  movq	0x5b8ae(%rip), %rsi                        <<< sel:standardUserDefaults
+00072be7  movq	0x5daaa(%rip), %rsi                        <<< sel:dvt_filePathForKey:
+00072bee  leaq	0x4f2c3(%rip), %rdx                        <<< @"DVTSimulatorSetLocation"
+00072c18  movq	0x5cbc9(%rip), %rsi                        <<< sel:logAspect
+00072c61  movq	0x5b6d0(%rip), %r14                        <<< sel:pathString
+00072cb9  movq	0x5d9e0(%rip), %rsi                        <<< sel:defaultDeviceSetWithError:
+00072d10  movq	0x5cad1(%rip), %rsi                        <<< sel:logAspect
+00072d60  movq	0x5b5d1(%rip), %r14                        <<< sel:pathString
+00072d99  movq	0x5d7f8(%rip), %rsi                        <<< sel:deviceSetWithPath:error:
+00072dfc  movq	0x5b895(%rip), %rsi                        <<< sel:addObject:
+00072e50  movq	0x5b3c1(%rip), %rsi                        <<< sel:countByEnumeratingWithState:objects:count:
+00072e98  movq	0x5d809(%rip), %rbx                        <<< sel:_startLocatingDevicesInDeviceSet:
+00072ee7  movq	0x5b32a(%rip), %rsi                        <<< sel:countByEnumeratingWithState:objects:count:
+[exit=0]
+
+## IDEiOSSupportCore log strings that bracket the branch
+$ bash -c strings -a '/Applications/Xcode.app/Contents/PlugIns/IDEiOSSupportCore.framework/Versions/A/IDEiOSSupportCore' | grep -E 'Creating/fetching (default|temporary) SimDeviceSet|deviceSetWithPath:error:\] returned nil|defaultDeviceSetWithError:\] returned nil'
+Creating/fetching temporary SimDeviceSet at: %@
+[SimServiceContext deviceSetWithPath:error:] returned nil (%@). Simulator device support disabled.
+Creating/fetching default SimDeviceSet
+[SimServiceContext defaultDeviceSetWithError:] returned nil (%@). Simulator device support disabled.
+[exit=0]
+
+## 4. Is the key set on this machine? (read-only)
+DVTSimulatorSetLocation                    (not set)
+IDECustomDerivedDataLocation               (not set)
+IDECustomDistributionArchivesLocation      (not set)
+IDECustomCompilationCacheLocation          (not set)
+IDEBuildLocationStyle                      Shared
+IDESharedBuildFolderName                   (not set)
+
+com.apple.iphonesimulator DeviceSetPath    (not set)
+
+## Locations default keys that exist in Xcode 26.5 IDEFoundation
+$ bash -c strings -a /Applications/Xcode.app/Contents/Frameworks/IDEFoundation.framework/Versions/A/IDEFoundation | grep -E '^IDE(Custom[A-Za-z]*(Location|Path)|BuildLocationStyle|SharedBuildFolderName)$' | sort -u
+IDEBuildLocationStyle
+IDECustomBuildIntermediatesPath
+IDECustomBuildProductsPath
+IDECustomCompilationCacheLocation
+IDECustomDerivedDataLocation
+IDECustomDistributionArchivesLocation
+IDECustomSnapshotsLocation
+IDESharedBuildFolderName
+[exit=0]
+
+## 5. What is actually in the device set
+## device set total
+$ du -shx ~/Library/Developer/CoreSimulator/Devices
+8.2G	~/Library/Developer/CoreSimulator/Devices
+[exit=0]
+
+## per device
+$ bash -c du -shx '~/Library/Developer/CoreSimulator/Devices'/*/ 2>/dev/null | sort -h
+1.2G	~/Library/Developer/CoreSimulator/Devices/0F29E552-3BA3-413D-96ED-B810CD690DC4/
+3.2G	~/Library/Developer/CoreSimulator/Devices/15EA64C9-8286-40CC-881A-B19C606C7F88/
+3.8G	~/Library/Developer/CoreSimulator/Devices/855CCF05-5E74-4372-ADB5-7ADE52900AE8/
+[exit=0]
+
+## per-device composition (durable vs regenerable)
+### Apple Watch Ultra 3 (49mm)  (0F29E552-3BA3-413D-96ED-B810CD690DC4)
+  data/Containers                                             95M
+  data/Library/Caches/com.apple.containermanagerd/Dead         0B
+  data/Library/Caches                                        275M
+  data/private/var/MobileAsset                               161M
+  data/var/db/diagnostics                                    502M
+  data/var/db/uuidtext                                       107M
+
+### iPhone 17 Pro Max  (15EA64C9-8286-40CC-881A-B19C606C7F88)
+  data/Containers                                            276M
+  data/Library/Caches/com.apple.containermanagerd/Dead       128M
+  data/Library/Caches                                        317M
+  data/private/var/MobileAsset                               1.4G
+  data/var/db/diagnostics                                    684M
+  data/var/db/uuidtext                                       183M
+
+### iPhone SE (3rd generation)  (855CCF05-5E74-4372-ADB5-7ADE52900AE8)
+  data/Containers                                            197M
+  data/Library/Caches/com.apple.containermanagerd/Dead       112M
+  data/Library/Caches                                        1.0G
+  data/private/var/MobileAsset                               1.8G
+  data/var/db/diagnostics                                    311M
+  data/var/db/uuidtext                                       148M
+
+## 6. Context: where the rest of the user-domain bytes are
+## ~/Library/Developer
+$ bash -c du -shx ~/Library/Developer/* 2>/dev/null | sort -h
+  0B	~/Library/Developer/DVTDownloads
+  0B	~/Library/Developer/XCPGDevices
+4.0K	~/Library/Developer/XCTestDevices
+4.6G	~/Library/Developer/Toolchains
+6.5G	~/Library/Developer/Xcode
+8.2G	~/Library/Developer/CoreSimulator
+[exit=0]
+
+## ~/Library/Developer/Xcode
+$ bash -c du -shx ~/Library/Developer/Xcode/* 2>/dev/null | sort -h
+4.0K	~/Library/Developer/Xcode/XcodeToMetalToolchainIndexMapping.plist
+4.0K	~/Library/Developer/Xcode/XcodeToMetalToolchainIndexMapping.plist.sb-2fe0759a-MXwUap
+ 12K	~/Library/Developer/Xcode/SDKToSimulatorIndexMapping.plist
+1.3M	~/Library/Developer/Xcode/DeviceLogs
+ 18M	~/Library/Developer/Xcode/UserData
+2.9G	~/Library/Developer/Xcode/watchOS DeviceSupport
+3.5G	~/Library/Developer/Xcode/DerivedData
+[exit=0]
+
+## free space
+$ bash -c df -h / /System/Volumes/Data 2>/dev/null
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk1s4s1   466Gi    12Gi    21Gi    37%    459k  217M    0%   /
+/dev/disk1s1     466Gi   424Gi    21Gi    96%    3.9M  217M    2%   /System/Volumes/Data
+[exit=0]
+
+## 7. FSKit availability on this host (H7)
+## FSKit framework + daemons
+$ bash -c ls -d /System/Library/Frameworks/FSKit.framework 2>&1; ls /usr/libexec | grep -i fskit
+/System/Library/Frameworks/FSKit.framework
+fskit_agent
+fskit_helper
+fskitd
+[exit=0]
+
+## mount(8) knows FSKit modules
+$ bash -c man 8 mount 2>/dev/null | col -b | grep -A2 -- '-F      Forces'
+     -F      Forces the file system type be considered as an FSModule
+	     delivered using FSKit.
+
+[exit=0]
+

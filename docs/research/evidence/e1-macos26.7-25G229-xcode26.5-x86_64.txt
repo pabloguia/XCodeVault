@@ -1,0 +1,152 @@
+# Experiment: E1 mountability / SIP status of CoreSimulator paths (read-only)
+# Date: 2026-09-17T00:40:58Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+## flags and xattrs on target paths
+$ ls -ldO@ /Library/Developer /Library/Developer/CoreSimulator /Library/Developer/CoreSimulator/Caches /Library/Developer/CoreSimulator/Cryptex /Library/Developer/CoreSimulator/Images /Library/Developer/CoreSimulator/Profiles /Library/Developer/CoreSimulator/Volumes
+drwxr-xr-x  8 root  wheel  - 256 Sep  7 19:58 /Library/Developer
+drwxr-xr-x  7 root  admin  - 224 Jul 23  2025 /Library/Developer/CoreSimulator
+drwxr-xr-x@ 3 root  admin  -  96 Jul 16 01:05 /Library/Developer/CoreSimulator/Caches
+	com.apple.metadata:com_apple_backup_excludeItem	 61 
+drwxr-xr-x  4 root  admin  - 128 Jul 23  2025 /Library/Developer/CoreSimulator/Cryptex
+drwxr-xr-x@ 7 root  admin  - 224 Sep 16 20:41 /Library/Developer/CoreSimulator/Images
+	com.apple.metadata:com_apple_backup_excludeItem	 61 
+drwxr-xr-x  3 root  admin  -  96 Apr 30  2025 /Library/Developer/CoreSimulator/Profiles
+drwxr-xr-x@ 4 root  admin  - 128 Sep  9 20:25 /Library/Developer/CoreSimulator/Volumes
+	com.apple.metadata:com_apple_backup_excludeItem	 61 
+[exit=0]
+
+## xattr -l CoreSimulator
+$ xattr -l /Library/Developer/CoreSimulator
+[exit=0]
+
+## xattr -l /Library/Developer
+$ xattr -l /Library/Developer
+[exit=0]
+
+## rootless.conf entries mentioning developer
+$ grep -i developer /System/Library/Sandbox/rootless.conf
+MobileStorageMounter		/System/Developer
+[exit=0]
+
+## mounts under /Library/Developer
+$ sh -c mount | grep -i developer
+/dev/disk5s1 on /Library/Developer/CoreSimulator/Volumes/watchOS_23T570 (apfs, sealed, local, nodev, nosuid, read-only, journaled, noatime, nobrowse)
+/dev/disk7s1 on /Library/Developer/CoreSimulator/Volumes/iOS_23F77 (apfs, sealed, local, nodev, nosuid, read-only, journaled, noatime, nobrowse)
+[exit=0]
+
+## nested mount points
+$ ls -la /Library/Developer/CoreSimulator/Volumes
+total 0
+drwxr-xr-x@ 4 root  admin  128 Sep  9 20:25 .
+drwxr-xr-x  7 root  admin  224 Jul 23  2025 ..
+drwxr-xr-x  3 root  wheel   96 May  6 19:45 iOS_23F77
+drwxr-xr-x  3 root  wheel   96 Apr 29 05:43 watchOS_23T570
+[exit=0]
+
+## Cryptex layout
+$ find /Library/Developer/CoreSimulator/Cryptex /Library/Developer/CoreSimulator/Images -maxdepth 3 -exec ls -ldO {} ;
+drwxr-xr-x  4 root  admin  - 128 Jul 23  2025 /Library/Developer/CoreSimulator/Cryptex
+drwxr-xr-x@ 5 root  admin  - 160 Jul 23  2025 /Library/Developer/CoreSimulator/Cryptex/Images
+drwxr-xr-x  2 root  admin  - 64 Sep  9 10:59 /Library/Developer/CoreSimulator/Cryptex/Images/Inbox
+drwxr-xr-x  2 root  admin  - 64 Jul 23  2025 /Library/Developer/CoreSimulator/Cryptex/Images/bundle
+drwxr-xr-x  2 root  admin  - 64 Sep  9 10:59 /Library/Developer/CoreSimulator/Cryptex/Images/mnt
+drwxr-xr-x@ 2 root  admin  - 64 Jul 23  2025 /Library/Developer/CoreSimulator/Cryptex/Caches
+drwxr-xr-x@ 7 root  admin  - 224 Sep 16 20:41 /Library/Developer/CoreSimulator/Images
+-rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+drwxr-xr-x  2 root  admin  - 64 Sep  9 11:00 /Library/Developer/CoreSimulator/Images/Inbox
+-rw-r--r--  1 root  wheel  - 1669 Sep 16 20:41 /Library/Developer/CoreSimulator/Images/images.plist
+drwxr-xr-x  2 root  admin  - 64 Sep  9 11:00 /Library/Developer/CoreSimulator/Images/mnt
+-rw-r--r--@ 1 root  admin  - 5242171072 Aug  6 18:33 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+[exit=0]
+
+## on-disk bytes under CoreSimulator (du -x, not crossing mounts)
+$ du -xsk /Library/Developer/CoreSimulator /Library/Developer/CoreSimulator/Caches /Library/Developer/CoreSimulator/Cryptex /Library/Developer/CoreSimulator/Images /Library/Developer/CoreSimulator/Profiles /Library/Developer/CoreSimulator/Volumes
+22939048	/Library/Developer/CoreSimulator
+7465676	/Library/Developer/CoreSimulator/Caches
+0	/Library/Developer/CoreSimulator/Cryptex
+15468140	/Library/Developer/CoreSimulator/Images
+5232	/Library/Developer/CoreSimulator/Profiles
+0	/Library/Developer/CoreSimulator/Volumes
+[exit=0]
+
+## runtime registry
+$ xcrun simctl runtime list -j
+{
+  "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B" : {
+    "build" : "23F77",
+    "deletable" : true,
+    "identifier" : "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B",
+    "kind" : "Disk Image",
+    "lastUsedAt" : "2026-09-16T00:46:56Z",
+    "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/iOS_23F77",
+    "path" : "\/Library\/Developer\/CoreSimulator\/Images\/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg",
+    "platformIdentifier" : "com.apple.platform.iphonesimulator",
+    "runtimeBundlePath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/iOS_23F77\/Library\/Developer\/CoreSimulator\/Profiles\/Runtimes\/iOS 26.5.simruntime",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+    "signatureState" : "Verified",
+    "sizeBytes" : 10597197700,
+    "state" : "Ready",
+    "supportedArchitectures" : [
+      "x86_64",
+      "arm64"
+    ],
+    "version" : "26.5"
+  },
+  "28793F5D-57BF-4847-957A-D2C0AC7AC62B" : {
+    "build" : "23T570",
+    "deletable" : true,
+    "identifier" : "28793F5D-57BF-4847-957A-D2C0AC7AC62B",
+    "kind" : "Disk Image",
+    "lastUsedAt" : "2026-09-16T00:46:30Z",
+    "mountPath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/watchOS_23T570",
+    "path" : "\/Library\/Developer\/CoreSimulator\/Images\/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg",
+    "platformIdentifier" : "com.apple.platform.watchsimulator",
+    "runtimeBundlePath" : "\/Library\/Developer\/CoreSimulator\/Volumes\/watchOS_23T570\/Library\/Developer\/CoreSimulator\/Profiles\/Runtimes\/watchOS 26.5.simruntime",
+    "runtimeIdentifier" : "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+    "signatureState" : "Verified",
+    "sizeBytes" : 5242171072,
+    "state" : "Ready",
+    "supportedArchitectures" : [
+      "x86_64",
+      "arm64"
+    ],
+    "version" : "26.5"
+  }
+}
+[exit=0]
+
+## MobileAsset runtime store
+$ sh -c ls -la /System/Library/AssetsV2/ | grep -i SimulatorRuntime; du -sk /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime
+drwxr-xr-x    3 root  wheel    96 Sep 16 19:13 com_apple_MobileAsset_appleTVOSSimulatorRuntime
+drwxr-xr-x    3 root  wheel    96 Sep 16 19:13 com_apple_MobileAsset_iOSSimulatorRuntime
+drwxr-xr-x    3 root  wheel    96 Sep 16 19:13 com_apple_MobileAsset_watchOSSimulatorRuntime
+4	/System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime
+4	/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime
+4	/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime
+[exit=0]
+
+## disk image attachments (runtime images)
+$ sh -c hdiutil info | grep -E 'image-path|^/dev/disk'
+image-path      : /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+/dev/disk4	GUID_partition_scheme	
+/dev/disk4s1	7C3457EF-0000-11AA-AA11-00306543ECAC	
+/dev/disk5	EF57347C-0000-11AA-AA11-00306543ECAC	
+/dev/disk5s1	41504653-0000-11AA-AA11-00306543ECAC	/Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+image-path      : /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+/dev/disk6	GUID_partition_scheme	
+/dev/disk6s1	7C3457EF-0000-11AA-AA11-00306543ECAC	
+/dev/disk7	EF57347C-0000-11AA-AA11-00306543ECAC	
+/dev/disk7s1	41504653-0000-11AA-AA11-00306543ECAC	/Library/Developer/CoreSimulator/Volumes/iOS_23F77
+[exit=0]
+
+## df of /System/Library/AssetsV2 (which volume backs it)
+$ df -h /System/Library/AssetsV2
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk1s1   466Gi   424Gi    21Gi    96%    3.9M  217M    2%   /System/Volumes/Data
+[exit=0]
+
