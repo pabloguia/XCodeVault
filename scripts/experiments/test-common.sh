@@ -34,9 +34,12 @@ mkdir -p "$FIX/volumes/VAULT" "$FIX/volumes/Backup" "$FIX/volumes/Weird.Name+1"
 ln -s / "$FIX/volumes/BootName"
 export XCV_VOLUMES_DIR="$FIX/volumes"
 
+# A synthetic UUID, deliberately. Hard-coding a real one would put back into the tree the value
+# this helper exists to take out — and the redaction would then rewrite the fixture itself,
+# leaving the assertion passing for the wrong reason.
 xcv_volume_uuid() {
     case "${1##*/}" in
-        VAULT) echo "<vault-uuid>" ;;
+        VAULT) echo "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D" ;;
         *) echo "" ;;
     esac
 }
@@ -74,7 +77,7 @@ check "a volume label does not eat a longer word containing it" \
     "the VAULTED archive" "$(redact "the VAULTED archive")"
 
 check "a volume UUID is redacted" \
-    "Volume UUID: <vault-uuid>" "$(redact "Volume UUID: <vault-uuid>")"
+    "Volume UUID: <vault-uuid>" "$(redact "Volume UUID: A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D")"
 
 check "the boot volume is redacted, and marked as the boot volume" \
     "/Volumes/<bootvolume>/Users" "$(redact "/Volumes/BootName/Users")"
