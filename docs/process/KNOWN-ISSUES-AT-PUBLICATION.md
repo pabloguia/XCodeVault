@@ -136,11 +136,14 @@ families by hand, so a third family means editing three files with no compile er
 
 ### CI and the test suite
 
-- Six of the twenty `XCTSkip` sites cannot be ruled out on a GitHub runner, and three of those are
-  the `chmod +a` ACL tests — including the **only** pin on the abort/forget termination bound. If
-  `chmod +a` does not work there, that test silently does not exist, with nothing turning red. The
-  fix needs no hardware: have CI assert its environment supports what the skips need, and fail if the
-  skip count exceeds a committed baseline.
+- ~~Six of the twenty `XCTSkip` sites cannot be ruled out on a GitHub runner~~ — **measured on the
+  first CI run, 2026-09-18: zero tests skipped on either `macos-15` or `macos-26`.** All 275
+  executed on both. So `chmod +a` works there, `hdiutil create`/`attach` works there, and the
+  `/Volumes/<bootname>` symlink exists there; the three ACL tests, including the only pin on the
+  abort/forget termination bound, do run in CI. The *residual* is that nothing enforces it: an
+  environment change could start skipping tests and no gate would notice. CI should assert its
+  environment supports what the skips need, and fail if the skip count exceeds a committed baseline
+  of zero.
 - `.github/workflows/ci.yml` pins `actions/checkout` and `actions/upload-artifact` by mutable tag
   rather than SHA. Given `permissions: contents: read`, no secrets, and no publishing step, this does
   not materially change the workflow's risk — but the calculus changes the day a release job is added.
