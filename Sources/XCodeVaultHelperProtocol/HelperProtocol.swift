@@ -5,22 +5,22 @@ import Foundation
 /// and the daemon link this module and nothing else crosses the XPC boundary.
 @objc public protocol XCodeVaultHelperXPC {
     /// Helper build identification, for version-skew checks.
-    func version(reply: @escaping (String) -> Void)
+    func version(reply: @escaping @Sendable (String) -> Void)
 
     /// Deletes the contents of one root-owned, regenerable directory chosen from
     /// `HelperCleanupTarget`. The helper maps the raw value to a fixed absolute path itself.
-    func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping (HelperResult) -> Void)
+    func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
 
     /// Deletes one stranded runtime download from a CoreSimulator Inbox directory. The name must be
     /// a single path component; the helper validates it, resolves it under the fixed Inbox paths,
     /// and refuses symlinks and anything not a regular file ending in .dmg.
-    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping (HelperResult) -> Void)
+    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping @Sendable (HelperResult) -> Void)
 
     /// Creates `<mount point>/<VaultDirectory.name>` on a mounted external volume identified by UUID
     /// and hands ownership to the *calling* user (uid/gid taken from the XPC connection's audit
     /// credentials, never from the request). The helper resolves the UUID to a mount point itself;
     /// the client cannot pass a path.
-    func createVaultDirectory(volumeUUID: String, reply: @escaping (HelperResult) -> Void)
+    func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void)
 }
 
 /// The vault directory's name, which is part of the client↔helper contract: the helper creates it,

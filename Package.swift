@@ -25,11 +25,24 @@ let package = Package(
             name: "XCodeVaultHelperProtocol",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
-        // Root LaunchDaemon (SMAppService.daemon). Allowlisted verbs only; no Process, no shell —
-        // enforced by .claude/hooks/helper-guard.sh and the helper-security-reviewer.
+        // The privileged helper's logic. Depended on by the helper executable and the test target,
+        // and deliberately by NOTHING else — not the app, not the CLI. It exists so the verbs, the
+        // authorization gate and the path guards can be tested; an untestable gate in a root daemon
+        // is how this project shipped a `getgrouplist` retry that could never run.
+        .target(
+            name: "XCodeVaultHelperCore",
+            dependencies: ["XCodeVaultHelperProtocol"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        // Root LaunchDaemon (SMAppService.daemon). Allowlisted verbs only; no Process, no shell.
+        // `scripts/helper-invariants.sh` checks that over a fixed list of helper directories, and
+        // the helper-security review is what actually decides — the script is a lint that has been
+        // defeated in every round it has been mutation-tested, and it does not read this file, so
+        // nothing mechanical notices if this target gains a dependency. This target is the
+        // bootstrap only.
         .executableTarget(
             name: "XCodeVaultHelper",
-            dependencies: ["XCodeVaultHelperProtocol"],
+            dependencies: ["XCodeVaultHelperCore", "XCodeVaultHelperProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // SwiftUI app — a projection of XCodeVaultCore; bundled by scripts/bundle-app.sh.
@@ -48,7 +61,7 @@ let package = Package(
         ),
         .testTarget(
             name: "XCodeVaultCoreTests",
-            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol"],
+            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore"],
             resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
