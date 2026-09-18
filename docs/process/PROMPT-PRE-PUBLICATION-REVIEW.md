@@ -12,6 +12,15 @@ estranhos.
 Leia `CLAUDE.md` (carregado automaticamente), depois `STATUS.md` e
 `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md`. Só então comece.
 
+**Duas coisas sobre a própria sessão, antes de qualquer trabalho:**
+
+- **Converse em português.** O dono do repositório é brasileiro. Código, commits, comentários e
+  documentação do projeto continuam em inglês; a conversa com ele, não.
+- **Escreva os achados em disco conforme aparecem, não no fim.** Crie
+  `docs/process/REVIEW-<data>.md` no primeiro achado e vá acrescentando. Esta sessão vai ser longa e
+  vai compactar, e um achado que só existe no contexto morre na compactação — junto com o motivo
+  pelo qual você decidiu não corrigi-lo.
+
 ---
 
 ## 1. Autonomia, e onde ela termina
@@ -77,7 +86,7 @@ bash scripts/experiments/test-common.sh   # 32 checks
 
 ---
 
-## 3. As cinco frentes
+## 3. As seis frentes
 
 Trate cada uma como uma passagem independente. Não misture achados de frentes diferentes no mesmo
 commit.
@@ -189,6 +198,23 @@ conversa.
 - `COMPATIBILITY_MATRIX.md`: nenhuma linha pode dizer "supported" sem a Definition of Done de
   `docs/product/NON_GOALS_AND_SAFETY.md`. Confira uma por uma.
 
+### 3.6 Licença, proveniência e o que sai no DMG
+
+Frente curta e a mais fácil de esquecer, porque nada nela quebra um teste.
+
+- **MIT foi escolhida em ADR-0005.** `swift-argument-parser` é **Apache License 2.0** e é ligado
+  estaticamente no binário que o `bundle-app.sh` empacota. A Apache-2.0 §4 exige propagar atribuição
+  em obras distribuídas, e **não existe `NOTICE` nem `THIRD-PARTY-LICENSES` neste repositório**.
+  Determine o que é de fato exigido e faça — isto é a categoria de achado que bloqueia publicação.
+- **Proveniência.** `mac-ssd-rescue` aparece em 4 arquivos de código. Uma checagem rápida indica que
+  são referências de **interoperabilidade** — o `doctor` detecta e nomeia o layout que aquela
+  ferramenta cria, o que é uso nominativo e não derivação. Confirme isso em toda a árvore, incluindo
+  `docs/process/PRIOR_ART.md` e os testes, e confirme que nenhum trecho foi copiado de lá ou de
+  qualquer outra fonte.
+- **Cabeçalhos de licença nos fontes:** o projeto tem zero. Decida se quer, aplique de forma
+  consistente, ou registre a decisão de não ter. Qualquer das três serve; o que não serve é metade.
+- `Package.resolved` está versionado. Confirme que as versões pinadas não carregam CVE conhecido.
+
 ---
 
 ## 4. Como provar que uma verificação rodou
@@ -212,9 +238,44 @@ Portanto, nesta sessão:
 - `git checkout -- <arquivo>` restaura o conteúdo **commitado** e destrói trabalho não commitado.
   Isso já desfez um refactor inteiro nesta base, durante a limpeza de uma mutação.
 
+E duas armadilhas específicas desta árvore:
+
+- **Refatoração precisa preservar comportamento, e "preserva" é uma afirmação que precisa de prova.**
+  Antes de partir um arquivo ou reescrever uma função, confirme que existe teste cobrindo o
+  comportamento que você vai mover. Se não existir, **escreva o teste primeiro, veja-o passar contra
+  o código atual**, e só então mexa. 269 testes não cobrem 6.831 linhas por igual, e uma revisão que
+  quebra o que funcionava causou exatamente o dano que existia para evitar.
+- **Dois placeholders são load-bearing e precisam continuar placeholders.** `TEAMID_PLACEHOLDER` em
+  `Sources/XCodeVaultHelper/main.swift` é *afirmado presente* por `scripts/helper-invariants.sh`:
+  preenchê-lo quebra o CI e remove um guarda fail-closed que faz o daemon recusar-se a servir sem
+  team id real. `<owner>` em `packaging/homebrew/xcodevault.rb` é deliberado — um nome de dono
+  registrável por qualquer pessoa é risco de supply chain no minuto em que o repositório abre.
+
 ---
 
-## 5. O que não re-litigar
+## 5. Severidade: o que bloqueia, o que corre, o que vira issue
+
+Você tem mandato aberto, e mandato aberto sem modelo de severidade produz ou gold-plating ou
+thrash. Classifique **todo** achado num destes três e diga qual no relatório:
+
+1. **Bloqueia a publicação.** Segurança alcançável por um cliente, perda de dados, vazamento de
+   identidade da máquina, problema de licença, ou qualquer afirmação falsa numa superfície que um
+   estranho lê primeiro — um README que promete o que o código não faz é isto. Corrija antes de
+   tudo e diga em voz alta.
+2. **Corrija agora porque fica mais caro depois.** Qualquer coisa que entre no histórico público e
+   depois exija uma segunda correção pública: nomes de API, formato do journal, contrato XPC,
+   estrutura de diretórios, nomes de comando da CLI.
+3. **Vira issue.** Melhoria real que não piora com o tempo e que um contribuidor externo poderia
+   pegar. **Este é o destino preferido**, não o consolo: um repositório recém-aberto com issues bem
+   escritas é mais convidativo que um repositório perfeito e mudo, e é exatamente para isso que o
+   `KNOWN-ISSUES-AT-PUBLICATION.md` existe.
+
+O corolário: se um achado não cabe em nenhum dos três, ele não é um achado. Não reescreva código
+que funciona porque você o escreveria diferente.
+
+---
+
+## 6. O que não re-litigar
 
 `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` lista o que foi achado por revisões independentes,
 julgado não-bloqueante e **deixado de propósito**, com o motivo de cada um. Leia antes de começar.
@@ -234,7 +295,7 @@ saber que ela existia. Dois em particular são armadilha:
 
 ---
 
-## 6. Entregáveis
+## 7. Entregáveis
 
 1. **Todos os achados resolvidos na árvore de trabalho**, em commits lógicos, cada um com os quatro
    portões verdes por exit code real e `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
@@ -245,23 +306,43 @@ saber que ela existia. Dois em particular são armadilha:
 3. **`KNOWN-ISSUES-AT-PUBLICATION.md` atualizado**: o que esta revisão resolveu sai; o que ela
    acrescentou entra.
 4. **`STATUS.md` e `SESSION-HANDOFF.md` atualizados** para refletir o estado real.
-5. **O comando de push entregue ao dono**, não executado:
+5. **Quatro verificações finais**, cada uma com controle positivo:
+   - **Varredura de vazamento sobre o que *esta sessão* escreveu.** O redator
+     (`scripts/experiments/common.sh`, `Redaction.swift`) filtra arquivos de evidência, não
+     documentos novos. Nome de usuário, caminho de home, rótulo e UUID de volume não podem aparecer
+     em nada que você criou. Plante um caso e confirme que a varredura o acha antes de acreditar num
+     resultado vazio.
+   - **Clone limpo compila.** `git clone` para um diretório temporário, `swift build && swift test`.
+     Caminho absoluto embutido, arquivo que o build precisa e não está versionado, ou dependência
+     que só existe nesta máquina — nada disso aparece de outro jeito, e todos aparecem para o
+     primeiro estranho que clonar.
+   - **Os templates de issue são YAML válido.** O GitHub ignora em silêncio um `.yml` malformado em
+     `.github/ISSUE_TEMPLATE/`, e você descobre quando o primeiro usuário não consegue abrir uma
+     issue.
+   - **Todo comando do README roda como está escrito.** Rode um por um. É controle positivo
+     aplicado a documentação.
+
+6. **O comando de push entregue ao dono**, não executado:
 
    ```bash
    git remote add origin git@github.com:<usuário>/XCodeVault.git && git push -u origin main
    ```
 
-6. Se você encontrar algo que **deveria** bloquear a publicação, diga isso em voz alta e em primeiro
+7. Se você encontrar algo que **deveria** bloquear a publicação, diga isso em voz alta e em primeiro
    lugar na sua resposta final. Não enterre no meio de um relatório.
 
 ---
 
-## 7. Ordem sugerida
+## 8. Ordem sugerida
 
 Leitura primeiro (`CLAUDE.md`, `STATUS.md`, `KNOWN-ISSUES`, os 6 ADRs), depois a passagem de
 arquitetura — porque ela pode mudar o que faz sentido corrigir nas outras. Depois Apple e code
 review, que se sobrepõem. Qualidade e engenharia agêntica por último, porque dependem do estado
 final do código. A limpeza de documentação e histórico fecha, já sabendo o que sobrou.
+
+**Licença e proveniência (3.6) não dependem de nada** — rode essa frente no começo, em paralelo com
+a leitura. É a mais curta, é a que ninguém lembra, e é a única em que um achado pode bloquear a
+publicação sem que nenhum teste fique vermelho.
 
 Rode as frentes independentes em paralelo quando elas não dependerem uma da outra. Não pergunte por
 aprovação entre elas — pergunte só quando bater numa das seis linhas da seção 1.
