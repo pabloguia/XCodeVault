@@ -49,8 +49,9 @@ this file short and update it only when a pointer or non-negotiable changes.
 `Package.swift` (Swift 6, macOS 14+) · `Sources/XCodeVaultCore` (the only domain layer:
 Discovery, Catalog, Scan, Doctor, Report, Support) · `Sources/xcodevaultctl` (CLI) ·
 `Tests/XCodeVaultCoreTests` (+ redacted fixtures) · `fixtures/E2Fixture` (experiment fixture)
-· `Sources/XCodeVaultHelperProtocol` + `Sources/XCodeVaultHelper` (root daemon, allowlisted
-verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
+· `Sources/XCodeVaultHelperProtocol` (the XPC contract) + `Sources/XCodeVaultHelperCore` (the
+daemon's logic, in a library so it is testable) + `Sources/XCodeVaultHelper` (root daemon
+bootstrap, allowlisted verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
 `Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
 `packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) · `.swift-format`
 (4-space indent, 160 cols). Build with `swift build`, test with `swift test`.

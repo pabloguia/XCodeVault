@@ -90,7 +90,8 @@ exists to close; see `CONTRIBUTING.md`.
 
 ## Documentation
 
-- `docs/process/SESSION-HANDOFF.md` and the `PROMPT-*.md` files are in Portuguese while the rest of
-  the repository is in English. For an outside reader that is noise.
+- `docs/process/SESSION-HANDOFF.md`, the `PROMPT-*.md` files and the tail of `STATUS.md` are in
+  Portuguese while the rest of the repository is in English. For an outside reader that is noise —
+  and `STATUS.md` is a root file, so it is noise encountered early.
 - `docs/process/PROMPT-PUBLICATION-PREP.md` is a completed session brief whose inventory had five
   errors, corrected in ADR-0005. It carries a header saying so and can be deleted without loss.
