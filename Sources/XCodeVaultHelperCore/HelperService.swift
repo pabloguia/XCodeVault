@@ -32,23 +32,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     let callerGID: gid_t
     init(callerUID: uid_t, callerGID: gid_t) { self.callerUID = callerUID; self.callerGID = callerGID }
 
-    /// Every state-changing verb requires the caller to be an administrator.
-    ///
-    /// The code-signing requirement decides which *binary* may connect. It says nothing about which
-    /// *user* is driving that binary — and the shipped CLI is a Developer-ID-signed, world-executable
-    /// client that satisfies the requirement by construction. Without this check the caller set was
-    /// every local account, including non-admin and service accounts, for verbs that delete files as
-    /// root and change ownership. `callerUID >= 500` further down is a "not a system account" filter,
-    /// which is not the same question and does not stop a perfectly ordinary user.
-    ///
-    /// Group membership, not the Security framework's rights API: SECURITY_MODEL.md forbids the
-    /// null-authorization form outright, and a genuine right would have to arrive as an externalized
-    /// authorization reference from a client that does not exist yet.
-    ///
-    /// **Fails closed.** Any failure to resolve the caller, the admin group, or the group list
-    /// refuses the operation; "I cannot tell whether you are an administrator" is not a yes.
     /// The caller's name and primary gid. Seams like this one exist so the gate can be tested;
     /// see the target header for why that is not optional here.
+    ///
+    /// The authorization contract used to be pasted here as well, which attributed it to a
+    /// `getpwuid` wrapper that performs no authorization. It lives on `isAdministrator`, the gate
+    /// it actually describes.
     static func passwdLookup(_ uid: uid_t) -> (name: String, gid: Int32)? {
         guard let pw = getpwuid(uid) else { return nil }
         return (String(cString: pw.pointee.pw_name), Int32(bitPattern: pw.pointee.pw_gid))
@@ -97,9 +86,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     ///
     /// **Admin-group membership is not user consent.** There is no prompt: any process already
     /// running as a logged-in administrator passes silently. This strictly shrinks the caller set
-    /// and is proportionate to these three verbs, but do not read it as an authorization dialogue.
+    /// and is proportionate to these two verbs, but do not read it as an authorization dialogue.
     /// A real right would have to arrive as an externalized authorization reference from a client,
-    /// and no client exists yet.
+    /// and no client exists yet. Group membership rather than the Security framework's rights API:
+    /// `SECURITY_MODEL.md` forbids the null-authorization form outright (the CVE-2025-65842
+    /// pattern), so `AuthorizationCopyRights(NULL, …)` is not an option here, not merely a weaker
+    /// one.
     ///
     /// **Fails closed.** Any failure to resolve the caller, the admin group, or the group list
     /// refuses; "I cannot tell whether you are an administrator" is not a yes.
@@ -129,9 +121,6 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async { reply(self.doRemoveRegenerableSystemDirectoryContents(target: target)) }
     }
-    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-        privilegedWork.async { reply(self.doRemoveStrandedRuntimeDownload(fileName: fileName)) }
-    }
     func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async { reply(self.doCreateVaultDirectory(volumeUUID: volumeUUID)) }
     }
@@ -160,32 +149,6 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             }
         }
         return HelperResult(ok: failures == 0, message: failures == 0 ? "cleaned \(dir)" : "\(failures) item(s) could not be removed", bytesFreed: freed)
-    }
-
-    private func doRemoveStrandedRuntimeDownload(fileName: String) -> HelperResult {
-        if let denied = authorize() { return denied }
-        // Single component, plain ASCII, .dmg, no traversal, no leading dot, no whitespace tricks.
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_. "))
-        guard !fileName.isEmpty, fileName.count <= 128, fileName.unicodeScalars.allSatisfy({ $0.isASCII && allowed.contains($0) }),
-            !fileName.hasPrefix("."), !fileName.hasSuffix(" "), fileName.lowercased().hasSuffix(".dmg"), fileName != ".dmg"
-        else {
-            return HelperResult(ok: false, message: "invalid file name")
-        }
-        for inbox in HelperInboxDirectory.allCases {
-            let p = inbox.rawValue + "/" + fileName
-            var st = stat()
-            guard lstat(p, &st) == 0 else { continue }
-            guard (st.st_mode & S_IFMT) == S_IFREG else { return HelperResult(ok: false, message: "not a regular file") }
-            let bytes = UInt64(st.st_blocks) * 512
-            // unlink(2) on the lstat'ed path: a symlink swapped in after lstat would be unlinked itself, never followed.
-            // `p` is a fixed Inbox prefix plus a filename validated byte-by-byte above (ASCII
-            // allowlist, no `/`, no NUL, no leading dot, `.dmg` suffix), and `unlink` acts on the
-            // lstat'ed path, so a symlink swapped in after the check is removed rather than followed.
-            // helper-invariants: allow deletion
-            guard unlink(p) == 0 else { return HelperResult(ok: false, message: "unlink failed: \(String(cString: strerror(errno)))") }
-            return HelperResult(ok: true, message: "removed \(p)", bytesFreed: bytes)
-        }
-        return HelperResult(ok: false, message: "no such stranded download")
     }
 
     private func doCreateVaultDirectory(volumeUUID: String) -> HelperResult {

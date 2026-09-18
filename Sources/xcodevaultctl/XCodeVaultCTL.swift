@@ -13,6 +13,9 @@ struct XCodeVaultCTL: ParsableCommand {
 
             Strategies marked "(exp.)" / experimental have not met the Definition of Done in \
             docs/product/NON_GOALS_AND_SAFETY.md for your macOS/Xcode combination.
+
+            Experiment IDs that appear in help text (E2, E8b, E11 …) are defined in \
+            docs/architecture/EXPERIMENTS.md.
             """,
         version: XCodeVaultVersion.current,
         subcommands: [
@@ -25,11 +28,14 @@ struct XCodeVaultCTL: ParsableCommand {
 struct GlobalOptions: ParsableArguments {
     @Flag(name: .long, help: "Emit machine-readable JSON instead of text.")
     var json = false
-    @Option(name: .long, help: "Operational profile for this invocation: safe, transparent, expert.")
-    var profile: Profile = .safe
 }
 
-enum Profile: String, ExpressibleByArgument, CaseIterable { case safe, transparent, expert }
+// There used to be a `--profile safe|transparent|expert` option here, surfaced on every subcommand
+// because GlobalOptions is @OptionGroup'd throughout — and read by nothing. On a tool that deletes
+// files, `--profile safe` reads as a constraint on the invocation, so a user who set it and then ran
+// `clean --apply` had been told something untrue by the help text. It is gone rather than wired up:
+// the concept, if it returns, should return as a flag that does something, not as one that has
+// already appeared in a release doing nothing.
 
 extension ParsableCommand {
     func emit<T: Encodable>(_ value: T, json: Bool, text: () -> String) throws {

@@ -17,6 +17,13 @@ must make the risk level visible before the action, at every profile level.
 
 ## Operational profiles
 
+> **Not implemented. This section is a specification, not a description of the shipped tool.**
+> A `--profile safe|transparent|expert` option existed on the CLI until 2026-09-18 and was read by
+> nothing: it appeared in every subcommand's `--help` and changed no behaviour. On a tool that
+> deletes files, `--profile safe` reads as a constraint on the invocation, so it was removed rather
+> than left as a flag that had already shipped doing nothing. If profiles return, they return as
+> something that acts.
+
 Safe / Transparent / Expert — see `MISSION.md`. GUI and CLI both respect the active
 profile; the CLI should be able to run `--profile safe|transparent|expert` explicitly
 per invocation without changing the persisted GUI setting.

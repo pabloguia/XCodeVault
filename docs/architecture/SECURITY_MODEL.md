@@ -43,6 +43,13 @@ require it as a precondition for any documented flow. Never modify `/System`.
 ## Concrete implementation requirements (2026-09-05 research pass)
 
 ### Registration
+
+> **Specification, not shipped behaviour.** `SMAppService` is named in two comments and called
+> nowhere: there is no registration, no `.status` handling, no `unregister()`, and no client opens a
+> connection to the helper at all. `README.md` says so plainly ("Built and security-reviewed, not
+> reachable from any client") and `scripts/bundle-app.sh` keeps the daemon behind `--with-helper`,
+> off by default. This section says what registration must do when it is written.
+
 - Use **`SMAppService.daemon(plistName:)`** (macOS 13+). `SMJobBless` is deprecated as
   of macOS 13 and, per ADR-0001, we do not ship a parallel SMJobBless path.
 - **Only `.daemon` runs as root**; `.agent` runs as the user.

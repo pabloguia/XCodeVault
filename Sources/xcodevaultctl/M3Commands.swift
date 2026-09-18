@@ -17,7 +17,11 @@ struct Vault: ParsableCommand {
                 \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
                 """)
         @Argument(help: "Mount point, e.g. /Volumes/MyDrive") var mountPoint: String
-        @Option(name: .long, help: "Vault directory relative to the volume root (default: \(VaultVolume.directoryName)). Not creatable by the privileged helper — see the discussion.") var directory: String = VaultVolume.directoryName
+        @Option(
+            name: .long,
+            help:
+                "Vault directory relative to the volume root (default: \(VaultVolume.directoryName)). Not creatable by the privileged helper — see the discussion."
+        ) var directory: String = VaultVolume.directoryName
         func run() throws {
             let vols = try VolumeDiscovery.mountedVolumes()
             guard let v = vols.first(where: { $0.mountPoint == mountPoint }) else {
@@ -142,7 +146,8 @@ struct Migration: ParsableCommand {
             let leftovers = try MigrationEngine().leftoverPartialCopies()
             struct Out: Encodable { let interrupted: [JournalEntry]; let leftoverPartialCopies: [JournalEntry] }
             try emit(Out(interrupted: interrupted, leftoverPartialCopies: leftovers), json: global.json) {
-                var o = interrupted.isEmpty
+                var o =
+                    interrupted.isEmpty
                     ? "No interrupted migrations.\n"
                     : interrupted.map { "INTERRUPTED \($0.id)  \($0.summary)  paths: \($0.paths.joined(separator: " → "))\n" }.joined()
                 for l in leftovers {

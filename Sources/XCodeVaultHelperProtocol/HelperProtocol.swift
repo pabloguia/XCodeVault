@@ -11,11 +11,6 @@ import Foundation
     /// `HelperCleanupTarget`. The helper maps the raw value to a fixed absolute path itself.
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
 
-    /// Deletes one stranded runtime download from a CoreSimulator Inbox directory. The name must be
-    /// a single path component; the helper validates it, resolves it under the fixed Inbox paths,
-    /// and refuses symlinks and anything not a regular file ending in .dmg.
-    func removeStrandedRuntimeDownload(fileName: String, reply: @escaping @Sendable (HelperResult) -> Void)
-
     /// Creates `<mount point>/<VaultDirectory.name>` on a mounted external volume identified by UUID
     /// and hands ownership to the *calling* user (uid/gid taken from the XPC connection's audit
     /// credentials, never from the request). The helper resolves the UUID to a mount point itself;
@@ -50,11 +45,6 @@ public enum HelperCleanupTarget: String, CaseIterable, Sendable {
         case .cryptexCaches: return "/Library/Developer/CoreSimulator/Cryptex/Caches"
         }
     }
-}
-
-public enum HelperInboxDirectory: String, CaseIterable, Sendable {
-    case cryptexInbox = "/Library/Developer/CoreSimulator/Cryptex/Images/Inbox"
-    case imagesInbox = "/Library/Developer/CoreSimulator/Images/Inbox"
 }
 
 /// Result envelope; `NSSecureCoding` so it can cross XPC.
