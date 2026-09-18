@@ -17,6 +17,13 @@ Ponto de partida para uma sessão nova. Projeto em `~/projects/XCodeVault`.
 
 ## Publicação — preparada em 2026-09-17, **falta só o push**
 
+> O push está **segurado por decisão do dono do repositório** (17/09): antes dele vem uma
+> revisão ampla de arquitetura, código e agentes. O que está abaixo é o procedimento, não uma
+> autorização. Criar o remote e dar o push continuam sendo dele.
+>
+> O branch é `main`, e a convenção deste repositório é **seguir o padrão do GitHub** quando não
+> houver razão concreta para divergir.
+
 O repositório está publicável. As três sub-decisões do ADR-0005 estão fechadas (MIT; autoria
 mantida; evidências redigidas e histórico reescrito) e há uma quarta: `.claude/` e `.codex/` são
 publicados. Detalhes e o inventário corrigido estão no ADR; as lições estão no `STATUS.md`.
@@ -29,7 +36,7 @@ git remote add origin git@github.com:<usuário>/XCodeVault.git
 ```
 
 ```bash
-git push -u origin master
+git push -u origin main
 ```
 
 > **O backup do histórico não redigido já saiu do repositório** (17/09): `refs/original` foi
@@ -40,6 +47,9 @@ git push -u origin master
 >
 > Para restaurar a partir dele, se precisar:
 > `git fetch ~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle master:pre-rewrite`
+>
+> O `master` aí é o branch **dentro do bundle**, não daqui — o branch local passou a ser
+> `main` em 17/09. Não "corrija" esse nome ou o fetch deixa de achar a ref.
 
 Antes de rodar o push, três coisas valem conferir:
 

@@ -1827,3 +1827,30 @@ alcançável por cliente, e nenhum artefato empacotado o contém.
 
 268 testes, build sem warnings, invariantes do helper e suíte de redação — quatro portões, exit 0
 conferido em cada um.
+
+---
+
+## 2026-09-17 (fim do dia) — `main`, e o push segurado de propósito
+
+Cinco commits fecharam as correções bloqueantes das quatro revisões: `27c25f0` (helper testável +
+o `getgrouplist` que negava admin com mais de 64 grupos + o checker de invariantes), `6a82746`
+(motor de migração: volume sumindo entre plano e cópia, subárvore ilegível passando na verificação,
+limite inferior aceito como medição, e o par `abort`/`forget` finalmente terminando), `a422bf9`
+(helper fora de qualquer artefato que este repositório consiga gerar hoje), `be14599` (superfície
+pública dizendo só o que foi medido, mais o `KNOWN-ISSUES-AT-PUBLICATION.md`) e `953aedb` (o registro
+da passagem de revisão).
+
+Quatro portões, exit code conferido direto em cada um: build sem warnings, **269 testes / 0 falhas**,
+`scripts/helper-invariants.sh` e a suíte do redator (32 checks).
+
+**O branch passou a ser `main`.** A convenção deste repositório é seguir o padrão do GitHub quando
+não houver razão concreta para divergir. O rename foi local — não existe remote — e o único lugar
+onde `master` ainda é correto é o `git fetch` do bundle pré-reescrita, porque a ref dentro do bundle
+tem esse nome. Está anotado lá para ninguém "corrigir".
+
+**O push está segurado por decisão do dono do repositório**, não por falta de preparo: antes dele vem
+uma revisão ampla de arquitetura, código e agentes. As quatro revisões já feitas cobriram o helper, a
+superfície que mexe em dados, o diff da sessão e a superfície pública — **arquitetura e a configuração
+agêntica (`.claude/`, `.codex/`) nunca entraram em escopo**. Quem for conduzir essa revisão deve ler
+`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` antes, para não re-litigar decisões que foram tomadas
+com motivo registrado.
