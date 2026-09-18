@@ -36,3 +36,7 @@ Review the diff against this checklist. Report each item PASS / FAIL / N-A with 
     vanishing, permission change, source mutation) or the gap is explicitly stated.
 
 Finish with APPROVE or REQUEST CHANGES with minimal concrete fixes.
+
+Hold the tree still while this review is in flight. You read a diff range; if the files change
+underneath it the review is invalidated rather than updated, and that has already cost this
+project a complete review.

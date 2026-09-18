@@ -19,9 +19,10 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `docs/research/FINDINGS-2026-09-05.md` — **read this early.** A sourced desk-research
   pass done before any code, with confidence tags. It corrects several assumptions the
   original brief made. Items tagged GATING/[UNKNOWN] are the research backlog.
-- `docs/architecture/HYPOTHESES.md` — the open technical hypotheses (H1–H9) and how each
+- `docs/architecture/HYPOTHESES.md` — the open technical hypotheses (H1 onward; the list grows)
+  and how each
   is proven or falsified. Do not claim a technique "works" without updating this file.
-- `docs/architecture/EXPERIMENTS.md` — the gating experiment protocol (E1–E11). E1 and
+- `docs/architecture/EXPERIMENTS.md` — the gating experiment protocol (E1 onward). E1 and
   E2 come before any implementation work; either can kill a strategy in an afternoon.
 - `docs/architecture/SECURITY_MODEL.md` — privileged-helper threat model and allowlisted API.
 - `docs/architecture/MIGRATION_ENGINE.md` — transactional migration state machine and journal.
@@ -40,8 +41,8 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `docs/process/SESSION-HANDOFF.md` — the distilled version of the above for starting cold:
   reading order, verified machine state, and the recommended next work in priority order. Its
   numbers are point-in-time and say so; re-verify before acting on them.
-- `scripts/experiments/` — the experiment harness (`common.sh` header/redaction, `e1`, `e2`,
-  `e8`); evidence lands in `docs/research/evidence/`. `.claude/skills/run-experiment` has the
+- `scripts/experiments/` — the experiment harness: `common.sh` (header/redaction) plus one script
+  per experiment; evidence lands in `docs/research/evidence/`. `.claude/skills/run-experiment` has the
   procedure.
 
 ## Layout
@@ -53,6 +54,7 @@ Discovery, Catalog, Scan, Doctor, Report, Support) · `Sources/xcodevaultctl` (C
 daemon's logic, in a library so it is testable) + `Sources/XCodeVaultHelper` (root daemon
 bootstrap, allowlisted verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
 `Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
+`scripts/helper-invariants.sh` / `scripts/check-doc-mirror.sh` (the two controls that run in CI) ·
 `packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) · `.swift-format`
 (4-space indent, 160 cols). Build with `swift build`, test with `swift test`.
 
@@ -79,7 +81,7 @@ bootstrap, allowlisted verbs; every change needs the helper-security review) · 
    first; canonical APFS mount only if the gating experiments pass, and labeled
    experimental until the Definition of Done is met.
 10. A storage strategy is not "supported" until `docs/architecture/HYPOTHESES.md` and
-   `COMPATIBILITY_MATRIX.md` show it meets the Definition of Done in
+   `docs/architecture/COMPATIBILITY_MATRIX.md` show it meets the Definition of Done in
    `docs/product/NON_GOALS_AND_SAFETY.md`. Until then, label it experimental everywhere
    (code comments, CLI help text, UI, docs).
 

@@ -19,3 +19,10 @@ change.
    commit message: `Reviewed-by: helper-security-reviewer` / `migration-safety-reviewer`.
 6. Never self-approve. If the review cannot run (tooling down), say so in the commit and
    open a follow-up rather than merging silently.
+
+## Hold the tree still while a review is in flight
+
+Do not edit the tree while a reviewer is reading it. A reviewer reads a diff range; changing the
+files underneath it invalidates the review rather than updating it, and that has already cost this
+project a complete review. Queue the change and re-run the review against the new range.
+

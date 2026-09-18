@@ -44,7 +44,7 @@ detailed version — expand on rationale here, keep CLAUDE.md as the terse check
 - Mount or redirect `/Library/Developer` wholesale — only specific, empirically
   justified subpaths (see `architecture/HYPOTHESES.md`).
 
-## Definition of "supported" for any storage strategy
+## Definition of Done: what "supported" means for any storage strategy
 
 Not supported merely because copying succeeded. Supported only once, for the relevant
 macOS/Xcode combination:

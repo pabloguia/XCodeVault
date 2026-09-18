@@ -36,3 +36,7 @@ Every item is a hard requirement; report each as PASS / FAIL / N-A with file:lin
 
 Finish with a verdict: APPROVE, or REQUEST CHANGES with the minimal concrete fix per finding.
 If you cannot determine something from the diff, say so and name the file to inspect.
+
+Hold the tree still while this review is in flight. You read a diff range; if the files change
+underneath it the review is invalidated rather than updated, and that has already cost this
+project a complete review.
