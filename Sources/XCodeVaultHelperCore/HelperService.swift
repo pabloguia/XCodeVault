@@ -125,13 +125,21 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         privilegedWork.async { reply(self.doCreateVaultDirectory(volumeUUID: volumeUUID)) }
     }
 
-    /// `base` is a test seam and nothing else: production passes nothing and walks from `/`, which
-    /// is what makes the required owner root. It injects the *trust anchor*, not an owner or a
-    /// target — the target is still `HelperCleanupTarget`'s compile-time path and still cannot
-    /// come from a client. An earlier draft of this took `requiredOwner` instead; two reviews
-    /// pointed out that an owner knob on a root deletion verb is a way to ask root to delete
-    /// somebody else's tree, and that a default argument is not a defence against a future
-    /// in-module caller.
+    /// `base` is a test seam. Production passes nothing and walks from `/`.
+    ///
+    /// Stated precisely, because an earlier version of this comment flattered it: `base` is not
+    /// *only* a trust anchor. It prefixes the target (`base + t.path`) and it determines the
+    /// required owner (whoever owns the anchor). One parameter therefore does everything the
+    /// `requiredOwner` knob this change removed did, plus choosing where the deletion happens —
+    /// and measured against the parent commit, where this verb was `private`, that widens the
+    /// in-module surface of a root deletion verb.
+    ///
+    /// What makes it acceptable rather than a worse version of what it replaced: it is not
+    /// reachable from a client (the XPC protocol has one parameter, `target`, and the dispatch
+    /// at the top of this type passes only that), `XCodeVaultHelperCore` is depended on by the
+    /// helper executable and the test target and nothing else, and anchoring at `/` while
+    /// demanding a non-root owner is refused outright. The alternative was leaving both guards
+    /// of this verb unkillable by mutation, which is the condition this change exists to end.
     ///
     /// `mount` is injected for the same reason `isAdministrator` injects its three lookups: the
     /// `.undetermined` answer is the one this verb must refuse on, and it cannot be staged from a
@@ -167,7 +175,17 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // Asked of the DESCRIPTOR, not the name. Fail closed on an unanswerable question: this
         // used to call `isMountPoint`, which returned false both for "not a mount point" and for
         // "could not tell", and proceeded on both.
-        switch mount(fd) {
+        // The seam is closed on the shipping path. A review pointed out that `mount:` was open
+        // to exactly the objection this change used to delete `requiredOwner` — "a default
+        // argument is not a defence against a future in-module caller" — and that an in-module
+        // caller passing `{ _ in .isNotMountPoint }` would disable issue #2's fix outright. When
+        // the anchor is `/`, which is the only thing production ever passes, the real query is
+        // used and the parameter is ignored.
+        //
+        // UNPINNED, unavoidably: reverting this to a bare `mount(fd)` fails no test, because the
+        // branch it protects is the one no test can enter — a test anchored at `/` would walk the
+        // real `/Library/Developer/CoreSimulator` and delete it.
+        switch base == "/" ? Self.mountStatus(ofDescriptor: fd) : mount(fd) {
         case .isMountPoint: return HelperResult(ok: false, message: "target is a mount point")
         case .undetermined: return HelperResult(ok: false, message: "could not determine whether \(dir) is a mount point; refusing")
         case .isNotMountPoint: break
@@ -176,6 +194,8 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // Everything below is descriptor-relative. The children come from the directory this call
         // walked to and verified — a fixed, root-owned, non-mount-point directory named by an enum
         // and never a client path — not from re-resolving that name a second time.
+        // The descriptor is the one the walk verified and has not left this function.
+        // helper-invariants: allow deletion
         let outcome = Self.removeContents(of: fd)
         return HelperResult(
             ok: outcome.failures == 0,
@@ -317,7 +337,14 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         precondition(base.hasPrefix("/"), "the trust anchor must be absolute")
         precondition(!base.split(separator: "/").contains(".."), "the trust anchor must not contain '..'")
 
-        guard path == base || path.hasPrefix(base.hasSuffix("/") ? base : base + "/") else {
+        // Containment is tested on BYTES for the same reason the split below is. `hasPrefix`
+        // compares with canonical equivalence, so "/tmp/cafe\u{301}" prefixes "/tmp/caf\u{e9}"
+        // while the byte slice that follows would cut in the wrong place and name a component
+        // that was never in the path. Fail-closed either way, but the refusal would lie.
+        let pathBytes = Array(path.utf8)
+        let baseBytes = Array(base.utf8)
+        let anchorBytes = base.hasSuffix("/") ? baseBytes : baseBytes + [0x2F]
+        guard pathBytes == baseBytes || pathBytes.starts(with: anchorBytes) else {
             return .failure(GuardFailure(component: path, reason: "is not under the trust anchor \(base)"))
         }
         // Split on the 0x2F BYTE, not on Characters. `split(separator: "/")` compares graphemes, so
@@ -326,8 +353,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // slash, where O_NOFOLLOW constrains only its own final component and everything before it
         // resolves through symlinks, unchecked. This is the same lesson `doCreateVaultDirectory`
         // already carries for `VaultDirectory.name`; only its NUL half had been brought across.
-        let rest = Array(path.utf8).dropFirst(base.hasSuffix("/") ? base.utf8.count : base.utf8.count + 1)
-        let components = rest.split(separator: 0x2F).map { String(decoding: $0, as: UTF8.self) }
+        let components = pathBytes.dropFirst(anchorBytes.count).split(separator: 0x2F).map { String(decoding: $0, as: UTF8.self) }
 
         var fd = open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
         guard fd >= 0 else { return .failure(GuardFailure(component: base, reason: String(cString: strerror(errno)))) }
@@ -456,9 +482,21 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     ///
     /// Names are collected before anything is unlinked: POSIX leaves `readdir` unspecified for
     /// entries not yet returned when the directory is modified during the scan.
+    ///
+    /// The byte count is an **upper bound on space reclaimed**, not a measurement of it.
+    /// `st_blocks * 512` is the file's logical allocation, so an APFS clone is credited in full
+    /// to every copy although deleting one frees nothing — and CoreSimulator clones runtime
+    /// files heavily into exactly these caches. A hard-linked file is likewise credited in full
+    /// although space comes back only with the last link. Do not present it as space recovered.
     static func removeContents(of fd: Int32, depthRemaining: Int = 64) -> (freed: UInt64, failures: Int) {
+        // The `1` is belt-and-braces rather than the signal: hitting the limit leaves the deep
+        // tree in place, so every enclosing `AT_REMOVEDIR` up the spine fails ENOTEMPTY and the
+        // verb reports `ok: false` regardless. Mutating it to `0` changes no observable outcome.
         guard depthRemaining > 0 else { return (0, 1) }
 
+        // UNPINNED, knowingly (this and the `dup`/`fdopendir` failures below): all three are
+        // fail-closed in behaviour but indistinguishable in the reply — "1 item(s) could not be
+        // removed" also means "nothing was enumerated and nothing was deleted".
         var parent = stat()
         guard fstat(fd, &parent) == 0 else { return (0, 1) }
 
@@ -469,10 +507,19 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             if scan >= 0 { close(scan) }
             return (0, 1)
         }
-        // The `String(cString:)` round-trip is safe here because APFS and HFS+ reject filenames
-        // that are not valid UTF-8: creating one fails with EILSEQ (measured 2026-09-18), so a
-        // name that came out of `readdir` re-encodes to the same bytes it went in as.
+        // The `String(cString:)` round-trip is exact on the filesystems this verb's targets
+        // live on: APFS and HFS+ reject filenames that are not valid UTF-8, so creating one
+        // fails with EILSEQ (measured 2026-09-18) and a name out of `readdir` re-encodes to the
+        // bytes it went in as. That is a property of those filesystems, not of this function —
+        // it takes any descriptor, and on exFAT, FAT or SMB the premise does not hold. Callers
+        // outside the two allowlisted `HelperCleanupTarget` paths must not assume it.
         var names: [String] = []
+        // `readdir` returns NULL for both end-of-stream and error, and only errno tells them
+        // apart. Without this, an I/O error part-way through truncates the listing, the loop
+        // finishes with no failures, and the verb replies "cleaned" over contents still on disk —
+        // the same fail-open this change closed at `fdopendir` and left open one line later.
+        errno = 0
+        var readFailure = 0
         while let entry = readdir(dir) {
             var e = entry.pointee
             let name = withUnsafePointer(to: &e.d_name) {
@@ -480,10 +527,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             }
             if name != "." && name != ".." { names.append(name) }
         }
+        // UNPINNED, knowingly: reaching it needs a real I/O error mid-enumeration.
+        if errno != 0 { readFailure = 1 }
         closedir(dir)
 
         var freed: UInt64 = 0
-        var failures = 0
+        var failures = readFailure
         for name in names {
             var st = stat()
             // A child that cannot be stat'd is a failure, not a skip: silently continuing let an
@@ -507,12 +556,42 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
             let size = UInt64(st.st_blocks) * 512
             if (st.st_mode & S_IFMT) == S_IFDIR {
+                // UNPINNED, knowingly: `O_NOFOLLOW` here survives its own removal because the
+                // `S_IFLNK` check above catches the symlink first. It is not redundant — it is
+                // the only defence against the entry being swapped for a symlink between that
+                // `fstatat` and this `openat` — and redundant-looking but load-bearing is the
+                // state most likely to be deleted by a later cleanup.
                 let child = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
                 guard child >= 0 else { failures += 1; continue }
+                // The check above was on a NAME; this one is on the descriptor actually opened.
+                // Without it the guard is the very defect this whole change exists to remove: a
+                // mount grafted onto `name` between the `fstatat` and the `openat` is descended
+                // into, and because the recursion re-derives `parent` from this new descriptor,
+                // every entry inside the mounted volume then matches its own device and is
+                // deleted. `simdiskimaged` grafts mounts inside this exact tree, unattended.
+                //
+                // UNPINNED, knowingly: staging it needs a mount to appear between the `fstatat`
+                // and the `openat`, which no fixture can arrange.
+                var cst = stat()
+                guard fstat(child, &cst) == 0, cst.st_dev == parent.st_dev else {
+                    close(child)
+                    failures += 1
+                    continue
+                }
+                // `child` was opened O_NOFOLLOW from an already-verified descriptor and
+                // re-checked above for the same device.
+                // helper-invariants: allow deletion
                 let inner = removeContents(of: child, depthRemaining: depthRemaining - 1)
                 close(child)
                 freed += inner.freed
                 failures += inner.failures
+                // `name` is re-resolved here: Darwin has no `funlinkat(2)`, so a descriptor
+                // cannot be unlinked directly. `AT_REMOVEDIR` is `rmdir(2)`, which refuses a
+                // non-empty directory, so the worst case is removing an empty directory planted
+                // in the window rather than the one just emptied.
+                //
+                // UNPINNED, knowingly: the `failures += 1` is near-unreachable, because any
+                // surviving child already left the directory non-empty and propagated a failure.
                 // helper-invariants: allow deletion
                 if unlinkat(fd, name, AT_REMOVEDIR) == 0 { freed += size } else { failures += 1 }
             } else {

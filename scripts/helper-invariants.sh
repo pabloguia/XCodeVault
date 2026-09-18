@@ -78,6 +78,14 @@ for f in $helper_files; do
 
     # Every deletion API, not just removeItem. The marker must sit next to the call: counting markers
     # file-wide let two unrelated comments buy two unrelated deletions.
+    #
+    # `removeContents(` is in this list because a review demonstrated the gap: once the recursive
+    # fd-relative deleter existed, a new root-recursive-delete function could be written that
+    # called it and named none of the kernel APIs below, and this script passed. A deletion
+    # PRIMITIVE this repository owns has to be gated like the syscalls it wraps.
+    #
+    # Declaring one is not performing one, so `func remove…` lines are excluded; every CALL still
+    # needs its own adjacent marker, including the recursive one.
     while IFS= read -r hit; do
         [ -n "$hit" ] || continue
         n=${hit%%:*}
@@ -85,7 +93,9 @@ for f in $helper_files; do
         context=$(sed -n "${from},$((n + 1))p" "$f")
         printf '%s' "$context" | grep -q 'helper-invariants: allow deletion' \
             || violation "$f — deletion of a path without an adjacent exemption marker" "$hit"
-    done < <(code_of "$f" | grep -nE 'removeItem\(at(Path)?:|[[:<:]]remove(file)?\(|[[:<:]]unlink(at)?\(|[[:<:]]rmdir\(|[[:<:]]renamex?_np\(' || true)
+    done < <(code_of "$f" \
+        | grep -nE 'removeItem\(at(Path)?:|[[:<:]]remove(file|Contents)?\(|[[:<:]]unlink(at)?\(|[[:<:]]rmdir\(|[[:<:]]renamex?_np\(' \
+        | grep -vE '[[:<:]]func +remove' || true)
 done
 
 # ---- peer validation -----------------------------------------------------------------------------

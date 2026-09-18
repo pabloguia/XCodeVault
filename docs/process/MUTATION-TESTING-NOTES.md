@@ -25,11 +25,46 @@ Three instances, in order of how long each took to notice:
    because every existing test sat on a row where both derivations return the same answer. Factoring
    was, to the test suite, indistinguishable from not factoring.
 
+## `swift test` is not a mutation oracle in this repository
+
+2026-09-18. A reviewer's entire first mutation pass had to be thrown out, and the tell was a
+result that could not be true: `testOwnershipDecisionTruthTable`, a pure function over three
+`Bool`/`uid_t` rows, failed three of them, and `mountStatus` on a nonexistent path returned
+`.isNotMountPoint`, which the source cannot produce.
+
+Measured on this machine (11 GiB free, 98% full): with a rebuild in flight, an **unmutated**
+`swift test --filter HelperPrivilegedVerbTests` failed 2 runs in 5. Split into
+`swift build --build-tests` followed by `swift test --skip-build`, it failed 0 in 22, and 0 in a
+separate 6-run check.
+
+So the protocol for every mutation in this repository is two commands, not one:
+
+```
+swift build --build-tests || echo "compile error — NOT a test kill"
+swift test --skip-build --filter <suite>
+```
+
+The first line matters on its own: a mutant that does not compile is not a caught mutant, and the
+split makes that unmissable instead of hiding it inside one exit code.
+
+The wider point is that an impossible result is data. A pure function failing its own truth table
+is not a finding about the code; it is a finding about the instrument. The reviewer noticed and
+re-ran; the same run on a busier disk with a less suspicious reader produces a confident, wrong
+report about a security guard.
+
 ## Corollaries
 
 - **`exit != 0` is not "the test caught it".** One mutant in this sequence did not compile, and the
   non-zero exit was read as a catch. Count assertion failures and compile errors separately; a
   broken experiment is not evidence.
+- **An assertion failure is not a test failure either.** 2026-09-18: a helper change reported "four
+  named tests each" for two mutations that had actually failed *one* test apiece, with four and six
+  assertions inside it. The grep counted lines matching `' failed`, which picks up per-assertion
+  `error:` lines and the suite footers. A reviewer re-measured and corrected it. The number that
+  means something is distinct `Test Case '-[…]' failed` lines:
+  `grep -oE "Test Case '-\[[^]]*\]' failed" log | sort -u | wc -l`. Note this was written *after*
+  the corollary above, by someone who had read it and checked for exactly that failure mode — the
+  measurement was wrong in a different place than the one being watched.
 - **The rows worth mutating are where two code paths are supposed to agree.** That is where a
   duplicated rule hides, and a duplicated rule is what produces two functions that both refuse the
   same input, or one that accepts what the other would have handled.

@@ -29,10 +29,29 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
 
   Both of the above are now pinned *at the call site*, not only in the primitives. The mutations
   that restore each defect verbatim — replacing the mount switch with `_ = mount(fd)`, and the
-  guarded walk with a bare `open` — each failed four named tests, having previously passed the
-  whole suite. Two guards inside the new recursion remain unpinned and say so in the source: the
-  cross-device check (needs a real mount to stage) and the `failures += 1` on an unstattable
-  child (needs a `readdir`/`fstatat` race).
+  guarded walk with a bare `open` — previously passed the whole suite and now each fail **one
+  named test** (`testTheVerbRefusesOnBothNonAnswersFromTheMountQuery`, 6 assertions;
+  `testTheVerbRefusesWhenAComponentOfTheChainIsGroupWritable`, 2 assertions). An earlier draft of
+  this paragraph said "four named tests each"; that was assertion-failure lines counted as test
+  failures — the measurement error `MUTATION-TESTING-NOTES.md` exists to prevent, made in the very
+  document meant to be checkable. Corrected by counting distinct `Test Case … failed` lines.
+
+  Seven guards inside the new code remain unpinned. Each says so **at the branch**, with the
+  reason: the two `st_dev` checks (one on a child's name, one on the opened descriptor — the
+  second needs a mount to appear between the `fstatat` and the `openat`), the `failures += 1` on
+  an unstattable child (needs a `readdir`/`fstatat` race), the `readdir` `errno` check (needs a
+  real I/O error mid-enumeration), `O_NOFOLLOW` on the recursive child open (survives only
+  because the `S_IFLNK` check catches the symlink first — redundant-looking and load-bearing),
+  the `AT_REMOVEDIR` failure branch (near-unreachable, since a surviving child already reported),
+  and the production gate on the injected mount query (its whole point is the `base == "/"`
+  branch, which no test can enter without walking the real system path).
+
+  An earlier draft of this paragraph said two. A reviewer enumerated nine surviving mutations and
+  showed that **two of them needed no root, no volume and no race** — `chmod 000` on a
+  subdirectory and `chflags uchg` on a file. Those two are now tested, along with the depth
+  limit, the trust-anchor containment check and the root-anchor owner refusal. The lesson is the
+  one this change is about: "unpinnable" is a claim that has to be checked per guard, not a
+  category applied to whatever is left over.
 - **The volume-UUID lookup parses an attribute it never confirmed was returned.** `getattrlist` is
   called without `ATTR_CMN_RETURNED_ATTRS`, so a filesystem that succeeds without supplying
   `ATTR_VOL_UUID` would yield the all-zero UUID, which is a valid `UUID` and would act as a

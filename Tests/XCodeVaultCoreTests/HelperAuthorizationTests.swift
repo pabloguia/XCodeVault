@@ -1,6 +1,8 @@
 import XCTest
 
+@testable import XCodeVaultCore
 @testable import XCodeVaultHelperCore
+@testable import XCodeVaultHelperProtocol
 
 /// The authorization gate on the root daemon's three state-changing verbs.
 ///
@@ -448,6 +450,131 @@ final class HelperPrivilegedVerbTests: XCTestCase {
         case .failure(let f):
             // Split on the byte, `a` is its own component and O_NOFOLLOW refuses the symlink.
             XCTAssertEqual(f.component, "a", "the refusal must land on the symlinked component, not the whole segment")
+        }
+    }
+
+    // MARK: - Guards a second review found surviving mutation
+
+    /// The whole stated defence for removing `requiredOwner` from the verb is "production's
+    /// anchor is `/`, so the derived owner is root". A review pointed out that nothing failed if
+    /// that refusal was deleted, which made the defence an assertion rather than a control.
+    func testAnchoringAtRootWhileDemandingANonRootOwnerIsRefused() {
+        switch HelperService.openGuardedDirectory("/Library", under: "/", requiredOwner: 501) {
+        case .success(let fd):
+            close(fd)
+            XCTFail("walking from / while demanding a non-root owner must be refused outright")
+        case .failure(let f):
+            XCTAssertEqual(f.component, "/")
+            XCTAssertTrue(f.reason.contains("not 0"), "unexpected reason: \(f.reason)")
+        }
+    }
+
+    /// A path outside the trust anchor must be refused before anything is opened.
+    func testAPathOutsideTheTrustAnchorIsRefused() throws {
+        let root = try tempDir("anchor")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        // A sibling whose name merely starts the same must not be mistaken for a child.
+        for outside in ["/etc", root + "-sibling/x"] {
+            switch HelperService.openGuardedDirectory(outside, under: root, requiredOwner: getuid()) {
+            case .success(let fd): close(fd); XCTFail("\(outside) is not under \(root)")
+            case .failure(let f): XCTAssertTrue(f.reason.contains("trust anchor"), "unexpected: \(f.reason)")
+            }
+        }
+    }
+
+    /// The recursion is depth-limited. Without the limit a deep or cyclic tree exhausts
+    /// descriptors instead of reporting a failure.
+    func testTheRecursionStopsAtItsDepthLimitAndReportsIt() throws {
+        let root = try tempDir("depth")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        var p = root
+        for i in 0..<70 { p += "/d\(i)" }
+        try FileManager.default.createDirectory(atPath: p, withIntermediateDirectories: true)
+        let fd = open(root, O_RDONLY | O_DIRECTORY)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        let outcome = HelperService.removeContents(of: fd)
+        XCTAssertGreaterThan(outcome.failures, 0, "exceeding the depth limit must be reported, not ignored")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root + "/d0"), "the tree must not be half-eaten silently")
+    }
+
+    /// Bytes are counted only after the unlink succeeds. Staged with a `uchg`-flagged file, which
+    /// its owner can set and then cannot unlink — so one child fails while another succeeds.
+    ///
+    /// The test that was supposed to cover this (`testTheVerbCountsOnlyWhatItActuallyDeleted`)
+    /// could not: every unlink in it succeeds, so counting before and counting after give the
+    /// same answer. A review caught that.
+    func testBytesAreNotCountedForAChildThatFailedToUnlink() throws {
+        let root = try tempDir("bytes-fail")
+        let locked = root + "/locked.bin"
+        FileManager.default.createFile(atPath: locked, contents: Data(repeating: 0xEE, count: 65536))
+        FileManager.default.createFile(atPath: root + "/free.bin", contents: Data(repeating: 0xDD, count: 4096))
+        XCTAssertEqual(chflags(locked, UInt32(UF_IMMUTABLE)), 0, "could not stage an unlinkable file")
+        defer {
+            chflags(locked, 0)
+            try? FileManager.default.removeItem(atPath: root)
+        }
+
+        let fd = open(root, O_RDONLY | O_DIRECTORY)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        let outcome = HelperService.removeContents(of: fd)
+
+        XCTAssertGreaterThan(outcome.failures, 0, "the immutable file must be reported as a failure")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: locked), "it must still be there")
+        XCTAssertLessThan(
+            outcome.freed, 65536,
+            "a file that could not be unlinked must not be counted as freed (got \(outcome.freed))")
+        XCTAssertGreaterThan(outcome.freed, 0, "the file that WAS deleted must still be counted")
+    }
+
+    /// A subdirectory that cannot be opened must be a failure, not a silent skip. Staged with
+    /// `chmod 000`, which needs no root and no race — so unlike the guards labelled UNPINNED in
+    /// the source, this one had no excuse for being untested.
+    func testAnUnopenableSubdirectoryIsReportedRatherThanSkipped() throws {
+        let root = try tempDir("unopenable")
+        let locked = root + "/locked"
+        try FileManager.default.createDirectory(atPath: locked, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: locked + "/inside.bin", contents: Data(repeating: 0x11, count: 1024))
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o000)], ofItemAtPath: locked)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: locked)
+            try? FileManager.default.removeItem(atPath: root)
+        }
+
+        let fd = open(root, O_RDONLY | O_DIRECTORY)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        let outcome = HelperService.removeContents(of: fd)
+
+        XCTAssertGreaterThan(outcome.failures, 0, "an unopenable subtree must be reported, never skipped as if cleaned")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: locked), "it must still be there")
+    }
+
+    /// A structural gate, not a behavioural test.
+    ///
+    /// Issue #24 is that after a disconnect the cleanup verb deletes the shadow half of a split
+    /// brain and reports routine cleanup. The verb cannot detect that, and the state it would
+    /// need does not exist yet. What can be prevented today is the precondition: a path must
+    /// never be both a cleanup target and somewhere a strategy may mount. This fails the build
+    /// if that ever becomes true, so #24 is discovered here rather than by a user.
+    func testNoCleanupTargetIsAlsoSomewhereAStrategyMayMount() {
+        let mountable =
+            StorageCatalog.all
+            .filter { $0.allowedStrategies.contains(.canonicalMount) || $0.isMountGraft }
+            .flatMap(\.pathTemplates)
+        XCTAssertFalse(mountable.isEmpty, "positive control: the catalog must actually name some mountable paths")
+
+        for target in HelperCleanupTarget.allCases {
+            for template in mountable {
+                // Templates may carry placeholders; compare on the literal prefix before one.
+                let path = template.split(separator: "{", maxSplits: 1).first.map(String.init) ?? template
+                let fixed = path.hasSuffix("/") ? String(path.dropLast()) : path
+                guard !fixed.isEmpty, fixed != "/" else { continue }
+                XCTAssertFalse(
+                    target.path == fixed || target.path.hasPrefix(fixed + "/") || fixed.hasPrefix(target.path + "/"),
+                    "cleanup target \(target.path) overlaps mountable path \(fixed) — see issue #24")
+            }
         }
     }
 }
