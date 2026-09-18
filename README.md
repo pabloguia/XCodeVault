@@ -103,3 +103,8 @@ author's**. See [`CONTRIBUTING.md`](CONTRIBUTING.md), and
 ## License
 
 [MIT](LICENSE).
+
+`xcodevaultctl` statically links [swift-argument-parser](https://github.com/apple/swift-argument-parser),
+which is Apache-2.0 with the Runtime Library Exception, and it ships inside the app bundle and the
+Homebrew cask. [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) carries its full licence text and
+the clause-by-clause reasoning; the same file is copied into `XCodeVault.app/Contents/Resources/`.
