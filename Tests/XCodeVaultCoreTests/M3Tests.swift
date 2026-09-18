@@ -261,7 +261,11 @@ final class MigrationEngineTests: XCTestCase {
                 totalBytes: 1, freeBytes: 1, isBootVolume: false)
             return MigrationEngine(
                 journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home, isXcodeRunning: { false },
-                afterCopy: afterCopy)
+                afterCopy: afterCopy,
+                // The fixture's "vault" is a directory in /tmp, so the real lookup answers with the
+                // boot volume's UUID — correctly, which is the whole point of the check under test.
+                // Tests that want the volume to *vanish* override this with a different answer.
+                volumeUUIDAt: { _ in "VU" })
         }
     }
 
@@ -374,6 +378,244 @@ final class MigrationEngineTests: XCTestCase {
             XCTAssertTrue("\($0)".contains("Expected a path under"), "the refusal should say what it wanted: \($0)")
         }
     }
+
+    /// The obstacle class this whole `abort`/`forget` split exists for, injected as it actually
+    /// occurs: a `deny delete` ACL on a file inside the partial copy.
+    ///
+    /// Every other test here uses `chmod 0o500` on the parent, and that is the one obstacle
+    /// `FileManager.isDeletableFile` can see — measured on macOS 26.7, a `deny delete` ACL gives
+    /// `isDeletableFile == true` while `removeItem` fails. A `forget` that predicted deletability
+    /// therefore sent the user back to `abort` forever, and no test could see it, because all three
+    /// of them injected the one obstacle the prediction happened to get right.
+    ///
+    /// What this asserts is termination: at most one redirect, and then the pair closes the entry.
+    func testAnACLDenyingDeleteDoesNotWedgeTheAbortForgetPair() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let user = Self.shell("/usr/bin/id", ["-un"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let acled = PathBox()
+        let engine = f.engine(afterCopy: { p in
+            // A file inside the copy, not the copy's parent: `isDeletableFile` asks only about the
+            // destination itself, so a child obstacle is structurally invisible to it.
+            if let victim = FileManager.default.enumerator(atPath: p.destination)?
+                .compactMap({ $0 as? String })
+                .map({ p.destination + "/" + $0 })
+                .first(where: { var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG })
+            {
+                _ = Self.shell("/bin/chmod", ["+a", "\(user) deny delete", victim])
+                acled.path = victim
+            }
+            throw MigrationError("injected failure after COPY")
+        })
+        defer { if let a = acled.path { _ = Self.shell("/bin/chmod", ["-a", "\(user) deny delete", a]) } }
+
+        XCTAssertThrowsError(try engine.copyAndVerify(plan))
+        try XCTSkipIf(acled.path == nil, "could not apply a deny-delete ACL on this filesystem")
+
+        // First round trip: abort cannot, forget hands it back.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        XCTAssertThrowsError(try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)) { error in
+            XCTAssertTrue("\(error)".contains("migration abort"), "\(error)")
+        }
+        // Second: abort fails again, which is proof the redirect's premise was wrong. It must close now.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        XCTAssertNoThrow(
+            try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true),
+            "the pair must terminate; it looped forever when forget predicted deletability")
+
+        let final = try f.journal.entries().filter { $0.id == plan.operationID }.last
+        XCTAssertEqual(final?.state, .rolledBack)
+        XCTAssertTrue(final?.summary.contains(plan.destination) == true, "the closing record must name the path")
+    }
+
+    private static func shell(_ tool: String, _ args: [String]) -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = args
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
+        guard (try? p.run()) != nil else { return "" }
+        let d = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: d, as: UTF8.self)
+    }
+
+    // MARK: regressions introduced while fixing the review's findings, and caught by the next round
+
+    /// The failure path may only remove a directory this operation created.
+    ///
+    /// `createDirectory(withIntermediateDirectories:)` succeeds silently on an existing directory,
+    /// so the first version of the cleanup `rmdir`'d the enclosing directory unconditionally — and
+    /// `copyAndVerify` is shared with restore, where that directory is `~/Library/Developer/Xcode`.
+    /// A failed restore deleted a canonical Apple directory it had never made.
+    func testAFailedCopyDoesNotRemoveAnEnclosingDirectoryItDidNotCreate() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let parent = (plan.destination as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+        let engine = f.engine(afterCopy: { _ in throw MigrationError("injected failure after COPY") })
+
+        XCTAssertThrowsError(try engine.copyAndVerify(plan))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: parent),
+            "the enclosing directory existed before the operation and must survive its failure")
+    }
+
+    /// `forget`'s escape hatch must ask whether `abort` can act **now**, not whether it once failed.
+    ///
+    /// Keyed on the historical `ABORT_FAILED` marker alone, one past failure handed the operation to
+    /// `forget` permanently — so once the obstacle was gone, `forget` would record `.rolledBack` over
+    /// a removable partial copy, dropping it out of `leftoverPartialCopies` and therefore out of
+    /// `doctor`, out of `migration status` and out of the retry hint.
+    func testForgetSendsTheUserBackToAbortOnceThePartialCopyIsRemovableAgain() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let parent = (plan.destination as NSString).deletingLastPathComponent
+        let engine = f.engine(afterCopy: { _ in
+            try? FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent)
+            throw MigrationError("injected failure after COPY")
+        })
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent) }
+
+        XCTAssertThrowsError(try engine.copyAndVerify(plan))
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        XCTAssertTrue(
+            try f.journal.entries().contains { $0.id == plan.operationID && $0.detail["phase"] == "ABORT_FAILED" })
+
+        // The obstacle goes away — a permission restored, an ACL lifted, the volume remounted.
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent)
+
+        XCTAssertThrowsError(try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)) { error in
+            XCTAssertTrue("\(error)".contains("migration abort"), "forget must hand it back to abort: \(error)")
+        }
+        XCTAssertTrue(
+            try engine.leftoverPartialCopies().contains { $0.id == plan.operationID },
+            "the partial copy must still be nameable by doctor and `migration status`")
+        // And `abort` really can close it now.
+        XCTAssertNoThrow(try engine.abort(operationID: plan.operationID))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination))
+    }
+
+    // MARK: fault injection added after the pre-publication review
+
+    /// The volume going away between the plan and the copy, with its mount-point directory left
+    /// behind — which is what macOS actually does on an unclean disconnect.
+    ///
+    /// Before this check the engine wrote the whole copy into that leftover directory on the
+    /// internal disk, verified it against its own source, passed, and journaled VERIFIED: a full
+    /// duplicate of the data on the disk the operation existed to free, at a path that reads like
+    /// the drive. `removeSource` refused afterwards, so it was never data loss — it was rule 6's
+    /// shadow data, manufactured by the engine that exists to prevent it.
+    func testAVolumeThatVanishesBetweenPlanAndCopyIsRefused() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        // Same fixture, but the volume under the destination is now somebody else's.
+        var vanished = f.engine()
+        vanished.volumeUUIDAt = { _ in "SOME-OTHER-VOLUME" }
+        XCTAssertThrowsError(try vanished.copyAndVerify(plan)) { error in
+            XCTAssertTrue("\(error)".contains("not mounted"), "\(error)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination), "nothing may be written after the refusal")
+    }
+
+    /// And the same check between COPY and VERIFY, which is the window the disconnect actually
+    /// lands in — the copy runs for minutes, the plan takes a moment.
+    func testAVolumeThatVanishesDuringTheCopyIsRefusedBeforeVerification() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let copied = Flag()
+        var engine = f.engine(afterCopy: { _ in copied.set() })
+        // Answers truthfully until the copy has happened, then reports a different volume.
+        engine.volumeUUIDAt = { _ in copied.isSet ? "SOME-OTHER-VOLUME" : "VU" }
+        XCTAssertThrowsError(try engine.copyAndVerify(plan)) { error in
+            XCTAssertTrue("\(error)".contains("not mounted"), "\(error)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination), "the partial copy must be removed")
+        // The property whose violation *was* the bug: a copy that landed on the internal disk must
+        // never be recorded as verified. The absent directory is the symptom; this is the disease.
+        let entries = try f.journal.entries().filter { $0.id == plan.operationID }
+        XCTAssertFalse(entries.contains { $0.detail["phase"] == "VERIFIED" }, "a disconnected copy was journaled as VERIFIED")
+    }
+
+    /// A subtree that neither side can read must not verify as identical. The realistic route is a
+    /// permission change arriving between COPY and the re-verification that precedes deleting the
+    /// source — at which point "identical" authorises deleting an original never compared.
+    func testAnUnreadableSubtreeOnBothSidesIsNotIdentical() throws {
+        let t = TempDir()
+        for side in ["a", "b"] {
+            t.file("\(side)/keep/file.txt", bytes: 10)
+            t.dir("\(side)/locked")
+            _ = t.file("\(side)/locked/secret.txt", bytes: 10)
+        }
+        let locked = [t.path + "/a/locked", t.path + "/b/locked"]
+        for p in locked { try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: p) }
+        defer { for p in locked { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: p) } }
+
+        let report = TreeVerifier(deep: true).verify(source: t.path + "/a", destination: t.path + "/b")
+        XCTAssertFalse(report.isIdentical, "two unreadable subtrees agreed with each other")
+        XCTAssertTrue(report.mismatches.contains { $0.reason.contains("unreadable") }, "\(report.mismatches)")
+    }
+
+    /// The full F14 sequence, driven through the verbs a user actually has.
+    ///
+    /// `abort` that cannot remove the partial copy used to throw before writing any journal line, so
+    /// the operation stayed exactly as it was: `abort` could never succeed, and `forget` declined
+    /// precisely because `abort` is the verb that should. Hand-editing the journal was the only exit.
+    ///
+    /// The first version of this test never called `abort` at all — it drove `copyAndVerify`'s catch
+    /// and asserted `forget` accepted, which pinned a *regression* rather than the fix: keying the
+    /// exception on the `cleanupFailed` marker let `forget` close an operation `abort` had not even
+    /// been offered, dropping a live partial copy out of `doctor`, out of `migration status` and out
+    /// of the retry hint while recording that no file was touched.
+    func testTheAbortThenForgetSequenceWhenThePartialCopyCannotBeRemoved() throws {
+        let f = try Fixture()
+        let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let parent = (plan.destination as NSString).deletingLastPathComponent
+        let engine = f.engine(afterCopy: { _ in
+            // Lock the parent so neither the engine's own cleanup nor `abort` can unlink the copy —
+            // what an ACL denying delete produces in the field.
+            try? FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent)
+            throw MigrationError("injected failure after COPY")
+        })
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent) }
+
+        XCTAssertThrowsError(try engine.copyAndVerify(plan))
+
+        // 1. The engine could not clean up, and said so instead of swallowing it.
+        let afterCopy = try f.journal.entries().filter { $0.id == plan.operationID }
+        XCTAssertTrue(afterCopy.contains { $0.detail["cleanupFailed"] == "1" }, "the failed cleanup was not recorded")
+
+        // 2. `forget` must still refuse: `abort` has not been offered, and the partial copy is live.
+        XCTAssertThrowsError(try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)) { error in
+            XCTAssertTrue("\(error)".contains("migration abort"), "forget should send the user to abort first: \(error)")
+        }
+        XCTAssertTrue(
+            try engine.leftoverPartialCopies().contains { $0.id == plan.operationID },
+            "the partial copy must still be nameable by doctor and `migration status`")
+
+        // 3. `abort` cannot remove it either — and now records that, rather than throwing silently.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        let afterAbort = try f.journal.entries().filter { $0.id == plan.operationID }
+        XCTAssertTrue(afterAbort.contains { $0.detail["phase"] == "ABORT_FAILED" }, "abort's failure was not journaled")
+
+        // 4. `forget` hands it back to `abort` exactly once — the obstacle may have been lifted in
+        // the meantime, and an `abort` that succeeds keeps the copy visible to `doctor` rather than
+        // recording it closed. It does not predict whether the removal will work; predicting that
+        // was what produced a pair of verbs that never terminated.
+        XCTAssertThrowsError(try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)) { error in
+            XCTAssertTrue("\(error)".contains("migration abort"), "\(error)")
+        }
+
+        // 5. A second failure is proof the redirect's premise was wrong, and `forget` closes it.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        XCTAssertNoThrow(try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true))
+        let final = try f.journal.entries().filter { $0.id == plan.operationID }.last
+        XCTAssertEqual(final?.state, .rolledBack)
+        XCTAssertTrue(final?.summary.contains(plan.destination) == true, "the closing record must name the path: \(final?.summary ?? "")")
+        XCTAssertFalse(final?.summary.contains("no file was touched") == true, "a copy is still on disk")
+    }
+
 }
 
 /// A VaultVerifier whose mount-point check treats the fixture directory as a mounted volume.
@@ -381,6 +623,24 @@ enum StubVerifier {
     static func make(registry: VaultRegistry, volume: Volume, mountPoint: String) -> VaultVerifier {
         VaultVerifier(registry: registry, mountedVolumes: { [volume] }, isMountPoint: { $0 == mountPoint || MountStatus.isMountPoint($0) })
     }
+}
+
+/// A lock-guarded optional path, so fault injection can report back out of a @Sendable closure.
+final class PathBox: @unchecked Sendable {
+    private var v: String?
+    private let lock = NSLock()
+    var path: String? {
+        get { lock.lock(); defer { lock.unlock() }; return v }
+        set { lock.lock(); v = newValue; lock.unlock() }
+    }
+}
+
+/// A one-way flag for fault injection: set once, read without setting.
+final class Flag: @unchecked Sendable {
+    private var v = false
+    private let lock = NSLock()
+    func set() { lock.lock(); v = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return v }
 }
 
 /// Minimal call counter for the register() seam: lets a stub answer differently on each call.

@@ -40,14 +40,20 @@ public struct MigrationEngine: Sendable {
     public var afterCopy: (@Sendable (MigrationPlan) throws -> Void)?
     /// Test hook: called after the source has been renamed aside, before the final verify+delete.
     public var afterRenameAside: (@Sendable (String) throws -> Void)?
+    /// The volume identity of the filesystem containing a path. Injected for the same reason
+    /// `isMountPoint` is injected elsewhere in this codebase: a test's vault is a directory in
+    /// `/tmp` with an invented UUID, and the real lookup correctly answers with the boot volume's.
+    public var volumeUUIDAt: @Sendable (String) -> String?
 
     public init(
         runner: CommandRunning = ProcessCommandRunner(), journal: Journal = Journal(), verifier: VaultVerifier = VaultVerifier(),
         home: String = NSHomeDirectory(), isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning,
-        afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil, afterRenameAside: (@Sendable (String) throws -> Void)? = nil
+        afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil, afterRenameAside: (@Sendable (String) throws -> Void)? = nil,
+        volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:)
     ) {
         self.runner = runner; self.journal = journal; self.verifier = verifier; self.home = home
         self.isXcodeRunning = isXcodeRunning; self.afterCopy = afterCopy; self.afterRenameAside = afterRenameAside
+        self.volumeUUIDAt = volumeUUIDAt
     }
 
     /// Journal phases; `abort` refuses anything at or past VERIFIED because the vault copy may be
@@ -74,8 +80,9 @@ public struct MigrationEngine: Sendable {
             }
             throw MigrationError("Destination \(dest) already exists. Verify or remove it first; the engine never merges into existing data.")
         }
+        // No `isLowerBound` check here: `preflightSource` above now refuses that first, and two
+        // checks with different wording for one condition read as two conditions.
         let usage = DiskUsage.measure(source) ?? .zero
-        if usage.isLowerBound { throw MigrationError("Parts of \(source) are unreadable; refusing to migrate a tree we cannot fully read.") }
         let free = MountStatus.space(at: vaultDir)?.free ?? 0
         guard free > usage.allocatedBytes + 1_000_000_000 else {
             throw MigrationError("Vault has \(ByteCount.format(free)) free; need \(ByteCount.format(usage.allocatedBytes)) plus headroom.")
@@ -145,8 +152,18 @@ public struct MigrationEngine: Sendable {
         let canonical = try PathSafety.canonicalize(source)
         let forbidden = CatalogRules.neverSymlink.compactMap { try? PathSafety.canonicalize($0.expandingTilde(home: home)) }
         guard !forbidden.contains(canonical) else { throw MigrationError("\(source) is a protected directory.") }
-        if let u = DiskUsage.measure(source), !u.skippedMountPoints.isEmpty {
-            throw MigrationError("\(source) contains mount points (\(u.skippedMountPoints.joined(separator: ", "))); refusing.")
+        if let u = DiskUsage.measure(source) {
+            if !u.skippedMountPoints.isEmpty {
+                throw MigrationError("\(source) contains mount points (\(u.skippedMountPoints.joined(separator: ", "))); refusing.")
+            }
+            // `planExternalize` has refused a partially unreadable tree since M3, but this function —
+            // the one `removeSource` calls immediately before it deletes — did not, so a permission
+            // change arriving after the plan was made was never noticed on the path that matters
+            // most. `TreeVerifier` now reports unreadable entries as mismatches too; this is the
+            // cheaper check that stops the operation before any of that work is done.
+            if u.isLowerBound {
+                throw MigrationError("Parts of \(source) are unreadable; refusing to act on a tree we cannot fully read.")
+            }
         }
     }
 
@@ -160,6 +177,57 @@ public struct MigrationEngine: Sendable {
     }
 
     // MARK: COPY → VERIFY
+
+    /// Re-asserts, at the moment of use, that the vault volume is still the volume under the path
+    /// this operation is about to write to or read from.
+    ///
+    /// `resolveUsable` runs at plan time, in `removeSource` and in `resume` — but not around the one
+    /// step that writes the bytes, which can run for many minutes. When an enclosure sleeps or is
+    /// pulled mid-copy, macOS can leave `/Volumes/<name>` behind as an ordinary directory: `ditto`
+    /// goes on writing into the **internal disk** at a path that reads like the drive, VERIFY then
+    /// compares the source against that local copy and passes, and the journal records VERIFIED.
+    /// That is CLAUDE.md rule 6's shadow data, manufactured by the engine that exists to prevent it.
+    /// `removeSource` still refuses afterwards — the vault reads `.ambiguous` — so it was never data
+    /// loss; it was a full duplicate of the data on the disk the operation was freeing.
+    ///
+    /// `volumeUUID(at:)` answers about the volume *containing* the path, which is exactly what is
+    /// wanted: if the mount is gone, the answer is the boot volume's UUID and the comparison fails.
+    /// Its own documentation describes this use — "is the volume I verified a moment ago still the
+    /// volume under my feet?" — and until now nothing asked it.
+    ///
+    /// **Fails closed**: an identity that cannot be read at all refuses.
+    func assertVaultVolumeStillPresent(_ plan: MigrationPlan, before phase: String) throws {
+        // Not `return`. `MigrationPlan` is a public struct with public vars and `copyAndVerify` is
+        // public API, so a plan can arrive without a vault UUID; skipping the check there would be
+        // the only fail-open path in a function documented as failing closed.
+        guard let expected = plan.vaultUUID else {
+            throw MigrationError("This migration plan names no vault volume; refusing to copy without being able to confirm the destination volume.")
+        }
+        // Externalizing writes to the vault; restoring reads from it.
+        let side = plan.direction == .externalize ? plan.destination : plan.source
+        // Canonicalize first. `fileExists` resolves symlinks; `MountStatus.volumeUUID` passes
+        // FSOPT_NOFOLLOW and does not. Without this, a symlink under the vault directory pointing
+        // into internal storage made the probe stop at the link, read the vault's UUID and pass —
+        // and then `createDirectory`/`mkdir` resolved the same link and wrote to the internal disk.
+        var probe = (try? PathSafety.canonicalize(side)) ?? side
+        while !FileManager.default.fileExists(atPath: probe) {
+            let parent = (probe as NSString).deletingLastPathComponent
+            guard parent != probe, !parent.isEmpty else { break }
+            probe = parent
+        }
+        // `PathSafety.canonicalize` realpaths the parent and re-appends the last component verbatim,
+        // so the two still disagreed at exactly one place: a symlinked *final* component. The walk
+        // above ends on something that exists, so resolve that fully.
+        probe = URL(fileURLWithPath: probe).resolvingSymlinksInPath().path
+        guard let actual = volumeUUIDAt(probe) else {
+            throw MigrationError("Cannot read the volume identity at \(probe) before \(phase); refusing rather than guessing.")
+        }
+        guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
+            throw MigrationError(
+                "The vault volume is not mounted at \(probe) before \(phase): expected \(expected), found \(actual). "
+                    + "Refusing — continuing would write to the internal disk under a path that reads like the drive.")
+        }
+    }
 
     /// Executes COPY and VERIFY. Never touches the source. On any failure the partial copy is
     /// removed (it is ours) and the journal records `failed`.
@@ -180,7 +248,14 @@ public struct MigrationEngine: Sendable {
             ])
         try journal.record(id: op, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
         var claimed = false
+        // Whether the enclosing directory was already there. `createDirectory` below succeeds
+        // silently on an existing one, so without this the failure path cannot tell a directory it
+        // made from a canonical developer directory it merely wrote into — and a failed *restore*
+        // would rmdir `~/Library/Developer/Xcode`.
+        let parentPath = (plan.destination as NSString).deletingLastPathComponent
+        let parentPreexisted = FileManager.default.fileExists(atPath: parentPath)
         do {
+            try assertVaultVolumeStillPresent(plan, before: "COPY")
             try FileManager.default.createDirectory(atPath: (plan.destination as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
             // Atomically claim the destination: mkdir fails if anything is already there, so a
             // failure path can only ever delete a directory this operation created.
@@ -195,6 +270,10 @@ public struct MigrationEngine: Sendable {
             var srcStat = stat()
             if lstat(plan.source, &srcStat) == 0 { _ = chmod(plan.destination, srcStat.st_mode & 0o7777) }
             try afterCopy?(plan)
+            // Again, because the copy above can run for many minutes and this is the window in which
+            // the volume actually goes away. Verifying a copy that landed on the internal disk
+            // against its own source passes, and the journal then records VERIFIED.
+            try assertVaultVolumeStillPresent(plan, before: "VERIFY")
             try journal.record(id: op, kind: .migration, state: .started, summary: "VERIFY", paths: [plan.destination], detail: ["phase": "VERIFY"])
             let report = verifierFor(plan).verify(source: plan.source, destination: plan.destination)
             guard report.isIdentical else {
@@ -208,10 +287,31 @@ public struct MigrationEngine: Sendable {
                 paths: [plan.source, plan.destination], bytes: report.destinationBytes, detail: ["phase": "VERIFIED", "hashedFiles": "\(report.hashedFiles)"])
             return MigrationOutcome(plan: plan, verification: report, sourceRemoved: false)
         } catch {
-            if claimed { try? FileManager.default.removeItem(atPath: plan.destination) }  // only the directory this op created
+            // `try?` swallowed the one failure worth reporting: when the partial copy cannot be
+            // removed, every retry is then refused by `planExternalize`, which points at `abort` —
+            // and `abort` could not remove it either. The reason for that has to reach both the
+            // journal and the person reading the error, or the operation looks merely failed rather
+            // than stuck. Only the directory this operation created is ever removed.
+            var cleanupNote = ""
+            if claimed {
+                do { try FileManager.default.removeItem(atPath: plan.destination) } catch {
+                    cleanupNote = "; the partial copy at \(plan.destination) could not be removed: \(error.localizedDescription)"
+                }
+                // And the category directory, but only when this operation created it, and only
+                // when externalizing. In the disconnect case that directory sits on the internal
+                // disk under a path that reads like the drive — the artifact the volume assertion
+                // exists to avoid — but on the restore side the same path is a canonical developer
+                // directory that was here before us. `rmdir` refuses a non-empty directory, which
+                // bounds the damage; it does not make the decision correct.
+                if cleanupNote.isEmpty, !parentPreexisted, plan.direction == .externalize {
+                    _ = rmdir(parentPath)
+                }
+            }
             try journal.record(
-                id: op, kind: .migration, state: .failed, summary: "\(error)", paths: [plan.source, plan.destination], detail: ["phase": "FAILED"])
-            throw error
+                id: op, kind: .migration, state: .failed, summary: "\(error)\(cleanupNote)", paths: [plan.source, plan.destination],
+                detail: cleanupNote.isEmpty ? ["phase": "FAILED"] : ["phase": "FAILED", "cleanupFailed": "1"])
+            if cleanupNote.isEmpty { throw error }
+            throw MigrationError("\(error)\(cleanupNote)")
         }
     }
 
@@ -468,6 +568,54 @@ public struct MigrationEngine: Sendable {
         // externalize whose vault volume is gone, because there `abort` refuses too (it will not
         // claim "no partial copy present" about a disk it cannot see) and the user would otherwise
         // have no verb at all.
+        // One exception to that division, for the wedge the two verbs used to create between them:
+        // when `abort` ran and its removal failed, `abort` cannot succeed however many times it is
+        // repeated, while `forget` would decline for the very reason that `abort` is the right verb.
+        // Nothing in the product could then close the operation. `abort` now records the failure,
+        // and this is what reads it.
+        // Keyed on the PHASE, not on `cleanupFailed`. Two different producers set that marker, and
+        // only one of them means what this exception is for: `abort` tried and could not. The other
+        // is `copyAndVerify`'s own opportunistic cleanup, which means abort has not been *offered*
+        // yet — and accepting that case here would record `.rolledBack` on a live partial copy,
+        // dropping it out of `leftoverPartialCopies` and therefore out of `doctor`, out of
+        // `migration status` and out of `planExternalize`'s retry hint, while writing a journal line
+        // saying no file was touched. That is the hole `testForgetRefusesPreVerificationFailures…`
+        // exists to guard, and keying on the marker punched straight through it.
+        // `ABORT_FAILED` is a record of the past; whether `abort` can act is a question about the
+        // present, and the two diverge as soon as the obstacle is removed. But the redirect has to
+        // be **bounded**, and the first version was not: it asked `isDeletableFile`, which consults
+        // POSIX mode on the parent and is blind to ACLs and file flags — measured on this machine, a
+        // `deny delete` ACL gives `isDeletableFile == true` while `removeItem` fails. That is
+        // precisely the obstacle class this whole feature exists for, so `abort` failed, `forget`
+        // sent the user back to `abort`, and the pair did not terminate.
+        //
+        // So: one past failure still hands it back, because the obstacle may genuinely be gone and
+        // `abort` succeeding keeps the copy visible to `doctor`. A *second* failure on the same
+        // operation is proof the prediction was wrong, and `forget` closes it. At most one round
+        // trip, and no prediction about deletability is needed to guarantee termination.
+        let abortFailures = entries.filter { $0.detail["phase"] == "ABORT_FAILED" }.count
+        var abortRemovalFailed = abortFailures > 0
+        if abortRemovalFailed, abortFailures < 2, case .cleanable(let planned) = abortDisposition(entries: entries, operationID: operationID) {
+            var st = stat()
+            if lstat(planned.paths[1], &st) != 0 {
+                abortRemovalFailed = false  // nothing left to remove; the normal path applies
+            } else {
+                throw MigrationError(
+                    "Migration \(operationID) failed to abort earlier. Try `xcodevaultctl migration abort \(operationID)` once more: "
+                        + "if the obstacle is gone it will remove the partial copy at \(planned.paths[1]), and if it fails again "
+                        + "`forget` will close the entry and record that a copy may remain there.")
+            }
+        }
+        if abortRemovalFailed {
+            // Its own record, naming the path. This is the only line that survives the operation,
+            // and a copy demonstrably remains on disk — "no file was touched" would be false.
+            let where_ = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
+            try journal.record(
+                id: operationID, kind: .migration, state: .rolledBack,
+                summary: "forgotten by the user after `abort` failed to remove the partial copy; it may still be at \(where_)",
+                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
+            return
+        }
         if phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
             // Pre-verification: `abort`'s territory. Ask `abort` what it would do rather than
             // guessing — the previous version re-derived "abort cannot act" as "externalize with an
@@ -480,9 +628,13 @@ public struct MigrationEngine: Sendable {
             let where_ = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
             switch abortDisposition(entries: entries, operationID: operationID) {
             case .cleanable(let planned):
+                var st = stat()
+                let present = lstat(planned.paths[1], &st) == 0
                 throw MigrationError(
-                    "Migration \(operationID) never reached verification and its partial copy at \(planned.paths[1]) is reachable, so there is nothing "
-                        + "here that needs your judgement: `xcodevaultctl migration abort \(operationID)` closes it out and removes it.")
+                    "Migration \(operationID) never reached verification, so there is nothing here that needs your judgement: "
+                        + (present
+                            ? "`xcodevaultctl migration abort \(operationID)` removes the partial copy at \(planned.paths[1]) and closes it out."
+                            : "the partial copy at \(planned.paths[1]) is already gone, and `xcodevaultctl migration abort \(operationID)` closes the entry."))
             case .unreachable(let reason):
                 why = "a partial copy may remain at \(where_) — \(reason)"
             case .declined(let reason):
@@ -640,7 +792,28 @@ public struct MigrationEngine: Sendable {
         var st = stat()
         var removed = false
         if lstat(destination, &st) == 0 {
-            try FileManager.default.removeItem(atPath: destination); removed = true
+            do {
+                try FileManager.default.removeItem(atPath: destination)
+                removed = true
+            } catch {
+                // Record the failure before rethrowing. This throw used to happen *before* any
+                // journal line, so the operation stayed exactly as it was: `abort` could not clean
+                // it up however many times it ran, and `forget` declined it precisely because
+                // `abort` is the verb that should. The demonstrated route is a file carrying a
+                // `deny delete` ACL — the temp file `ditto` leaves behind inherits it — and the only
+                // exit was editing the journal by hand, which is the wedge this pair of verbs was
+                // designed to eliminate, reached through a different door.
+                try journal.record(
+                    id: operationID, kind: .migration, state: .failed,
+                    summary: "abort could not remove the partial copy at \(destination): \(error.localizedDescription)",
+                    paths: [source, destination], detail: ["phase": "ABORT_FAILED", "cleanupFailed": "1"])
+                throw MigrationError(
+                    "Could not remove the partial copy at \(destination): \(error.localizedDescription). "
+                        + "Run `xcodevaultctl migration abort \(operationID)` again once it is removable — by hand, or after lifting "
+                        + "whatever denies the delete. If it fails a second time, "
+                        + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records "
+                        + "that a copy may remain at that path.")
+            }
         }
         try journal.record(id: operationID, kind: .migration, state: .rolledBack, summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
     }

@@ -200,7 +200,7 @@ final class PerDeviceRegenerablesTests: XCTestCase {
     /// the CoreSimulator device set at a canonical path (rule 6).
     func testRestoreRefusesACategoryThatWasNeverEligibleToLeave() {
         let t = TempDir()
-        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path)
+        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path, volumeUUIDAt: { _ in "VU" })
         for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() + ["simulatorDevices"] {
             XCTAssertThrowsError(
                 try engine.planRestore(
@@ -218,7 +218,7 @@ final class PerDeviceRegenerablesTests: XCTestCase {
         let t = TempDir()
         makeDeviceSet(t)
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl"))
-        let engine = MigrationEngine(journal: journal, home: t.path)
+        let engine = MigrationEngine(journal: journal, home: t.path, volumeUUIDAt: { _ in "VU" })
         let set = t.path + "/Library/Developer/CoreSimulator/Devices"
         for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() {
             guard let c = StorageCatalog.category(id) else { continue }
@@ -518,7 +518,7 @@ final class PerDeviceRegenerablesTests: XCTestCase {
                 "\(decoy) is not a device, so what is under it is not ours to act on")
         }
         // The engine's own gate, not just the predicate.
-        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path)
+        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path, volumeUUIDAt: { _ in "VU" })
         XCTAssertThrowsError(
             try engine.preflightSource(set + "/Backup 2026-09-01/" + sub, category: dead),
             "preflight accepted a non-device directory as a source")
@@ -597,7 +597,7 @@ final class PerDeviceRegenerablesTests: XCTestCase {
     func testPreflightRefusesTheDeviceSetAsASourceForAPerDeviceCategory() {
         let t = TempDir()
         makeDeviceSet(t)
-        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path)
+        let engine = MigrationEngine(journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), home: t.path, volumeUUIDAt: { _ in "VU" })
         let set = t.path + "/Library/Developer/CoreSimulator/Devices"
         for id in PerDeviceRegenerablesTests.perDeviceIDs.sorted() {
             guard let c = StorageCatalog.category(id) else { continue }
