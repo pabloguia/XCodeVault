@@ -14,15 +14,25 @@ gates the binary and the LaunchDaemon plist behind `--with-helper`, off by defau
 the tree opens a connection to it. **Every item below becomes live the moment that flag is used in a
 release**, which is why the same list is repeated beside the flag in `scripts/bundle-app.sh`.
 
-- **Path-based cleanup verb.** `removeRegenerableSystemDirectoryContents` validates the final path
-  component's owner but not the intermediate components, and not the target's mode. A root-owned but
-  group- or world-writable target would let an unprivileged user plant entries that root then walks
-  and deletes. Not exploitable on a stock machine — the whole `/Library/Developer/CoreSimulator`
-  chain is `root:wheel 0755` — so the safety property is currently inherited from the environment
-  rather than enforced. The fix is an `openat` walk with `O_NOFOLLOW` per component.
-- **`isMountPoint` fails open in that same verb.** It returns `false` both for "not a mount point"
-  and for "the attribute could not be read", and the cleanup path reads that as permission to
-  proceed. The same helper is used fail-*closed* elsewhere in the file.
+- ~~**Path-based cleanup verb.**~~ **Fixed 2026-09-18** (issue #1). The verb now walks every
+  component from `/` with `openat` + `O_NOFOLLOW`, checking owner *and* mode at each level, and —
+  the part that took two review rounds to get right — acts **through the returned descriptor**
+  (`fstatat`/`openat`/`unlinkat`) instead of rebuilding the path. The first attempt did the walk
+  and then re-resolved the string for every operation, which made the guard decorative; both
+  reviewers caught it independently. The recursion also refuses to cross a device boundary, which
+  `FileManager.removeItem` (`removefile(3)` with `REMOVEFILE_RECURSIVE`) did not.
+- ~~**`isMountPoint` fails open in that same verb.**~~ **Fixed 2026-09-18** (issue #2). The query
+  is three-valued (`MountAnswer`), is asked of the **descriptor** rather than the name, and the
+  verb refuses on `.undetermined`. `isMountPoint` survives for the byte accounting, where the
+  collapse is not a safety decision; its doc comment now names both callers and says why the
+  remaining guard use is safe.
+
+  Both of the above are now pinned *at the call site*, not only in the primitives. The mutations
+  that restore each defect verbatim — replacing the mount switch with `_ = mount(fd)`, and the
+  guarded walk with a bare `open` — each failed four named tests, having previously passed the
+  whole suite. Two guards inside the new recursion remain unpinned and say so in the source: the
+  cross-device check (needs a real mount to stage) and the `failures += 1` on an unstattable
+  child (needs a `readdir`/`fstatat` race).
 - **The volume-UUID lookup parses an attribute it never confirmed was returned.** `getattrlist` is
   called without `ATTR_CMN_RETURNED_ATTRS`, so a filesystem that succeeds without supplying
   `ATTR_VOL_UUID` would yield the all-zero UUID, which is a valid `UUID` and would act as a
@@ -99,14 +109,23 @@ knowledge that existed in one conversation.
 
 ### Testability of the privileged verbs
 
-`XCodeVaultHelperCore` exists, by its own file header and `Package.swift` comment, "so the verbs,
-the authorization gate and the path guards can be tested". The gate is tested. The two remaining
-verbs are `private func`, and `@testable import` reaches `internal`, not `private` — so the refactor
-moved the code into a testable target and then sealed it. A designed mutation predicts that
-replacing `doCreateVaultDirectory`'s `(created && st_uid == 0) || st_uid == callerUID` ownership
-guard with `true` would fail no test. Relaxing `private` to `internal` and testing the guards is
-cheap and needs no root; it was left because it is a change to the helper and deserves its own
-review cycle rather than being folded into a large one.
+**Largely resolved 2026-09-18** (issue #6). `removeRegenerableSystemDirectoryContents` is now
+internal and called by tests through a `under:` seam that injects the *trust anchor* only — the
+target is still chosen from `HelperCleanupTarget` and the required owner is derived from whoever
+owns the anchor, so a test owns its own tree while production keeps demanding root. An earlier
+draft injected `requiredOwner` instead; both reviewers pointed out that an owner knob on a root
+deletion verb is a way to ask root to delete somebody else's tree, and that a default argument is
+not a defence against a future in-module caller.
+
+This section previously made a falsifiable prediction: that replacing `doCreateVaultDirectory`'s
+`(created && st_uid == 0) || st_uid == callerUID` guard with `true` would fail no test. It was
+correct, and it now fails five rows of a truth table. **What it did not predict is the more
+interesting half** — extracting and testing the guard did not pin the *call site*, and the first
+attempt at this change left all three call sites mutation-clean while looking thoroughly tested.
+
+Still open: `doCreateVaultDirectory` itself has no test that calls it, so the `mayTakeOwnership`
+call site remains unpinned even though the predicate is exhaustively covered. See issue #5, which
+needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor anyway.
 
 ### Structural findings with named seams
 

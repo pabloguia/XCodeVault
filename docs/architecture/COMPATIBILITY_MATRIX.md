@@ -834,6 +834,42 @@ case sensitivity did.
     the image, removed both scratch directories and kept a partial transcript. Bench and table in
     `EXPERIMENTS.md` under "Harness"; nine other scripts still carry the old shape.
 
+### Helper cleanup-verb path guard — ownership of the `/Library/Developer/CoreSimulator` chain — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-18
+- Hypothesis reference: none — this records an **environmental precondition** the privileged
+  helper's cleanup verb now depends on, not a storage strategy.
+- Test performed: `stat -f '%Lp %Su:%Sg %N'` on every component the guarded walk traverses.
+- Result: pass
+- Evidence:
+
+  ```
+  755 root:wheel /
+  755 root:wheel /Library
+  755 root:wheel /Library/Developer
+  755 root:admin /Library/Developer/CoreSimulator
+  755 root:admin /Library/Developer/CoreSimulator/Caches
+  755 root:admin /Library/Developer/CoreSimulator/Caches/dyld
+  755 root:admin /Library/Developer/CoreSimulator/Cryptex
+  755 root:admin /Library/Developer/CoreSimulator/Cryptex/Caches
+  ```
+
+- Functional checks: N/A — no simulator was booted and nothing was deleted to obtain this.
+- Verdict: verified **on this configuration only**
+- Notes: `removeRegenerableSystemDirectoryContents` refuses any component that is not owned by
+  root or that is writable by group or other. Every component here is `0755`, so the group bit
+  is `r-x` and the guard passes — including the `root:admin` components, where `admin` membership
+  does *not* confer write.
+
+  This is recorded because it is the precondition under which the guard is a no-op rather than a
+  behaviour change, and **one passing configuration is not a proof** (CLAUDE.md rule 7; the
+  Definition of Done in `NON_GOALS_AND_SAFETY.md`). A machine where an MDM profile or a
+  third-party installer leaves any of these `0775` gets a hard `ok: false` from the cleanup verb
+  with no other diagnosis. That is fail-closed and therefore safe, but it is a support case, and
+  it is why the measurement lives here rather than only in a code comment where it would read as
+  a general fact. Not measured on Apple Silicon, on managed machines, or after an Xcode
+  reinstall.
+
 **Matrix status after this pass:** five of roughly twenty-one entries re-verified on 26.7 (E1, E8,
 E14a, E2, E12). Everything still outstanding mutates devices, needs root, or needs an event — see
 the list in the entry above.
