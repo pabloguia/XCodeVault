@@ -20,7 +20,7 @@ def read(p):
         sys.exit(2)
 
 # The intended differences, and only these.
-SWAPS = [(".codex/", ".claude/"), ("Codex", "Claude Code"), ("AGENTS.md", "CLAUDE.md")]
+SWAPS = [(".codex/", ".claude/"), (".agents/", ".claude/"), ("Codex", "Claude Code"), ("AGENTS.md", "CLAUDE.md")]
 
 def norm(lines):
     out = []
@@ -35,12 +35,37 @@ if not a or not b:
     print("doc-mirror: one of the documents is empty", file=sys.stderr)
     sys.exit(2)
 
+bad = False
 diff = list(difflib.unified_diff(norm(a), norm(b), "CLAUDE.md", "AGENTS.md", lineterm="", n=1))
 if diff:
+    bad = True
     print("doc-mirror: CLAUDE.md and AGENTS.md have drifted.", file=sys.stderr)
     print("Every difference below is unintended — the tool-name and directory swaps are", file=sys.stderr)
     print("already normalised away. Fix the file that is wrong, not this script.\n", file=sys.stderr)
     print("\n".join(diff), file=sys.stderr)
+
+# The normalisation above is a hole, and it was found on this script's first day: mapping
+# `.codex/` onto `.claude/` is exactly what hides a pointer to a `.codex/` path that does not
+# exist. AGENTS.md pointed at `.codex/skills/` — absent from the tree — and the diff said ok.
+# So each document is also checked against the filesystem, before normalisation.
+import os, re
+PATH = re.compile(r"`(\.?[A-Za-z0-9_./-]+/[A-Za-z0-9_./-]*)`")
+for name, lines in (("CLAUDE.md", a), ("AGENTS.md", b)):
+    for i, line in enumerate(lines, 1):
+        for m in PATH.finditer(line):
+            ref = m.group(1)
+            if ref.endswith("/"):
+                ref = ref[:-1]
+            # Only judge paths this repository is supposed to contain.
+            if not ref.startswith((".claude", ".codex", ".agents", "docs", "scripts", "Sources", "Tests", "fixtures", "packaging", "Resources", ".github")):
+                continue
+            if "<" in ref or "*" in ref:
+                continue
+            if not os.path.exists(ref):
+                bad = True
+                print(f"doc-mirror: {name}:{i} points at `{ref}`, which does not exist", file=sys.stderr)
+
+if bad:
     sys.exit(1)
 print("doc-mirror: ok")
 PY

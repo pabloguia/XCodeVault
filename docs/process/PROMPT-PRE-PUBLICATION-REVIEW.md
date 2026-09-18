@@ -34,8 +34,13 @@ zero remotes, 99 commits de trabalho. O reflog local é tudo que há entre você
 mal colocado.
 
 ```bash
+git status --porcelain          # precisa sair vazio: o bundle só captura refs commitadas
 git tag pre-review-$(date +%F) && git bundle create ../XCodeVault-pre-review-$(date +%F).bundle --all
 ```
+
+Se a árvore não estiver limpa, **commite antes de criar o ponto de retorno** — senão o que você
+tem de rede exclui exatamente o trabalho não commitado que a §4 avisa que o `git checkout --`
+destrói.
 
 O bundle que já existe em `~/projects/` **não serve de rede**: ele é o backup *pré-reescrita*,
 anterior à redação dos identificadores da máquina. Restaurar dele reintroduz exatamente o que a
@@ -67,7 +72,11 @@ E uma sexta, que este briefing acrescenta porque é fácil de não enxergar:
 E cinco proibições que existem porque um agente com mandato aberto e portões para manter verdes tem
 incentivo direto para cada uma:
 
-7. **Nunca apague, pule ou enfraqueça um teste para manter um portão verde.** `swift test` continua
+7. **Nunca apague, pule ou enfraqueça um teste para manter um portão verde.** (A mutação que a §4
+   exige é o contrário disto: você quebra o *código*, confirma que o teste grita, e desfaz. Faça
+   isso só com a árvore limpa e commitada, ou num `git worktree` separado — nunca com
+   `git checkout --` por cima de trabalho não commitado, que é como este repositório já perdeu um
+   refactor inteiro.) `swift test` continua
    verde quando um teste é deletado, quando uma asserção some, e quando um `XCTSkip` é acrescentado
    — e já existem 20 skips, então o 21º não chama atenção. Se um teste está errado, diga por que no
    commit e prove; não o faça desaparecer. Ver também a contabilidade obrigatória em §4.
@@ -77,10 +86,15 @@ incentivo direto para cada uma:
    `HYPOTHESES.md`; não pode promovê-la sem evidência nova, e não pode editar arquivo existente em
    `docs/research/evidence/`. A conformidade mais barata com "toda linha precisa da Definition of
    Done" é editar a linha — é justamente essa a que não vale.
-10. **Não apague a única cópia de uma razão.** Antes de remover qualquer justificativa de
-    documento, prove no próprio commit que existe segunda cópia (`git log -S`, `grep -rln`). Isto
-    vale em especial para `STATUS.md`: a cauda dele é o único registro de várias lições em que este
-    briefing se apoia, e §3.1 te autoriza a resumi-lo.
+10. **Nenhuma razão pode sumir sem destino.** Resumir `STATUS.md` é autorizado (§3.1) e resumir
+    remove texto — a regra não é "não remova", é **"não remova sem realojar"**. Antes de cortar
+    qualquer justificativa, ou ela já existe em outro arquivo (`grep -rln`, e diga qual no commit),
+    ou você a move para um. Não use `git log -S` como prova: para conteúdo de cópia única ele
+    devolve só o commit que a criou, então ele nunca consegue confirmar uma segunda cópia. E "está
+    no histórico do git" não conta: ninguém lê histórico atrás de razão, é por isso que o
+    `KNOWN-ISSUES` existe. A cauda do `STATUS.md` é o único registro de várias lições em que este
+    briefing se apoia — o `git checkout --`, o defeito do `getgrouplist`, por que as três versões
+    anteriores do `abort`/`forget` falharam. **Traduzir não é remover**; resumir é.
 11. **Não apague ferramental de terceiros por decidir que é redundante.** `.codex/` e `.agents/` são
     tooling de outra pessoa. Decida, escreva a recomendação, não execute a deleção.
 
@@ -95,20 +109,22 @@ Números envelhecem — inclusive por causa dos commits desta própria revisão.
 confiar:**
 
 ```bash
-find Sources Tests -name '*.swift' | wc -l
-find Sources Tests -name '*.swift' -exec wc -l {} + | tail -1
-find . -name '*.md' -not -path './.git/*' -not -path './.build/*' -exec wc -l {} + | sort -rn | head -12
-git ls-files .claude .codex .agents
+find Sources -name '*.swift' | wc -l          # fontes  (Tests é separado: find Tests …)
+find Sources -name '*.swift' -exec wc -l {} + | tail -1
+find Sources Tests docs . -maxdepth 1 -name '*.md' | head        # docs de raiz
+find Sources Tests -name '*.swift' -exec wc -l {} + | sort -rn | sed -n '2,12p'   # maiores; linha 1 é o total
+git ls-files .claude .codex .agents            # três diretórios, não dois
 ```
 
-Na última medição: **6 targets**, 36 arquivos Swift, 6.831 linhas de fonte, 4.745 de teste,
-**269 testes / 0 falhas**, 6 ADRs, ~30 `.md` em `docs/` e 8 na raiz.
+Na última medição: **6 targets**, 36 arquivos de fonte (14 de teste, 50 no total — não confunda),
+6.831 linhas de fonte, 4.745 de teste, **269 testes / 0 falhas**, **5 ADRs mais um template**,
+~30 `.md` em `docs/` e 8 na raiz.
 
 **A configuração agêntica é um campo minado de duplicação, e o inventário dela é o seguinte:**
 3 agentes + 3 skills + 2 hooks em `.claude/`; `.codex/` espelha agentes e hooks mas **não tem
 skills**; e existe um **terceiro** diretório rastreado, `.agents/skills/`, byte-idêntico a
 `.claude/skills/`, que nem `CLAUDE.md` nem `AGENTS.md` mencionam. Três cópias, uma documentada.
-Decida — mas leia a regra 11 da §1 antes de apagar qualquer uma.
+Decida — mas leia a **regra 11 deste briefing** (§1) antes de apagar qualquer uma.
 
 **Arquivos maiores, por ordem** — não são culpados por serem grandes, mas são onde procurar
 primeiro: `STATUS.md` (1.856), `DoctorAndScanTests.swift` (1.249), `FINDINGS-2026-09-05.md`
@@ -142,8 +158,13 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
 - `AGENTS.md` existe para o Codex e **espelha** o `CLAUDE.md`. Dois arquivos que precisam ser
   editados juntos derivam, e este par já derivou **três vezes**: `.Codex/` com C maiúsculo, o
   ponteiro da Definition of Done na **regra 10** (uma regra de segurança), e o target
-  `XCodeVaultHelperCore` ausente do Layout dos dois. As três foram corrigidas antes desta revisão
-  começar — o que não corrige é o mecanismo. Decida se a duplicação se paga e, se sim, deixe
+  `XCodeVaultHelperCore` ausente do Layout dos dois — e uma quarta, dois ponteiros do `AGENTS.md`
+  para `.codex/skills/`, um diretório que não existe. As quatro foram corrigidas antes desta revisão
+  começar, e agora existe controle: `scripts/check-doc-mirror.sh`, no CI, que compara os dois depois
+  de normalizar as trocas que *devem* diferir e verifica que todo caminho citado existe. **Ele já
+  foi furado uma vez** — a normalização `.codex/` → `.claude/` era exatamente o que escondia os
+  ponteiros mortos — então trate-o como os outros checkers deste repositório: mute e confirme que
+  ele grita. Decida se a duplicação se paga e, se sim, deixe
   explícito em cada arquivo que o outro existe e precisa acompanhar. `AGENTS.md` também não tem o
   ponteiro para `SESSION-HANDOFF.md` que o `CLAUDE.md` tem.
 - `.codex/` inteiro é um espelho de `.claude/`: agentes em `.toml` em vez de `.md`, hooks
@@ -170,7 +191,7 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
   em inglês — e o `KNOWN-ISSUES` que lista isso **está incompleto**: a cauda do `STATUS.md` também
   está, e `STATUS.md` é um arquivo de raiz que um estranho lê antes de qualquer coisa em `docs/`.
   Seguir a instrução de idioma ao pé da letra passa por cima dele. Decida e execute — lembrando da
-  regra 10 da §1 antes de apagar qualquer razão que só exista ali.
+  **regra 10 deste briefing** (§1) antes de apagar qualquer razão que só exista ali.
 
 ### 3.2 Arquitetura e engenharia de software
 
@@ -189,8 +210,8 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
 
 ### 3.3 Desenvolvimento Apple
 
-- **Swift 6**: o modo de linguagem é `.v6`. Há **5 `@unchecked Sendable`** na árvore — cada um tem
-  justificativa escrita, e ela ainda é verdadeira?
+- **Swift 6**: o modo de linguagem é `.v6`. São **2 `@unchecked Sendable` em `Sources/`** e 3 em
+  `Tests/` — cada um tem justificativa escrita, e ela ainda é verdadeira?
   Há `@preconcurrency` ou supressão de warning escondendo um problema real de concorrência?
 - **Disponibilidade**: mínimo macOS 14.0 (ADR-0001). Há `if #available` para versões abaixo disso?
   Há uso de API mais nova sem anotação?
@@ -241,9 +262,10 @@ conversa.
 - Organização: `ReviewFixTests.swift` tem 712 linhas e o nome descreve *de onde vieram*, não *o que
   guardam*. `DoctorAndScanTests.swift` tem 1.249. **Renomear e reorganizar arquivos de teste é
   exatamente onde cobertura some sem nada ficar vermelho** — ver §1.7 e a contabilidade em §4.
-- **20 `XCTSkip` na suíte.** Um `XCTSkip` que dispara sempre é um teste que não existe, e ele
-  reporta verde. Rode a suíte e conte quantos desses 20 realmente pularam nesta máquina — e o
-  que acontece com eles num runner de CI, que não tem volume externo nem os simuladores daqui.
+- **20 `XCTSkip` na suíte, e nenhum dispara nesta máquina.** É a pior configuração possível: o skip
+  só age no ambiente onde ninguém olha. A pergunta não é quantos pulam aqui — é o que acontece com
+  eles num runner de CI, que não tem volume externo nem os simuladores desta máquina. Um `XCTSkip`
+  que dispara sempre no CI é um teste que só existe no laptop do autor.
 - CI (`.github/workflows/ci.yml`, macos-15 + macos-26): os quatro portões estão lá? Algum passo
   pode reportar sucesso sem ter rodado? E — a pergunta que só existe depois de publicar — **qual é a
   postura de segurança do workflow**, já que ele dispara em `pull_request` e roda scripts do
@@ -299,14 +321,30 @@ Portanto, nesta sessão:
 **E o mesmo padrão vale para esta revisão.** Um `git grep` que não rodou reporta limpo; uma revisão
 que não abriu o arquivo também. Duas contabilidades são obrigatórias:
 
-- **Cobertura.** No início, `git ls-files > docs/process/REVIEW-<data>-coverage.tsv`. Uma linha por
-  arquivo: revisado, ou pulado com o motivo. O relatório final diz `n/N` e **nomeia os não
-  revisados**. Sem isso, "revisão exaustiva" é uma afirmação que ninguém consegue checar — inclusive
-  você.
-- **Conjunto de testes.** Antes de mexer em qualquer teste, despeje os nomes
-  (`swift test --list-tests` ou equivalente) num arquivo. Ao fim, faça o diff. **Todo nome que
-  sumiu precisa de justificativa por linha no relatório.** Um teste renomeado é uma linha; um teste
-  perdido num refactor é o dano que esta revisão deveria impedir.
+- **Cobertura.** No início, `git ls-files > docs/process/REVIEW-<data>-coverage.tsv` (são ~197
+  arquivos; `git ls-files` sai em uma coluna, você acrescenta as outras). Uma linha por arquivo:
+  revisado **com uma frase do que você procurou nele**, ou pulado com o motivo. *Uma linha marcada
+  "revisado" sem essa frase conta como não revisada* — é isso que impede que a planilha vire a
+  própria varredura falsa que esta seção existe para evitar.
+
+  **E leia isto antes de mirar em `197/197`:** são ~35 mil linhas rastreadas. Uma sessão não revisa
+  isso de verdade, e o dono prefere `61/197` com os 136 restantes nomeados a um `197/197` obtido com
+  um `grep` na árvore inteira. O manifesto **não é uma nota**; é o handoff que diz por onde a
+  próxima passagem começa. Um `197/197` vindo de uma sessão só deve ser desacreditado, inclusive
+  por você.
+
+- **Conjunto de testes.** Antes de mexer em qualquer teste, despeje os nomes **num arquivo dentro do
+  repositório** — `docs/process/REVIEW-<data>-tests.txt`, não `/tmp`, que some na compactação e leva
+  junto a única prova de que nada se perdeu:
+
+  ```bash
+  swift test list 2>/dev/null | grep -E '^[A-Za-z].*\.' | sort > docs/process/REVIEW-<data>-tests.txt
+  ```
+
+  (`swift test --list-tests` está deprecado nesta toolchain, e a saída crua traz preâmbulo de build
+  com tempos variáveis e às vezes um PID — sem o `grep`, todo diff acusa mudança falsa, e é assim
+  que você se treina a ignorar diffs.) Ao fim, refaça e compare. **Todo nome que sumiu precisa de
+  justificativa por linha no relatório.**
 
 E duas armadilhas específicas desta árvore:
 
@@ -352,7 +390,7 @@ julgado não-bloqueante e **deixado de propósito**, com o motivo de cada um. Le
 Você pode discordar e corrigir qualquer um deles — mas com a razão registrada na mão, não por não
 saber que ela existia. Dois em particular são armadilha:
 
-- **A proibição de symlink no `CoreSimulator`** (regra 7). Ela é incondicional, mas o relato de
+- **A proibição de symlink no `CoreSimulator`** (regra 7 do `CLAUDE.md`, não a 7 deste briefing). Ela é incondicional, mas o relato de
   quebra em mesmo disco **não reproduziu aqui** (E9). Ela se apoia no que foi de fato observado:
   o CoreSimulator recria um diretório no caminho antigo depois de reiniciar o serviço. Não
   "simplifique" a justificativa de volta para o relato não verificado — isso já foi corrigido uma
@@ -369,7 +407,9 @@ saber que ela existia. Dois em particular são armadilha:
 1. **Todos os achados resolvidos na árvore de trabalho**, em commits lógicos, cada um com os quatro
    portões verdes por exit code real e `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
    Commits que tocam helper ou dados levam também a linha `Reviewed-by:` do agente que revisou.
-2. **`docs/process/REVIEW-<data>.md`**: o que foi revisado, o que foi achado, o que foi corrigido,
+2. **`docs/process/REVIEW-<data>.md`, em inglês** (é documentação do projeto, e a §3.1 manda
+   resolver o português espalhado — não crie mais): o que foi revisado, o que foi achado, o que foi
+   corrigido,
    e — a parte que mais importa — **o que foi deixado e por quê**. Cada achado com sua severidade
    (§5). Um achado sem decisão registrada volta como surpresa depois. Acompanhado do
    `REVIEW-<data>-coverage.tsv` e do diff de nomes de teste (§4), com o `n/N` no corpo do relatório.
@@ -421,5 +461,13 @@ Depois arquitetura, que pode mudar o que faz sentido corrigir nas outras. Depois
 review, que se sobrepõem. **Não deixe qualidade e engenharia agêntica para o fim**: é onde uma
 sessão que já compactou fica sem espaço, e são justamente as frentes que exigem ler muitos arquivos.
 Intercale-as. A limpeza de documentação fecha, já sabendo o que sobrou.
+
+**Despache subagentes por frente.** Não é sobre velocidade, é sobre contexto: as ~35 mil linhas
+rastreadas não cabem numa sessão, e a §4 proíbe contar como revisado o que você não abriu. Um
+subagente por frente lê com o contexto dele e te devolve os achados; você fica com o orçamento para
+decidir e corrigir. A §1.4 já obriga isso para helper e dados — o que esta seção acrescenta é que
+vale pelas mesmas razões para as outras quatro. Nas três rodadas que produziram este briefing,
+**cada passagem independente achou mais que a auto-revisão anterior**, incluindo erros de fato no
+próprio documento e um buraco num controle escrito vinte minutos antes.
 
 Rode em paralelo o que for independente. Pergunte só quando bater numa das onze linhas da §1.

@@ -28,7 +28,7 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `docs/architecture/COMPATIBILITY_MATRIX.md` — macOS/Xcode combinations, evidence, status.
 - `docs/process/EXECUTION_PHASES.md` — phased plan (research-first, not GUI-first).
 - `docs/process/AGENTIC_ENGINEERING_SETUP.md` — how to bootstrap and evolve
-  `.codex/agents/`, `.codex/skills/`, and hooks for this repo.
+  `.codex/agents/`, `.agents/skills/`, and hooks for this repo.
 - `docs/process/PRIOR_ART.md` — notes on `Viniciuscarvalho/mac-ssd-rescue` and other prior art.
 - `docs/adr/` — architecture decision records. Add one for every meaningful
   architectural choice or reversal; don't silently overwrite past reasoning.
@@ -41,7 +41,7 @@ this file short and update it only when a pointer or non-negotiable changes.
   reading order, verified machine state, and the recommended next work in priority order. Its
   numbers are point-in-time and say so; re-verify before acting on them.
 - `scripts/experiments/` — the experiment harness (`common.sh` header/redaction, `e1`, `e2`,
-  `e8`); evidence lands in `docs/research/evidence/`. `.codex/skills/run-experiment` has the
+  `e8`); evidence lands in `docs/research/evidence/`. `.agents/skills/run-experiment` has the
   procedure.
 
 ## Layout
