@@ -1,7 +1,9 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-08 (session 6). This file is the hand-off for the next session or a
-post-compaction continuation. Update it as milestones move._
+_Last updated: 2026-09-17. This file is the hand-off for the next session or a post-compaction
+continuation; it is append-only by date, so the newest sections are at the **end**. "Current
+milestone" and "Next three actions" below are from 2026-09-08 and have been overtaken — read the
+last few dated sections first, and `docs/process/SESSION-HANDOFF.md` before acting._
 
 ## Current milestone
 
@@ -1778,3 +1780,50 @@ verificação que não distingue "limpo" de "não rodei" não é uma verificaç�
 declara `566/566 blobs, controle 392` antes de qualquer conclusão.
 
 236 testes, 21 checks de redação, `swift build` e `swift test` com exit 0.
+
+## 2026-09-17 (revisão pré-publicação) — quatro revisões, e o padrão importa mais que os achados
+
+Quatro revisores independentes leram o repositório antes do push: o helper privilegiado inteiro, a
+superfície que move dados inteira, o diff desta sessão e a superfície pública. Todos voltaram com
+REQUEST CHANGES. O que fica registrado aqui não é a lista — está nos commits e em
+`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` — é o padrão, porque ele se repetiu de formas que
+custam caro.
+
+**Metade dos achados graves foram contra correções feitas nesta mesma sessão.** Não contra o código
+antigo: contra o conserto. Em duas rodadas seguidas, a correção da migração introduziu um problema
+novo — primeiro um `forget` que casava um marcador escrito por dois produtores diferentes, depois um
+`rmdir` que apagava `~/Library/Developer/Xcode` num restore que falha. Nenhum dos dois foi
+encontrado por leitura; os dois foram encontrados por probe. A lição não é "revise mais", é que
+**uma correção é uma mudança e merece o mesmo ceticismo que a mudança que a motivou.**
+
+**Três varreduras de verificação devolveram "limpo" sem ter varrido nada.** Um `git grep` sobre 86
+revisões que estourou o limite de argumentos em silêncio; um parser com `break` num cabeçalho curto;
+e um `grep -c … || echo 0` que produz a string `"0\n0"` e faz a comparação seguinte erra e
+curto-circuitar. As três foram pegas pelo mesmo expediente: **um controle positivo** — procurar algo
+que *tem* que estar lá. Sem ele, "0 ocorrências" e "não rodei" são indistinguíveis, e esta sessão
+produziu os dois.
+
+**Um verificador que eu escrevi foi derrotado em três rodadas seguidas.** Na primeira, ele exigia que
+o símbolo do gate de autorização existisse, não que fosse chamado: o revisor apagou os três call
+sites e o CI ficou verde. Na segunda, 11 de 13 mutações passaram, porque cada regra era keyed a um
+nome de arquivo, um glob não-recursivo ou uma convenção de nomenclatura. Na terceira, 13 bypasses
+novos. A conclusão não é continuar endurecendo o grep — é que **um matcher de texto não distingue uso
+de menção nem detecta neutralização semântica**, e isso agora está escrito no cabeçalho dele. O que
+foi removido junto: as frases no `HelperService.swift` e no `Package.swift` que afirmavam uma
+aplicação que o script não faz. Um comentário que promete verificação inexistente é pior que nenhum,
+porque é nele que o próximo revisor confia.
+
+**A minha própria mutação passou pelo motivo errado.** Testei a regra de deleção mutando o único
+arquivo que já tinha um marcador de isenção, então a comparação funcionou por acidente. O bug de
+shell que a tornava inerte em todos os outros arquivos só apareceu quando outra pessoa mutou um
+arquivo diferente.
+
+**E o `git checkout --` me mordeu com o refactor por commitar.** Restaurar um arquivo durante a
+limpeza de uma mutação desfez o split do helper, que não estava commitado — exatamente a armadilha
+que um commit três horas antes tinha criticado no `bundle-app.sh`.
+
+O daemon, ao fim das quatro rodadas: **nada que bloqueie publicar**, nenhuma escalada de root
+alcançável por cliente, e nenhum artefato empacotado o contém.
+
+268 testes, build sem warnings, invariantes do helper e suíte de redação — quatro portões, exit 0
+conferido em cada um.

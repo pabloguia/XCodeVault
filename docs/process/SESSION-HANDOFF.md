@@ -49,6 +49,10 @@ Antes de rodar o push, três coisas valem conferir:
   `SECURITY.md` aponta para esse canal e não publica endereço de e-mail nenhum.
 - **A autoria continua visível**, por decisão: nome e e-mail pessoal em todos os commits.
 
+O que ficou deliberadamente por fazer está em `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md`, com
+quem achou cada item e o que o torna não-bloqueante *hoje* — vários deixam de ser no momento em que
+o helper for empacotado. Esse arquivo existe para virar issues públicas depois do push.
+
 Uma inconsistência que a publicação expõe e que não me cabia resolver sozinho: **este arquivo e os
 `PROMPT-*.md` estão em português, e todo o resto do repositório está em inglês.** Para um leitor
 externo isso é ruído. Traduzi-los, ou marcá-los como notas internas, é uma decisão em aberto.
