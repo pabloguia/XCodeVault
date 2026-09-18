@@ -15,9 +15,8 @@
 #   - the cleanup verb validates only the final path component, never the intermediate ones, and
 #     checks the target's owner but not its mode (a root-owned but group-writable target is enough);
 #   - `isMountPoint` fails *open* in that same verb: a getattrlist error reads as "not a mount point";
-#   - `removeStrandedRuntimeDownload` has no notion of "stranded" and can delete a runtime image
-#     that Xcode is downloading right now, for a benefit the project's own research says macOS 26.5
-#     does not deliver;
+#   - the cleanup verb has no in-use check: it deletes the CoreSimulator dyld and Cryptex caches
+#     regardless of whether a simulator, `simctl` or `xcodebuild` is running against them;
 #   - the volume-UUID lookup parses `ATTR_VOL_UUID` without confirming it was returned;
 #   - there is no audit log of any kind.
 set -euo pipefail
@@ -53,6 +52,20 @@ rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/XCodeVault" "$APP/Contents/MacOS/XCodeVault"
 cp "$BIN/xcodevaultctl" "$APP/Contents/MacOS/xcodevaultctl"
 cp Resources/App/Info.plist "$APP/Contents/Info.plist"
+# One authoritative version, stamped into the bundle rather than maintained in two places.
+# `Resources/App/Info.plist` carried `0.1.0` while `ScanReport.current` said `0.1.0-dev`, and
+# nothing reconciled them: `release.sh --version` renamed the DMG and left the notarized app
+# reporting whatever the tracked plist happened to say. A notarized artifact cannot be corrected
+# after the fact, so the source of truth wins here.
+XCV_VERSION="$(sed -n 's/.*public static let current = "\(.*\)".*/\1/p' Sources/XCodeVaultCore/Scan/ScanReport.swift)"
+[ -n "$XCV_VERSION" ] || { echo "refusing: could not read the version from ScanReport.swift" >&2; exit 2; }
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $XCV_VERSION" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $XCV_VERSION" "$APP/Contents/Info.plist"
+# The CLI copied above statically links swift-argument-parser, which is Apache-2.0. Its licence
+# therefore ships with the binary, not only in the repository — see THIRD-PARTY-LICENSES.md for
+# the clause-by-clause reasoning. Info.plist's NSHumanReadableCopyright points the reader here.
+cp THIRD-PARTY-LICENSES.md "$APP/Contents/Resources/THIRD-PARTY-LICENSES.md"
+cp LICENSE "$APP/Contents/Resources/LICENSE"
 if [ "$WITH_HELPER" = 1 ]; then
   mkdir -p "$APP/Contents/Library/LaunchDaemons"
   cp "$BIN/xcodevault-helper" "$APP/Contents/MacOS/xcodevault-helper"

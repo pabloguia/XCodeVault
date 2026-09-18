@@ -29,9 +29,16 @@ jobs:
         # `set -o pipefail` is load-bearing: without it the pipeline reports tail's status, so a
         # failing build would pass CI silently. This workflow has never executed (ADR-0005), so
         # nothing has ever caught that.
+        #
+        # `-warnings-as-errors` because "0 warnings" was an unenforced claim until 2026-09-18, and
+        # an unenforced claim is how it stopped being true: `swift build` exits 0 with warnings, and
+        # an incremental local build only re-emits warnings for files it recompiles, so four
+        # warnings — one of them a Swift 6 concurrency warning — sat in the tree while every local
+        # run reported clean. CI builds from a fresh checkout, which is the one place this is
+        # reliably measurable.
         run: |
           set -o pipefail
-          swift build -v 2>&1 | tail -20
+          swift build -v -Xswiftc -warnings-as-errors 2>&1 | tail -20
       - name: Unit tests
         run: |
           set -o pipefail
@@ -49,9 +56,13 @@ jobs:
         # uploaded as a public artifact.
         run: bash scripts/experiments/test-common.sh
       - name: Lint (swift-format)
+        # A lint that cannot fail is a lint that will eventually not run. Both arms of the old
+        # `||` were green, so a missing formatter and real findings were indistinguishable from
+        # clean. A missing formatter now fails the step: this is the control the PostToolUse hook
+        # explicitly is not.
         run: |
-          fmt=$(xcrun --find swift-format 2>/dev/null) || { echo "swift-format not in this toolchain; skipping"; exit 0; }
-          "$fmt" lint --recursive --strict --configuration .swift-format Sources Tests || echo "::warning::swift-format lint reported issues"
+          fmt=$(xcrun --find swift-format 2>/dev/null) || { echo "swift-format is not in this toolchain; the lint gate cannot run"; exit 1; }
+          "$fmt" lint --recursive --strict --configuration .swift-format Sources Tests
       - name: Smoke test the CLI (read-only)
         run: |
           .build/debug/xcodevaultctl status
