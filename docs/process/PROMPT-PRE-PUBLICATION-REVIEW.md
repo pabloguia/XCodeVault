@@ -29,6 +29,18 @@ Você tem autonomia total para investigar, decidir, corrigir, reescrever, reorga
 dentro da árvore de trabalho. Não peça permissão para cada achado; corrija e registre. Não pare no
 primeiro problema para perguntar se deve continuar.
 
+**Antes de tocar em qualquer coisa, crie o ponto de retorno.** Não existe nenhum hoje: zero tags,
+zero remotes, 99 commits de trabalho. O reflog local é tudo que há entre você e um `git reset --hard`
+mal colocado.
+
+```bash
+git tag pre-review-$(date +%F) && git bundle create ../XCodeVault-pre-review-$(date +%F).bundle --all
+```
+
+O bundle que já existe em `~/projects/` **não serve de rede**: ele é o backup *pré-reescrita*,
+anterior à redação dos identificadores da máquina. Restaurar dele reintroduz exatamente o que a
+reescrita existiu para remover.
+
 Cinco coisas **não** são suas, e nenhuma delas é negociável por conveniência:
 
 1. **Nunca `sudo`, nunca peça a senha do dono.** Se algo exigir root, escreva o script e entregue o
@@ -52,30 +64,58 @@ E uma sexta, que este briefing acrescenta porque é fácil de não enxergar:
    documentos. Se você concluir que é necessária, **pare e escreva a recomendação** — a decisão é do
    dono.
 
+E cinco proibições que existem porque um agente com mandato aberto e portões para manter verdes tem
+incentivo direto para cada uma:
+
+7. **Nunca apague, pule ou enfraqueça um teste para manter um portão verde.** `swift test` continua
+   verde quando um teste é deletado, quando uma asserção some, e quando um `XCTSkip` é acrescentado
+   — e já existem 20 skips, então o 21º não chama atenção. Se um teste está errado, diga por que no
+   commit e prove; não o faça desaparecer. Ver também a contabilidade obrigatória em §4.
+8. **Isto é uma revisão, não um sprint de feature.** Não implemente milestone que falta, não
+   complete a GUI, não adicione comando novo. "Resolver todos os achados" é sobre o que existe.
+9. **Evidência é append-only.** Você pode **rebaixar** uma afirmação em `COMPATIBILITY_MATRIX.md` ou
+   `HYPOTHESES.md`; não pode promovê-la sem evidência nova, e não pode editar arquivo existente em
+   `docs/research/evidence/`. A conformidade mais barata com "toda linha precisa da Definition of
+   Done" é editar a linha — é justamente essa a que não vale.
+10. **Não apague a única cópia de uma razão.** Antes de remover qualquer justificativa de
+    documento, prove no próprio commit que existe segunda cópia (`git log -S`, `grep -rln`). Isto
+    vale em especial para `STATUS.md`: a cauda dele é o único registro de várias lições em que este
+    briefing se apoia, e §3.1 te autoriza a resumi-lo.
+11. **Não apague ferramental de terceiros por decidir que é redundante.** `.codex/` e `.agents/` são
+    tooling de outra pessoa. Decida, escreva a recomendação, não execute a deleção.
+
+E uma regra de trânsito: **se você discordar de uma das regras permanentes do repositório** — as 10
+de `CLAUDE.md` — escreva a recomendação com o raciocínio e siga em frente. Não aja contra ela.
+
 ---
 
-## 2. Inventário medido (2026-09-17, 96 commits, branch `main`)
+## 2. Inventário (branch `main`, ~99 commits)
 
-| | |
-|---|---|
-| Código | 36 arquivos Swift, 6.831 linhas em 6 targets |
-| — `XCodeVaultCore` | 28 arquivos, 5.352 linhas — a única camada de domínio |
-| — `xcodevaultctl` | 4 arquivos, 720 linhas |
-| — `XCodeVaultHelperCore` | 1 arquivo, 327 linhas — lógica do daemon root |
-| — `XCodeVaultHelper` | 1 arquivo, 29 linhas — só bootstrap |
-| — `XCodeVaultHelperProtocol` | 1 arquivo, 93 linhas — a fronteira XPC |
-| — `XCodeVault` | 1 arquivo, 310 linhas — app SwiftUI |
-| Testes | 4.745 linhas, **269 testes, 0 falhas** |
-| Documentação | 29 `.md` em `docs/` (6.121 linhas) + 8 na raiz |
-| Config agêntica | 3 agentes, 3 skills, 2 hooks em `.claude/`; espelho em `.codex/` |
-| ADRs | 6 (0000 template + 0001–0005) |
+Números envelhecem — inclusive por causa dos commits desta própria revisão. **Regenere antes de
+confiar:**
+
+```bash
+find Sources Tests -name '*.swift' | wc -l
+find Sources Tests -name '*.swift' -exec wc -l {} + | tail -1
+find . -name '*.md' -not -path './.git/*' -not -path './.build/*' -exec wc -l {} + | sort -rn | head -12
+git ls-files .claude .codex .agents
+```
+
+Na última medição: **6 targets**, 36 arquivos Swift, 6.831 linhas de fonte, 4.745 de teste,
+**269 testes / 0 falhas**, 6 ADRs, ~30 `.md` em `docs/` e 8 na raiz.
+
+**A configuração agêntica é um campo minado de duplicação, e o inventário dela é o seguinte:**
+3 agentes + 3 skills + 2 hooks em `.claude/`; `.codex/` espelha agentes e hooks mas **não tem
+skills**; e existe um **terceiro** diretório rastreado, `.agents/skills/`, byte-idêntico a
+`.claude/skills/`, que nem `CLAUDE.md` nem `AGENTS.md` mencionam. Três cópias, uma documentada.
+Decida — mas leia a regra 11 da §1 antes de apagar qualquer uma.
 
 **Arquivos maiores, por ordem** — não são culpados por serem grandes, mas são onde procurar
 primeiro: `STATUS.md` (1.856), `DoctorAndScanTests.swift` (1.249), `FINDINGS-2026-09-05.md`
 (1.158), `Doctor.swift` (1.025), `COMPATIBILITY_MATRIX.md` (839), `MigrationEngine.swift` (839),
 `ReviewFixTests.swift` (712).
 
-**Portões que devem continuar verdes** (todos com exit code conferido, não grep):
+**Portões que devem continuar verdes** (exit code real, conforme §1.3):
 
 ```bash
 swift build          # 0 warnings
@@ -100,8 +140,12 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
   nele que esteja duplicada em `docs/` é peso morto. Verifique se cada ponteiro ainda resolve e se
   cada regra ainda é verdadeira.
 - `AGENTS.md` existe para o Codex e **espelha** o `CLAUDE.md`. Dois arquivos que precisam ser
-  editados juntos derivam; já derivaram uma vez (`.Codex/` com C maiúsculo). Decida se a duplicação
-  se paga e, se sim, deixe explícito em cada um que o outro existe e precisa acompanhar.
+  editados juntos derivam, e este par já derivou **três vezes**: `.Codex/` com C maiúsculo, o
+  ponteiro da Definition of Done na **regra 10** (uma regra de segurança), e o target
+  `XCodeVaultHelperCore` ausente do Layout dos dois. As três foram corrigidas antes desta revisão
+  começar — o que não corrige é o mecanismo. Decida se a duplicação se paga e, se sim, deixe
+  explícito em cada arquivo que o outro existe e precisa acompanhar. `AGENTS.md` também não tem o
+  ponteiro para `SESSION-HANDOFF.md` que o `CLAUDE.md` tem.
 - `.codex/` inteiro é um espelho de `.claude/`: agentes em `.toml` em vez de `.md`, hooks
   byte-idênticos. Mesma pergunta, mesma resposta esperada.
 - Os 3 agentes (`helper-security-reviewer`, `migration-safety-reviewer`, `storage-researcher`)
@@ -123,7 +167,10 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
   sempre, então antes de apagar, pergunte se aquilo é a *única* cópia de uma razão. Uma decisão sem
   o porquê registrado é uma decisão que alguém vai desfazer.
 - Os `PROMPT-*.md` e o `SESSION-HANDOFF.md` estão em português enquanto o resto do repositório está
-  em inglês. Para um leitor de fora isso é ruído, e está listado em KNOWN-ISSUES. Decida e execute.
+  em inglês — e o `KNOWN-ISSUES` que lista isso **está incompleto**: a cauda do `STATUS.md` também
+  está, e `STATUS.md` é um arquivo de raiz que um estranho lê antes de qualquer coisa em `docs/`.
+  Seguir a instrução de idioma ao pé da letra passa por cima dele. Decida e execute — lembrando da
+  regra 10 da §1 antes de apagar qualquer razão que só exista ali.
 
 ### 3.2 Arquitetura e engenharia de software
 
@@ -145,8 +192,6 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
 - **Swift 6**: o modo de linguagem é `.v6`. Há **5 `@unchecked Sendable`** na árvore — cada um tem
   justificativa escrita, e ela ainda é verdadeira?
   Há `@preconcurrency` ou supressão de warning escondendo um problema real de concorrência?
-- **Swift API Design Guidelines**: nomes de tipos, métodos e argumentos. Uma API pública lida em voz
-  alta deve formar uma frase.
 - **Disponibilidade**: mínimo macOS 14.0 (ADR-0001). Há `if #available` para versões abaixo disso?
   Há uso de API mais nova sem anotação?
 - **Estrutura SwiftPM**: `Package.swift` — dependências do helper (a propriedade "só dois
@@ -169,10 +214,9 @@ carrega em toda sessão e não usa é imposto sobre cada tarefa futura.
 O leitor a imaginar é alguém que chega ao repositório em seis meses sem nenhum contexto desta
 conversa.
 
-- Funções longas com muitos retornos; condicionais aninhadas que escondem o caminho feliz.
-- Erros: `MigrationError` com string versus tipos que o chamador consegue discriminar. Há `try?`
+- Erros: `MigrationError` carrega string; o chamador consegue discriminar o que precisa? Há `try?`
   engolindo uma falha que importa?
-- Nomes que mentem, ou que só fazem sentido para quem viveu a sessão em que nasceram.
+- Nomes que só fazem sentido para quem viveu a sessão em que nasceram.
 - **Comentários que prometem verificação inexistente.** Já foram encontrados dois nesta base, e um
   comentário falso é pior que nenhum, porque é nele que o próximo revisor confia. Todo comentário
   que afirma um fato sobre o sistema deve ser verificável — e se você não conseguir verificar,
@@ -188,13 +232,24 @@ conversa.
 - **269 testes é uma contagem, não uma medida.** A pergunta é o que eles pegam. Para cada teste que
   guarda uma propriedade de segurança, **mute a implementação e confirme que ele falha.** Um teste
   que passa com o bug reintroduzido não estava testando nada — três já foram encontrados assim aqui.
+- **O app SwiftUI tem 310 linhas e zero dos 269 testes.** Nada em `Tests/` referencia
+  `XCodeVaultApp`, `MainView` ou `AppModel`, e o target de teste não depende do target `XCodeVault`
+  em `Package.swift`. Ele não é um stub — são 8 views reais — e `applyClean` chama
+  `CleanExecutor().execute(...)`, ou seja, **há um caminho destrutivo sem cobertura nenhuma**, e ele
+  vai no DMG. O README já o descreve honestamente como "First slice only"; a pergunta é se um
+  caminho que apaga arquivos pode ir para um repositório público sem um único teste.
 - Organização: `ReviewFixTests.swift` tem 712 linhas e o nome descreve *de onde vieram*, não *o que
-  guardam*. `DoctorAndScanTests.swift` tem 1.249.
+  guardam*. `DoctorAndScanTests.swift` tem 1.249. **Renomear e reorganizar arquivos de teste é
+  exatamente onde cobertura some sem nada ficar vermelho** — ver §1.7 e a contabilidade em §4.
 - **20 `XCTSkip` na suíte.** Um `XCTSkip` que dispara sempre é um teste que não existe, e ele
   reporta verde. Rode a suíte e conte quantos desses 20 realmente pularam nesta máquina — e o
   que acontece com eles num runner de CI, que não tem volume externo nem os simuladores daqui.
 - CI (`.github/workflows/ci.yml`, macos-15 + macos-26): os quatro portões estão lá? Algum passo
-  pode reportar sucesso sem ter rodado?
+  pode reportar sucesso sem ter rodado? E — a pergunta que só existe depois de publicar — **qual é a
+  postura de segurança do workflow**, já que ele dispara em `pull_request` e roda scripts do
+  repositório: um PR de fork executa a *versão dele* desses scripts no runner. `permissions:
+  contents: read` já foi adicionado; as actions ainda estão pinadas por tag mutável
+  (`actions/checkout@v4`, `actions/upload-artifact@v4`) em vez de SHA.
 - `COMPATIBILITY_MATRIX.md`: nenhuma linha pode dizer "supported" sem a Definition of Done de
   `docs/product/NON_GOALS_AND_SAFETY.md`. Confira uma por uma.
 
@@ -202,8 +257,11 @@ conversa.
 
 Frente curta e a mais fácil de esquecer, porque nada nela quebra um teste.
 
-- **MIT foi escolhida em ADR-0005.** `swift-argument-parser` é **Apache License 2.0** e é ligado
-  estaticamente no binário que o `bundle-app.sh` empacota. A Apache-2.0 §4 exige propagar atribuição
+- **MIT foi escolhida em ADR-0005.** `swift-argument-parser` é **Apache License 2.0**. O único
+  dependente dele é o `xcodevaultctl` — o target `.app` não o liga — e o `bundle-app.sh` copia o
+  `xcodevaultctl` para dentro de `XCodeVault.app/Contents/MacOS/`, além de o Homebrew o expor como
+  `binary`. Ou seja: **ele sai no DMG e na fórmula.** Não conclua "não há obrigação" olhando só para
+  o target do app. A Apache-2.0 §4 exige propagar atribuição
   em obras distribuídas, e **não existe `NOTICE` nem `THIRD-PARTY-LICENSES` neste repositório**.
   Determine o que é de fato exigido e faça — isto é a categoria de achado que bloqueia publicação.
 - **Proveniência.** `mac-ssd-rescue` aparece em 4 arquivos de código. Uma checagem rápida indica que
@@ -238,6 +296,18 @@ Portanto, nesta sessão:
 - `git checkout -- <arquivo>` restaura o conteúdo **commitado** e destrói trabalho não commitado.
   Isso já desfez um refactor inteiro nesta base, durante a limpeza de uma mutação.
 
+**E o mesmo padrão vale para esta revisão.** Um `git grep` que não rodou reporta limpo; uma revisão
+que não abriu o arquivo também. Duas contabilidades são obrigatórias:
+
+- **Cobertura.** No início, `git ls-files > docs/process/REVIEW-<data>-coverage.tsv`. Uma linha por
+  arquivo: revisado, ou pulado com o motivo. O relatório final diz `n/N` e **nomeia os não
+  revisados**. Sem isso, "revisão exaustiva" é uma afirmação que ninguém consegue checar — inclusive
+  você.
+- **Conjunto de testes.** Antes de mexer em qualquer teste, despeje os nomes
+  (`swift test --list-tests` ou equivalente) num arquivo. Ao fim, faça o diff. **Todo nome que
+  sumiu precisa de justificativa por linha no relatório.** Um teste renomeado é uma linha; um teste
+  perdido num refactor é o dano que esta revisão deveria impedir.
+
 E duas armadilhas específicas desta árvore:
 
 - **Refatoração precisa preservar comportamento, e "preserva" é uma afirmação que precisa de prova.**
@@ -270,8 +340,7 @@ thrash. Classifique **todo** achado num destes três e diga qual no relatório:
    escritas é mais convidativo que um repositório perfeito e mudo, e é exatamente para isso que o
    `KNOWN-ISSUES-AT-PUBLICATION.md` existe.
 
-O corolário: se um achado não cabe em nenhum dos três, ele não é um achado. Não reescreva código
-que funciona porque você o escreveria diferente.
+Se um achado não cabe em nenhum dos três, ele não é um achado.
 
 ---
 
@@ -301,8 +370,9 @@ saber que ela existia. Dois em particular são armadilha:
    portões verdes por exit code real e `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
    Commits que tocam helper ou dados levam também a linha `Reviewed-by:` do agente que revisou.
 2. **`docs/process/REVIEW-<data>.md`**: o que foi revisado, o que foi achado, o que foi corrigido,
-   e — a parte que mais importa — **o que foi deixado e por quê**. Um achado sem decisão registrada
-   volta como surpresa depois.
+   e — a parte que mais importa — **o que foi deixado e por quê**. Cada achado com sua severidade
+   (§5). Um achado sem decisão registrada volta como surpresa depois. Acompanhado do
+   `REVIEW-<data>-coverage.tsv` e do diff de nomes de teste (§4), com o `n/N` no corpo do relatório.
 3. **`KNOWN-ISSUES-AT-PUBLICATION.md` atualizado**: o que esta revisão resolveu sai; o que ela
    acrescentou entra.
 4. **`STATUS.md` e `SESSION-HANDOFF.md` atualizados** para refletir o estado real.
@@ -322,27 +392,34 @@ saber que ela existia. Dois em particular são armadilha:
    - **Todo comando do README roda como está escrito.** Rode um por um. É controle positivo
      aplicado a documentação.
 
-6. **O comando de push entregue ao dono**, não executado:
+6. **A lista de ajustes que só existem no GitHub**, entregue junto com o push — nenhum deles é
+   arquivo no repositório, e todos ficam esquecidos se ninguém escrever:
+   - ligar **private vulnerability reporting** (está desligado por padrão, e o `SECURITY.md` manda o
+     usuário para lá);
+   - **Settings → Actions → Workflow permissions: read-only**, que é a metade da defesa que o
+     `permissions:` do workflow não cobre;
+   - **branch protection** em `main`.
+
+7. **O comando de push entregue ao dono**, não executado:
 
    ```bash
    git remote add origin git@github.com:<usuário>/XCodeVault.git && git push -u origin main
    ```
 
-7. Se você encontrar algo que **deveria** bloquear a publicação, diga isso em voz alta e em primeiro
+8. Se você encontrar algo que **deveria** bloquear a publicação, diga isso em voz alta e em primeiro
    lugar na sua resposta final. Não enterre no meio de um relatório.
 
 ---
 
 ## 8. Ordem sugerida
 
-Leitura primeiro (`CLAUDE.md`, `STATUS.md`, `KNOWN-ISSUES`, os 6 ADRs), depois a passagem de
-arquitetura — porque ela pode mudar o que faz sentido corrigir nas outras. Depois Apple e code
-review, que se sobrepõem. Qualidade e engenharia agêntica por último, porque dependem do estado
-final do código. A limpeza de documentação e histórico fecha, já sabendo o que sobrou.
+Snapshot (§1), depois a leitura (`CLAUDE.md`, `STATUS.md`, `KNOWN-ISSUES`, os 6 ADRs) com a frente
+de **licença e proveniência (3.6) rodando em paralelo** — ela não depende de nada, é a mais curta, e
+é a única em que um achado bloqueia a publicação sem nenhum teste ficar vermelho.
 
-**Licença e proveniência (3.6) não dependem de nada** — rode essa frente no começo, em paralelo com
-a leitura. É a mais curta, é a que ninguém lembra, e é a única em que um achado pode bloquear a
-publicação sem que nenhum teste fique vermelho.
+Depois arquitetura, que pode mudar o que faz sentido corrigir nas outras. Depois Apple e code
+review, que se sobrepõem. **Não deixe qualidade e engenharia agêntica para o fim**: é onde uma
+sessão que já compactou fica sem espaço, e são justamente as frentes que exigem ler muitos arquivos.
+Intercale-as. A limpeza de documentação fecha, já sabendo o que sobrou.
 
-Rode as frentes independentes em paralelo quando elas não dependerem uma da outra. Não pergunte por
-aprovação entre elas — pergunte só quando bater numa das seis linhas da seção 1.
+Rode em paralelo o que for independente. Pergunte só quando bater numa das onze linhas da §1.
