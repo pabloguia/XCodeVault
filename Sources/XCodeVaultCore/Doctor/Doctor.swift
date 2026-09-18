@@ -212,7 +212,8 @@ public struct Doctor: Sendable {
                         detail:
                             "\(root.path) could not be enumerated (permissions). This rule reports nothing about that location — treat it as unknown, not as clean. Note it does NOT catch a volume that merely went away: an unmounted mount point that is still a readable empty directory enumerates fine and produces no finding at all.",
                         path: root.path,
-                        remediation: "Re-run `xcodevaultctl doctor` with the volume mounted and readable. If it stays unreadable, inspect it manually before assuming no shadow data is there.",
+                        remediation:
+                            "Re-run `xcodevaultctl doctor` with the volume mounted and readable. If it stays unreadable, inspect it manually before assuming no shadow data is there.",
                         evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
                 continue
             }
@@ -247,7 +248,8 @@ public struct Doctor: Sendable {
                                 detail:
                                     "\(root.path)/\(parent) could not be enumerated (permissions). Anything below it — including a whole CoreSimulator device set — is invisible to this check. Treat it as unknown, not as clean.",
                                 path: root.path + "/" + parent,
-                                remediation: "Inspect it as a user who can read it before assuming no shadow data is there, then re-run `xcodevaultctl doctor`.",
+                                remediation:
+                                    "Inspect it as a user who can read it before assuming no shadow data is there, then re-run `xcodevaultctl doctor`.",
                                 evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
                         continue
                     }
@@ -333,7 +335,9 @@ public struct Doctor: Sendable {
                     severity = liveRedirect ? .critical : .error
                     detail =
                         "\(candidate)/Devices holds "
-                        + (udids.isEmpty ? "a device_set.plist and no device directories" : "\(udids.count) device director\(udids.count == 1 ? "y" : "ies")\(hasDeviceSet ? " and a device_set.plist" : "")")
+                        + (udids.isEmpty
+                            ? "a device_set.plist and no device directories"
+                            : "\(udids.count) device director\(udids.count == 1 ? "y" : "ies")\(hasDeviceSet ? " and a device_set.plist" : "")")
                         + ". Either this is a live device set reached through a redirect — an unsupported configuration — or it is a stale duplicate left behind by one, or a deliberate cold backup. All three mean simulator state exists in two places, which is the shadow-data failure mode; this rule cannot tell them apart."
                         + (liveRedirect
                             ? " A forbidden symlink under ~/Library/Developer is present at the same time, so both sets can be taking writes right now — resolve that redirect first."
@@ -432,7 +436,8 @@ public struct Doctor: Sendable {
                         + (stillTargeted
                             ? " But something under ~/Library/Developer still redirects here, so this is a live redirect pointing at an empty tree — resolve that first."
                             : " Nothing to compare and nothing at risk.")
-                    remediation = stillTargeted
+                    remediation =
+                        stillTargeted
                         ? "Do not remove it yet: fix the redirect under ~/Library/Developer first, then this directory is safe to delete."
                         : "Remove the empty directory. The volume root is root-owned, so this one needs sudo:\n  sudo rmdir \(OwnershipAdvice.shellQuoted(candidate))\nUse `rmdir`, not `rm -rf` — it refuses if anything reappeared inside."
                 } else {
@@ -511,8 +516,11 @@ public struct Doctor: Sendable {
                 out.append(
                     Finding(
                         id: "stranded-inbox:\(n)", severity: .warning, title: "Stranded runtime download: \(n) (\(ByteCount.format(size)))",
-                        detail: "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful `-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
-                        path: p, remediation: "Restart the Mac: simdiskimaged reaps the Inbox at startup (verified 2026-09-07, 5 GB reclaimed). Deleting by hand does not work — even `sudo rm` is refused (Operation not permitted) on macOS 26.5. If it survives a reboot, report to Apple.",
+                        detail:
+                            "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful `-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
+                        path: p,
+                        remediation:
+                            "Restart the Mac: simdiskimaged reaps the Inbox at startup (verified 2026-09-07, 5 GB reclaimed). Deleting by hand does not work — even `sudo rm` is refused (Operation not permitted) on macOS 26.5. If it survives a reboot, report to Apple.",
                         evidence: "docs/research/FINDINGS-2026-09-05.md §F1 + 2026-09-06 root-EPERM note"))
             }
         }
@@ -715,12 +723,14 @@ public struct Doctor: Sendable {
                 out.append(
                     Finding(
                         id: "orphan-dyld-host:\(buildDir)", severity: .info,
-                        title: "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.format($0.allocatedBytes) } ?? "size unknown"))",
+                        title:
+                            "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.format($0.allocatedBytes) } ?? "size unknown"))",
                         detail:
                             "This machine runs \(hostBuild). Caches under another build are not read by anything — but XCodeVault has never observed a stale "
                             + "build directory in the field, so this is reported for inspection only and carries no command.",
                         path: buildPath,
-                        remediation: "Inspect it. If it is genuinely a leftover from a macOS update, report what you find so this can be turned into a real rule.",
+                        remediation:
+                            "Inspect it. If it is genuinely a leftover from a macOS update, report what you find so this can be turned into a real rule.",
                         evidence: "docs/research/FINDINGS-2026-09-05.md §F10 (layout), branch unverified"))
                 continue
             }

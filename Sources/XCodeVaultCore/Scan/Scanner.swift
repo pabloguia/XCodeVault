@@ -83,9 +83,15 @@ public struct Scanner: Sendable {
                 }
             }
         }
-        let results = ConcurrentResults<StorageItem>(count: pending.count)
-        DispatchQueue.concurrentPerform(iterations: pending.count) { i in
-            let (cid, path) = pending[i]
+        // `pending` is complete by this point and never written again, but the compiler cannot see
+        // that: captured as a `var` it is a mutable reference inside a concurrent closure, which is
+        // a Swift 6 warning and would become a real race the day someone appends below this line.
+        // Freezing it into a `let` makes the invariant the type system's business rather than a
+        // reader's.
+        let work = pending
+        let results = ConcurrentResults<StorageItem>(count: work.count)
+        DispatchQueue.concurrentPerform(iterations: work.count) { i in
+            let (cid, path) = work[i]
             results[i] = resolve(categoryID: cid, path: path, bootMountPoint: bootFS)
         }
         return results.values.compactMap { $0 }
@@ -110,10 +116,13 @@ public struct Scanner: Sendable {
         }
         return (
             names
-            .filter { SimulatorNaming.isDeviceUDID($0) }
-            .sorted()
-            .map { deviceSet + "/" + $0 }
-            .filter { var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFDIR }, nil)
+                .filter { SimulatorNaming.isDeviceUDID($0) }
+                .sorted()
+                .map { deviceSet + "/" + $0 }
+                .filter {
+                    var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFDIR
+                }, nil
+        )
     }
 
     func resolve(categoryID: String, path: String, bootMountPoint: String?) -> StorageItem {

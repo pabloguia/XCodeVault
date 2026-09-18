@@ -3,7 +3,10 @@ import Foundation
 /// A registered external volume. Identity is the APFS volume UUID plus a sentinel file we wrote;
 /// the mount point is only where we last saw it (MIGRATION_ENGINE.md §Split-brain safety).
 public struct VaultVolume: Sendable, Codable, Equatable, Identifiable {
-    public init(volumeUUID: String, volumeName: String, lastMountPoint: String, registeredAt: Date, sentinelID: String, relativeDirectory: String = VaultVolume.directoryName) {
+    public init(
+        volumeUUID: String, volumeName: String, lastMountPoint: String, registeredAt: Date, sentinelID: String,
+        relativeDirectory: String = VaultVolume.directoryName
+    ) {
         self.volumeUUID = volumeUUID; self.volumeName = volumeName; self.lastMountPoint = lastMountPoint; self.registeredAt = registeredAt
         self.sentinelID = sentinelID; self.relativeDirectory = relativeDirectory
     }
@@ -75,7 +78,14 @@ public struct VaultRegistry: Sendable {
     public init(url: URL = VaultRegistry.defaultURL) { self.url = url }
 
     public func volumes() throws -> [VaultVolume] {
-        guard let data = FileManager.default.contents(atPath: url.path) else { return [] }
+        // `FileManager.contents(atPath:)` returns nil for a permission error exactly as it does for
+        // a missing file, so the earlier `guard let … else { return [] }` reported "no vault
+        // volumes" — a clean bill of health — for an unreadable registry. `doctor` then had nothing
+        // to report and exited 0. Same idiom as `Journal.read()`: check existence, then let the
+        // read throw. Found by the migration-safety review of 2026-09-18, which noticed that the
+        // do/catch added to `Doctor+Vault` that day could not fire for the case it was written for.
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        let data = try Data(contentsOf: url)
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
         return try dec.decode([VaultVolume].self, from: data)
     }
@@ -105,10 +115,15 @@ public struct VaultRegistry: Sendable {
         guard q.verdict != .unsuitable else { throw VaultError("Volume \(v.volumeName) is not suitable: \(q.blockers.joined(separator: " "))") }
         guard isMountPoint(mp) else { throw VaultError("\(mp) is not a mount point.") }
         let rel = relativeDirectory.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !rel.isEmpty, !rel.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { throw VaultError("Invalid vault directory '\(relativeDirectory)'.") }
+        guard !rel.isEmpty, !rel.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else {
+            throw VaultError("Invalid vault directory '\(relativeDirectory)'.")
+        }
         let dir = mp + "/" + rel
         guard PathSafety.isContained(dir, in: mp) else { throw VaultError("\(dir) is not inside \(mp).") }
-        if rel.hasPrefix(".TemporaryItems") { try journal.record(kind: .migration, state: .planned, summary: "warning: vault directory under .TemporaryItems is not durable (macOS may purge it)", paths: [dir]) }
+        if rel.hasPrefix(".TemporaryItems") {
+            try journal.record(
+                kind: .migration, state: .planned, summary: "warning: vault directory under .TemporaryItems is not durable (macOS may purge it)", paths: [dir])
+        }
         let sentinelPath = dir + "/" + VaultVolume.sentinelName
         var existing = try volumes()
         if let already = existing.first(where: { $0.volumeUUID == uuid }) {
@@ -155,14 +170,21 @@ public struct VaultRegistry: Sendable {
         if let problem = OwnershipAdvice.writabilityProblem(dir) {
             // Journalled because by this point a directory may exist that we created and are now
             // refusing to use; without a record it is an orphan nothing downstream will look at.
-            try? journal.record(kind: .migration, state: .failed, summary: "vault directory unusable: \(problem.prefix(120))", paths: [dir])
+            //
+            // `try?` and not `try`: a journal write that fails here must not replace the real
+            // error, which is the one the user can act on. The trade is that if the journal is
+            // itself unwritable the orphan goes unrecorded — exactly the thing the paragraph above
+            // says must not happen. That is the lesser of the two, and it is stated rather than
+            // implied. `_ =` because discarding the result is the decision, not an oversight.
+            _ = try? journal.record(kind: .migration, state: .failed, summary: "vault directory unusable: \(problem.prefix(120))", paths: [dir])
             throw VaultError(problem)
         }
 
         let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)
-        let vv = VaultVolume(volumeUUID: uuid, volumeName: v.volumeName, lastMountPoint: mp, registeredAt: Date(), sentinelID: sentinel.sentinelID, relativeDirectory: rel)
+        let vv = VaultVolume(
+            volumeUUID: uuid, volumeName: v.volumeName, lastMountPoint: mp, registeredAt: Date(), sentinelID: sentinel.sentinelID, relativeDirectory: rel)
         existing.append(vv)
         try save(existing)
         try journal.record(kind: .migration, state: .completed, summary: "registered vault volume \(v.volumeName) (\(uuid))", paths: [dir])

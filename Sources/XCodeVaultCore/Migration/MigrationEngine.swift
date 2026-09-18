@@ -76,7 +76,8 @@ public struct MigrationEngine: Sendable {
         if FileManager.default.fileExists(atPath: dest) {
             if let leftover = try leftoverPartialCopies().first(where: { $0.paths[1] == dest }) {
                 throw MigrationError(
-                    "Destination \(dest) holds the partial copy of failed migration \(leftover.id). Run `migration abort \(leftover.id)` to remove it, then retry.")
+                    "Destination \(dest) holds the partial copy of failed migration \(leftover.id). Run `migration abort \(leftover.id)` to remove it, then retry."
+                )
             }
             throw MigrationError("Destination \(dest) already exists. Verify or remove it first; the engine never merges into existing data.")
         }
@@ -593,6 +594,12 @@ public struct MigrationEngine: Sendable {
         // `abort` succeeding keeps the copy visible to `doctor`. A *second* failure on the same
         // operation is proof the prediction was wrong, and `forget` closes it. At most one round
         // trip, and no prediction about deletability is needed to guarantee termination.
+        //
+        // The guarantee is conditional, and the condition is worth stating because the earlier
+        // wording did not: it holds over a WRITABLE journal. `abort` records its failure before
+        // rethrowing, so if the journal itself cannot be written the failure count never advances
+        // and nothing closes. That mode is loud rather than silent — every verb errors — which is
+        // why it is recorded in KNOWN-ISSUES-AT-PUBLICATION.md rather than defended against here.
         let abortFailures = entries.filter { $0.detail["phase"] == "ABORT_FAILED" }.count
         var abortRemovalFailed = abortFailures > 0
         if abortRemovalFailed, abortFailures < 2, case .cleanable(let planned) = abortDisposition(entries: entries, operationID: operationID) {
@@ -609,10 +616,10 @@ public struct MigrationEngine: Sendable {
         if abortRemovalFailed {
             // Its own record, naming the path. This is the only line that survives the operation,
             // and a copy demonstrably remains on disk — "no file was touched" would be false.
-            let where_ = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
+            let location = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
             try journal.record(
                 id: operationID, kind: .migration, state: .rolledBack,
-                summary: "forgotten by the user after `abort` failed to remove the partial copy; it may still be at \(where_)",
+                summary: "forgotten by the user after `abort` failed to remove the partial copy; it may still be at \(location)",
                 paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
             return
         }
@@ -625,7 +632,7 @@ public struct MigrationEngine: Sendable {
             let why: String
             // Both forms below name the path. This record is the only thing that survives the
             // operation, so "a copy may remain" without a location is a note nobody can act on.
-            let where_ = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
+            let location = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
             switch abortDisposition(entries: entries, operationID: operationID) {
             case .cleanable(let planned):
                 var st = stat()
@@ -636,9 +643,9 @@ public struct MigrationEngine: Sendable {
                             ? "`xcodevaultctl migration abort \(operationID)` removes the partial copy at \(planned.paths[1]) and closes it out."
                             : "the partial copy at \(planned.paths[1]) is already gone, and `xcodevaultctl migration abort \(operationID)` closes the entry."))
             case .unreachable(let reason):
-                why = "a partial copy may remain at \(where_) — \(reason)"
+                why = "a partial copy may remain at \(location) — \(reason)"
             case .declined(let reason):
-                why = "\(where_) was left untouched — \(reason)"
+                why = "\(location) was left untouched — \(reason)"
             }
             try journal.record(
                 id: operationID, kind: .migration, state: .rolledBack,
@@ -728,7 +735,8 @@ public struct MigrationEngine: Sendable {
                     "the vault volume for migration \(operationID) is not present, so whether a partial copy remains on it cannot be determined")
             }
             guard PathSafety.isContained(destination, in: vaultDir) else {
-                return .declined("\(destination) is not inside the vault directory \(vaultDir); it is not the partial copy this externalization made. Nothing is removed.")
+                return .declined(
+                    "\(destination) is not inside the vault directory \(vaultDir); it is not the partial copy this externalization made. Nothing is removed.")
             }
             return .cleanable(planned: planned)
         case .restore:
@@ -737,7 +745,8 @@ public struct MigrationEngine: Sendable {
             // unplugged drive an ordinary case here rather than a dead end.
             guard atOwnHome else {
                 return .declined(
-                    "\(destination) is not inside \(category?.name ?? "the category")'s own location; it is not the partial copy this restore made. Nothing is removed.")
+                    "\(destination) is not inside \(category?.name ?? "the category")'s own location; it is not the partial copy this restore made. Nothing is removed."
+                )
             }
             return .cleanable(planned: planned)
         case .none:
@@ -753,7 +762,8 @@ public struct MigrationEngine: Sendable {
             }
             guard vaultDir != nil else {
                 return .unreachable(
-                    "migration \(operationID) predates the journal's `direction` field and its vault volume is not present, so \(destination) cannot be confirmed to be a copy this tool made")
+                    "migration \(operationID) predates the journal's `direction` field and its vault volume is not present, so \(destination) cannot be confirmed to be a copy this tool made"
+                )
             }
             return .declined("\(destination) is not where this migration would have put its copy. Nothing is removed.")
         }
@@ -769,9 +779,14 @@ public struct MigrationEngine: Sendable {
         let phases = Set(entries.compactMap { $0.detail["phase"] })
         if !phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
             let aside = plannedForMessage.map { $0.paths[0] + ".xcodevault-removing-" + String(operationID.prefix(8)) }
-            let asideExists = aside.flatMap { a in { var st = stat(); return lstat(a, &st) == 0 }() ? a : nil }
+            let asideExists = aside.flatMap { a in
+                {
+                    var st = stat(); return lstat(a, &st) == 0
+                }() ? a : nil
+            }
             throw MigrationError(
-                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(plannedForMessage?.paths[1] ?? "the recorded destination") was verified and may be the only complete copy. Not deleting anything.\(asideExists.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")")
+                "Migration \(operationID) reached \(phases.sorted().joined(separator: "/")): the vault copy at \(plannedForMessage?.paths[1] ?? "the recorded destination") was verified and may be the only complete copy. Not deleting anything.\(asideExists.map { " The original was renamed to \($0); if it is intact, rename it back manually." } ?? "")"
+            )
         }
         guard let last = entries.last, last.state == .started || last.state == .failed else {
             throw MigrationError("Migration \(operationID) is in state \(entries.last?.state.rawValue ?? "?"); nothing to abort.")
@@ -785,7 +800,8 @@ public struct MigrationEngine: Sendable {
             // that same reason into a permanent record and must not tell its reader to run `forget`.
             throw MigrationError(
                 "Nothing was removed and nothing was recorded: \(why). Reconnect the volume and re-run; if it is gone for good, "
-                    + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records that a copy may remain on it.")
+                    + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records that a copy may remain on it."
+            )
         }
         let source = planned.paths[0], destination = planned.paths[1]
 
@@ -815,7 +831,9 @@ public struct MigrationEngine: Sendable {
                         + "that a copy may remain at that path.")
             }
         }
-        try journal.record(id: operationID, kind: .migration, state: .rolledBack, summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
+        try journal.record(
+            id: operationID, kind: .migration, state: .rolledBack,
+            summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
     }
 
     /// Failed or interrupted pre-verification migrations whose destination still exists on disk —

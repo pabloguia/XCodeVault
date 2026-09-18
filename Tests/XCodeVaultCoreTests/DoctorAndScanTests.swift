@@ -61,8 +61,9 @@ final class DoctorTests: XCTestCase {
         XCTAssertEqual(hit?.severity, .warning, "empty residue is a warning, not an error: \(f.map(\.id))")
         XCTAssertTrue(hit?.remediation?.contains("rmdir") == true, "empty residue may name rmdir")
         XCTAssertTrue(hit?.remediation?.contains("never `rm -rf`") == true, "must steer the user away from rm -rf explicitly: \(hit?.remediation ?? "nil")")
-        XCTAssertTrue(hit?.remediation?.contains("empty as of this scan") == true || hit?.remediation?.contains("Empty as of this scan") == true,
-                      "must not imply the emptiness is still guaranteed: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(
+            hit?.remediation?.contains("empty as of this scan") == true || hit?.remediation?.contains("Empty as of this scan") == true,
+            "must not imply the emptiness is still guaranteed: \(hit?.remediation ?? "nil")")
     }
 
     /// The canonical path must never report itself. Asserting this from a plain home layout is
@@ -129,20 +130,24 @@ final class DoctorTests: XCTestCase {
                 _ = t.file("CoreSimulator-odd/" + (placeAtRoot ? "" : "Devices/") + leftover, bytes: 4)
                 let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path))
                 let hit = f.first { $0.id == "shadow-coresimulator:home:CoreSimulator-odd" }
-                let where_ = placeAtRoot ? "at the root" : "inside Devices"
-                XCTAssertNotNil(hit, "still a CoreSimulator-shaped root (\(leftover) \(where_))")
-                XCTAssertFalse(hit?.detail.contains("nothing but an empty") == true,
-                               "must not claim emptiness with \(leftover) \(where_): \(hit?.detail ?? "nil")")
-                XCTAssertFalse(hit?.remediation?.contains("rmdir") == true,
-                               "must not offer rmdir when \(leftover) \(where_) would make it refuse")
+                let location = placeAtRoot ? "at the root" : "inside Devices"
+                XCTAssertNotNil(hit, "still a CoreSimulator-shaped root (\(leftover) \(location))")
+                XCTAssertFalse(
+                    hit?.detail.contains("nothing but an empty") == true,
+                    "must not claim emptiness with \(leftover) \(location): \(hit?.detail ?? "nil")")
+                XCTAssertFalse(
+                    hit?.remediation?.contains("rmdir") == true,
+                    "must not offer rmdir when \(leftover) \(location) would make it refuse")
                 // NOT `detail.contains(leftover)`: the branch's own boilerplate mentions
                 // ".DS_Store" as an example, so that assertion passes even when the message names
                 // nothing at all. Assert on the rendered leftovers segment instead.
                 let segment = placeAtRoot ? "alongside `Devices`: " : "inside `Devices`: "
-                XCTAssertTrue(hit?.detail.contains(segment + leftover) == true,
-                              "should name what is actually left (\(leftover) \(where_)): \(hit?.detail ?? "nil")")
-                XCTAssertFalse(hit?.detail.contains("either — .") == true,
-                               "must never render an empty leftovers list: \(hit?.detail ?? "nil")")
+                XCTAssertTrue(
+                    hit?.detail.contains(segment + leftover) == true,
+                    "should name what is actually left (\(leftover) \(location)): \(hit?.detail ?? "nil")")
+                XCTAssertFalse(
+                    hit?.detail.contains("either — .") == true,
+                    "must never render an empty leftovers list: \(hit?.detail ?? "nil")")
             }
         }
     }
@@ -161,8 +166,9 @@ final class DoctorTests: XCTestCase {
         let hit = f.first { $0.id == "shadow-coresimulator:home:CoreSimulator-real" }
         XCTAssertNotNil(hit)
         XCTAssertFalse(hit?.detail.contains("either — .") == true, "empty leftovers list: \(hit?.detail ?? "nil")")
-        XCTAssertTrue(hit?.detail.contains(".metadata_never_index") == true,
-                      "must name the hidden entry that will make rmdir refuse: \(hit?.detail ?? "nil")")
+        XCTAssertTrue(
+            hit?.detail.contains(".metadata_never_index") == true,
+            "must name the hidden entry that will make rmdir refuse: \(hit?.detail ?? "nil")")
         XCTAssertFalse(hit?.remediation?.contains("rmdir") == true, "not removable while that file is there")
     }
 
@@ -177,8 +183,9 @@ final class DoctorTests: XCTestCase {
             isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
-        XCTAssertTrue(f.contains { $0.path == t.path + "/ext/.stash/CoreSimulator" && $0.severity == .error },
-                      "a readable hidden directory must still be scanned: \(f.map(\.id))")
+        XCTAssertTrue(
+            f.contains { $0.path == t.path + "/ext/.stash/CoreSimulator" && $0.severity == .error },
+            "a readable hidden directory must still be scanned: \(f.map(\.id))")
     }
 
     /// A symlinked `Devices` must not reach the residue branch: `rmdir` returns ENOTDIR on a
@@ -192,10 +199,12 @@ final class DoctorTests: XCTestCase {
         t.symlink("CoreSimulator-linkdev/Devices", to: t.path + "/somewhere-empty")
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path))
         let hit = f.first { $0.id == "shadow-coresimulator:home:CoreSimulator-linkdev" }
-        XCTAssertFalse(hit?.remediation?.contains("rmdir") == true,
-                       "a symlinked Devices must never be offered for rmdir: \(hit?.remediation ?? "nil")")
-        XCTAssertFalse(hit?.detail.contains("nothing but an empty") == true,
-                       "must not claim it is an empty Devices directory: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(
+            hit?.remediation?.contains("rmdir") == true,
+            "a symlinked Devices must never be offered for rmdir: \(hit?.remediation ?? "nil")")
+        XCTAssertFalse(
+            hit?.detail.contains("nothing but an empty") == true,
+            "must not claim it is an empty Devices directory: \(hit?.detail ?? "nil")")
     }
 
     /// Regression: the first cut of the unreadable-intermediate check fired on every external
@@ -216,8 +225,9 @@ final class DoctorTests: XCTestCase {
             isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
-        XCTAssertFalse(f.contains { $0.id.hasPrefix("shadow-coresimulator-unscannable:") },
-                       "macOS metadata stores must not be reported every run: \(f.map(\.id))")
+        XCTAssertFalse(
+            f.contains { $0.id.hasPrefix("shadow-coresimulator-unscannable:") },
+            "macOS metadata stores must not be reported every run: \(f.map(\.id))")
     }
 
     /// D2: an unreadable directory one level below a volume root would otherwise hide a whole
@@ -236,8 +246,9 @@ final class DoctorTests: XCTestCase {
             isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
-        XCTAssertTrue(f.contains { $0.id == "shadow-coresimulator-unscannable:extuuid:locked" },
-                      "an unreadable intermediate must not silently hide the set below it: \(f.map(\.id))")
+        XCTAssertTrue(
+            f.contains { $0.id == "shadow-coresimulator-unscannable:extuuid:locked" },
+            "an unreadable intermediate must not silently hide the set below it: \(f.map(\.id))")
     }
 
     /// H2: the canonical set reached through an aliased parent must not report itself.
@@ -252,8 +263,9 @@ final class DoctorTests: XCTestCase {
             isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
-        XCTAssertFalse(f.contains { $0.id.hasPrefix("shadow-coresimulator:") && $0.id.contains("dev/CoreSimulator") },
-                       "the live device set must not be reported as its own duplicate: \(f.map(\.id))")
+        XCTAssertFalse(
+            f.contains { $0.id.hasPrefix("shadow-coresimulator:") && $0.id.contains("dev/CoreSimulator") },
+            "the live device set must not be reported as its own duplicate: \(f.map(\.id))")
     }
 
     /// H3: a root that cannot be enumerated must be reported as unknown, never passed over silently.
@@ -281,8 +293,9 @@ final class DoctorTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: devices)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: devices) }
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path))
-        XCTAssertEqual(f.first { $0.id == "shadow-coresimulator:home:CoreSimulator-locked2" }?.severity, .critical,
-                       "\(f.map { "\($0.id)=\($0.severity)" })")
+        XCTAssertEqual(
+            f.first { $0.id == "shadow-coresimulator:home:CoreSimulator-locked2" }?.severity, .critical,
+            "\(f.map { "\($0.id)=\($0.severity)" })")
     }
 
     /// A shadow set holding devices *while* a live redirect exists means both can take writes.
@@ -400,11 +413,13 @@ final class DoctorTests: XCTestCase {
         XCTAssertNotNil(hit)
         XCTAssertFalse(hit?.detail.contains("contains: .") == true, "empty list rendered as nothing: \(hit?.detail ?? "nil")")
         XCTAssertTrue(hit?.detail.contains("is empty") == true, "should say it is empty: \(hit?.detail ?? "nil")")
-        XCTAssertFalse(hit?.remediation?.contains("Compare with the local copies") == true,
-                       "nothing to compare when it is empty: \(hit?.remediation ?? "nil")")
+        XCTAssertFalse(
+            hit?.remediation?.contains("Compare with the local copies") == true,
+            "nothing to compare when it is empty: \(hit?.remediation ?? "nil")")
         XCTAssertTrue(hit?.remediation?.contains("rmdir") == true, "should offer the safe removal: \(hit?.remediation ?? "nil")")
-        XCTAssertTrue(hit?.remediation?.contains("not `rm -rf`") == true,
-                      "must steer away from rm -rf explicitly: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(
+            hit?.remediation?.contains("not `rm -rf`") == true,
+            "must steer away from rm -rf explicitly: \(hit?.remediation ?? "nil")")
     }
 
     /// Blocking regression from review, and the same defect this rewrite was meant to close, one
@@ -424,12 +439,15 @@ final class DoctorTests: XCTestCase {
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
         let hit = try? XCTUnwrap(f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") })
-        XCTAssertFalse(hit?.detail.contains("is empty") == true,
-                       "a .DS_Store is enough for rmdir to refuse: \(hit?.detail ?? "nil")")
-        XCTAssertFalse(hit?.remediation?.contains("rmdir") == true,
-                       "must not offer a removal that would refuse: \(hit?.remediation ?? "nil")")
-        XCTAssertTrue(hit?.detail.contains("plus 1 hidden entry") == true,
-                      "must state the count, not just the word: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(
+            hit?.detail.contains("is empty") == true,
+            "a .DS_Store is enough for rmdir to refuse: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(
+            hit?.remediation?.contains("rmdir") == true,
+            "must not offer a removal that would refuse: \(hit?.remediation ?? "nil")")
+        XCTAssertTrue(
+            hit?.detail.contains("plus 1 hidden entry") == true,
+            "must state the count, not just the word: \(hit?.detail ?? "nil")")
     }
 
     /// An emptied directory that something still redirects into is not "nothing at risk" — it is a
@@ -445,10 +463,12 @@ final class DoctorTests: XCTestCase {
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
         let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
-        XCTAssertFalse(hit?.detail.contains("nothing at risk") == true,
-                       "a live redirect target is not nothing at risk: \(hit?.detail ?? "nil")")
-        XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
-                       "must not offer removal while a redirect still points here: \(hit?.remediation ?? "nil")")
+        XCTAssertFalse(
+            hit?.detail.contains("nothing at risk") == true,
+            "a live redirect target is not nothing at risk: \(hit?.detail ?? "nil")")
+        XCTAssertFalse(
+            hit?.remediation?.contains("sudo rmdir") == true,
+            "must not offer removal while a redirect still points here: \(hit?.remediation ?? "nil")")
     }
 
     /// The redirect check has to survive three shapes that a raw string compare misses, all of
@@ -473,10 +493,12 @@ final class DoctorTests: XCTestCase {
                 totalBytes: 1, freeBytes: 1, isBootVolume: false)
             let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
             let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
-            XCTAssertFalse(hit?.detail.contains("nothing at risk") == true,
-                           "\(c.name) redirect must not read as safe: \(hit?.detail ?? "nil")")
-            XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
-                           "\(c.name) redirect must not be offered for removal: \(hit?.remediation ?? "nil")")
+            XCTAssertFalse(
+                hit?.detail.contains("nothing at risk") == true,
+                "\(c.name) redirect must not read as safe: \(hit?.detail ?? "nil")")
+            XCTAssertFalse(
+                hit?.remediation?.contains("sudo rmdir") == true,
+                "\(c.name) redirect must not be offered for removal: \(hit?.remediation ?? "nil")")
         }
     }
 
@@ -510,8 +532,9 @@ final class DoctorTests: XCTestCase {
             totalBytes: 1, freeBytes: 1, isBootVolume: false)
         let f = Doctor(home: t.path, runner: quiet).diagnose(report: fakeReport(home: t.path, volumes: [vol]))
         let hit = f.first { $0.id.hasPrefix("prior-tool:mac-ssd-rescue") }
-        XCTAssertFalse(hit?.remediation?.contains("sudo rmdir") == true,
-                       "a redirect into a subdirectory still makes removal unsafe: \(hit?.remediation ?? "nil")")
+        XCTAssertFalse(
+            hit?.remediation?.contains("sudo rmdir") == true,
+            "a redirect into a subdirectory still makes removal unsafe: \(hit?.remediation ?? "nil")")
     }
 
     func testUnreadablePriorToolDirectoryIsNotDescribedAsEmpty() throws {

@@ -87,7 +87,8 @@ public enum StorageCatalog {
             description: "Per-device data containers (apps, user data, caches). Delete unwanted devices with `simctl delete`; never symlink this tree.",
             regenerability: .userRecreatable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
-            evidence: "H5/F3 + E9 (2026-09-08): symlinking ~/Library/Developer/CoreSimulator is unsupported — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2/Xcode 26.5, but the layout leaves shadow device sets behind",
+            evidence:
+                "H5/F3 + E9 (2026-09-08): symlinking ~/Library/Developer/CoreSimulator is unsupported — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2/Xcode 26.5, but the layout leaves shadow device sets behind",
             evidenceStatus: .probable,
             notes: [
                 "No relocation strategy at any risk level. Unconditional (CLAUDE.md rule 7) — not contingent on E9, which has now run without reproducing the reported breakage; the rule stands on 'unverified, and known to produce shadow data'.",
@@ -169,7 +170,8 @@ public enum StorageCatalog {
                 "The simulated OS's own unified-log datastore and the symbolication table that goes with it. Written continuously by a booted device, whether or not anyone reads it.",
             regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
-            evidence: "F18 (2026-09-09): 1.2 GB of `db/diagnostics` + 0.3 GB of `db/uuidtext` across three devices; E18 (2026-09-15): the documented verb is refused inside a device",
+            evidence:
+                "F18 (2026-09-09): 1.2 GB of `db/diagnostics` + 0.3 GB of `db/uuidtext` across three devices; E18 (2026-09-15): the documented verb is refused inside a device",
             // Stays .probable. E18 is one machine, one runtime, one device type — and this field is
             // printed verbatim in the `compatibility` table (TextRenderer) whenever isExperimental
             // is false, which it is here. Raising it would flip a user-visible column to "verified"
@@ -225,7 +227,9 @@ public enum StorageCatalog {
             regenerability: .redownloadable, deletionRisk: .low, relocationRisk: .high,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged], privilege: .root,
             evidence: "F1 [COMMUNITY-REPRO]; E1 layout confirmed (empty on a healthy install)", evidenceStatus: .probable,
-            notes: ["`doctor` reports stranded .dmg files here; removal is a helper verb in M3."]),
+            notes: [
+                "`doctor` reports stranded .dmg files here. There is no removal verb: `sudo rm` is refused by policy on macOS 26.5 and simdiskimaged reaps the Inbox at startup, so the remediation is a restart."
+            ]),
         StorageCategory(
             id: "runtimeBundles", name: "Runtime bundles (Cryptex store)", subsystem: .coreSimulator,
             pathTemplates: ["/Library/Developer/CoreSimulator/Cryptex/Images/bundle"],

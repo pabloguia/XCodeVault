@@ -15,7 +15,23 @@ extension Doctor {
 
     func checkVaultVolumes(registry: VaultRegistry, volumes: [Volume]) -> [Finding] {
         let verifier = VaultVerifier(registry: registry, mountedVolumes: { volumes })
-        guard let checks = try? verifier.checkAll() else { return [] }
+        // "I could not check" is a finding, not the absence of one. `try? … else { return [] }`
+        // here reported a clean bill of health for every vault volume whenever the registry could
+        // not be read — and `doctor` exits 0 unless an `.error` finding exists, so the command
+        // whose whole job is to say what is wrong said nothing at all.
+        let checks: [VaultVolumeCheck]
+        do {
+            checks = try verifier.checkAll()
+        } catch {
+            return [
+                Finding(
+                    id: "vault-registry-unreadable", severity: .error, title: "Vault registry could not be read",
+                    detail: "\(error). No vault volume could be checked, so this run says nothing about them either way.",
+                    path: nil,
+                    remediation: "Check permissions on the vault registry, then re-run doctor. Do not treat this run as a clean result.",
+                    evidence: "Journal.ReadResult: silence from a store that could not be read is not a fact")
+            ]
+        }
         return checks.compactMap { c in
             switch c.state {
             case .verified: return nil
@@ -80,31 +96,79 @@ extension Doctor {
     }
 
     func checkInterruptedMigrations(journal: Journal) -> [Finding] {
-        guard let interrupted = try? journal.interrupted() else { return [] }
-        return interrupted.map { e in
-            Finding(
-                id: "interrupted:\(e.id)", severity: e.kind == .migration ? .error : .warning,
-                title: "Interrupted \(e.kind.rawValue) operation (\(e.summary))",
-                detail:
-                    "Journal shows this operation started at \(ISO8601DateFormatter().string(from: e.timestamp)) and never completed (crash, kill, or volume removal). Paths: \(e.paths.joined(separator: ", ")).",
-                path: e.paths.first,
-                remediation: e.kind != .migration
-                    ? "Check the paths listed; re-run the command if needed."
-                    : (["CLEANUP", "VERIFIED", "DONE"].contains(e.detail["phase"] ?? "")
-                        ? "The vault copy was verified before the interruption. Run `xcodevaultctl migration resume \(e.id)` to re-verify and finish removing the original (nothing is deleted unless it matches the vault copy)."
-                        : "Run `xcodevaultctl migration abort \(e.id)` — removes only the partial vault copy; the source is never touched."),
-                evidence: "docs/architecture/MIGRATION_ENGINE.md")
+        // Same rule as checkVaultVolumes: an unreadable journal cannot mean "no interrupted
+        // migrations". Journal.ReadResult exists to make that distinction and says so in its own
+        // doc comment; this call site used to erase it.
+        let interrupted: [JournalEntry]
+        var unreadableLines = 0
+        do {
+            let r = try journal.interruptedWithCompleteness()
+            interrupted = r.entries
+            unreadableLines = r.read.undecodableLines
+        } catch {
+            return [
+                Finding(
+                    id: "journal-unreadable:interrupted", severity: .error, title: "Journal could not be read",
+                    detail: "\(error). Interrupted migrations cannot be listed, so an operation may be open and unreported.",
+                    path: nil,
+                    remediation: "Check permissions on the journal, then re-run doctor. Do not treat this run as a clean result.",
+                    evidence: "Journal.ReadResult")
+            ]
         }
+        // A journal that opened but whose lines did not decode is not an empty history. `entries()`
+        // discards that count; `interruptedWithCompleteness()` carries it here so it can be said out
+        // loud rather than silently folded into "nothing interrupted".
+        var f: [Finding] = []
+        if unreadableLines > 0 {
+            f.append(
+                Finding(
+                    id: "journal-partially-corrupt", severity: .warning,
+                    title: "\(unreadableLines) journal line(s) could not be decoded",
+                    detail: "Those operations are invisible to every check that reads the journal, including this one.",
+                    path: nil,
+                    remediation: "Keep the journal file; it is the only record of what was migrated. Attach it to an issue.",
+                    evidence: "Journal.ReadResult.undecodableLines")
+            )
+        }
+        return f
+            + interrupted.map { e in
+                Finding(
+                    id: "interrupted:\(e.id)", severity: e.kind == .migration ? .error : .warning,
+                    title: "Interrupted \(e.kind.rawValue) operation (\(e.summary))",
+                    detail:
+                        "Journal shows this operation started at \(ISO8601DateFormatter().string(from: e.timestamp)) and never completed (crash, kill, or volume removal). Paths: \(e.paths.joined(separator: ", ")).",
+                    path: e.paths.first,
+                    remediation: e.kind != .migration
+                        ? "Check the paths listed; re-run the command if needed."
+                        : (["CLEANUP", "VERIFIED", "DONE"].contains(e.detail["phase"] ?? "")
+                            ? "The vault copy was verified before the interruption. Run `xcodevaultctl migration resume \(e.id)` to re-verify and finish removing the original (nothing is deleted unless it matches the vault copy)."
+                            : "Run `xcodevaultctl migration abort \(e.id)` — removes only the partial vault copy; the source is never touched."),
+                    evidence: "docs/architecture/MIGRATION_ENGINE.md")
+            }
     }
 
     func checkLeftoverPartialCopies(journal: Journal) -> [Finding] {
-        guard let leftovers = try? MigrationEngine(journal: journal).leftoverPartialCopies() else { return [] }
+        let leftovers: [JournalEntry]
+        do {
+            leftovers = try MigrationEngine(journal: journal).leftoverPartialCopies()
+        } catch {
+            return [
+                Finding(
+                    id: "journal-unreadable:leftovers", severity: .error, title: "Leftover partial copies could not be checked",
+                    detail: "\(error). A partial copy may be occupying space on a vault volume without being named here.",
+                    path: nil,
+                    remediation: "Check permissions on the journal, then re-run doctor. Do not treat this run as a clean result.",
+                    evidence: "Journal.ReadResult")
+            ]
+        }
         return leftovers.map { e in
             let bytes = DiskUsage.measure(e.paths[1])?.allocatedBytes ?? 0
             return Finding(
                 id: "partial-copy:\(e.id)", severity: .warning, title: "Partial vault copy left by failed migration (\(ByteCount.format(bytes)))",
-                detail: "\(e.paths[1]) was being written when the migration failed (typically the volume disappeared mid-copy) and could not be cleaned up then. It blocks retrying the migration and wastes vault space. The source \(e.paths[0]) was never touched.",
-                path: e.paths[1], remediation: "`xcodevaultctl migration abort \(e.id)` removes only this partial copy.", evidence: "E6 software run 2 (2026-09-06)")
+                detail:
+                    "\(e.paths[1]) was being written when the migration failed (typically the volume disappeared mid-copy) and could not be cleaned up then. It blocks retrying the migration and wastes vault space. The source \(e.paths[0]) was never touched.",
+                path: e.paths[1], remediation: "`xcodevaultctl migration abort \(e.id)` removes only this partial copy.",
+                evidence: "E6 software run 2 (2026-09-06)")
         }
     }
 

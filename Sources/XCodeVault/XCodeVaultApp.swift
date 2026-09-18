@@ -48,11 +48,11 @@ final class AppModel {
         isScanning = false
     }
 
-    func applyClean(actions: [CleanAction]) async {
+    func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
         do {
-            let result = try await Task.detached { try CleanExecutor().execute(selected) }.value
+            let result = try await Task.detached { try CleanExecutor(useTrash: useTrash).execute(selected) }.value
             lastCleanResult = result
             await refresh()
         } catch { lastError = "\(error)" }
@@ -210,6 +210,19 @@ struct CleanView: View {
     @Bindable var model: AppModel
     @State private var selection = Set<String>()
     @State private var confirm = false
+    @State private var useTrash = true
+
+    /// The rows that will actually be deleted: selected, and not gated behind the privileged
+    /// helper. Rows needing root are listed and selectable but never acted on.
+    ///
+    /// This is a single definition on purpose. The confirmation dialog used to title itself with
+    /// `selection.count` while the delete acted on this filtered set, so selecting one root-owned
+    /// row alongside two ordinary ones asked "Delete 3 item(s) permanently?" and deleted two. The
+    /// count in a destructive confirmation is the last thing a user reads before agreeing to it.
+    private func deletable(in plan: CleanPlan) -> [CleanAction] {
+        plan.actions.filter { selection.contains($0.id) && !$0.requiresRoot }
+    }
+
     var body: some View {
         if let plan = model.cleanPlan {
             VStack(alignment: .leading) {
@@ -222,16 +235,25 @@ struct CleanView: View {
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
                 ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }
                 HStack {
-                    let chosen = plan.actions.filter { selection.contains($0.id) && !$0.requiresRoot }
+                    let chosen = deletable(in: plan)
                     Text("\(chosen.count) selected · \(ByteCount.format(chosen.reduce(0) { $0 + $1.bytes }))")
+                    // The CLI has --trash; without this the GUI was strictly more destructive than
+                    // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
+                    Toggle("Move to Trash instead of deleting (space is freed only when the Trash is emptied)", isOn: $useTrash)
                     Spacer()
                     Button("Delete selected…") { confirm = true }.disabled(chosen.isEmpty)
                 }.padding()
             }
-            .confirmationDialog("Delete \(selection.count) item(s) permanently?", isPresented: $confirm) {
-                Button("Delete", role: .destructive) {
+            .confirmationDialog(
+                useTrash
+                    ? "Move \(deletable(in: plan).count) item(s) to the Trash?"
+                    : "Delete \(deletable(in: plan).count) item(s) permanently?",
+                isPresented: $confirm
+            ) {
+                Button(useTrash ? "Move to Trash" : "Delete", role: .destructive) {
                     Task {
-                        await model.applyClean(actions: plan.actions.filter { selection.contains($0.id) && !$0.requiresRoot }); selection = []
+                        await model.applyClean(actions: deletable(in: plan), useTrash: useTrash)
+                        selection = []
                     }
                 }
             } message: {

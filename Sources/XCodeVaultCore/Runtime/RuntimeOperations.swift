@@ -225,7 +225,8 @@ public struct RuntimeOperations: Sendable {
                 } ?? "\(req.platform) is installed, but no -buildVersion was given and `-downloadPlatform` fetches the LATEST"
             w.append(
                 "\(why). If what Xcode fetches is the image you already have, this is a copy-out and internal use stays flat; otherwise it is a full download "
-                    + "that installs internally first. Nothing local can tell the two apart — measured behaviour exists only for the case where they coincided (F11).")
+                    + "that installs internally first. Nothing local can tell the two apart — measured behaviour exists only for the case where they coincided (F11)."
+            )
             warnIfTight("this may turn out to be a download that stages through an install first")
         case .download:
             w.append(downloadWarning)
@@ -369,7 +370,9 @@ public struct RuntimeOperations: Sendable {
                 let sdkToPlatform = ["iphonesimulator": "iOS", "appletvsimulator": "tvOS", "watchsimulator": "watchOS", "xrsimulator": "visionOS"]
                 let platform = parts.first.flatMap { sdkToPlatform[$0.lowercased()] }
                 let restore = p + "/Restore"
-                guard let dmg = (try? FileManager.default.contentsOfDirectory(atPath: restore))?.first(where: { $0.hasSuffix("_Cryptex.dmg") }) else { continue }
+                guard let dmg = (try? FileManager.default.contentsOfDirectory(atPath: restore))?.first(where: { $0.hasSuffix("_Cryptex.dmg") }) else {
+                    continue
+                }
                 let dmgPath = restore + "/" + dmg
                 let attrs = try? FileManager.default.attributesOfItem(atPath: dmgPath)
                 out.append(

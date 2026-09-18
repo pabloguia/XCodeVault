@@ -27,7 +27,15 @@ public struct DriveBenchmark: Sendable {
         let fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0o600)
         guard fd >= 0 else { throw CleanError("cannot create benchmark file in \(dir): \(String(cString: strerror(errno)))") }
         defer { close(fd); unlink(path) }
-        fcntl(fd, F_NOCACHE, 1)  // bypass the unified buffer cache so we measure the device
+        // Bypass the unified buffer cache so we measure the device. The result is checked rather
+        // than discarded: if F_NOCACHE does not take, every number below is the page cache's
+        // throughput rather than the drive's — wrong by orders of magnitude, and wrong in the
+        // flattering direction, presented as a measurement. A benchmark that cannot measure must
+        // say so, not return a good-looking number.
+        guard fcntl(fd, F_NOCACHE, 1) != -1 else {
+            throw CleanError(
+                "cannot disable the buffer cache for \(dir) (\(String(cString: strerror(errno)))); a benchmark here would measure the cache, not the drive")
+        }
 
         // Sequential write to size the file.
         let chunk = 1 << 20

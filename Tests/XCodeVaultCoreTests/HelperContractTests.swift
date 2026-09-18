@@ -1,7 +1,7 @@
 import XCTest
+import XCodeVaultHelperProtocol
 
 @testable import XCodeVaultCore
-import XCodeVaultHelperProtocol
 
 /// The client and the privileged helper agree on a few constants by convention rather than by a
 /// shared type: `XCodeVaultCore` is declared with no dependencies ("no UI, no privileged calls, no
@@ -33,5 +33,20 @@ final class HelperContractTests: XCTestCase {
         // the point of use too; this assertion is the second lock, not the only one.
         XCTAssertNotEqual(VaultDirectory.name, "..")
         XCTAssertNotEqual(VaultDirectory.name, ".")
+    }
+
+    /// The helper and the rest of the product carry their version separately — `HelperIdentity`
+    /// lives in the XPC contract module, which by design cannot see `XCodeVaultCore` — so "the
+    /// version" has two sources of truth and nothing reconciled them. That matters because the
+    /// `version()` verb exists for version-skew checks: a daemon that reports a different version
+    /// from the client that shipped with it makes the one mechanism for detecting skew lie.
+    ///
+    /// Found by the helper-security review of 2026-09-18, after the XPC surface changed (a verb was
+    /// removed) while `HelperIdentity.version` stayed put. This assertion is the reconciliation the
+    /// module boundary prevents expressing in code.
+    func testHelperVersionMatchesTheProductVersion() {
+        XCTAssertEqual(
+            HelperIdentity.version, XCodeVaultVersion.current,
+            "the helper reports a different version from the product it ships inside; the version() verb is the skew check and it must not lie")
     }
 }

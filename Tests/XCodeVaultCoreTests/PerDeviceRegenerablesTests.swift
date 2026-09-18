@@ -173,7 +173,8 @@ final class PerDeviceRegenerablesTests: XCTestCase {
         let withoutSlices = scanner.summarize(items: all.filter { !PerDeviceRegenerablesTests.perDeviceIDs.contains($0.categoryID) }, runtimes: [])
         XCTAssertEqual(
             summary.internalDeveloperBytes, withoutSlices.internalDeveloperBytes,
-            "adding the breakdown changed the machine-wide total by \(Int64(summary.internalDeveloperBytes) - Int64(withoutSlices.internalDeveloperBytes)) bytes")
+            "adding the breakdown changed the machine-wide total by \(Int64(summary.internalDeveloperBytes) - Int64(withoutSlices.internalDeveloperBytes)) bytes"
+        )
         XCTAssertEqual(summary.appleManagedBytes, withoutSlices.appleManagedBytes)
         XCTAssertEqual(summary.cleanableBytes, withoutSlices.cleanableBytes)
         XCTAssertEqual(summary.relocatableBytes, withoutSlices.relocatableBytes)

@@ -63,7 +63,6 @@ public enum MountStatus {
         public var isReadOnly: Bool { flags & UInt32(MNT_RDONLY) != 0 }
         public var isLocal: Bool { flags & UInt32(MNT_LOCAL) != 0 }
         public var ignoresOwnership: Bool { flags & UInt32(MNT_IGNORE_OWNERSHIP) != 0 }
-        public var isNoBrowse: Bool { flags & UInt32(MNT_DONTBROWSE) != 0 }
     }
 
     /// The filesystem that serves `path` (walks up to the mount point).

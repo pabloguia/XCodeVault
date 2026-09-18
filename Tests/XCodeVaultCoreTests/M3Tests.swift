@@ -51,8 +51,9 @@ final class VaultTests: XCTestCase {
             XCTAssertTrue("\($0)".contains("Nothing was written"), "\($0)")
         }
         // The claim in that message has to be literally true: no directory, no sentinel.
-        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/" + VaultVolume.directoryName),
-                       "the vault directory must not survive a refusal that says nothing was written")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: dir + "/" + VaultVolume.directoryName),
+            "the vault directory must not survive a refusal that says nothing was written")
         XCTAssertEqual(try reg.volumes().count, 0)
     }
 
@@ -169,9 +170,11 @@ final class VaultTests: XCTestCase {
         let t = TempDir()
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
         // Old registry entries without relativeDirectory decode to the default.
-        try Data("""
-        [{"volumeUUID":"U","volumeName":"N","lastMountPoint":"/Volumes/N","registeredAt":"2026-09-06T00:00:00Z","sentinelID":"s"}]
-        """.utf8).write(to: reg.url)
+        try Data(
+            """
+            [{"volumeUUID":"U","volumeName":"N","lastMountPoint":"/Volumes/N","registeredAt":"2026-09-06T00:00:00Z","sentinelID":"s"}]
+            """.utf8
+        ).write(to: reg.url)
         XCTAssertEqual(try reg.volumes().first?.relativeDirectory, "XCodeVault")
         XCTAssertEqual(try reg.volumes().first?.lastVaultDirectory, "/Volumes/N/XCodeVault")
         // Escapes are refused at registration.
@@ -400,7 +403,9 @@ final class MigrationEngineTests: XCTestCase {
             if let victim = FileManager.default.enumerator(atPath: p.destination)?
                 .compactMap({ $0 as? String })
                 .map({ p.destination + "/" + $0 })
-                .first(where: { var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG })
+                .first(where: {
+                    var st = stat(); return lstat($0, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG
+                })
             {
                 _ = Self.shell("/bin/chmod", ["+a", "\(user) deny delete", victim])
                 acled.path = victim

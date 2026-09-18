@@ -176,16 +176,6 @@ xcv_redact() {
         fi
         lesc=$(xcv_re_escape "$label")
 
-        # The boot volume is redacted in its `/Volumes/` form ONLY, and never as a bare label.
-        # Its name is an ordinary path component: on a machine whose boot volume is called `MacOS`,
-        # a bare-label rule rewrites every `Contents/MacOS/` in every bundle path — including the
-        # binary paths that ARE the finding in E14a, E14b and E13b. Word boundaries do not save it,
-        # because `/` is not a word character. Redacting a name is not worth destroying evidence.
-        if [ -L "$vol" ] && [ "$(readlink "$vol")" = "/" ]; then
-            args+=(-e "s#/Volumes/$lesc#/Volumes/<bootvolume>#g")
-            continue
-        fi
-
         # A word boundary only fires where the label's own edge is a word character: [[:<:]] needs
         # one to its right, [[:>:]] one to its left. A label like `Backup.` or `-Drive` has a
         # non-word edge, so the boundary there matches nothing and the whole bare-label rule
@@ -193,6 +183,26 @@ xcv_redact() {
         # label's own punctuation is the delimiter and the rule over-redacts rather than leaking.
         case "$label" in [[:alnum:]_]*) lb='[[:<:]]' ;; *) lb='' ;; esac
         case "$label" in *[[:alnum:]_]) rb='[[:>:]]' ;; *) rb='' ;; esac
+
+        # The boot volume's name is an ordinary path component: on a machine whose boot volume is
+        # called `MacOS`, an unguarded bare-label rule rewrites every `Contents/MacOS/` in every
+        # bundle path — including the binary paths that ARE the finding in E14a, E14b and E13b.
+        # Word boundaries do not save it, because `/` is not a word character.
+        #
+        # This used to `continue` here, redacting only the `/Volumes/` form and leaving the bare
+        # label alone — which publishes a boot volume named after its owner verbatim. The Swift
+        # redactor solved it with a `(?<!/)` lookbehind (see Redaction.swift). BSD sed has no
+        # lookbehind, so the same rule is expressed as an explicit not-a-slash character that is
+        # captured and put back, plus line-start and whole-line variants, because a capture cannot
+        # match the empty string at the start of a line.
+        if [ -L "$vol" ] && [ "$(readlink "$vol")" = "/" ]; then
+            args+=(-e "s#/Volumes/$lesc#/Volumes/<bootvolume>#g" \
+                   -e "s#^$lesc\$#<bootvolume>#g" \
+                   -e "s#^$lesc$rb#<bootvolume>#g" \
+                   -e "s#\\([^/]\\)$lb$lesc$rb#\\1<bootvolume>#g")
+            continue
+        fi
+
         args+=(-e "s#/Volumes/$lesc#/Volumes/<vault>#g" -e "s#$lb$lesc$rb#<vault>#g")
     done
 

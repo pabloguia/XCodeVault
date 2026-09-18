@@ -167,8 +167,19 @@ public struct TreeVerifier: Sendable {
             if s.acl != d.acl { add(Mismatch(relativePath: rel, reason: "ACL differs")) }
             if deep && s.type == S_IFREG {
                 hashed += 1
+                // Fail-closed in every branch of the switch below: a file that could not be read
+                // is a Mismatch, never a pass. What used to be wrong was the message — an EACCES or an
+                // EIO on a failing enclosure was reported as "content hash differs", telling the
+                // user their archive is corrupt when the truth is that it could not be read. On a
+                // multi-hundred-gigabyte non-regenerable migration that is the difference between
+                // "check permissions" and "the drive is failing".
                 let a = try? TreeVerifier.sha256(ofFile: source + "/" + rel), b = try? TreeVerifier.sha256(ofFile: destination + "/" + rel)
-                if a == nil || a != b { add(Mismatch(relativePath: rel, reason: "content hash differs")) }
+                switch (a, b) {
+                case (nil, nil): add(Mismatch(relativePath: rel, reason: "neither copy could be read"))
+                case (nil, _): add(Mismatch(relativePath: rel, reason: "source could not be read"))
+                case (_, nil): add(Mismatch(relativePath: rel, reason: "destination could not be read"))
+                default: if a != b { add(Mismatch(relativePath: rel, reason: "content hash differs")) }
+                }
             }
         }
         for rel in dst.entries.keys where src.entries[rel] == nil { add(Mismatch(relativePath: rel, reason: "extra in destination")) }

@@ -84,6 +84,26 @@ check "a volume UUID is redacted" \
 check "the boot volume is redacted, and marked as the boot volume" \
     "/Volumes/<bootvolume>/Users" "$(redact "/Volumes/BootName/Users")"
 
+# The boot volume's BARE label. This half of the rule was missing until 2026-09-18: only the
+# `/Volumes/` form was redacted, so a boot volume named after its owner — which is the default on
+# a Mac set up with a personal name — was published verbatim in every evidence file. The Swift
+# redactor had it right (`(?<!/)` in Redaction.swift); the shell one did not, while
+# Redaction.swift's header claimed the two were kept in step.
+check "the boot volume's bare label is redacted, not only its /Volumes/ form" \
+    "volumeName: <bootvolume>" "$(redact "volumeName: BootName")"
+check "the boot volume's bare label is redacted in prose" \
+    "the <bootvolume> volume is full" "$(redact "the BootName volume is full")"
+check "the boot volume's bare label is redacted when it is the whole line" \
+    "<bootvolume>" "$(redact "BootName")"
+
+# And the reason the bare-label rule was left out in the first place, which must stay true: the
+# label is also an ordinary path component. A rule without the not-a-slash guard rewrites every
+# app bundle path in the evidence — the binary paths that ARE the finding in E14a, E14b and E13b.
+check "a path component equal to the boot volume label survives" \
+    "/Applications/Xcode.app/Contents/BootName/Xcode" "$(redact "/Applications/Xcode.app/Contents/BootName/Xcode")"
+check "a deeper path component equal to the boot volume label survives" \
+    "/a/BootName/b/BootName/c" "$(redact "/a/BootName/b/BootName/c")"
+
 check "regex metacharacters in a label are escaped, not interpreted" \
     "/Volumes/<vault>/x" "$(redact "/Volumes/Weird.Name+1/x")"
 

@@ -298,7 +298,8 @@ final class ReReviewTests: XCTestCase {
         try f.journal.record(
             id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, stranded],
             detail: ["vault": "VU", "phase": "PLAN", "category": "archives", "direction": "externalize"])
-        try f.journal.record(id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, stranded], detail: ["phase": "COPY"])
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, stranded], detail: ["phase": "COPY"])
 
         XCTAssertThrowsError(try engine.abort(operationID: plan.operationID)) { e in
             XCTAssertTrue("\(e)".contains("not the partial copy this externalization made"), "\(e)")
@@ -316,7 +317,8 @@ final class ReReviewTests: XCTestCase {
         try f.journal.record(
             id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination],
             detail: ["vault": "VU", "phase": "PLAN", "category": "archives"])
-        try f.journal.record(id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .started, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
         try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: plan.destination + "/partial", contents: Data([1]))
         XCTAssertEqual(try engine.leftoverPartialCopies().map(\.id), [plan.operationID], "precondition: the partial copy is visible")
@@ -471,7 +473,8 @@ final class ReReviewTests: XCTestCase {
         try f.journal.record(
             id: op, kind: .migration, state: .planned, summary: "restore archives", paths: [f.vaultDir + "/archives/Archives", elsewhere],
             detail: ["vault": "VU", "phase": "PLAN", "category": "archives", "direction": "restore"])
-        try f.journal.record(id: op, kind: .migration, state: .started, summary: "COPY", paths: [f.vaultDir + "/archives/Archives", elsewhere], detail: ["phase": "COPY"])
+        try f.journal.record(
+            id: op, kind: .migration, state: .started, summary: "COPY", paths: [f.vaultDir + "/archives/Archives", elsewhere], detail: ["phase": "COPY"])
 
         XCTAssertThrowsError(try engine.abort(operationID: op), "precondition: abort declines this one")
         try engine.forget(operationID: op, confirmComparedBothCopies: true)
@@ -617,7 +620,9 @@ final class E6LeftoverTests: XCTestCase {
         f.t.file("vault/" + VaultVolume.directoryName + "/archives/Archives/partial.bin", bytes: 4096)
         let leftovers = try engine.leftoverPartialCopies()
         XCTAssertEqual(leftovers.map(\.id), [plan.operationID])
-        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")) { XCTAssertTrue("\($0)".contains("migration abort \(plan.operationID)"), "\($0)") }
+        XCTAssertThrowsError(try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")) {
+            XCTAssertTrue("\($0)".contains("migration abort \(plan.operationID)"), "\($0)")
+        }
         try engine.abort(operationID: plan.operationID)
         XCTAssertFalse(FileManager.default.fileExists(atPath: plan.destination))
         XCTAssertTrue(FileManager.default.fileExists(atPath: f.archives + "/2026-09-02/B.xcarchive/Info.plist"), "source untouched")
@@ -708,5 +713,114 @@ final class ReviewFixLocationsTests: XCTestCase {
         } else {
             throw XCTSkip("no plain directory under /Volumes on this machine")
         }
+    }
+}
+
+/// Tests for the 2026-09-18 pre-publication review. The migration-safety review of that day
+/// observed that none of its eight changes had a single test, which is the same shape as the
+/// findings the review itself was fixing — a claim with nothing holding it.
+final class PrePublicationReviewTests: XCTestCase {
+
+    // MARK: - TreeVerifier distinguishes "could not read" from "differs", and stays fail-closed
+
+    /// The guard was always fail-closed; only the message was wrong, reporting an EACCES as
+    /// "content hash differs" — which tells a user their archive is corrupt when the truth is that
+    /// it could not be read. On a multi-hundred-gigabyte non-regenerable migration that is the
+    /// difference between "check permissions" and "the drive is failing".
+    func testAnUnreadableSourceIsAMismatchAndSaysWhich() throws {
+        try XCTSkipIf(getuid() == 0, "root ignores mode 000, so the unreadable case cannot be staged")
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xcv-tv-\(UUID().uuidString)")
+        let src = root.appendingPathComponent("src"), dst = root.appendingPathComponent("dst")
+        try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dst, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: src.appendingPathComponent("f").path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try Data("payload".utf8).write(to: src.appendingPathComponent("f"))
+        try Data("payload".utf8).write(to: dst.appendingPathComponent("f"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: src.appendingPathComponent("f").path)
+
+        let report = TreeVerifier(deep: true).verify(source: src.path, destination: dst.path)
+        XCTAssertFalse(report.isIdentical, "an unreadable file must never verify as identical — this is the fail-closed property")
+        let reasons = report.mismatches.map(\.reason)
+        XCTAssertTrue(
+            reasons.contains(where: { $0.contains("could not be read") }),
+            "an unreadable file must say so, not be reported as a content difference: \(reasons)")
+        XCTAssertFalse(
+            reasons.contains("content hash differs"),
+            "reporting EACCES as a hash difference is the defect this test exists for: \(reasons)")
+    }
+
+    // MARK: - xcodeIsRunning identifies by bundle identifier, not by bundle directory name
+
+    /// The first version of the process-table rewrite matched `/Xcode.app/Contents/MacOS/Xcode`,
+    /// which looked tighter and was a regression: Xcode betas install as `Xcode-beta.app`, and
+    /// anyone keeping several toolchains renames them. The `NSWorkspace` query it replaced caught
+    /// all of those. Caught by the migration-safety review before it was committed.
+    func testARenamedOrBetaXcodeIsStillRecognised() {
+        // The seam takes a path -> bundle-identifier function, so the predicate is testable without
+        // launching anything. Any process whose executable sits at .app/Contents/MacOS/Xcode and
+        // whose bundle says com.apple.dt.Xcode counts, whatever the bundle is called.
+        for bundle in ["Xcode.app", "Xcode-beta.app", "Xcode_16.4.app", "Xcode26.app"] {
+            let path = "/Applications/\(bundle)/Contents/MacOS/Xcode"
+            XCTAssertTrue(
+                CleanExecutor.isXcodeExecutable(path, bundleIdentifierAt: { _ in "com.apple.dt.Xcode" }),
+                "\(bundle) must be recognised; matching the bundle directory name misses every renamed install")
+        }
+    }
+
+    /// The other direction: a folder merely named Xcode.app, or a different app, must not answer
+    /// this question — a false positive here blocks a legitimate clean forever.
+    func testSomethingThatIsNotXcodeDoesNotCount() {
+        let real = "/Applications/Xcode.app/Contents/MacOS/Xcode"
+        XCTAssertFalse(
+            CleanExecutor.isXcodeExecutable(real, bundleIdentifierAt: { _ in "com.example.NotXcode" }),
+            "only com.apple.dt.Xcode counts")
+        XCTAssertFalse(CleanExecutor.isXcodeExecutable(real, bundleIdentifierAt: { _ in nil }), "an unreadable Info.plist is not Xcode")
+        // A directory merely named Xcode.app, and an executable outside a bundle, must not answer.
+        XCTAssertFalse(
+            CleanExecutor.isXcodeExecutable("/tmp/Xcode.app", bundleIdentifierAt: { _ in "com.apple.dt.Xcode" }),
+            "a bundle directory is not the running executable")
+        XCTAssertFalse(
+            CleanExecutor.isXcodeExecutable("/usr/bin/Xcode", bundleIdentifierAt: { _ in "com.apple.dt.Xcode" }),
+            "an executable outside a .app bundle must not match")
+    }
+
+    // MARK: - doctor reports "I could not check" rather than a clean bill of health
+
+    /// `doctor` exits 0 unless an `.error` finding exists, so a registry that could not be read used
+    /// to make the command whose whole job is to say what is wrong say nothing at all.
+    func testAnUnreadableVaultRegistryIsAnErrorFindingNotSilence() throws {
+        try XCTSkipIf(getuid() == 0, "root ignores mode 000")
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xcv-reg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("volumes.json")
+        try Data("[]".utf8).write(to: url)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+
+        let findings = Doctor().checkVaultVolumes(registry: VaultRegistry(url: url), volumes: [])
+        XCTAssertTrue(
+            findings.contains { $0.id == "vault-registry-unreadable" && $0.severity == .error },
+            "an unreadable registry must produce an error finding, not an empty result: \(findings.map(\.id))")
+    }
+
+    /// A journal that opens but whose lines do not decode is not an empty history — the distinction
+    /// `Journal.ReadResult` exists to preserve, and which `entries()` discards.
+    func testAJournalOfUndecodableLinesIsReportedRatherThanReadAsEmpty() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xcv-jrl-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("journal.jsonl")
+        try Data("{not json\n{also not json\n".utf8).write(to: url)
+
+        let findings = Doctor().checkInterruptedMigrations(journal: Journal(url: url))
+        XCTAssertTrue(
+            findings.contains { $0.id == "journal-partially-corrupt" },
+            "two undecodable lines must be reported, not silently read as 'nothing interrupted': \(findings.map(\.id))")
     }
 }

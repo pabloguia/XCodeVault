@@ -20,14 +20,15 @@ final class OwnershipAdviceTests: XCTestCase {
         XCTAssertTrue(
             advice.contains(
                 "sudo install -d -o \(OwnershipAdvice.shellQuoted(user)) -g \(OwnershipAdvice.shellQuoted(group)) -m 755 '/Volumes/Dev'\\''s SSD/XCodeVault'"),
-                      "the pasted command must be correct verbatim: \(advice)")
+            "the pasted command must be correct verbatim: \(advice)")
         XCTAssertFalse(user.isEmpty)
         XCTAssertFalse(group.isEmpty)
         // `install -d` over `mkdir`+`chown` for idempotency, NOT atomicity: install(1)
         // does mkdir then chown, so the root-owned window exists either way.
         XCTAssertFalse(advice.contains("mkdir"), "one idempotent command beats mkdir + chown")
-        XCTAssertTrue(advice.contains("XCodeVault will not run this for you"),
-                      "must be explicit that the tool does not run privileged commands itself")
+        XCTAssertTrue(
+            advice.contains("XCodeVault will not run this for you"),
+            "must be explicit that the tool does not run privileged commands itself")
     }
 
     func testWritableDirectoryIsNotReportedAsAProblem() {
@@ -38,8 +39,9 @@ final class OwnershipAdviceTests: XCTestCase {
 
     func testMissingPathIsTheCallersProblemNotOurs() {
         let t = TempDir()
-        XCTAssertNil(OwnershipAdvice.writabilityProblem(t.path + "/does-not-exist"),
-                     "absence is handled by the create path; this check is only about usability")
+        XCTAssertNil(
+            OwnershipAdvice.writabilityProblem(t.path + "/does-not-exist"),
+            "absence is handled by the create path; this check is only about usability")
     }
 
     func testAFileWhereTheVaultDirectoryShouldBeIsReported() {

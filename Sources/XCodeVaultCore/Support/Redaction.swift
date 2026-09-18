@@ -3,10 +3,20 @@ import Foundation
 /// Removes machine-identifying strings from text that is about to be published.
 ///
 /// `report` exists to be pasted into a public issue, so this is the Swift counterpart of
-/// `xcv_redact` in `scripts/experiments/common.sh`. The two are deliberately kept in step: they are
-/// the project's only redactors, they publish into the same places, and every defect found in one
-/// has also been present in the other. The three the shell version had to learn under test, all of
-/// which were present here too until 2026-09-17:
+/// `xcv_redact` in `scripts/experiments/common.sh`. The two must be kept in step: they are the
+/// project's only redactors and they publish into the same places.
+///
+/// **Nothing mechanically compares them, and they have diverged.** An earlier version of this
+/// comment claimed "every defect found in one has also been present in the other", which was false
+/// when it was written: the boot volume's bare label was redacted here and not there, so a boot
+/// volume named after its owner — the default on a Mac set up with a personal name — was published
+/// verbatim in every evidence file the shell harness produced. The shell side gained the rule on
+/// 2026-09-18 and `scripts/experiments/test-common.sh` now pins both halves of it, but a parity
+/// *test* across the two implementations still does not exist. Treat the pairing as a convention
+/// that has already failed once, and change both together.
+///
+/// The three defects the shell version had to learn under test, all of which were present here too
+/// until 2026-09-17:
 ///
 ///   - **The home directory is a path prefix, not a word.** Unanchored, `/Users/dev` rewrites
 ///     `/Users/devops` into `~ops` — corrupting rather than protecting.

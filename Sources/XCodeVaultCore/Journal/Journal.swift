@@ -95,11 +95,23 @@ public struct Journal: Sendable {
         return ReadResult(entries: out, filePresent: true, undecodableLines: bad)
     }
 
+    /// Operations whose last recorded state is `started` — i.e. interrupted by a crash or kill,
+    /// together with the completeness of the read that produced them.
+    ///
+    /// Returning the `ReadResult` rather than just the entries is the point: `entries()` discards
+    /// `undecodableLines`, so a journal that is readable but whose lines are all corrupt yields "no
+    /// interrupted migrations" — which is the exact distinction `ReadResult` exists to preserve. A
+    /// caller that reports findings must be able to say "I could not tell".
+    public func interruptedWithCompleteness() throws -> (entries: [JournalEntry], read: ReadResult) {
+        let r = try read()
+        var last: [String: JournalEntry] = [:]
+        for e in r.entries { last[e.id] = e }
+        return (last.values.filter { $0.state == .started }.sorted { $0.sequence < $1.sequence }, r)
+    }
+
     /// Operations whose last recorded state is `started` — i.e. interrupted by a crash or kill.
     public func interrupted() throws -> [JournalEntry] {
-        var last: [String: JournalEntry] = [:]
-        for e in try entries() { last[e.id] = e }
-        return last.values.filter { $0.state == .started }.sorted { $0.sequence < $1.sequence }
+        try interruptedWithCompleteness().entries
     }
 
     /// Convenience: record a transition for an operation.

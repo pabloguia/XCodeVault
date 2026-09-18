@@ -134,7 +134,8 @@ final class ExperimentScriptSafetyTests: XCTestCase {
                 guard !text.hasPrefix("#"), !text.hasPrefix("echo "), text.contains("simctl") else { continue }
                 guard !text.contains("simctl help") else { continue }
                 if ["create", "boot", "delete", "erase", "shutdown", "install", "launch", "terminate"]
-                    .contains(where: { text.contains(" \($0) ") || text.hasSuffix(" \($0)") }) {
+                    .contains(where: { text.contains(" \($0) ") || text.hasSuffix(" \($0)") })
+                {
                     mutatingLines.append("\(name):\(i + 1)")
                 }
             }

@@ -37,7 +37,8 @@ final class CleanTests: XCTestCase {
     func testTheDyldCacheWarningSaysMostOfTheTotalIsNotDurableSpace() {
         let item = StorageItem(
             categoryID: "coreSimulatorSystemCaches", path: "/Library/Developer/CoreSimulator/Caches/dyld", exists: true,
-            isSymlink: false, isMountPoint: false, usage: DiskUsage(
+            isSymlink: false, isMountPoint: false,
+            usage: DiskUsage(
                 allocatedBytes: 10_000_000_000, logicalBytes: 10_000_000_000, fileCount: 1, directoryCount: 1,
                 symlinkCount: 0, skippedMountPoints: [], unreadable: []),
             volumeMountPoint: "/", onBootVolume: true)
@@ -172,7 +173,8 @@ final class RuntimeOperationsTests: XCTestCase {
         t.file("appletvsimulator_26.5_23L470.exportedBundle/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg", bytes: 600_000_000)
         t.file("appletvsimulator_26.5_23L470.exportedBundle/ExportedMetadata.plist", bytes: 10)
         let lib = try RuntimeOperations.library(at: t.path)
-        XCTAssertEqual(lib.map(\.fileName).sorted(), ["appletvsimulator_26.5_23L470.exportedBundle", "iOS 26.5 Simulator Runtime.dmg", "tvOS 26.0 Simulator Runtime.dmg"])
+        XCTAssertEqual(
+            lib.map(\.fileName).sorted(), ["appletvsimulator_26.5_23L470.exportedBundle", "iOS 26.5 Simulator Runtime.dmg", "tvOS 26.0 Simulator Runtime.dmg"])
         let bundle = lib.first { $0.fileName.hasSuffix(".exportedBundle") }!
         XCTAssertEqual(bundle.platform, "tvOS"); XCTAssertEqual(bundle.version, "26.5"); XCTAssertEqual(bundle.build, "23L470")
         XCTAssertTrue(bundle.path.hasSuffix("/Restore/AppleTVOSSimulatorRuntime_Cryptex.dmg"))
@@ -385,7 +387,8 @@ final class RuntimeOperationsTests: XCTestCase {
         XCTAssertFalse(cheap.contains { $0.contains("ENOSPC") }, "must not warn about internal staging for a copy-out: \(cheap)")
 
         // tvOS is absent from the fixture, so this is a real download on a 3 GB-free machine.
-        let costly = try ops.preflightExport(.init(platform: "tvOS", destination: t.path), freeBytesAtDestination: 500_000_000_000, installedRuntimes: installed)
+        let costly = try ops.preflightExport(
+            .init(platform: "tvOS", destination: t.path), freeBytesAtDestination: 500_000_000_000, installedRuntimes: installed)
         XCTAssertTrue(costly.contains { $0.contains("NOT already installed") }, "\(costly)")
         XCTAssertTrue(costly.contains { $0.contains("ENOSPC") }, "a download onto a 3 GB-free volume must warn: \(costly)")
     }

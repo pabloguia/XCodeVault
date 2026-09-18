@@ -51,9 +51,15 @@ public enum PathSafety {
         // `realpath` needs the path to exist; a dangling target still deserves a lexical comparison,
         // so fall back rather than reporting "not targeted" for a link into a directory we are about
         // to be asked about.
-        let resolvedTarget = realpath(lexical, nil).map { p -> String in defer { free(p) }; return String(cString: p) }
+        let resolvedTarget =
+            realpath(lexical, nil).map { p -> String in
+                defer { free(p) }; return String(cString: p)
+            }
             ?? URL(fileURLWithPath: lexical).standardized.path
-        let resolvedCandidate = realpath(candidate, nil).map { p -> String in defer { free(p) }; return String(cString: p) }
+        let resolvedCandidate =
+            realpath(candidate, nil).map { p -> String in
+                defer { free(p) }; return String(cString: p)
+            }
             ?? URL(fileURLWithPath: candidate).standardized.path
         let a = resolvedTarget, b = resolvedCandidate
         return a.caseInsensitiveCompare(b) == .orderedSame

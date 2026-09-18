@@ -1,4 +1,4 @@
-import AppKit
+import Darwin
 import Foundation
 
 /// One deletion the cleaner proposes. Always a whole path; never a shell command.
@@ -163,8 +163,87 @@ public struct CleanExecutor: Sendable {
         self.journal = journal; self.home = home; self.useTrash = useTrash; self.isXcodeRunning = isXcodeRunning; self.runner = runner
     }
 
+    /// Whether Xcode.app is running anywhere on this machine.
+    ///
+    /// This used to be `NSWorkspace.shared.runningApplications`, which is a LaunchServices query
+    /// scoped to the **caller's own GUI (Aqua) session**. A process without one — `xcodevaultctl
+    /// clean` run over SSH, or from any non-session context — gets an empty or partial array, and
+    /// the guard at the only call site then evaluates false. That is a safety check reporting
+    /// "safe" in precisely the situation it exists for, and the situation is not exotic: the
+    /// audience for this tool is developers who reach a Mac remotely to free disk space. Nothing is
+    /// lost when it fires wrongly — DerivedData is regenerable — but an in-flight build in the
+    /// console session is corrupted and forced into a full rebuild.
+    ///
+    /// `proc_listallpids` + `proc_pidpath` has no session scoping: it enumerates the kernel's
+    /// process table, so it answers the same way over SSH, from a LaunchAgent, or from the GUI. It
+    /// also removes the only `import AppKit` from a target that `Package.swift` describes as "the
+    /// single shared domain layer. No UI" — and with it an AppKit call that `AppModel.applyClean`
+    /// was making from a `Task.detached`, i.e. off the main thread, which AppKit does not allow.
+    ///
+    /// **Fails closed** in three places, and each one was a defect at some point in this function's
+    /// short history: the sizing call failing, the listing call failing, and — the one a reviewer
+    /// caught — being able to list the table but read no path out of it. `proc_pidpath` returns 0
+    /// with `EPERM` for a process the caller may not inspect, so "I read zero paths" is
+    /// indistinguishable from "Xcode is not running" unless it is tracked. It is tracked.
+    ///
+    /// **What it still does not detect:** a headless `xcodebuild` with no `Xcode.app` process. The
+    /// stated purpose is protecting an in-flight build, and that case is not covered by this or by
+    /// what it replaced. Stating it beats implying it away.
     public static func xcodeIsRunning() -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.dt.Xcode" }
+        switch runningExecutablePaths() {
+        case .none: return true  // could not enumerate, or enumerated and read nothing: "I cannot tell" is not "no"
+        case .some(let paths): return paths.contains { isXcodeExecutable($0, bundleIdentifierAt: bundleIdentifier(ofExecutable:)) }
+        }
+    }
+
+    /// The predicate, split out so it can be tested without launching anything or reading the real
+    /// process table. `identify` maps an executable path to the `CFBundleIdentifier` of the bundle
+    /// containing it.
+    ///
+    /// **Identify by bundle identifier, NOT by the bundle's directory name.** Matching
+    /// `/Xcode.app/Contents/MacOS/Xcode` looked tighter and was a regression: Xcode betas install as
+    /// `Xcode-beta.app`, and anyone keeping several toolchains renames them (`Xcode_16.4.app`,
+    /// `Xcode26.app`). All of those carry `com.apple.dt.Xcode`, and the `NSWorkspace` query this
+    /// replaced caught every one. Requiring the executable to sit at `.app/Contents/MacOS/Xcode`
+    /// still means a directory merely named `Xcode.app` cannot answer the question.
+    static func isXcodeExecutable(_ path: String, bundleIdentifierAt identify: (String) -> String?) -> Bool {
+        guard path.hasSuffix("/Contents/MacOS/Xcode"), path.contains(".app/Contents/MacOS/Xcode") else { return false }
+        return identify(path) == "com.apple.dt.Xcode"
+    }
+
+    /// Every running process's executable path, or `nil` when the table could not be enumerated or
+    /// not one path could be read out of it. `nil` is the fail-closed signal; an empty array is not
+    /// returned.
+    static func runningExecutablePaths() -> [String]? {
+        // `proc_listallpids(nil, 0)` returns a BYTE count, not an element count — XNU answers a
+        // NULL buffer with (nprocs + 20) * sizeof(int), so the kernel's own headroom is already in
+        // it. An earlier comment here called it a count and added 64 "for headroom", which
+        // over-allocated roughly fourfold and asserted a unit the API does not have.
+        let sizeInBytes = proc_listallpids(nil, 0)
+        guard sizeInBytes > 0 else { return nil }
+        var pids = [pid_t](repeating: 0, count: Int(sizeInBytes) / MemoryLayout<pid_t>.size)
+        let bytes = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        guard bytes > 0 else { return nil }
+        let n = Int(bytes) / MemoryLayout<pid_t>.size
+        // PROC_PIDPATHINFO_MAXSIZE is a C macro (4 * MAXPATHLEN) and does not import into Swift.
+        var buf = [UInt8](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        var paths: [String] = []
+        for i in 0..<min(n, pids.count) where pids[i] > 0 {
+            // A pid that exits between the listing and this call returns 0, which is ordinary. A
+            // pid the caller may not inspect also returns 0 (EPERM), which is not — so "I read zero
+            // paths" must not be reported as "Xcode is not running".
+            let len = proc_pidpath(pids[i], &buf, UInt32(buf.count))
+            guard len > 0 else { continue }
+            paths.append(String(decoding: buf[0..<Int(len)], as: UTF8.self))
+        }
+        return paths.isEmpty ? nil : paths
+    }
+
+    static func bundleIdentifier(ofExecutable path: String) -> String? {
+        // <bundle>.app/Contents/MacOS/Xcode -> <bundle>.app/Contents/Info.plist
+        let plist = String(path.dropLast("MacOS/Xcode".count)) + "Info.plist"
+        guard let d = NSDictionary(contentsOfFile: plist) else { return nil }
+        return d["CFBundleIdentifier"] as? String
     }
 
     public func execute(_ plan: CleanPlan, force: Bool = false) throws -> CleanResult {
@@ -196,7 +275,9 @@ public struct CleanExecutor: Sendable {
             }
         }
         try journal.record(
-            id: opID, kind: .clean, state: .completed, summary: "freed \(ByteCount.format(deleted.reduce(0) { $0 + $1.bytes })), \(failed.count) failure(s)",
+            id: opID, kind: .clean, state: .completed,
+            summary:
+                "\(useTrash ? "moved to Trash" : "freed") \(ByteCount.format(deleted.reduce(0) { $0 + $1.bytes })), \(failed.count) failure(s)",
             paths: deleted.map(\.path), bytes: deleted.reduce(0) { $0 + $1.bytes })
         return CleanResult(deleted: deleted, failedPairs: failed)
     }
