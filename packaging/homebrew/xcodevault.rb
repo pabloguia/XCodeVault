@@ -1,14 +1,19 @@
-# Homebrew Cask draft (M5). `brew uninstall` deletes the bundle but leaves the SMAppService BTM
-# registration behind (research F7) — the `uninstall` stanza and the in-app "Uninstall helper"
-# action both call the daemon's unregister path.
+# Homebrew Cask DRAFT (M5). Not installable and not meant to be: there is no release, the sha256 is
+# a placeholder, and the owner segment of the URLs is intentionally not a registrable GitHub name —
+# publishing a cask that points at an unclaimed org invites somebody to go and claim it.
+#
+# `brew uninstall` deletes the bundle but leaves the SMAppService BTM registration behind
+# (research F7) — the `uninstall` stanza and the in-app "Uninstall helper" action both call the
+# daemon's unregister path. That stanza is kept for when the helper is actually shipped; today the
+# bundle contains no helper (see scripts/bundle-app.sh --with-helper).
 cask "xcodevault" do
   version "0.1.0"
   sha256 "REPLACE_WITH_dist/XCodeVault-0.1.0.dmg.sha256"
 
-  url "https://github.com/OWNER/XCodeVault/releases/download/v#{version}/XCodeVault-#{version}.dmg"
+  url "https://github.com/<owner>/XCodeVault/releases/download/v#{version}/XCodeVault-#{version}.dmg"
   name "XCodeVault"
   desc "Honest accounting and safe relocation of Xcode/Simulator storage"
-  homepage "https://github.com/OWNER/XCodeVault"
+  homepage "https://github.com/<owner>/XCodeVault"
 
   depends_on macos: ">= :sonoma"
 
@@ -23,8 +28,7 @@ cask "xcodevault" do
     "~/Library/Preferences/com.xcodevault.app.plist",
   ]
 
-  caveats <<~EOS
-    The privileged helper (for root-owned CoreSimulator caches) must be enabled once in
-    System Settings ▸ General ▸ Login Items & Extensions. Everything else works without it.
-  EOS
+  # No caveat telling anyone to enable the privileged helper. It used to say exactly that, while
+  # nothing in the shipped code ever connected to it — so following the instruction bought a root
+  # Mach service in the global bootstrap namespace and no functionality whatsoever.
 end

@@ -8,3 +8,6 @@ DerivedData/
 /dist/
 .token-pilot/
 *.tmp
+# scripts/bundle-app.sh's restore copy. A SIGKILL between the edit and the trap leaves both this
+# file and a real team id in a tracked source file; at least keep this one out of the index.
+*.bundle-bak
