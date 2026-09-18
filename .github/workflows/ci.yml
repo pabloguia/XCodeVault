@@ -5,6 +5,13 @@ on:
     branches: [main, master]
   pull_request:
 
+# Least privilege for the automatic GITHUB_TOKEN. With no block here the job inherits the
+# repository default, which on a personal account can still be read/write — a public repo's
+# workflow that can write to the repo is a supply-chain hazard for the cost of two lines.
+# This workflow only reads the checkout.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     name: build+test (${{ matrix.os }})

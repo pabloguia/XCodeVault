@@ -11,3 +11,10 @@ DerivedData/
 # scripts/bundle-app.sh's restore copy. A SIGKILL between the edit and the trap leaves both this
 # file and a real team id in a tracked source file; at least keep this one out of the index.
 *.bundle-bak
+# Per-machine agent permission grants. These were only ever ignored by the owner's *global*
+# gitignore, which no contributor has — Claude Code and Codex write these files the first time
+# a permission is granted, so without this line the first outside contributor gets an untracked
+# file holding their local grants and paths, sitting there waiting for a `git add -A`.
+.claude/settings.local.json
+.codex/settings.local.json
+
