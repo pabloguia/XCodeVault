@@ -1,9 +1,15 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-17. This file is the hand-off for the next session or a post-compaction
+_Last updated: 2026-09-18. This file is the hand-off for the next session or a post-compaction
 continuation; it is append-only by date, so the newest sections are at the **end**. "Current
 milestone" and "Next three actions" below are from 2026-09-08 and have been overtaken — read the
 last few dated sections first, and `docs/process/SESSION-HANDOFF.md` before acting._
+
+_This file is 1,800+ lines and its live sections ("In flight", "Blocked", "Next three actions") sit
+around line 430, with the chronological log after them. The 2026-09-18 review classified it line by
+line for what is safely summarisable and what is the only surviving copy of a lesson; the
+restructuring was deferred rather than rushed. The classification, with the four load-bearing ranges
+and a named destination for each, is in `docs/process/REVIEW-2026-09-17.md`._
 
 ## Current milestone
 
@@ -429,7 +435,8 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## In flight
 
-- Nothing running. 114 tests green.
+- Nothing running. 269 tests green; `swift build` clean-tree warning-free and `swift-format lint`
+  clean, both for the first time (see the 2026-09-18 review).
 
 ## Blocked / pending — manual (ask the user)
 
@@ -445,7 +452,9 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   xcv-probe` removed by the user with sudo, confirmed gone.
 - **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
   but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
-  `removeStrandedRuntimeDownload` verb is pointless against this policy — drop it in M3 review.
+  `removeStrandedRuntimeDownload` verb was pointless against this policy — **deleted 2026-09-18**,
+  together with `HelperInboxDirectory`, which had no other user. It had no client anywhere, and its
+  name asserted a "stranded" check the implementation never performed.
 - **Import half of E8 — done (2026-09-07, tvOS; 2026-09-08, iOS 10.35 GB), pass both times.**
   See Session 3 and Session 4 above and `docs/process/RUNBOOK-E8-import-roundtrip.md` for the
   tvOS procedure. Preflight formula confirmed against two very different image sizes.
@@ -453,8 +462,11 @@ release/bundle scripts and cask draft exist; nothing signed yet.
 
 ## Next three actions
 
-1. Land review findings; commit M3 + helper skeleton + GUI slice; run `swift test` on CI once a
-   remote exists (user decision: repo creation is public — ask first).
+1. **Publish.** Everything the 2026-09-18 pre-publication review found blocking is fixed; the
+   remaining findings are in `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` as deliberate issues.
+   The remote and the push are the owner's to do, together with the three GitHub-only settings
+   listed at the end of `docs/process/REVIEW-2026-09-17.md`. CI has still never executed — the first
+   push is what runs it.
 2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
    the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
    signed bundle — cannot be tested unsigned.

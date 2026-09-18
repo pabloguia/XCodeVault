@@ -76,3 +76,12 @@ transparently placed on an external APFS volume mounted at a canonical
 `/Library/Developer/CoreSimulator...` path, while preserving simulator operation,
 Xcode builds, multi-Xcode compatibility, reboot behavior, and physical-device
 debugging (H1)? Prove or falsify it; don't assume the answer.
+
+## How each phase is built
+
+Ship each phase as working, tested, committed code before starting the next. Prefer vertical slices
+over horizontal layers — a thin path that actually runs beats four half-built tiers. The phase
+ordering above says *what* comes first and why; this says how to build whatever is current.
+
+_(Rehoused from `BOOTSTRAP_PROMPT.md` during the 2026-09-18 pre-publication review, before that
+completed brief was deleted. It was the only copy.)_

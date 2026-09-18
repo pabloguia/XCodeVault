@@ -23,11 +23,6 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
 - **`isMountPoint` fails open in that same verb.** It returns `false` both for "not a mount point"
   and for "the attribute could not be read", and the cleanup path reads that as permission to
   proceed. The same helper is used fail-*closed* elsewhere in the file.
-- **`removeStrandedRuntimeDownload` cannot tell stranded from in-flight.** It has no notion of
-  "stranded" at all, so a caller can delete a multi-gigabyte runtime image that Xcode is downloading
-  right now. Its benefit is also unproven: this project's own research records that macOS 26.5
-  refuses the unlink even for `sudo`. A verb with no demonstrated benefit does not belong in a root
-  daemon; deleting it is the likely resolution.
 - **The volume-UUID lookup parses an attribute it never confirmed was returned.** `getattrlist` is
   called without `ATTR_CMN_RETURNED_ATTRS`, so a filesystem that succeeds without supplying
   `ATTR_VOL_UUID` would yield the all-zero UUID, which is a valid `UUID` and would act as a
@@ -90,8 +85,79 @@ exists to close; see `CONTRIBUTING.md`.
 
 ## Documentation
 
-- `docs/process/SESSION-HANDOFF.md`, the `PROMPT-*.md` files and the tail of `STATUS.md` are in
-  Portuguese while the rest of the repository is in English. For an outside reader that is noise —
-  and `STATUS.md` is a root file, so it is noise encountered early.
-- `docs/process/PROMPT-PUBLICATION-PREP.md` is a completed session brief whose inventory had five
-  errors, corrected in ADR-0005. It carries a header saying so and can be deleted without loss.
+- The tail of `STATUS.md` is still in Portuguese. `SESSION-HANDOFF.md` was translated in the
+  2026-09-18 review because both entry points route a cold start to it; `STATUS.md` was classified
+  line by line in the same review but not restructured, because four of its ranges are the only
+  surviving copy of a lesson and rehousing them is a separate piece of work. See
+  `REVIEW-2026-09-17.md` §G12 for the line ranges and their named destinations.
+
+## Found by the 2026-09-18 pre-publication review and left
+
+Each of these is real, has a written remedy in `REVIEW-2026-09-17.md`, and was judged to cost more
+than it returns before a first public commit. They are here so they become issues rather than
+knowledge that existed in one conversation.
+
+### Testability of the privileged verbs
+
+`XCodeVaultHelperCore` exists, by its own file header and `Package.swift` comment, "so the verbs,
+the authorization gate and the path guards can be tested". The gate is tested. The two remaining
+verbs are `private func`, and `@testable import` reaches `internal`, not `private` — so the refactor
+moved the code into a testable target and then sealed it. A designed mutation predicts that
+replacing `doCreateVaultDirectory`'s `(created && st_uid == 0) || st_uid == callerUID` ownership
+guard with `true` would fail no test. Relaxing `private` to `internal` and testing the guards is
+cheap and needs no root; it was left because it is a change to the helper and deserves its own
+review cycle rather than being folded into a large one.
+
+### Structural findings with named seams
+
+- `Doctor.swift` (1,025 lines) has a real two-reasons-to-change seam at lines 471-941: the
+  CoreSimulator rules are versioned by *Apple's* release schedule, everything else by this
+  project's. `Doctor+Vault.swift` already proves the extension-in-its-own-file pattern works.
+- `MigrationEngine.swift` (839 lines) has one at 660-839: journal forensics that migrate nothing and
+  read only `[JournalEntry]`. `abortDisposition` is already near-pure over its input.
+- Four injection seams are missing, each blocking a specific test: `isMountPoint` in
+  `MigrationEngine` (the source already says "UNPINNED, knowingly" beside it), the free-space guard,
+  `XcodeLocations.preflightLocation`'s shadow-data check, and `CleanExecutor.preflight`'s
+  nested-mount-point guard.
+- The `runtime offload` transaction — four guards, an `hdiutil` verification and three journal
+  transitions — lives in `Sources/xcodevaultctl/M2Commands.swift`, an executable target no test can
+  import. It is the most destructive verb in the product. This is the `getgrouplist` pattern the
+  project has already paid for once.
+
+### API surface
+
+`XCodeVaultCore` ships as a `.library` product with a large public surface and no
+`package`/`internal` discipline, which makes all of it a semver commitment on the day the repository
+opens, when every actual consumer is in this repository. Two passes counted the surface differently
+(551 vs 422) by different methods; the count is not the point. Also: `XcodeLocations.Change.key` is a
+free-form `String` written into `defaults write com.apple.dt.Xcode`, with the "which keys this tool
+may own" rule held by discipline at six call sites; and each client composes the Doctor's two rule
+families by hand, so a third family means editing three files with no compile error if one is missed.
+
+### CI and the test suite
+
+- Six of the twenty `XCTSkip` sites cannot be ruled out on a GitHub runner, and three of those are
+  the `chmod +a` ACL tests — including the **only** pin on the abort/forget termination bound. If
+  `chmod +a` does not work there, that test silently does not exist, with nothing turning red. The
+  fix needs no hardware: have CI assert its environment supports what the skips need, and fail if the
+  skip count exceeds a committed baseline.
+- `.github/workflows/ci.yml` pins `actions/checkout` and `actions/upload-artifact` by mutable tag
+  rather than SHA. Given `permissions: contents: read`, no secrets, and no publishing step, this does
+  not materially change the workflow's risk — but the calculus changes the day a release job is added.
+- The workflow has still never executed. Publishing is what will run it for the first time.
+
+### Evidence ledger
+
+Three rows in `docs/architecture/COMPATIBILITY_MATRIX.md` warrant demotion on evidence grounds: a
+`.verified` catalog status whose evidence (F22) has no matrix entry; a verdict claiming a formula
+"generalizes" from n=2 on one machine where the adjacent row correctly scopes the same claim; and a
+row whose evidence is "this session's transcript (no `.txt` evidence file written)" in a document
+whose header calls it an evidence ledger. Evidence is append-only, so these are demotions only.
+
+### Naming
+
+`M2Commands.swift` and `M3Commands.swift` are named for a milestone scheme that appears nowhere in
+`README.md`, `CONTRIBUTING.md`, `CLAUDE.md` or `AGENTS.md` — the docs say "Phase 0…6". The code's
+vocabulary is not recoverable from the repository. Renaming by content is cheap and internal; it was
+left because it would collide with the structural splits above, which should happen first.
+

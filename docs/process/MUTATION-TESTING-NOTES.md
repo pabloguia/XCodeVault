@@ -45,3 +45,18 @@ Three instances, in order of how long each took to notice:
 
 Mutation is still the thing that caught a rule shipped with no test behind it, twice. The discipline
 is not weaker for having these failure modes — it is that a green run is a question, not an answer.
+
+## Pick the mutation subject so the check has to work
+
+A deletion rule was tested by mutating the one file that already carried an exemption marker. The
+comparison succeeded — by accident, because the exemption path was the path being exercised. The
+shell defect that made the rule inert in every other file surfaced only when a different person
+mutated a different file.
+
+The rule this gives: **a mutation planted in the file you had in mind when you wrote the check is
+the weakest possible test of it.** Plant it somewhere you were not thinking about. If the check has
+per-file exemptions, mutate a file without one.
+
+This is the same family as "a rule that is duplicated, with no test on a row where the copies
+disagree", recorded above — both are cases where the sample chosen cannot falsify the claim.
+
