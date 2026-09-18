@@ -161,15 +161,44 @@ extension Doctor {
                     evidence: "Journal.ReadResult")
             ]
         }
+        // Copies the user consciously took responsibility for with `forget`. They are not a
+        // fault — the entry is closed and the decision was deliberate — but before this they were
+        // named nowhere the user looks, so the reminder rested entirely on their memory.
+        let forgotten = (try? MigrationEngine(journal: journal).knownLeftoversAfterForget()) ?? []
+
+        // `DiskUsage.measure` fails on exactly the paths `presence` could not stat, so formatting
+        // its zero would render the entries this check was widened to surface as "(0 B)" — an
+        // invitation to dismiss the one leftover most worth looking at.
+        func sizeLabel(_ path: String) -> String {
+            guard let bytes = DiskUsage.measure(path)?.allocatedBytes else { return "size unknown" }
+            return ByteCount.format(bytes)
+        }
+
         return leftovers.map { e in
-            let bytes = DiskUsage.measure(e.paths[1])?.allocatedBytes ?? 0
             return Finding(
-                id: "partial-copy:\(e.id)", severity: .warning, title: "Partial vault copy left by failed migration (\(ByteCount.format(bytes)))",
+                id: "partial-copy:\(e.id)", severity: .warning, title: "Partial vault copy left by failed migration (\(sizeLabel(e.paths[1])))",
                 detail:
                     "\(e.paths[1]) was being written when the migration failed (typically the volume disappeared mid-copy) and could not be cleaned up then. It blocks retrying the migration and wastes vault space. The source \(e.paths[0]) was never touched.",
                 path: e.paths[1], remediation: "`xcodevaultctl migration abort \(e.id)` removes only this partial copy.",
                 evidence: "E6 software run 2 (2026-09-06)")
         }
+            + forgotten.compactMap { e -> Finding? in
+                // `leftoverPath` is written beside the marker; `paths.last` is the fallback and
+                // is the SOURCE when the PLAN line could not be read, which is why it is second.
+                guard let path = e.detail["leftoverPath"] ?? e.paths.last else { return nil }
+                // Only while it is actually still there. A copy the user removed by hand should
+                // stop being mentioned, and `.absent` is the one answer that licenses silence.
+                let state = MigrationEngine.presence(of: path)
+                guard state.mayBePresent else { return nil }
+                return Finding(
+                    id: "forgotten-copy:\(e.id)", severity: .info,
+                    title: "Copy you closed out by hand may still be at this path (\(sizeLabel(path)))",
+                    detail:
+                        "Migration \(e.id) was closed with `forget --i-verified-both-copies-myself` while a copy remained at \(path), because it could not be removed automatically — often because the vault volume was unplugged. That was deliberate and nothing is wrong. It is repeated here so the journal line is not the only place it is recorded. Right now, \(state.explanation).",
+                    path: path,
+                    remediation: "Remove \(path) by hand when you no longer want it. Nothing in the product will touch it.",
+                    evidence: "docs/architecture/MIGRATION_ENGINE.md")
+            }
     }
 
     func checkLocationsPointAtPresentVolumes(volumes: [Volume]) -> [Finding] {

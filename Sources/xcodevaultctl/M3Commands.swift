@@ -144,14 +144,31 @@ struct Migration: ParsableCommand {
         func run() throws {
             let interrupted = try Journal().interrupted().filter { $0.kind == .migration }
             let leftovers = try MigrationEngine().leftoverPartialCopies()
-            struct Out: Encodable { let interrupted: [JournalEntry]; let leftoverPartialCopies: [JournalEntry] }
-            try emit(Out(interrupted: interrupted, leftoverPartialCopies: leftovers), json: global.json) {
+            // Closed by `forget` with the copy still on disk. Reported because closing the entry
+            // removed them from `leftoverPartialCopies` above, which left the user as the only
+            // record of a copy the machine could not remove.
+            let forgotten = try MigrationEngine().knownLeftoversAfterForget()
+                .filter { e in
+                    guard let p = e.detail["leftoverPath"] ?? e.paths.last else { return false }
+                    return MigrationEngine.presence(of: p).mayBePresent
+                }
+            struct Out: Encodable {
+                let interrupted: [JournalEntry]
+                let leftoverPartialCopies: [JournalEntry]
+                let knownLeftoversAfterForget: [JournalEntry]
+            }
+            try emit(Out(interrupted: interrupted, leftoverPartialCopies: leftovers, knownLeftoversAfterForget: forgotten), json: global.json) {
                 var o =
                     interrupted.isEmpty
                     ? "No interrupted migrations.\n"
                     : interrupted.map { "INTERRUPTED \($0.id)  \($0.summary)  paths: \($0.paths.joined(separator: " → "))\n" }.joined()
                 for l in leftovers {
                     o += "LEFTOVER PARTIAL COPY \(l.id)  \(l.paths[1])  (failed before verification; `migration abort \(l.id)` removes it)\n"
+                }
+                for f in forgotten {
+                    o +=
+                        "KNOWN LEFTOVER \(f.id)  \(f.detail["leftoverPath"] ?? f.paths.last ?? "?")  "
+                        + "(you closed this one out yourself; nothing will touch it)\n"
                 }
                 return o
             }

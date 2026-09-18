@@ -83,27 +83,47 @@ review is the control. Specific gaps worth closing, in rough order of value:
 
 ## Migration engine
 
-The abort/forget pair terminates under every obstacle a reviewer could produce on this machine —
-`deny delete` ACLs, `uchg`, read-only parents, an obstacle that only appears on the second attempt —
-because the redirect is bounded by counting `ABORT_FAILED` entries rather than by predicting whether
-a removal will succeed. Two residuals were found in the same review and left:
+The abort/forget pair terminates under every obstacle produced on this machine so far — `deny
+delete` ACLs, `uchg`, read-only parents, a parent with no search permission at all (`0o000`), an
+obstacle that only appears on the second attempt — because the redirect is bounded by counting
+`ABORT_FAILED` entries rather than by predicting whether a removal will succeed.
 
-- **"I cannot see it" is reported as "it is gone."** `abort`, `forget` and `leftoverPartialCopies`
-  all treat a failing `lstat` on the partial copy as absence. `EACCES` — from a parent with no search
-  permission, or an ACL denying `search,list,readattr` — and `EIO` from a failing enclosure both
-  produce that, and the operation is then journaled as "no partial copy present, source intact"
-  while the copy is still on the drive. Nothing is deleted on this path and the source is untouched;
-  what is wrong is the claim. The fix is to keep `errno` and treat only `ENOENT` as absence.
-- **An entry closed after two failed aborts survives only as a journal summary.** `doctor` and
-  `migration status` read `leftoverPartialCopies`, which is driven by open entries, so once
-  `forget --i-verified-both-copies-myself` closes one the partial copy is no longer named anywhere
-  but the journal line that records it. That is the intended escape hatch — it exists for a copy the
-  machine cannot remove — but the trade is real and worth stating: the user is the one who has to
-  remember.
-- **If the journal itself cannot be written, every verb errors and nothing closes.** `abort` records
-  its failure before rethrowing, so an unwritable journal replaces the removal error with a write
-  error and the failure count never advances. Not reproduced; noted because the failure mode is loud
-  rather than silent, which is the property that makes it acceptable to leave.
+**The condition that claim rests on, stated because a fix briefly broke it.** The bound advances
+only if `abort` reaches its `ABORT_FAILED` record. A 2026-09-18 change made `abort` refuse *before*
+that record when it could not stat the destination, and since `forget`'s `.cleanable` case has no
+non-throwing exit, both verbs then refused forever — and with a `started` entry, `refuseIfInterrupted`
+blocked every future migration. A reviewer found it; the fix is that `abort` attempts the removal
+whenever the copy *may* be present and lets the failure be recorded, rather than declining to try.
+Anything that returns early from `abort` before that record breaks termination, and the note at the
+guard says so. The bound still depends on a writable journal (issue #10).
+
+Three residuals were found in the original review:
+
+- ~~**"I cannot see it" is reported as "it is gone."**~~ **Fixed 2026-09-18** (issue #8). The four
+  sites that asked this question now share one helper, `MigrationEngine.presence(of:)`, returning
+  three answers instead of two: only `ENOENT` and `ENOTDIR` are absence, everything else is
+  `undetermined`. `leftoverPartialCopies` keeps an entry it could not stat rather than dropping it
+  — the copy most worth surfacing is the one that could not be checked — and `abort` refuses
+  outright instead of journaling "no partial copy present, source intact" over a path it never
+  read. This is the same defect as the helper's `isMountPoint` (#2): a question with three answers
+  written with two, where the missing one silently took the value of the safe-sounding one.
+- ~~**An entry closed after two failed aborts survives only as a journal summary.**~~
+  **Fixed 2026-09-18** (issue #9). `forget` now marks the record it writes when a copy remains, and
+  `MigrationEngine.knownLeftoversAfterForget()` reads it back. `doctor` reports it as an
+  informational finding — not a fault, because closing the entry was deliberate and correct — and
+  `migration status` prints a `KNOWN LEFTOVER` line. Both suppress it once the path is definitely
+  gone, using the same `.absent` answer above, so a copy the user removed by hand stops being
+  mentioned. The escape hatch still works exactly as designed; it is no longer also the place the
+  reminder disappears.
+- ~~**If the journal itself cannot be written, every verb errors and nothing closes.**~~
+  **Partly fixed 2026-09-18** (issue #10). The failure record in `abort` no longer steals the
+  story: a journal-write failure is caught, and the error the user sees names the real obstacle
+  (the removal) *and* says the attempt was not counted, so the retry that would let `forget` close
+  the entry will not become available until the journal is writable. What is **not** fixed is the
+  underlying coupling — the termination bound still counts `ABORT_FAILED` entries in the same
+  journal whose unwritability is the problem. Making the count independent of that journal is the
+  remaining work, and the engine's comments scope the termination claim to a writable journal
+  rather than stating it unconditionally.
 
 ## Compatibility
 

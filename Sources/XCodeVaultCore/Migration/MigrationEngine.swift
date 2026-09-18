@@ -30,6 +30,52 @@ public struct MigrationError: Error, CustomStringConvertible, Sendable {
     public init(_ d: String) { description = d }
 }
 
+/// Whether a path is there — with "could not tell" kept apart from "no".
+///
+/// Every site that asked this used to spell it `lstat(p, &st) == 0`, which folds *every* failure
+/// into absence. `EACCES` from a parent with no search permission, or an ACL denying
+/// `search,list,readattr`, and `EIO` from a failing enclosure all produce a failing `lstat` — and
+/// the operation was then journaled as "no partial copy present, source intact" while the copy
+/// was still occupying the drive. Nothing was deleted and no data was lost; what was wrong was
+/// the claim, which is the one thing a journal exists to get right.
+///
+/// This is the same shape as the helper's `MountAnswer`: a question with three answers that had
+/// been written with two, where the missing one silently took the value of the safe-sounding one.
+public enum Presence: Equatable, Sendable {
+    case present
+    case absent
+    /// `lstat` failed for a reason other than "it is not there". The path may well still exist.
+    case undetermined(code: Int32)
+
+    /// The only reading that is safe when the subject is a leftover copy: anything short of a
+    /// definite `absent` has to count as "may be there". Never write `== .present` for that
+    /// question — that is the two-valued mistake in a new spelling.
+    public var mayBePresent: Bool { self != .absent }
+
+    /// For a message a user has to act on: naming the errno beats "could not be checked".
+    public var explanation: String {
+        switch self {
+        case .present: return "it is there"
+        case .absent: return "it is not there"
+        case .undetermined(let code): return "could not be determined: \(String(cString: strerror(code)))"
+        }
+    }
+}
+
+extension MigrationEngine {
+    /// One helper for the three sites the review named, so they cannot drift apart again.
+    ///
+    /// `ENOENT` is absence. `ENOTDIR` is too — a component of the prefix is not a directory, so
+    /// the path cannot exist. Everything else is `undetermined`, including `ELOOP` and `ENAMETOOLONG`,
+    /// because none of them licenses the sentence "the partial copy is gone".
+    public static func presence(of path: String) -> Presence {
+        var st = stat()
+        if lstat(path, &st) == 0 { return .present }
+        let code = errno
+        return (code == ENOENT || code == ENOTDIR) ? .absent : .undetermined(code: code)
+    }
+}
+
 public struct MigrationEngine: Sendable {
     public var runner: CommandRunning
     public var journal: Journal
@@ -603,14 +649,22 @@ public struct MigrationEngine: Sendable {
         let abortFailures = entries.filter { $0.detail["phase"] == "ABORT_FAILED" }.count
         var abortRemovalFailed = abortFailures > 0
         if abortRemovalFailed, abortFailures < 2, case .cleanable(let planned) = abortDisposition(entries: entries, operationID: operationID) {
-            var st = stat()
-            if lstat(planned.paths[1], &st) != 0 {
+            switch MigrationEngine.presence(of: planned.paths[1]) {
+            case .absent:
                 abortRemovalFailed = false  // nothing left to remove; the normal path applies
-            } else {
+            case .present:
                 throw MigrationError(
                     "Migration \(operationID) failed to abort earlier. Try `xcodevaultctl migration abort \(operationID)` once more: "
                         + "if the obstacle is gone it will remove the partial copy at \(planned.paths[1]), and if it fails again "
                         + "`forget` will close the entry and record that a copy may remain there.")
+            case .undetermined(let code):
+                // Not `absent`, so the normal path — which would record "no file was touched" —
+                // must not be taken. Say which way the uncertainty runs.
+                throw MigrationError(
+                    "Migration \(operationID) failed to abort earlier, and whether the partial copy at \(planned.paths[1]) is still "
+                        + "there could not be determined: \(String(cString: strerror(code))). Fix that first — it is usually a parent "
+                        + "directory without search permission, or a volume going bad — then run `xcodevaultctl migration abort "
+                        + "\(operationID)`. Closing the entry now would record a claim about that path that nothing has checked.")
             }
         }
         if abortRemovalFailed {
@@ -620,7 +674,12 @@ public struct MigrationEngine: Sendable {
             try journal.record(
                 id: operationID, kind: .migration, state: .rolledBack,
                 summary: "forgotten by the user after `abort` failed to remove the partial copy; it may still be at \(location)",
-                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
+                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths,
+                // Machine-findable, not only prose. Closing the entry took this copy out of
+                // `leftoverPartialCopies`, which is what `doctor` and `migration status` read —
+                // so the user became the only thing tracking it. `knownLeftoversAfterForget`
+                // reads this marker back.
+                detail: ["leftover": "1", "leftoverPath": location])
             return
         }
         if phases.isDisjoint(with: MigrationEngine.phasesWhereAbortIsUnsafe) {
@@ -633,24 +692,49 @@ public struct MigrationEngine: Sendable {
             // Both forms below name the path. This record is the only thing that survives the
             // operation, so "a copy may remain" without a location is a note nobody can act on.
             let location = entries.first(where: { $0.state == .planned })?.paths.last ?? "the recorded destination"
+            // `leavesACopy` decides whether this record has to stay findable afterwards.
+            var leavesACopy = false
             switch abortDisposition(entries: entries, operationID: operationID) {
             case .cleanable(let planned):
-                var st = stat()
-                let present = lstat(planned.paths[1], &st) == 0
+                let tail: String
+                switch MigrationEngine.presence(of: planned.paths[1]) {
+                case .present:
+                    tail = "`xcodevaultctl migration abort \(operationID)` removes the partial copy at \(planned.paths[1]) and closes it out."
+                case .absent:
+                    tail = "the partial copy at \(planned.paths[1]) is already gone, and `xcodevaultctl migration abort \(operationID)` closes the entry."
+                case .undetermined(let code):
+                    tail =
+                        "whether the partial copy at \(planned.paths[1]) is still there could not be determined "
+                        + "(\(String(cString: strerror(code)))); `xcodevaultctl migration abort \(operationID)` will remove it if it is."
+                }
                 throw MigrationError(
-                    "Migration \(operationID) never reached verification, so there is nothing here that needs your judgement: "
-                        + (present
-                            ? "`xcodevaultctl migration abort \(operationID)` removes the partial copy at \(planned.paths[1]) and closes it out."
-                            : "the partial copy at \(planned.paths[1]) is already gone, and `xcodevaultctl migration abort \(operationID)` closes the entry."))
+                    "Migration \(operationID) never reached verification, so there is nothing here that needs your judgement: " + tail)
             case .unreachable(let reason):
                 why = "a partial copy may remain at \(location) — \(reason)"
+                // The vault volume is absent, so whether a copy is on it cannot be determined —
+                // and this summary says so in prose. The first version of this change wrote that
+                // sentence and skipped the marker, which left the drive-yanked case — the failure
+                // mode this product treats as first-class — as the one case #9 did not cover:
+                // reconnect the volume a week later and nothing could name the copy on it.
+                leavesACopy = true
             case .declined(let reason):
                 why = "\(location) was left untouched — \(reason)"
+            // Deliberately NOT marked. `.declined` means either the copy is not ours, or the
+            // source is gone and the destination may be the only copy left. Nagging about a
+            // path in that state would be wrong.
+            }
+            var detail: [String: String] = [:]
+            if leavesACopy {
+                detail["leftover"] = "1"
+                // Carried explicitly rather than re-derived from `paths.last`, which is the
+                // SOURCE when the PLAN line could not be read.
+                detail["leftoverPath"] = location
             }
             try journal.record(
                 id: operationID, kind: .migration, state: .rolledBack,
                 summary: "forgotten by the user; abort could not close this one: \(why)",
-                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths)
+                paths: entries.first(where: { $0.state == .planned })?.paths ?? last.paths,
+                detail: detail)
             return
         }
         try journal.record(
@@ -805,9 +889,27 @@ public struct MigrationEngine: Sendable {
         }
         let source = planned.paths[0], destination = planned.paths[1]
 
-        var st = stat()
         var removed = false
-        if lstat(destination, &st) == 0 {
+        let before = MigrationEngine.presence(of: destination)
+        // `mayBePresent`, not `== .present`, and no early throw.
+        //
+        // The first attempt at this refused outright on `.undetermined`, on the reasoning that
+        // recording "no partial copy present" over a path nothing read is a false claim. The
+        // claim part was right; the refusal was a product wedge. Throwing here happens BEFORE
+        // the `ABORT_FAILED` record below, so that record is never written, `abortFailures`
+        // never advances, and `forget`'s `.cleanable` case — which has no non-throwing exit —
+        // refuses too. Both verbs then refuse forever, and if the entry's last state is
+        // `started`, `refuseIfInterrupted` blocks every future migration and restore with
+        // nothing able to clear it. That is the same wedge the comment below describes, reached
+        // through a third door, and a review found it.
+        //
+        // Attempting the removal instead costs nothing and fixes both halves: on an unreadable
+        // parent `removeItem` fails, the `ABORT_FAILED` record is written, the count advances,
+        // and the second attempt lets `forget` close the entry with a `leftover` marker. Honesty
+        // comes free — the "no partial copy present" line at the end is now only reachable with
+        // `removed == true` or a definite `.absent`, so it is never written over a path that was
+        // never read.
+        if before.mayBePresent {
             do {
                 try FileManager.default.removeItem(atPath: destination)
                 removed = true
@@ -819,21 +921,50 @@ public struct MigrationEngine: Sendable {
                 // `deny delete` ACL — the temp file `ditto` leaves behind inherits it — and the only
                 // exit was editing the journal by hand, which is the wedge this pair of verbs was
                 // designed to eliminate, reached through a different door.
-                try journal.record(
-                    id: operationID, kind: .migration, state: .failed,
-                    summary: "abort could not remove the partial copy at \(destination): \(error.localizedDescription)",
-                    paths: [source, destination], detail: ["phase": "ABORT_FAILED", "cleanupFailed": "1"])
+                // The journal write is allowed to fail without stealing the story. It used to be
+                // `try`, so an unwritable journal replaced the removal error with a write error:
+                // the user was told about the wrong obstacle, and — because this record is what
+                // increments `ABORT_FAILED` — the bound that makes the abort/forget pair
+                // terminate never advanced, so every verb errored and nothing closed.
+                var journalNote = ""
+                do {
+                    try journal.record(
+                        id: operationID, kind: .migration, state: .failed,
+                        summary: "abort could not remove the partial copy at \(destination): \(error.localizedDescription)",
+                        paths: [source, destination], detail: ["phase": "ABORT_FAILED", "cleanupFailed": "1"])
+                } catch let journalError {
+                    journalNote =
+                        " The journal could not be written either (\(journalError.localizedDescription)), so this attempt was not "
+                        + "counted: the retry that would normally let `forget` close this entry will not become available until the "
+                        + "journal is writable. Fix the journal first."
+                }
                 throw MigrationError(
                     "Could not remove the partial copy at \(destination): \(error.localizedDescription). "
                         + "Run `xcodevaultctl migration abort \(operationID)` again once it is removable — by hand, or after lifting "
                         + "whatever denies the delete. If it fails a second time, "
                         + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records "
-                        + "that a copy may remain at that path.")
+                        + "that a copy may remain at that path." + journalNote)
             }
         }
         try journal.record(
             id: operationID, kind: .migration, state: .rolledBack,
             summary: removed ? "aborted; partial copy removed, source intact" : "aborted; no partial copy present, source intact", paths: [source, destination])
+    }
+
+    /// Copies that `forget` closed the entry on while the copy itself was still on disk.
+    ///
+    /// `forget --i-verified-both-copies-myself` is a deliberate escape hatch for a copy the
+    /// machine cannot remove, and closing the entry is the point of it. The trade was that the
+    /// copy then vanished from `leftoverPartialCopies` — the thing `doctor` and `migration
+    /// status` actually read — leaving the user as the only record of it. This returns them so
+    /// the reminder survives the escape hatch. They are informational, not a fault: nothing here
+    /// is broken and nothing needs to be run.
+    public func knownLeftoversAfterForget() throws -> [JournalEntry] {
+        var out: [String: JournalEntry] = [:]
+        for e in try journal.entries() where e.kind == .migration && e.detail["leftover"] == "1" {
+            out[e.id] = e  // the last such line per operation
+        }
+        return out.values.sorted { $0.sequence < $1.sequence }
     }
 
     /// Failed or interrupted pre-verification migrations whose destination still exists on disk —
@@ -851,7 +982,9 @@ public struct MigrationEngine: Sendable {
         }
         return last.values.filter { e in
             guard !unsafe.contains(e.id), e.state == .failed || e.state == .started, let p = planned[e.id] else { return false }
-            var st = stat(); return lstat(p.paths[1], &st) == 0
+            // `mayBePresent`, not `== .present`: a copy this cannot stat is exactly the one most
+            // worth surfacing, and dropping it is how `doctor` reports a clean machine that is not.
+            return MigrationEngine.presence(of: p.paths[1]).mayBePresent
         }.map { planned[$0.id]! }.sorted { $0.sequence < $1.sequence }
     }
 }

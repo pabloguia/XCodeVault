@@ -823,4 +823,177 @@ final class PrePublicationReviewTests: XCTestCase {
             findings.contains { $0.id == "journal-partially-corrupt" },
             "two undecodable lines must be reported, not silently read as 'nothing interrupted': \(findings.map(\.id))")
     }
+
+    // MARK: - A failing lstat is not absence (issues #8, #9, #10)
+
+    /// The truth table for the helper the three sites now share.
+    func testPresenceSeparatesNotThereFromCouldNotTell() throws {
+        let t = TempDir()
+        let dir = t.path + "/box"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir + "/file", contents: Data([1]))
+
+        XCTAssertEqual(MigrationEngine.presence(of: dir + "/file"), .present)
+        XCTAssertEqual(MigrationEngine.presence(of: dir + "/nope"), .absent)
+        XCTAssertFalse(MigrationEngine.presence(of: dir + "/nope").mayBePresent, "a definite absence is the one answer that licenses silence")
+        // A prefix component that is not a directory: the path cannot exist, so this is absence.
+        XCTAssertEqual(MigrationEngine.presence(of: dir + "/file/under-a-file"), .absent)
+
+        // No search permission on the parent: lstat fails with EACCES, and the file is still there.
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o000)], ofItemAtPath: dir)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: dir) }
+        guard case .undetermined(let code) = MigrationEngine.presence(of: dir + "/file") else {
+            return XCTFail("an unreadable parent must give .undetermined, never .absent")
+        }
+        XCTAssertEqual(code, EACCES)
+        XCTAssertTrue(MigrationEngine.presence(of: dir + "/file").mayBePresent, "undetermined must count as may-be-there")
+        // And note what this means: with the parent unreadable, even a name that does not exist
+        // now answers `.undetermined`. That is the point — the question is genuinely unanswerable
+        // from here, and only `.absent` licenses saying the copy is gone.
+        XCTAssertTrue(MigrationEngine.presence(of: dir + "/nope").mayBePresent)
+    }
+
+    /// The copy most worth surfacing is the one that could not be checked. Dropping it is how
+    /// `doctor` reports a clean machine that is not.
+    func testALeftoverThatCannotBeStattedIsStillReported() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives"])
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .failed, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
+        try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
+        XCTAssertEqual(try engine.leftoverPartialCopies().map(\.id), [plan.operationID], "precondition")
+
+        let parent = (plan.destination as NSString).deletingLastPathComponent
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o000)], ofItemAtPath: parent)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: parent) }
+
+        XCTAssertEqual(
+            try engine.leftoverPartialCopies().map(\.id), [plan.operationID],
+            "a partial copy whose presence cannot be determined must stay visible, not be silently dropped")
+    }
+
+    /// `abort` must not journal "no partial copy present, source intact" over a path it could
+    /// not read — AND must still leave the pair able to close the entry.
+    ///
+    /// The first version of this fix refused outright on `.undetermined`, which read as the
+    /// honest thing to do and was a product wedge: throwing happens before the `ABORT_FAILED`
+    /// record, so the count that bounds the abort/forget pair never advanced, `forget`'s
+    /// `.cleanable` case has no non-throwing exit, and both verbs refused forever. A review
+    /// found it and noted that the earlier version of this very test asserted the throw — it
+    /// proved half the deadlock and called it correct. Hence the second half below.
+    func testAbortRefusesRatherThanClaimingAbsenceItCouldNotVerify() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives"])
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .failed, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
+        try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: plan.destination + "/partial", contents: Data([9]))
+
+        let parent = (plan.destination as NSString).deletingLastPathComponent
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o000)], ofItemAtPath: parent)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: parent) }
+
+        // It must fail — the copy cannot be removed through an unreadable parent.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        // But it must fail *having recorded the attempt*, or nothing can ever close this entry.
+        XCTAssertEqual(
+            try f.journal.entries().filter { $0.id == plan.operationID && $0.detail["phase"] == "ABORT_FAILED" }.count, 1,
+            "abort must journal the failure before rethrowing, or the termination bound never advances")
+        XCTAssertFalse(
+            try f.journal.entries().contains { $0.id == plan.operationID && $0.summary.contains("no partial copy present") },
+            "nothing may record absence that was never established")
+
+        // Second attempt, then `forget` closes it. This is the liveness property the bound exists
+        // for, and the first version of this change destroyed it.
+        XCTAssertThrowsError(try engine.abort(operationID: plan.operationID))
+        try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)
+        XCTAssertEqual(
+            try engine.knownLeftoversAfterForget().map(\.id), [plan.operationID],
+            "the entry must close, and the copy it leaves behind must stay named")
+        XCTAssertTrue(try engine.leftoverPartialCopies().isEmpty, "and the open-entry surface must be clear")
+    }
+
+    /// `.unreachable` — the vault volume is gone — is the commonest way a copy is left behind,
+    /// and the first version of this change wrote "a partial copy may remain at …" into the
+    /// journal without the marker that makes it findable. Reconnect the drive a week later and
+    /// nothing in the product could name the copy sitting on it.
+    func testForgettingWithTheVaultUnpluggedStillLeavesTheCopyNamed() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let op = UUID().uuidString
+        let onGoneDrive = "/Volumes/GONE/XCodeVault/archives/Archives"
+        try f.journal.record(
+            id: op, kind: .migration, state: .planned, summary: "externalize archives", paths: [f.archives, onGoneDrive],
+            detail: ["vault": "NOT-REGISTERED", "phase": "PLAN", "category": "archives", "direction": "externalize"])
+        try f.journal.record(id: op, kind: .migration, state: .started, summary: "COPY", paths: [f.archives, onGoneDrive], detail: ["phase": "COPY"])
+
+        try engine.forget(operationID: op, confirmComparedBothCopies: true)
+
+        let record = try XCTUnwrap(f.journal.entries().filter { $0.id == op }.last)
+        XCTAssertTrue(record.summary.contains("may remain"), "precondition: the prose says a copy may remain")
+        XCTAssertEqual(
+            record.detail["leftover"], "1",
+            "the prose said a copy may remain and the record was not marked — so nothing could find it again")
+        XCTAssertEqual(record.detail["leftoverPath"], onGoneDrive, "and the marker must name the destination, not the source")
+        XCTAssertEqual(try engine.knownLeftoversAfterForget().map(\.id), [op])
+    }
+
+    /// The other arm must stay unmarked. `.declined` means the copy is not ours, or the source is
+    /// gone and the destination may be the only copy left — nagging there would be wrong, and a
+    /// marker applied to both arms would be indistinguishable from not thinking about it.
+    func testTheDeclinedArmIsNotMarkedAsALeftover() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let op = UUID().uuidString
+        let dest = f.vaultDir + "/archives/Archives"
+        try f.journal.record(
+            id: op, kind: .migration, state: .planned, summary: "externalize archives", paths: [f.archives, dest],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives", "direction": "externalize"])
+        try f.journal.record(id: op, kind: .migration, state: .started, summary: "COPY", paths: [f.archives, dest], detail: ["phase": "COPY"])
+        // Source gone: abort declines because the destination may now be the only copy.
+        try FileManager.default.removeItem(atPath: f.archives)
+
+        try engine.forget(operationID: op, confirmComparedBothCopies: true)
+
+        let record = try XCTUnwrap(f.journal.entries().filter { $0.id == op }.last)
+        XCTAssertNil(record.detail["leftover"], "declined must not be marked: \(record.summary)")
+        XCTAssertTrue(try engine.knownLeftoversAfterForget().isEmpty)
+    }
+
+    /// The escape hatch must not also be the place the reminder disappears.
+    func testACopyClosedOutByForgetIsStillNamedSomewhereTheUserLooks() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .planned, summary: "x", paths: [plan.source, plan.destination],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives"])
+        try f.journal.record(
+            id: plan.operationID, kind: .migration, state: .failed, summary: "COPY", paths: [plan.source, plan.destination], detail: ["phase": "COPY"])
+        // Two prior abort failures are what lets `forget` close it while a copy remains.
+        for _ in 0..<2 {
+            try f.journal.record(
+                id: plan.operationID, kind: .migration, state: .failed, summary: "abort could not remove it",
+                paths: [plan.source, plan.destination], detail: ["phase": "ABORT_FAILED", "cleanupFailed": "1"])
+        }
+        try FileManager.default.createDirectory(atPath: plan.destination, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: plan.destination + "/partial", contents: Data([7]))
+
+        try engine.forget(operationID: plan.operationID, confirmComparedBothCopies: true)
+
+        XCTAssertTrue(
+            try engine.leftoverPartialCopies().isEmpty,
+            "precondition: closing the entry is the point of forget, so it leaves the open-entry surface")
+        XCTAssertEqual(
+            try engine.knownLeftoversAfterForget().map(\.id), [plan.operationID],
+            "but the copy must still be named somewhere, or the user is the only record of it")
+    }
 }

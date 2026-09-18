@@ -52,6 +52,33 @@ is not a finding about the code; it is a finding about the instrument. The revie
 re-ran; the same run on a busier disk with a less suspicious reader produces a confident, wrong
 report about a security guard.
 
+## Verify the restore, not just the mutation
+
+2026-09-18, the same afternoon as the note above, and a different failure of the same instrument.
+
+A batch of four mutations ran as a shell loop: apply, test, restore from a copy taken at the
+start. The second mutation's `python3 -c` hit a quoting error and raised, the loop kept going
+without restoring, and the *next* iteration took its "gold" copy from the already-mutated tree.
+Every restore after that restored the mutation. The run then reported a later mutation as KILLED
+when the anchor had not even applied — the suite was red because of the leaked edit, and a red
+suite reads identically to a caught mutant.
+
+It surfaced only because the full gate run afterwards failed a test that had passed minutes
+earlier. Nothing in the mutation harness itself noticed.
+
+Two rules follow, and they cost one command each:
+
+- **Prove the gold copy is clean before using it as a restore point.** Build and run the suite
+  against it once, and require zero failures. A gold copy taken from a dirty tree poisons every
+  result after it.
+- **Verify the restore after every mutation, not at the end.** Re-run the suite on the restored
+  tree and require zero failures before applying the next one. Then "KILLED" means the mutation
+  did it, because the tree was provably green a moment earlier.
+
+The general form: a mutation result is a *difference* between two states, and it is only evidence
+if both states are known. This project's harness kept measuring the mutated state carefully and
+assuming the clean one.
+
 ## Corollaries
 
 - **`exit != 0` is not "the test caught it".** One mutant in this sequence did not compile, and the
