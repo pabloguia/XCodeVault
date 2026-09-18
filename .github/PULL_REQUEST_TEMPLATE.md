@@ -37,7 +37,7 @@ Tick what applies. Both reviews must be done by someone who did not write the ch
 - [ ] `docs/architecture/COMPATIBILITY_MATRIX.md` and `docs/architecture/HYPOTHESES.md` are updated,
       with an evidence file under `docs/research/evidence/`, and the strategy still carries its
       `experimental` label everywhere until it meets the Definition of Done in
-      `docs/process/EXECUTION_PHASES.md`
+      `docs/product/NON_GOALS_AND_SAFETY.md`
 
 <!-- A strategy is not "supported" because a copy succeeded. A finding measured on one machine is
 `probable`, not `verified`, however convincing it looked. -->

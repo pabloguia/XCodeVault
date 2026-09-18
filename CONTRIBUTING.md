@@ -16,6 +16,7 @@ of.
 swift build
 swift test
 bash scripts/experiments/test-common.sh   # the redaction helper
+bash scripts/helper-invariants.sh         # the privileged-helper invariants
 ```
 
 Requires macOS 14 or later and a recent Xcode. The package targets Swift 6.
@@ -63,6 +64,16 @@ Two kinds of change require an independent review before merge, by someone who d
 The review prompts live in `.claude/agents/` and `.codex/agents/` and are worth reading even if you
 run the review by hand: they are the checklist.
 
+`scripts/helper-invariants.sh` enforces the mechanical half of the helper rules — no process or
+shell execution, no hand-rolled peer validation, no client-influenced deletion, a code-signing
+requirement set before any connection is served, an authorization gate on every state-changing
+verb — over the files as committed, and it runs in CI. The editor hooks under `.claude/hooks/` and
+`.codex/hooks/` carry the same patterns and will catch a careless edit sooner, but they are a lint
+on a proposed edit rather than a control: they see only the Edit and Write tools, they inspect the
+new text rather than the resulting file, and they cannot tell a use of a forbidden API from a
+comment mentioning one. Do not cite them as evidence that a change is safe. Neither check replaces
+the human review.
+
 ## Running an experiment
 
 The protocol is `docs/architecture/EXPERIMENTS.md`; the open questions it answers are
@@ -74,7 +85,7 @@ The protocol is `docs/architecture/EXPERIMENTS.md`; the open questions it answer
    macOS/Xcode/arch combination it was measured on.
 3. Record the outcome in `COMPATIBILITY_MATRIX.md` and update the hypothesis status in
    `HYPOTHESES.md`. **A strategy is not "supported" because a copy succeeded** — the Definition of
-   Done is in `docs/process/EXECUTION_PHASES.md`, and until it is met the strategy is labelled
+   Done is in `docs/product/NON_GOALS_AND_SAFETY.md`, and until it is met the strategy is labelled
    experimental in code, CLI help, UI and docs alike.
 
 Do not turn an unreproduced forum workaround into product behaviour. Reproduce it, record the

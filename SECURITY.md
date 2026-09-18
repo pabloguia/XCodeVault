@@ -20,6 +20,12 @@ Use GitHub's private vulnerability reporting: the **Security** tab of this repos
 **Report a vulnerability**. That channel is private to the maintainers and gives you a thread to
 discuss a fix before anything is disclosed.
 
+If that button is not there, private reporting has not been switched on for this repository yet —
+it is off by default on a new one, which is an unhappy thing to discover two paragraphs after being
+told not to open a public issue. In that case open a public issue saying only that you have a
+security report and asking for a private channel, with **no technical detail**, and a maintainer
+will enable it and come back to you. Do not put the finding in that issue.
+
 Please include:
 
 - macOS build (`sw_vers`), Xcode version, and architecture (`uname -m`);

@@ -5,11 +5,14 @@ simulator runtimes, CoreSimulator data, DerivedData, device support, caches, arc
 keeping Xcode, Simulator, `xcodebuild`, `simctl` and `devicectl` working.
 
 Every mature tool in this space **deletes**; almost none **relocates**. The one prior tool that
-tries symlinks `~/Library/Developer/CoreSimulator` — a configuration this project refuses at any
-risk level, because CoreSimulator caches the resolved target and a restarted `CoreSimulatorService`
-goes on writing to the old path, leaving a shadow device set behind. XCodeVault treats each storage
-category as an independent unit with its own strategy, and refuses to claim a strategy works until
-it has been measured.
+tries symlinks `~/Library/Developer/CoreSimulator`, which this project refuses at any risk level.
+Note what that refusal does *not* rest on: the August 2025 report that the layout breaks the
+Simulator **did not reproduce here** (E9). What E9 did show is that CoreSimulator caches the
+resolved path and recreates a `CoreSimulator` directory there after a service restart — empty in
+that run, and observed after the symlink had already been removed. That is the shadow-data failure
+mode rule 6 exists for, and an unverified report plus one demonstrated way to strand data is
+reason enough not to inherit the design. XCodeVault treats each storage category as an independent
+unit with its own strategy, and refuses to claim a strategy works until it has been measured.
 
 ## What this is not
 
@@ -26,8 +29,8 @@ The full list of things this project will not do, and why, is in
 
 | area | state |
 |---|---|
-| Accounting (`scan`, `status`, `report`, `doctor`, `volumes`, `compatibility`) | Working. Read-only, `--json` on every read command. |
-| Cleanup and Apple-supported relocation (`clean`, `locations`, `runtime`) | Working, journaled, gated. **These change your machine.** |
+| Accounting (`scan`, `status`, `report`, `doctor`, `volumes`, `journal`, `compatibility`) | Working. Read-only, `--json` on every read command. |
+| Cleanup and Apple-supported relocation (`clean`, `locations`, `runtime`) | Working, journaled, gated. **These change your machine**, and every underlying strategy is still labelled **experimental** — see `compatibility`. |
 | Vault / external migration (`vault`, `externalize`, `restore`, `migration`) | **Experimental.** Verified copy with explicit, opt-in source removal. |
 | GUI | First slice only. Builds, launches, read-only plus the clean flow. |
 | Privileged helper | Built and security-reviewed, **not reachable from any client** — it needs a signed bundle first. |
@@ -36,7 +39,8 @@ The full list of things this project will not do, and why, is in
 
 **The important caveat.** Every compatibility claim in
 [`docs/architecture/COMPATIBILITY_MATRIX.md`](docs/architecture/COMPATIBILITY_MATRIX.md) was
-measured on a **single** Mac — one architecture, one macOS build, one Xcode, one external volume.
+measured on a **single** Mac — one architecture, two macOS builds of the same major version, one
+Xcode, one external volume.
 Several findings are therefore marked `probable` rather than `verified`, and no amount of review
 upgrades them. Publishing this repository is how that changes: CI on two macOS versions, and
 results from machines that are not the author's. See
@@ -56,8 +60,9 @@ swift build
 
 `scan`, `status`, `report`, `doctor`, `xcode`, `runtime list`, `volumes`, `journal` and
 `compatibility` are read-only and never change anything. `clean`, `locations set-*`, `runtime delete/import/offload`,
-`externalize` and `restore` do change things; each shows a plan first, and every change is recorded
-in a journal you can inspect with `journal`.
+`externalize`, `restore` and `bench` (which writes a temporary 256 MB file) do change things; each
+of the first five shows a plan first, and every change is recorded in a journal you can inspect
+with `journal`.
 
 `report` exists to be pasted into an issue: it redacts your home directory.
 
@@ -75,7 +80,7 @@ This project is research-first, and the docs are the product as much as the code
 - [`docs/adr/`](docs/adr/) — decisions, including the ones that reversed earlier decisions.
 
 A strategy is labelled **experimental** in code, CLI help, UI and docs until it meets the Definition
-of Done in [`docs/process/EXECUTION_PHASES.md`](docs/process/EXECUTION_PHASES.md). "The copy
+of Done in [`docs/product/NON_GOALS_AND_SAFETY.md`](docs/product/NON_GOALS_AND_SAFETY.md). "The copy
 succeeded" is not that definition.
 
 ## Safety rules

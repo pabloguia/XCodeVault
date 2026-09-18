@@ -51,9 +51,11 @@ an appointed representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the
-maintainers through GitHub's private vulnerability reporting on the **Security** tab of this
-repository, or by contacting the repository owner through their GitHub profile. All complaints will
-be reviewed and investigated promptly and fairly.
+maintainers by contacting the repository owner through the contact details on their GitHub profile.
+If GitHub's private vulnerability reporting is enabled on this repository, the **Security** tab
+offers a private thread that works for this too — but that feature is scoped to security and is off
+by default, so it is the second route here, not the first. All complaints will be reviewed and
+investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any
 incident.

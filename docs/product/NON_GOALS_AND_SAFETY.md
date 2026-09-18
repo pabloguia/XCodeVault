@@ -34,8 +34,9 @@ detailed version — expand on rationale here, keep CLAUDE.md as the terse check
   create folders (H5 / research finding F3) on macOS 26.6.2 / Xcode 26.5 — so do not repeat
   that breakage as established fact. What E9 did show is that the layout leaves **shadow
   device sets** behind: CoreSimulator caches the resolved target, so a restarted
-  `CoreSimulatorService` recreates and keeps writing to the old path (rule 6). The
-  prohibition therefore stands on "unverified, and known to produce shadow data" — a weaker
+  `CoreSimulatorService` recreated the directory at the old path — **empty in that run**, and
+  observed after the symlink had already been removed (rule 6). The
+  prohibition therefore stands on "unverified, and known to strand a directory" — a weaker
   claim about the symptom, not a weaker rule.
 - Ship pre-macOS-14 compatibility code paths, and in particular never add a second,
   SMJobBless-based privileged-helper implementation (ADR-0001). An untestable

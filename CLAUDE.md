@@ -68,8 +68,10 @@ verbs; every change needs the helper-security review) · `Sources/XCodeVault` (S
    never silently allow shadow/duplicate data to form.
 7. `~/Library/Developer` stays a real directory and `~/Library/Developer/DeveloperDiskImages`
    is never a symlink (FB12363725). Do not offer any symlink strategy for
-   `~/Library/Developer/CoreSimulator` — symlinking it breaks the Simulator even when
-   the target is on the same internal disk (H5).
+   `~/Library/Developer/CoreSimulator`. The prohibition is unconditional, but note what it
+   rests on: the reported same-disk breakage did **not** reproduce (H5/E9). It rests on the
+   layout leaving a shadow `CoreSimulator` directory behind, and on one passing configuration
+   not being a safety proof.
 8. Minimum supported macOS is 14.0 (ADR-0001). Do not add pre-14 compatibility code
    paths, and never a second SMJobBless privileged-helper implementation.
 9. Ship in the tier order of ADR-0002: supported Apple mechanisms and disconnect safety
@@ -77,7 +79,7 @@ verbs; every change needs the helper-security review) · `Sources/XCodeVault` (S
    experimental until the Definition of Done is met.
 10. A storage strategy is not "supported" until `docs/architecture/HYPOTHESES.md` and
    `COMPATIBILITY_MATRIX.md` show it meets the Definition of Done in
-   `docs/process/EXECUTION_PHASES.md`. Until then, label it experimental everywhere
+   `docs/product/NON_GOALS_AND_SAFETY.md`. Until then, label it experimental everywhere
    (code comments, CLI help text, UI, docs).
 
 ## Working style

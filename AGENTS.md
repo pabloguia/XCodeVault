@@ -28,7 +28,7 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `docs/architecture/COMPATIBILITY_MATRIX.md` — macOS/Xcode combinations, evidence, status.
 - `docs/process/EXECUTION_PHASES.md` — phased plan (research-first, not GUI-first).
 - `docs/process/AGENTIC_ENGINEERING_SETUP.md` — how to bootstrap and evolve
-  `.Codex/agents/`, `.Codex/skills/`, and hooks for this repo.
+  `.codex/agents/`, `.codex/skills/`, and hooks for this repo.
 - `docs/process/PRIOR_ART.md` — notes on `Viniciuscarvalho/mac-ssd-rescue` and other prior art.
 - `docs/adr/` — architecture decision records. Add one for every meaningful
   architectural choice or reversal; don't silently overwrite past reasoning.
@@ -38,7 +38,7 @@ this file short and update it only when a pointer or non-negotiable changes.
 - `STATUS.md` — current milestone, what is done / in flight / blocked, next three actions.
   Read it first in a new session; update it as you go.
 - `scripts/experiments/` — the experiment harness (`common.sh` header/redaction, `e1`, `e2`,
-  `e8`); evidence lands in `docs/research/evidence/`. `.Codex/skills/run-experiment` has the
+  `e8`); evidence lands in `docs/research/evidence/`. `.codex/skills/run-experiment` has the
   procedure.
 
 ## Layout
@@ -65,8 +65,10 @@ verbs; every change needs the helper-security review) · `Sources/XCodeVault` (S
    never silently allow shadow/duplicate data to form.
 7. `~/Library/Developer` stays a real directory and `~/Library/Developer/DeveloperDiskImages`
    is never a symlink (FB12363725). Do not offer any symlink strategy for
-   `~/Library/Developer/CoreSimulator` — symlinking it breaks the Simulator even when
-   the target is on the same internal disk (H5).
+   `~/Library/Developer/CoreSimulator`. The prohibition is unconditional, but note what it
+   rests on: the reported same-disk breakage did **not** reproduce (H5/E9). It rests on the
+   layout leaving a shadow `CoreSimulator` directory behind, and on one passing configuration
+   not being a safety proof.
 8. Minimum supported macOS is 14.0 (ADR-0001). Do not add pre-14 compatibility code
    paths, and never a second SMJobBless privileged-helper implementation.
 9. Ship in the tier order of ADR-0002: supported Apple mechanisms and disconnect safety
