@@ -37,6 +37,9 @@ this file short and update it only when a pointer or non-negotiable changes.
   cleanup + disconnect safety).
 - `STATUS.md` — current milestone, what is done / in flight / blocked, next three actions.
   Read it first in a new session; update it as you go.
+- `docs/process/SESSION-HANDOFF.md` — the distilled version of the above for starting cold:
+  reading order, verified machine state, and the recommended next work in priority order. Its
+  numbers are point-in-time and say so; re-verify before acting on them.
 - `scripts/experiments/` — the experiment harness (`common.sh` header/redaction, `e1`, `e2`,
   `e8`); evidence lands in `docs/research/evidence/`. `.codex/skills/run-experiment` has the
   procedure.
