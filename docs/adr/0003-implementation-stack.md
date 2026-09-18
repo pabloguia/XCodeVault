@@ -63,8 +63,13 @@ target population per ADR-0001 is macOS 14+ with Xcode 16/26.
     user-visible in CLI and GUI is a projection of this module.
   - `XCodeVaultHelperProtocol` — the XPC `@objc` protocol and allowlisted verb value
     types shared by client and daemon. Nothing else crosses the XPC boundary.
-  - `XCodeVaultHelper` — the root daemon executable (`SMAppService.daemon`). Depends on
-    `XCodeVaultHelperProtocol` only; resolves every request against its own approved
+  - `XCodeVaultHelperCore` — the daemon's logic (verbs, authorization gate, path guards) in a
+    library target so it can be tested. **Added 2026-09-17; see ADR-0006.** Nothing but the
+    helper executable and the test target may depend on it, and no script enforces that.
+  - `XCodeVaultHelper` — the root daemon executable (`SMAppService.daemon`). Bootstrap only.
+    Depends on `XCodeVaultHelperCore` and `XCodeVaultHelperProtocol`; the text below said
+    "`XCodeVaultHelperProtocol` only" and was left stale by the split ADR-0006 records.
+    Resolves every request against its own approved
     catalog. No `Process` with shell, no free-form paths.
   - `xcodevaultctl` — CLI on swift-argument-parser; every read verb has `--json`.
   - `XCodeVault` — SwiftUI app executable target (M4), bundled by `scripts/bundle-app.sh`.
@@ -74,7 +79,9 @@ target population per ADR-0001 is macOS 14+ with Xcode 16/26.
 - **Process execution:** a single `CommandRunner` abstraction (array-argument
   `posix_spawn` via `Process`, no shell) in Core, injectable for tests. The helper never
   links it in a way that accepts client-supplied arguments.
-- **Formatting:** `swift-format` from the Xcode toolchain, enforced by a hook.
+- **Formatting:** `swift-format` from the Xcode toolchain, reported by a PostToolUse hook and
+  **enforced in CI**. The hook is a convenience: every exit path is 0, and it only sees Edit and
+  Write, so `cat >`, `sed -i` and `git apply` bypass it entirely. Its own header says so.
 
 ## Consequences
 

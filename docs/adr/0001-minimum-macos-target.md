@@ -1,6 +1,10 @@
 # ADR 0001: Minimum supported macOS is 14.0 (Sonoma), not 10.13
 
-- Status: proposed (accept after the team confirms no Ventura/Monterey user need)
+- Status: accepted (2026-09-17)
+- The original status read "proposed (accept after the team confirms no Ventura/Monterey user
+  need)". There is no team, so that condition could never be met, while the floor shipped,
+  `Package.swift` declares `.macOS(.v14)`, CI runs macos-15 and macos-26, and safety rule 8 of
+  `CLAUDE.md` calls it non-negotiable. A decision the code has implemented is not proposed.
 - Date: 2026-09-05
 - Related hypothesis: none — this is a platform decision, evidence in
   `../research/FINDINGS-2026-09-05.md` §F8
@@ -29,9 +33,15 @@ alongside a modern tier. Desk research says that is not defensible:
 ## Decision
 
 Minimum deployment target **macOS 14.0**. Primary development and CI targets:
-**macOS 15 and macOS 26**. macOS 13.0 is an acceptable fallback floor if user research
-later shows a meaningful Ventura population — it costs no additional API work, only
-testing. **Do not go below 13 under any circumstances.**
+**macOS 15 and macOS 26**. macOS 13.0 was recorded here as an acceptable fallback floor if user
+research later showed a meaningful Ventura population, on the grounds that it would cost "no
+additional API work, only testing". **That is no longer true, and the sentence is kept rather than
+deleted so the correction is visible.** The GUI now depends on three macOS 14.0-only APIs —
+`@Observable` and `@Bindable` (Observation) and `ContentUnavailableView` — each load-bearing in
+`Sources/XCodeVault/XCodeVaultApp.swift`. A 13.0 floor today costs migrating `AppModel` back to
+`ObservableObject`/`@Published`, replacing `@Bindable`, and hand-rolling three empty-state views.
+Safety rule 8 is the stricter statement and governs: 14.0 is the floor, and this ADR does not
+authorise going below it.
 
 ## Consequences
 

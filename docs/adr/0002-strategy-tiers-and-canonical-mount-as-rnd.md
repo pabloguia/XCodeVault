@@ -1,6 +1,8 @@
 # ADR 0002: Ship supported mechanisms + disconnect safety first; canonical mount is R&D
 
-- Status: proposed
+- Status: accepted (2026-09-17); **Tier 2 superseded by ADR-0004**
+- ADR-0004 demoted canonical APFS mount to R&D after E1/E2. A reader of this ADR alone would
+  otherwise still be told Tier 2 is a shippable experimental tier.
 - Date: 2026-09-05
 - Related hypotheses: H1, H5, H6, H7
 
@@ -37,6 +39,9 @@ Order the product by evidence, not by ambition:
   verification, shadow-data detection, refusal to operate under ambiguity, verified
   restore. This is the entire missing half of the prior art and is what makes this a
   tool rather than a script.
+- **Tier 2 — SUPERSEDED BY ADR-0004.** E1 and E2 demoted canonical APFS mount to R&D; it is not
+  a shippable tier and nothing surfaces it as an action. The original text follows, unedited,
+  because the reasoning that led to it is what ADR-0004 argues against.
 - **Tier 2 (experimental, opt-in, gated on E1/E2/E4/E6):** canonical APFS mount. Ship
   only if the gating experiments pass, and label it experimental until the full
   Definition of Done is met.
