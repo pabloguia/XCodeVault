@@ -304,7 +304,8 @@ final class ExperimentScriptSafetyTests: XCTestCase {
             ["e.txt: contains the account name as a bare word"],
             "the account rule must stand on its own, not only alongside the home-directory rule")
         XCTAssertEqual(
-            Self.machineIdentityLeaks(in: "mounted at /Volumes/Octavia-SSD\n", fileName: "e.txt", home: "", user: "runner", mountedVolumes: ["Octavia-SSD", "Data"]),
+            Self.machineIdentityLeaks(
+                in: "mounted at /Volumes/Octavia-SSD\n", fileName: "e.txt", home: "", user: "runner", mountedVolumes: ["Octavia-SSD", "Data"]),
             ["e.txt: names the mounted volume 'Octavia-SSD'"],
             "and a named drive is still caught on a CI account, while a generic system volume is not")
     }

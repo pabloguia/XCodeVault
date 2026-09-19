@@ -393,11 +393,12 @@ final class OffloadVolumeIdentityTests: XCTestCase {
         let image = try makeImage()
         defer { try? FileManager.default.removeItem(at: image.deletingLastPathComponent()) }
 
-        let text = try findingFromJournal({ journal in
-            try journal.record(
-                id: "op-1", kind: .runtimeOffload, state: .started, summary: "offload",
-                paths: [image.path], detail: ["runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-5", "installer": image.path])
-        })?.remediation ?? ""
+        let text =
+            try findingFromJournal({ journal in
+                try journal.record(
+                    id: "op-1", kind: .runtimeOffload, state: .started, summary: "offload",
+                    paths: [image.path], detail: ["runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-5", "installer": image.path])
+            })?.remediation ?? ""
 
         XCTAssertFalse(
             text.contains("journal records no offloaded runtime"),
@@ -409,10 +410,11 @@ final class OffloadVolumeIdentityTests: XCTestCase {
     /// The control: a `.started` followed by `.failed` means the delete did not happen, so there is
     /// no interrupted operation to warn about.
     func testAStartedOffloadThatRecordedAFailureIsNotTreatedAsInterrupted() throws {
-        let text = try findingFromJournal({ journal in
-            try journal.record(id: "op-1", kind: .runtimeOffload, state: .started, summary: "offload", paths: ["/tmp/x.dmg"], detail: [:])
-            try journal.record(id: "op-1", kind: .runtimeOffload, state: .failed, summary: "failed", paths: ["/tmp/x.dmg"], detail: [:])
-        })?.remediation ?? ""
+        let text =
+            try findingFromJournal({ journal in
+                try journal.record(id: "op-1", kind: .runtimeOffload, state: .started, summary: "offload", paths: ["/tmp/x.dmg"], detail: [:])
+                try journal.record(id: "op-1", kind: .runtimeOffload, state: .failed, summary: "failed", paths: ["/tmp/x.dmg"], detail: [:])
+            })?.remediation ?? ""
         XCTAssertFalse(text.contains("never recorded how it ended"), "a recorded failure is not an unknown outcome. Got: \(text)")
     }
 
@@ -466,14 +468,16 @@ final class OffloadVolumeIdentityTests: XCTestCase {
     func testAnOffloadForSomeOtherRuntimeDoesNotGreenLightDeletion() throws {
         let image = try makeImage()
         defer { try? FileManager.default.removeItem(at: image.deletingLastPathComponent()) }
-        let text = try findingFromJournal({ journal in
-            try journal.record(
-                id: UUID().uuidString, kind: .runtimeOffload, state: .completed, summary: "offloaded", paths: [image.path],
-                detail: [
-                    "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-11-0", "installer": image.path,
-                    "installerVolumeUUID": "AAAA-1111",
-                ])
-        }, actualUUID: "AAAA-1111")?.remediation ?? ""
+        let text =
+            try findingFromJournal(
+                { journal in
+                    try journal.record(
+                        id: UUID().uuidString, kind: .runtimeOffload, state: .completed, summary: "offloaded", paths: [image.path],
+                        detail: [
+                            "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-11-0", "installer": image.path,
+                            "installerVolumeUUID": "AAAA-1111",
+                        ])
+                }, actualUUID: "AAAA-1111")?.remediation ?? ""
 
         XCTAssertFalse(text.contains("journal records no offloaded runtime"), text)
         XCTAssertTrue(text.contains("does not match any of these unavailable devices"), text)
@@ -506,4 +510,3 @@ final class OffloadVolumeIdentityTests: XCTestCase {
         XCTAssertFalse(attempt.runner.invocations.contains { $0.contains("delete") }, "\(attempt.runner.invocations)")
     }
 }
-

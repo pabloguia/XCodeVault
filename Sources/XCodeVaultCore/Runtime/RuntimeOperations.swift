@@ -288,8 +288,10 @@ public struct RuntimeOperations: Sendable {
         if volumeUUID == nil {
             warnings.append(
                 "The filesystem holding \(inst.path) reports no volume UUID, so the journal cannot record which drive this "
-                    + "installer is on. `doctor` will be able to say the image is unreachable but not whether a file later found "
-                    + "at that path is the same one.")
+                    + "installer is on. Two consequences, and the first is about this deletion rather than a later diagnosis: "
+                    + "the runtime will be deleted without any check that the installer is still on the same drive it was verified "
+                    + "on, and `doctor` will later be able to say the image is unreachable but not whether a file found at that "
+                    + "path is the same one.")
         }
         return (
             OffloadPlan.checked(identifier: identifier, installer: inst, runtime: rt, installerVolumeUUID: volumeUUID),

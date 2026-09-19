@@ -396,6 +396,15 @@ extension Doctor {
         let entries = read?.entries ?? []
         // An installer that was offloaded and later re-imported is no longer standing in for a
         // missing runtime; the stale offload entry must not keep claiming recoverability.
+        //
+        // Matched by installer **path**, and a reviewer noted this is a fourth route to the branch
+        // that says nothing was offloaded: if the only offload entry has a completed import against
+        // the same path, `offloads` comes out empty and that sentence is produced with a perfectly
+        // good installer sitting on disk. Left as is deliberately — a completed import means the
+        // runtime was already restored once, so re-importing it again is not the advice these
+        // devices need, and the sentence is then true of the *outstanding* offloads, which is what
+        // it is about. Written down because it is not obvious, and the next reader should not have
+        // to re-derive it.
         let reimported = Set(entries.filter { $0.kind == .runtimeImport && $0.state == .completed }.flatMap(\.paths))
         /// An offload that wrote `.started` and never wrote a terminal line.
         ///

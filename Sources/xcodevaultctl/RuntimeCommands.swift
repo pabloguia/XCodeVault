@@ -101,7 +101,10 @@ extension Runtime {
 
     struct Offload: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Delete an installed runtime only if its installer already sits in the Runtime Library (export first if not). Two-phase, journaled.")
+            abstract:
+                "EXPERIMENTAL. Delete an installed runtime only if its installer already sits in the Runtime Library (export first if not). "
+                + "Two-phase, journaled. The round trip that makes this safe — devices returning when the runtime is re-imported — has been "
+                + "observed twice on one configuration and at the same version; see `compatibility`.")
         @Argument(help: "Runtime image identifier (UUID from `runtime list`).") var identifier: String
         @Option(name: .long, help: "Runtime Library directory.") var library: String
         @Flag(name: .long, help: "Confirm deletion.") var yes = false
@@ -125,9 +128,18 @@ extension Runtime {
             print(
                 "Installer readable (hdiutil imageinfo): \(plan.installerFileName) (\(ByteCount.format(plan.installerSizeBytes))). "
                     + "Seal validation happens on import.")
+            // The qualifier belongs *here*, where the user decides, and not only after the deletion.
+            // `doctor` hedges this same claim ("observed twice on one configuration … a cross-version
+            // import has not been tried") while the CLI stated it as flat fact at the one moment the
+            // data is still there — the stronger claim made where it costs most. CLAUDE.md rule 10.
+            let recoveryCaveat =
+                "Recovery evidence: devices returned to Shutdown with their data on macOS 26.6.2 / Xcode 26.5 / Intel, iOS 26.5, "
+                + "re-imported at the SAME version (E8/H4, F13). Two runs of one configuration; a cross-version import has never "
+                + "been tried."
             guard yes else {
                 let size = plan.sizeBytes.map { " (\(ByteCount.format($0)))" } ?? ""
                 print("Would delete runtime \(plan.runtimeIdentifier ?? identifier)\(size). Pass --yes to proceed.")
+                print(recoveryCaveat)
                 return
             }
             let r = try ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "--yes"))
@@ -143,7 +155,8 @@ extension Runtime {
             print("Deleted runtime \(plan.runtimeIdentifier ?? identifier)\(freed) from the internal volume.")
             // The surprising part, and the reason `doctor` now refuses to suggest deleting them:
             // the devices survive, they just cannot run until the runtime is back.
-            print("Devices for this runtime are now Unavailable, NOT deleted — they return to Shutdown with their data when it is re-imported (E11).")
+            print("Devices for this runtime are now Unavailable, NOT deleted — they are expected to return to Shutdown with their data when it is re-imported.")
+            print(recoveryCaveat)
             print("Re-install later with: xcodevaultctl runtime import \"\(plan.installerPath)\"")
         }
     }
