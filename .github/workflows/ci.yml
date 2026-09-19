@@ -39,10 +39,24 @@ jobs:
         run: |
           set -o pipefail
           swift build -v -Xswiftc -warnings-as-errors 2>&1 | tail -20
+      - name: Test-environment capabilities
+        # Twenty-four `XCTSkip` sites gate tests on environment capabilities. The first CI run
+        # measured zero skipped on both runners, so all of them fire — but nothing enforced it, and
+        # a test that silently stops running is worse than one that fails: the suite stays green and
+        # the count only moves if somebody is watching it (issue #18). This says which capability is
+        # missing; the step after the tests says whether anything was actually skipped.
+        run: bash scripts/ci-environment-assertions.sh
       - name: Unit tests
         run: |
           set -o pipefail
-          swift test 2>&1 | tail -60
+          swift test 2>&1 | tee "$RUNNER_TEMP/test.log" | tail -60
+      - name: No tests were skipped
+        # The committed baseline is zero, measured on 2026-09-18. This reads what the suite did
+        # rather than what the environment can do, so a skip introduced by a test gating on
+        # something the capability list forgot is still caught. It refuses to pass on a log it
+        # could not parse, because "zero skips" and "no summary found" render identically if you
+        # only count — a mistake this repository has made three times.
+        run: bash scripts/ci-assert-no-skips.sh "$RUNNER_TEMP/test.log"
       - name: Entry-point documents in step
         # CLAUDE.md and AGENTS.md are one document for two tools. They have drifted three times,
         # once on a safety rule, each caught by a human noticing rather than by anything here.

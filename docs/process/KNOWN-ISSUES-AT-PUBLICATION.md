@@ -52,17 +52,34 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
   limit, the trust-anchor containment check and the root-anchor owner refusal. The lesson is the
   one this change is about: "unpinnable" is a claim that has to be checked per guard, not a
   category applied to whatever is left over.
-- **The volume-UUID lookup parses an attribute it never confirmed was returned.** `getattrlist` is
-  called without `ATTR_CMN_RETURNED_ATTRS`, so a filesystem that succeeds without supplying
-  `ATTR_VOL_UUID` would yield the all-zero UUID, which is a valid `UUID` and would act as a
-  wildcard. Probed on apfs, msdos, devfs and autofs, all of which either return a real UUID or fail;
-  smbfs, nfs, webdav and FUSE are untested.
-- **No audit log.** A root daemon that deletes files and changes ownership records nothing, so an
-  incident has nothing to reconstruct from.
-- **A narrow race in `createVaultDirectory`.** Between `mkdir` succeeding and `open` returning, a
-  writer on that volume can rename a different directory into the path. The create branch now also
-  requires the directory to be root-owned, which closes the demonstrated case; the caller must
-  already be an administrator either way.
+- ~~**The volume-UUID lookup parses an attribute it never confirmed was returned.**~~ **Fixed
+  2026-09-19** (issue #3). The request now carries `ATTR_CMN_RETURNED_ATTRS`, and the reply's
+  returned-attribute bitmap is checked for `ATTR_VOL_UUID` before any byte of it is read; the reply
+  length is validated at both the set and the UUID offset. Independently, the all-zero UUID is
+  rejected on both sides — never produced from a reply, and refused at `mountPoint(forVolumeUUID:)`
+  before any filesystem is examined, so it cannot act as a wildcard by any route. The parse is
+  cross-checked against Core's independent reader on the boot volume, and every filesystem mounted
+  on the test machine is asserted never to yield the all-zero value. smbfs, nfs, webdav and FUSE
+  remain untested, because none is mounted here.
+- ~~**No audit log.**~~ **Fixed 2026-09-19** (issue #4). Every verb invocation is recorded to the
+  unified log through `HelperAudit` — caller uid, verb, validated arguments, the authorization
+  outcome and the result — at `.notice`, which persists, rather than `.info`, which does not
+  survive a reboot. Emitted at the XPC dispatch, which is the only place every invocation passes
+  through and which keeps test invocations out of the machine's real log. Redaction uses `os_log`'s
+  own privacy qualifiers rather than `Redaction.swift`: that type is built from `[Volume]` and
+  lives in Core, and importing Core into the root daemon to save an enum is the wrong trade.
+  Caller-supplied arguments are `.private(mask: .hash)`, so they stay correlatable across entries
+  without being disclosed. `scripts/helper-invariants.sh` now requires one `emit` per state-changing
+  verb and forbids the memory-backed levels.
+- ~~**A narrow race in `createVaultDirectory`.**~~ **Fixed 2026-09-19** (issue #5). The verb no
+  longer touches the path after resolving it: it opens the volume root `O_NOFOLLOW|O_DIRECTORY` and
+  does `fstatat`/`mkdirat`/`openat` relative to that descriptor, so the parent cannot be swapped
+  underneath it. POSIX offers no create-and-open for directories, so the remaining window between
+  `mkdirat` and `openat` is closed by verification rather than exclusion: `fstat` on the descriptor
+  — never `stat` on the path — must report the same `st_dev` as the parent, and for the just-created
+  branch `st_nlink == 2` (an empty directory is `.` plus its parent's entry) and `st_uid == 0`.
+  **Stated as a verification, not an exclusion:** an attacker who can place an empty root-owned
+  directory on that volume defeats it, and doing so requires root.
 
 ## `scripts/helper-invariants.sh`
 
@@ -269,13 +286,27 @@ needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor
 
 ### API surface
 
-`XCodeVaultCore` ships as a `.library` product with a large public surface and no
-`package`/`internal` discipline, which makes all of it a semver commitment on the day the repository
-opens, when every actual consumer is in this repository. Two passes counted the surface differently
-(551 vs 422) by different methods; the count is not the point. Also: `XcodeLocations.Change.key` is a
-free-form `String` written into `defaults write com.apple.dt.Xcode`, with the "which keys this tool
-may own" rule held by discipline at six call sites; and each client composes the Doctor's two rule
-families by hand, so a third family means editing three files with no compile error if one is missed.
+~~`XCodeVaultCore` ships as a `.library` product with a large public surface and no
+`package`/`internal` discipline~~ — **the exposure is closed as of 2026-09-19** (issue #15). The
+library *product* is gone; the three in-repo consumers (the CLI, the app, the test target) depend on
+the **target**, which is unaffected, while nothing outside this repository can depend on any of it.
+That is the part that made the surface a semver commitment, and removing it closes all of it. The
+`package`/`internal` narrowing is now ordinary hygiene rather than a breaking change — narrowing a
+surface nobody can reach breaks nobody — and it can proceed incrementally. 502 `public` declarations
+remain; the earlier passes counted 551 and 422 by different methods, and the count was never the
+point. Re-adding the product has a precondition written beside it in `Package.swift` and a test that
+fails if it reappears.
+
+~~`XcodeLocations.Change.key` is a free-form `String` written into
+`defaults write com.apple.dt.Xcode`~~ — **fixed 2026-09-19** (issue #16). It is a closed
+enumeration of the four keys this tool owns, so an unowned key cannot be *constructed* rather than
+being rejected at write time. The enum's raw values are short display names and the defaults keys
+come from a separate `switch`, deliberately: fusing them would make renaming a display name silently
+rewrite a real Xcode preference key.
+
+~~Each client composes the Doctor's two rule families by hand~~ — **fixed 2026-09-19** (issue #17).
+`diagnoseAll` is the single entry point and a test fails when a family is declared under
+`Sources/XCodeVaultCore/Doctor` and is not reachable from it.
 
 ### CI and the test suite
 
@@ -287,6 +318,17 @@ families by hand, so a third family means editing three files with no compile er
   environment change could start skipping tests and no gate would notice. CI should assert its
   environment supports what the skips need, and fail if the skip count exceeds a committed baseline
   of zero.
+
+  **The residual is closed as of 2026-09-19** (issue #18), with two controls rather than one,
+  because they fail differently. `scripts/ci-environment-assertions.sh` asserts the capabilities —
+  `chmod +a` sets an ACL that sticks, `hdiutil create`/`attach` round-trips, `/Volumes/<boot volume>`
+  is a symlink, and the suite is not running as root (which would *remove* eleven permission tests
+  rather than fail them). `scripts/ci-assert-no-skips.sh` asserts the outcome: it parses the run's
+  own summary and fails when anything was skipped, baseline zero. The capability list is something
+  somebody maintains and will eventually be incomplete; the skip count is the property actually
+  wanted. Both refuse to report ok on input they could not parse — "zero skips" and "I found no
+  test summary" render identically if you only count, which is the instrument failure this
+  repository has now made three times.
 - `.github/workflows/ci.yml` pins `actions/checkout` and `actions/upload-artifact` by mutable tag
   rather than SHA. Given `permissions: contents: read`, no secrets, and no publishing step, this does
   not materially change the workflow's risk — but the calculus changes the day a release job is added.
@@ -307,3 +349,50 @@ whose header calls it an evidence ledger. Evidence is append-only, so these are 
 vocabulary is not recoverable from the repository. Renaming by content is cheap and internal; it was
 left because it would collide with the structural splits above, which should happen first.
 
+
+## Experiment harness and evidence ledger — audited 2026-09-19 (issue #23)
+
+The pre-publication review did not read 19 of the experiment scripts or 44 of the evidence files,
+and named them as the first place a second pass should go. That pass has now run. What it checked
+mechanically, and what it found:
+
+**Clean.** Every one of the 19 scripts sources `common.sh` and uses its header/redaction helpers —
+none writes evidence by hand. Across all 44 evidence files there is no occurrence of this machine's
+home directory, its account name as a bare word, any mounted volume's name, or either mounted
+volume's UUID. 39 of the 44 carry at least one redaction marker (`<user>`, `<vault>`,
+`<vault-uuid>`, `<bootvolume>`, `~`). The five that carry none — `e13-dyld-reboot-*` (2),
+`e1b-mount*` (2), `e4b-runtime-from-external-20260909T201158.txt` — were read: they contain only
+root-scoped paths under `/Library/Developer` and system version strings, so there was nothing to
+redact. An absent marker there is the redactor having nothing to do, not the redactor not running.
+
+**Two findings, neither of them a redaction failure:**
+
+- **`e15-ide-honours-device-set.sh` has produced no evidence file, ever.** It is the only script
+  with a zero count, and the `run-experiment` skill classifies it as **destructive** — it
+  `defaults write`s and `defaults delete`s `DVTSimulatorSetLocation`, a real key in the user's own
+  `com.apple.dt.Xcode`. So the one script in the harness with no recorded run is also one of the
+  six that can leave the user's Xcode pointing somewhere else if interrupted. Nothing in the
+  product depends on E15, and `HYPOTHESES.md` does not cite it, so this is an untested tool rather
+  than an unsupported claim — but it should be run and recorded, or deleted, rather than left as a
+  destructive script nobody has exercised.
+
+- **Four evidence files have no script that could have produced them:**
+  `e4a-seal-survives-external-relocation-*`, `f11-export-installed-runtime-*`,
+  `f12-export-artifact-shapes-*`, `f13-offload-import-device-return-*`. They were produced by hand.
+  That is the same class as the E7 row demoted under issue #20 — an evidence ledger entry that
+  cannot be re-run by anyone but the person who ran it. They are not wrong and nothing here
+  proposes deleting them; what is missing is a script, and writing one is what would let a second
+  machine confirm them.
+
+**What this pass did not do.** It is a mechanical audit plus a read of the five unmarked files. It
+did not re-derive each script's findings, and it cannot: most of them mutate a real environment.
+It says the harness redacts what it claims to redact and that the ledger has no leak of this
+machine's identity. It does not say the experiments' conclusions are right — that is what a second
+machine is for (`CONTRIBUTING.md`).
+
+The skill's destructive-experiment list, the other half of issue #23, was already corrected in
+commit `6322ef0` ("Classify the experiment scripts by what they do, not by their number"), which
+replaced the stale three-name list with the six-class table now in
+`.claude/skills/run-experiment/SKILL.md` — and `e13b`, `e14b-device-set-external` and `e14c` are
+all classified there. Both mirrored copies are byte-identical, checked by
+`scripts/check-doc-mirror.sh`.

@@ -459,6 +459,16 @@ Evidence: `../research/evidence/e18-simctl-log-erase-macos26.6.2-25G83-xcode26.5
 
 ## E15 — does `xcodebuild`/Xcode honour `DVTSimulatorSetLocation`? (gates H12's transparency half)
 
+> **Never run. No evidence file exists for E15** — it is the only script in `scripts/experiments/`
+> with a zero count, found by the 2026-09-19 harness audit (issue #23). It is also classified
+> **destructive** by the `run-experiment` skill, because steps B–D `defaults write` and
+> `defaults delete` a real key in the user's own `com.apple.dt.Xcode`; the script restores the prior
+> value on exit, but an interrupted run leaves Xcode pointing at another device set — and the
+> harness's own measured limitation is that cleanup traps do not run on interruption (see
+> "Harness" below). Nothing in the product depends on E15 and `HYPOTHESES.md` does not cite it, so
+> this is an unexercised tool rather than an unsupported claim. Run it and record the result, or
+> delete it; do not leave a destructive script that nobody has ever run.
+
 `scripts/experiments/e15-ide-honours-device-set.sh --i-understand`. Uses an alternate set on the
 **internal** disk on purpose, so a failure here means "not transparent" and not "external storage".
 Writes one user default and restores the prior value on exit including `^C`.

@@ -272,10 +272,18 @@ those entries "pending — manual" until someone actually runs and records the r
     scripts, so this doesn't affect `xcodevaultctl` itself.
 - Evidence: `../research/evidence/e11-iOS-macos26.6.2-25G83-xcode26.5-x86_64.txt`,
   `../research/evidence/e11-import-iOSSimulatorRuntime_Cryptex-macos26.6.2-25G83-xcode26.5-x86_64.txt`
-- Verdict: import mechanism **verified safe against a large, real, in-use runtime** — the
-  offload→import round trip does not lose devices or data even when the runtime being cycled
-  is the one actively backing the user's own development devices. Confirms the preflight
-  formula generalizes beyond the single tvOS data point.
+- Verdict: import mechanism **verified safe against a large, real, in-use runtime, on this
+  machine** — the offload→import round trip did not lose devices or data even when the runtime
+  being cycled is the one actively backing the user's own development devices.
+  <!-- Rescoped under issue #20. This read "verified safe against a large, real, in-use runtime"
+       unqualified, and closed with "Confirms the preflight formula generalizes beyond the single
+       tvOS data point". Two data points on one machine is not generalization, and the adjacent
+       entry at the 2026-09-06 import above scopes the same class of claim to "on this machine".
+       The formula being right twice here is what the evidence carries; whether it holds elsewhere
+       is what a second machine would answer. -->
+  The preflight formula held for a second runtime family (iOS as well as tvOS) on this machine.
+  Whether it generalizes to other hardware is **not** established by n=2 on one host; see
+  `CONTRIBUTING.md` for what a second machine would settle.
 
 ### E7 shadow-data defense — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
 
@@ -299,11 +307,20 @@ those entries "pending — manual" until someone actually runs and records the r
     `IDELogStore`-level permission errors (log level "critical", not a crash) leading up to the
     failure; no SIGSEGV/SIGABRT/fatal-error lines, no lingering/zombie processes, `xcv-probe`
     itself unchanged (`root:wheel`, `0500`, `uchg`) after the attempt.
-- Evidence: this session's transcript (no `.txt` evidence file written — no script exists for
-  E7; recorded here and in `HYPOTHESES.md` H3 directly, per the "informative, low-priority"
-  nature of the experiment).
-- Verdict: for this failure shape (a build tool asked to create a derived-data directory under
-  a locked path), the shadow-data defense **fails loudly, does not crash or corrupt state.**
+- Evidence: **a session transcript, not an evidence file.** No `.txt` was written and no script
+  exists for E7; the observation was recorded here and in `HYPOTHESES.md` H3 directly, on the
+  grounds that the experiment was "informative, low-priority".
+  <!-- Named plainly under issue #20. This document's own header calls it an evidence ledger, and
+       a row whose evidence is a transcript that no longer exists in reviewable form is a row that
+       cannot be checked by anyone but the person who ran it. Left in place rather than deleted —
+       evidence is append-only here — but the verdict below is scoped to match what a transcript
+       can support. Writing `scripts/experiments/e7-shadow-data-defense.sh` and re-running it is
+       what would upgrade this row; see CONTRIBUTING.md. -->
+- Verdict: **unreproducible as recorded.** For this failure shape (a build tool asked to create a
+  derived-data directory under a locked path), the shadow-data defense was *observed* to fail
+  loudly without crashing or corrupting state — but with no script and no evidence file, this row
+  rests on one person's transcript and cannot be re-run. Treat it as a note, not as a verified
+  compatibility claim, and do not cite it as evidence that a change is safe.
   Not tested: the Xcode.app GUI (only the `xcodebuild` CLI was exercised, deliberately, to avoid
   touching the concurrently-running build's global Locations default), and the
   `VaultVerifier` sentinel-file check (no vault was pointed at the probe path). Still low
@@ -873,3 +890,80 @@ case sensitivity did.
 **Matrix status after this pass:** five of roughly twenty-one entries re-verified on 26.7 (E1, E8,
 E14a, E2, E12). Everything still outstanding mutates devices, needs root, or needs an event — see
 the list in the entry above.
+
+---
+
+### F22 per-device regenerables — dead containers, MobileAsset payloads, log store — macOS 26.6.2 (25G83) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-13 (entry written 2026-09-19, issue #20)
+- Hypothesis reference: H7 (per-device regenerable data is separable from the device)
+- Test performed: observation with a control. One booted simulator device driven by an
+  `xcodebuild test` loop, one shutdown sibling left alone, both measured over several hours.
+- Result: pass, for the dead-container claim only. The other two subpaths were measured but not
+  controlled.
+- Evidence: **none written as a file.** The measurement was recorded inline in
+  `Sources/XCodeVaultCore/Catalog/StorageCatalog.swift:128` and `:159` and in
+  `docs/product/STORAGE_CATALOG.md:131`, and this entry is the first time it appears in the
+  matrix. That absence is the finding this entry exists to record: the catalog carried
+  `evidenceStatus: .verified` on the strength of an `F22` tag that the evidence ledger had no
+  entry for. Found by `REVIEW-2026-09-17.md` §3.5 Q6.
+- Functional checks: simulator boot — yes, the booted device is the instrument. `xcodebuild` —
+  ran throughout, as the workload. Physical device — N/A.
+- Verdict: **probable**, on this machine, for the dead-container reaping. Demoted from the
+  `verified` the catalog claimed.
+- Notes:
+  - What was seen: a booted device reaped 19 of 19 pre-existing `Dead/temp.XXXXXX` entries
+    (1.5 GB → 306 MB) in a single bulk sweep, while the shutdown sibling stayed byte-identical at
+    676 MB. Three entries created shortly before the sweep were still present an hour later.
+  - Why this is `probable` and not `verified`, in the Definition-of-Done sense of
+    `NON_GOALS_AND_SAFETY.md`: n=1 machine, n=1 occurrence, one macOS/Xcode pair, and — as the
+    catalog's own note already says — "an observation with a control, not a controlled
+    experiment". An `xcodebuild test` was driving the booted device for part of the window, so
+    containermanagerd's own timer cannot be separated from something the test triggered. The
+    shutdown control makes the *direction* unambiguous; it does not make the mechanism proven.
+  - The cadence is explicitly **not** established. The sweep was a bulk event that took everything
+    predating it and left the three newest alone. "Booting gets it collected" is supported;
+    "booting collects it within N minutes" is not, and nothing may promise a schedule from this.
+  - The MobileAsset figures at `StorageCatalog.swift:159` (3.3 GB across two devices) are a size
+    measurement from the same session with **no control at all**. They are a description of what
+    was on this machine, not a claim about behaviour, and nothing in the product acts on them
+    beyond reporting.
+  - No category with a relocation or cleanup strategy depends on this entry: all three subpaths
+    are `.appleManaged` with `allowedStrategies: [.appleManaged]`, so safety rule 10 is not
+    implicated either way. That is why this was a documentation defect rather than a product one.
+  - What would upgrade it: the same observation on a second machine, and a run where nothing else
+    is driving the booted device. See `CONTRIBUTING.md`.
+
+---
+
+### Correction — "external volumes mount `noowners` by default" is narrower than stated — macOS 26.7 (25G229) · x86_64
+
+- Date tested: 2026-09-19 (issue #5 review)
+- Hypothesis reference: H8 (ownership semantics on the vault volume)
+- Test performed: read the live mount flags and `diskutil info` for the external APFS volume
+  attached to this machine, while reviewing the `createVaultDirectory` hardening.
+- Result: the claim does not hold for this volume.
+- Evidence: `mount` reports `/dev/disk3s1 on /Volumes/<vault> (apfs, local, nodev, nosuid,
+  journaled)` — no `noowners` — and `diskutil info` reports `Owners: Enabled`. The reviewer
+  independently read `f_flags = 0x04809218` with `MNT_IGNORE_OWNERSHIP` clear.
+- Functional checks: N/A — this is a property of the mount, not of a developer workflow.
+- Verdict: **`noowners` is a default, not an invariant.** Both readings in this matrix that mention
+  it are still correct about what they measured — a freshly attached volume and a sparse disk image
+  both came up `noowners` — but ownership can be, and on this machine has been, enabled afterwards
+  (`diskutil enableOwnership` persists it). Nothing may assume either state.
+- Notes:
+  - Why it matters beyond bookkeeping: the `createVaultDirectory` identity check (issue #5) reads
+    `st_uid` from a descriptor, and the question "could an unprivileged user stage a root-owned
+    directory on a `noowners` volume?" was the sharpest objection to it. Measured answer, from the
+    same review: no. `chown 0:0` as an unprivileged user on such a volume returns `EPERM` — ignoring
+    ownership grants *owner* rights on everything, not the superuser right to give a file away — and
+    a root caller reads the true on-disk uid, because XNU applies the `MNT_IGNORE_OWNERSHIP`
+    substitution only for non-superuser callers. The attacker-created directories read uid 501 on
+    disk when the same image is re-attached with `-owners on`.
+  - The root-observer half of that rests on XNU's documented behaviour rather than on a measurement
+    here, because `sudo -n` is unavailable on this machine. If it were false, the consequence is a
+    *functional* break — the created-branch check would refuse on every `noowners` volume, which is
+    the primary target — not an escalation. That asymmetry is why it is recorded rather than
+    assumed, and it is the shape of an experiment somebody with root can run in a minute.
+  - Not measured: Apple Silicon, HFS+, or a volume that has never had `enableOwnership` run on it
+    by this machine's owner.

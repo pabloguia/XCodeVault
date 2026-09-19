@@ -150,4 +150,77 @@ final class ExperimentScriptSafetyTests: XCTestCase {
             offences.isEmpty,
             "these scripts create/boot/delete a simulator device with no confirmation gate:\n" + offences.joined(separator: "\n"))
     }
+
+    // MARK: the evidence ledger (issue #23)
+
+    private var evidenceDirectory: String {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/research/evidence").path
+    }
+
+    /// Every script writes through `common.sh`, which is where the header and the redactor live.
+    ///
+    /// A script that writes evidence by hand is a script whose output nothing redacted. Checked
+    /// here rather than by reading, because the 2026-09-19 audit that first established this was a
+    /// one-off, and a one-off audit of a growing directory is a fact with an expiry date.
+    func testEveryExperimentScriptGoesThroughTheSharedHeaderAndRedactor() throws {
+        var offenders: [String] = []
+        for name in try FileManager.default.contentsOfDirectory(atPath: experimentsDirectory).sorted()
+        where name.hasPrefix("e") && name.hasSuffix(".sh") {
+            let body = try String(contentsOfFile: experimentsDirectory + "/" + name, encoding: .utf8)
+            guard body.contains("common.sh") else {
+                offenders.append("\(name): does not source common.sh")
+                continue
+            }
+            guard body.contains("xcv_redact") || body.contains("xcv_header") || body.contains("xcv_out") else {
+                offenders.append("\(name): sources common.sh but uses none of its header/redaction helpers")
+                continue
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, "evidence written outside the redactor:\n" + offenders.joined(separator: "\n"))
+    }
+
+    /// No committed evidence file names this machine.
+    ///
+    /// Runs against the *running* machine's identity, so it is a real check on a contributor's
+    /// laptop and a near-vacuous one on a CI runner whose home is `/Users/runner`. That asymmetry
+    /// is the point: the leak this prevents happens when a person runs an experiment locally and
+    /// commits the output, and that person's machine is exactly where this test then runs.
+    ///
+    /// Deliberately not checked: CoreSimulator runtime and device identifiers, and Apple's APFS
+    /// partition-type GUID. `Redaction.swift` says at length why those survive — several findings
+    /// are unreadable without them, and none identifies a person.
+    func testNoEvidenceFileNamesThisMachine() throws {
+        let home = NSHomeDirectory()
+        let user = NSUserName()
+        var leaks: [String] = []
+
+        for name in try FileManager.default.contentsOfDirectory(atPath: evidenceDirectory).sorted() where !name.hasPrefix(".") {
+            let text = try String(contentsOfFile: evidenceDirectory + "/" + name, encoding: .utf8)
+            if !home.isEmpty, text.contains(home) { leaks.append("\(name): contains the home directory") }
+            // Word-bounded, for the reason `Redaction.swift` records: an account called `dev`
+            // unanchored turns `devicectl` into a false positive.
+            if !user.isEmpty, user != "root" {
+                let pattern = "(^|[^A-Za-z0-9_])" + NSRegularExpression.escapedPattern(for: user) + "([^A-Za-z0-9_]|$)"
+                if let re = try? NSRegularExpression(pattern: pattern),
+                    re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+                {
+                    leaks.append("\(name): contains the account name as a bare word")
+                }
+            }
+            // Volume names only in their `/Volumes/` form — the same rule and the same reason:
+            // a boot volume called `MacOS` appears inside every app bundle's `Contents/MacOS`.
+            for volume in (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? [] where !volume.hasPrefix(".") {
+                if text.contains("/Volumes/" + volume) { leaks.append("\(name): names the mounted volume '\(volume)'") }
+            }
+        }
+        XCTAssertTrue(
+            leaks.isEmpty,
+            """
+            Evidence files are written to be pasted into a public issue. These name this machine:
+
+            \(leaks.joined(separator: "\n"))
+            """)
+    }
 }

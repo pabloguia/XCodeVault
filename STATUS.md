@@ -1,15 +1,66 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-18. This file is the hand-off for the next session or a post-compaction
-continuation; it is append-only by date, so the newest sections are at the **end**. "Current
-milestone" and "Next three actions" below are from 2026-09-08 and have been overtaken — read the
-last few dated sections first, and `docs/process/SESSION-HANDOFF.md` before acting._
+_Last updated: 2026-09-19. **The live sections are immediately below**: what is in flight, what is
+blocked, and the next actions. Everything after them is an append-only chronological log, newest at
+the end — it is history, not instructions._
 
-_This file is 1,800+ lines and its live sections ("In flight", "Blocked", "Next three actions") sit
-around line 430, with the chronological log after them. The 2026-09-18 review classified it line by
-line for what is safely summarisable and what is the only surviving copy of a lesson; the
-restructuring was deferred rather than rushed. The classification, with the four load-bearing ranges
-and a named destination for each, is in `docs/process/REVIEW-2026-09-17.md`._
+_Restructured 2026-09-19 under issue #22. Before that the live sections sat at line 436 with 1,400
+lines of chronology above and below them, while `CLAUDE.md` told every session to read this file for
+"in flight / blocked / next three actions". The restructure waited on two ranges that were the only
+surviving copy of a lesson: the abort/forget five-pass sequence is now in
+`docs/process/MUTATION-TESTING-NOTES.md`, and the harness cleanup-trap lesson was confirmed already
+rehoused — more fully than here — in `docs/architecture/EXPERIMENTS.md` § "Harness". The line-by-line
+classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
+
+## In flight
+
+- Post-publication issue backlog, worked in batches. See `gh issue list` for the live queue and
+  `git log` for which batch closed what — each batch commit names its issues.
+- Test count and gate state move every batch, so this section does not restate them: `swift test`,
+  `swift format lint --strict`, `scripts/helper-invariants.sh` and `scripts/check-doc-mirror.sh`
+  are the four gates, and CI runs them on `macos-15` and `macos-26`. A number written here goes
+  stale within a day; the commit that changed it is the honest record.
+
+## Blocked / pending — manual (ask the user)
+
+- **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
+  `noowners`. The physical yank for E6 still needs hands on the Mac.
+- **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5): done (2026-09-08) — the reported
+  failure did NOT reproduce.** See Session 5 below. Rule 7 / ADR-0004 unchanged. Still pending
+  and explicitly out of scope for that runbook: the `~/Library/Developer`-wide symlink that
+  FB12363725 actually requires (forbidden by rule 7 — it would move `DeveloperDiskImages`), the
+  Xcode.app GUI (only `xcodebuild` was exercised), Apple Silicon, and any iCloud-Drive-signed-in
+  configuration.
+- **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. `/Library/Developer/
+  xcv-probe` removed by the user with sudo, confirmed gone.
+- **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
+  but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
+  `removeStrandedRuntimeDownload` verb was pointless against this policy — **deleted 2026-09-18**,
+  together with `HelperInboxDirectory`, which had no other user. It had no client anywhere, and its
+  name asserted a "stranded" check the implementation never performed.
+- **Import half of E8 — done (2026-09-07, tvOS; 2026-09-08, iOS 10.35 GB), pass both times.**
+  See Session 3 and Session 4 above and `docs/process/RUNBOOK-E8-import-roundtrip.md` for the
+  tvOS procedure. Preflight formula confirmed against two very different image sizes.
+- GitHub remote/CI: **done.** The repository is public at `github.com/pabloguia/XCodeVault` since
+  2026-09-18 and CI runs on `macos-15` and `macos-26`. Pushes go over HTTPS (the SSH key has a
+  passphrase). Left here rather than deleted because the line above it is the reason it was blocked.
+
+## Next three actions
+
+_Item 1 was "Publish" until 2026-09-18; the repository is public and CI runs on both runners, so it
+is done. The post-publication issue backlog replaced it._
+
+1. **Work the issue backlog.** `gh issue list` is the current queue — the findings the pre-publication
+   review left deliberately, plus what the independent reviews have opened since. They are worked in
+   batches, each batch commit naming the issues it closes. Structural work (`Doctor.swift` and
+   `MigrationEngine.swift` seams) is sequenced before the file renames that depend on it.
+2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
+   the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
+   signed bundle — cannot be tested unsigned.
+3. **M5:** Developer ID signing + notarization + stapling in `scripts/release.sh`, Homebrew Cask
+   formula draft, in-app uninstall (`unregister()`), diagnostic bundle (`report --json`).
+
+
 
 ## Current milestone
 
@@ -432,46 +483,6 @@ release/bundle scripts and cask draft exist; nothing signed yet.
   needs no internal free space at all (source internal → destination external, internal usage only
   falls when the verified source is removed). The ~40 GB internal requirement belongs to *runtime
   installs* (E11), which is a different operation — do not conflate them.
-
-## In flight
-
-- Nothing running. 269 tests green; `swift build` clean-tree warning-free and `swift-format lint`
-  clean, both for the first time (see the 2026-09-18 review).
-
-## Blocked / pending — manual (ask the user)
-
-- **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
-  `noowners`. The physical yank for E6 still needs hands on the Mac.
-- **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5): done (2026-09-08) — the reported
-  failure did NOT reproduce.** See Session 5 below. Rule 7 / ADR-0004 unchanged. Still pending
-  and explicitly out of scope for that runbook: the `~/Library/Developer`-wide symlink that
-  FB12363725 actually requires (forbidden by rule 7 — it would move `DeveloperDiskImages`), the
-  Xcode.app GUI (only `xcodebuild` was exercised), Apple Silicon, and any iCloud-Drive-signed-in
-  configuration.
-- **E7 shadow-data defense: done (2026-09-07), pass.** See Session 3 above. `/Library/Developer/
-  xcv-probe` removed by the user with sudo, confirmed gone.
-- **Stranded 5 GB Inbox dmg: resolved by reboot** (2026-09-07). `sudo rm` is refused by policy,
-  but simdiskimaged reaps the Inbox at startup. Doctor now says "restart the Mac". The helper's
-  `removeStrandedRuntimeDownload` verb was pointless against this policy — **deleted 2026-09-18**,
-  together with `HelperInboxDirectory`, which had no other user. It had no client anywhere, and its
-  name asserted a "stranded" check the implementation never performed.
-- **Import half of E8 — done (2026-09-07, tvOS; 2026-09-08, iOS 10.35 GB), pass both times.**
-  See Session 3 and Session 4 above and `docs/process/RUNBOOK-E8-import-roundtrip.md` for the
-  tvOS procedure. Preflight formula confirmed against two very different image sizes.
-- GitHub remote/CI: repo has no remote; do not create one without the user.
-
-## Next three actions
-
-1. **Publish.** Everything the 2026-09-18 pre-publication review found blocking is fixed; the
-   remaining findings are in `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` as deliberate issues.
-   The remote and the push are the owner's to do, together with the three GitHub-only settings
-   listed at the end of `docs/process/REVIEW-2026-09-17.md`. CI has still never executed — the first
-   push is what runs it.
-2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
-   the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
-   signed bundle — cannot be tested unsigned.
-3. **M5:** Developer ID signing + notarization + stapling in `scripts/release.sh`, Homebrew Cask
-   formula draft, in-app uninstall (`unregister()`), diagnostic bundle (`report --json`).
 
 ## 2026-09-09 (overnight) — the durable-space path, and three bugs found only by running it for real
 
@@ -1766,103 +1777,108 @@ handoff.
 
 236 tests. `swift build` and `swift test` both exit 0, checked by exit code. 21 redaction checks.
 
-## 2026-09-17 (ainda) — o histórico reescrito, e duas varreduras que mentiram
+## 2026-09-17 (still) — the history rewrite, and two sweeps that lied
 
-A reescrita rodou: 86 commits, identificadores da máquina fora de todos eles, autoria e mensagens
-preservadas, `HEAD^{tree}` byte a byte idêntica à de antes — o filtro é no-op sobre o estado atual e
-só toca ancestrais. Registro e mapa de SHAs em `docs/process/HISTORY-REWRITE-2026-09-17.md`.
+_Translated from Portuguese 2026-09-19 under issue #22. Content unchanged._
 
-**Ensaiar num clone descartável pagou-se duas vezes.** O primeiro ensaio destruiu a linha de
-copyright da `LICENSE` e reescreveu um fixture de teste até ele virar tautologia — e foi assim que
-apareceu o pior erro do dia, meu: `test-common.sh`, que eu tinha acabado de escrever, usava o UUID
-real do vault como fixture. Reintroduzi na árvore o valor que o redator existe para tirar, horas
-depois da varredura que o tinha removido de todo o resto. O segundo ensaio achou um `sed` escrito
-para um backslash contra um arquivo que tem dois, e um runbook que faz grep pelos primeiros oito
-caracteres do UUID, que a regra de valor completo não enxerga.
+The rewrite ran: 86 commits, machine identifiers out of all of them, authorship and messages
+preserved, `HEAD^{tree}` byte-for-byte identical to before — the filter is a no-op on the current
+state and touches only ancestors. The record and the SHA map are in
+`docs/process/HISTORY-REWRITE-2026-09-17.md`.
 
-**Duas varreduras de verificação deram "zero" sem ter varrido nada.** A primeira usou `git grep`
-sobre as 86 revisões de uma vez, estourou o limite de argumentos em silêncio e devolveu zero para
-tudo. A segunda tinha um `break` num cabeçalho curto e parava no meio da lista. As duas foram
-pegas pelo mesmo expediente: **um controle positivo** — procurar algo que *tem* que estar lá e
-conferir que aparece. Na primeira, `XCodeVault` também deu zero; na segunda, a `LICENSE` sumiu de
-um resultado que sabidamente a contém.
+**Rehearsing on a throwaway clone paid for itself twice.** The first rehearsal destroyed the
+`LICENSE` copyright line and rewrote a test fixture until it became a tautology — and that is how the
+worst mistake of the day surfaced, and it was mine: `test-common.sh`, which I had just written, used
+the vault's real UUID as a fixture. I reintroduced into the tree the exact value the redactor exists
+to remove, hours after the sweep that had taken it out of everything else. The second rehearsal found
+a `sed` written for one backslash against a file that has two, and a runbook that greps the UUID's
+first eight characters, which the full-value rule cannot see.
 
-Isto é a quarta falha de instrumento em três dias, e a regra já não é sobre experimentos: **uma
-verificação que não distingue "limpo" de "não rodei" não é uma verificação.** A varredura final
-declara `566/566 blobs, controle 392` antes de qualquer conclusão.
+**Two verification sweeps returned "zero" without having swept anything.** The first ran `git grep`
+across all 86 revisions at once, blew the argument limit silently, and returned zero for everything.
+The second had a `break` on a short header and stopped mid-list. Both were caught the same way: **a
+positive control** — search for something that *has* to be there and check that it appears. In the
+first, `XCodeVault` also returned zero; in the second, `LICENSE` vanished from a result known to
+contain it.
 
-236 testes, 21 checks de redação, `swift build` e `swift test` com exit 0.
+That is the fourth instrument failure in three days, and the rule is no longer about experiments: **a
+check that cannot distinguish "clean" from "I did not run" is not a check.** The final sweep declares
+`566/566 blobs, control 392` before drawing any conclusion.
 
-## 2026-09-17 (revisão pré-publicação) — quatro revisões, e o padrão importa mais que os achados
+236 tests, 21 redaction checks, `swift build` and `swift test` both exit 0.
 
-Quatro revisores independentes leram o repositório antes do push: o helper privilegiado inteiro, a
-superfície que move dados inteira, o diff desta sessão e a superfície pública. Todos voltaram com
-REQUEST CHANGES. O que fica registrado aqui não é a lista — está nos commits e em
-`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` — é o padrão, porque ele se repetiu de formas que
-custam caro.
+## 2026-09-17 (pre-publication review) — four reviews, and the pattern matters more than the findings
 
-**Metade dos achados graves foram contra correções feitas nesta mesma sessão.** Não contra o código
-antigo: contra o conserto. Em duas rodadas seguidas, a correção da migração introduziu um problema
-novo — primeiro um `forget` que casava um marcador escrito por dois produtores diferentes, depois um
-`rmdir` que apagava `~/Library/Developer/Xcode` num restore que falha. Nenhum dos dois foi
-encontrado por leitura; os dois foram encontrados por probe. A lição não é "revise mais", é que
-**uma correção é uma mudança e merece o mesmo ceticismo que a mudança que a motivou.**
+_Translated from Portuguese 2026-09-19 under issue #22, as the last step of the restructure. The
+content is unchanged; only the language is._
 
-**Três varreduras de verificação devolveram "limpo" sem ter varrido nada.** Um `git grep` sobre 86
-revisões que estourou o limite de argumentos em silêncio; um parser com `break` num cabeçalho curto;
-e um `grep -c … || echo 0` que produz a string `"0\n0"` e faz a comparação seguinte erra e
-curto-circuitar. As três foram pegas pelo mesmo expediente: **um controle positivo** — procurar algo
-que *tem* que estar lá. Sem ele, "0 ocorrências" e "não rodei" são indistinguíveis, e esta sessão
-produziu os dois.
+Four independent reviewers read the repository before the push: the whole privileged helper, the
+whole surface that moves data, this session's diff, and the public surface. All four came back
+REQUEST CHANGES. What is recorded here is not the list — that is in the commits and in
+`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` — it is the pattern, because the pattern repeated in
+ways that cost real time.
 
-**Um verificador que eu escrevi foi derrotado em três rodadas seguidas.** Na primeira, ele exigia que
-o símbolo do gate de autorização existisse, não que fosse chamado: o revisor apagou os três call
-sites e o CI ficou verde. Na segunda, 11 de 13 mutações passaram, porque cada regra era keyed a um
-nome de arquivo, um glob não-recursivo ou uma convenção de nomenclatura. Na terceira, 13 bypasses
-novos. A conclusão não é continuar endurecendo o grep — é que **um matcher de texto não distingue uso
-de menção nem detecta neutralização semântica**, e isso agora está escrito no cabeçalho dele. O que
-foi removido junto: as frases no `HelperService.swift` e no `Package.swift` que afirmavam uma
-aplicação que o script não faz. Um comentário que promete verificação inexistente é pior que nenhum,
-porque é nele que o próximo revisor confia.
+**Half the serious findings were against fixes made in that same session.** Not against the old
+code: against the repair. In two consecutive rounds, the migration fix introduced a new problem —
+first a `forget` that matched a marker written by two different producers, then an `rmdir` that
+deleted `~/Library/Developer/Xcode` on a restore that fails. Neither was found by reading; both were
+found by probing. The lesson is not "review more", it is that **a fix is a change and deserves the
+same scepticism as the change that prompted it.**
 
-**A minha própria mutação passou pelo motivo errado.** Testei a regra de deleção mutando o único
-arquivo que já tinha um marcador de isenção, então a comparação funcionou por acidente. O bug de
-shell que a tornava inerte em todos os outros arquivos só apareceu quando outra pessoa mutou um
-arquivo diferente.
+**Three verification sweeps came back "clean" without having swept anything.** A `git grep` across 86
+revisions that blew the argument limit silently; a parser with a `break` on a short header; and a
+`grep -c … || echo 0` that produces the string `"0\n0"`, which makes the next comparison error and
+short-circuit. All three were caught the same way: **a positive control** — looking for something
+that *has* to be there. Without one, "0 occurrences" and "I did not run" are indistinguishable, and
+that session produced both.
 
-**E o `git checkout --` me mordeu com o refactor por commitar.** Restaurar um arquivo durante a
-limpeza de uma mutação desfez o split do helper, que não estava commitado — exatamente a armadilha
-que um commit três horas antes tinha criticado no `bundle-app.sh`.
+**A checker written in that session was defeated three rounds running.** In the first, it required
+the authorization gate's symbol to exist, not to be called: the reviewer deleted all three call
+sites and CI stayed green. In the second, 11 of 13 mutations passed, because each rule was keyed to a
+filename, a non-recursive glob, or a naming convention. In the third, 13 fresh bypasses. The
+conclusion is not to keep hardening the grep — it is that **a text matcher does not distinguish use
+from mention and cannot detect semantic neutering**, and that is now written in its own header. What
+was removed alongside: the sentences in `HelperService.swift` and `Package.swift` that asserted an
+enforcement the script does not perform. A comment promising verification that does not exist is
+worse than no comment, because it is the one the next reviewer trusts.
 
-O daemon, ao fim das quatro rodadas: **nada que bloqueie publicar**, nenhuma escalada de root
-alcançável por cliente, e nenhum artefato empacotado o contém.
+**My own mutation passed for the wrong reason.** I tested the deletion rule by mutating the one file
+that already carried an exemption marker, so the comparison worked by accident. The shell bug that
+made it inert in every other file only surfaced when someone else mutated a different file.
 
-268 testes, build sem warnings, invariantes do helper e suíte de redação — quatro portões, exit 0
-conferido em cada um.
+**And `git checkout --` bit me, with a refactor left uncommitted.** Restoring a file while cleaning
+up after a mutation undid the helper split, which had not been committed — exactly the trap a commit
+three hours earlier had criticised in `bundle-app.sh`.
+
+The daemon, after four rounds: **nothing blocking publication**, no client-reachable root escalation,
+and no packaged artifact contains it.
+
+268 tests, a warning-free build, the helper invariants and the redaction suite — four gates, exit
+code checked on each.
 
 ---
 
-## 2026-09-17 (fim do dia) — `main`, e o push segurado de propósito
+## 2026-09-17 (end of day) — `main`, and the push held deliberately
 
-Cinco commits fecharam as correções bloqueantes das quatro revisões: `27c25f0` (helper testável +
-o `getgrouplist` que negava admin com mais de 64 grupos + o checker de invariantes), `6a82746`
-(motor de migração: volume sumindo entre plano e cópia, subárvore ilegível passando na verificação,
-limite inferior aceito como medição, e o par `abort`/`forget` finalmente terminando), `a422bf9`
-(helper fora de qualquer artefato que este repositório consiga gerar hoje), `be14599` (superfície
-pública dizendo só o que foi medido, mais o `KNOWN-ISSUES-AT-PUBLICATION.md`) e `953aedb` (o registro
-da passagem de revisão).
+Five commits closed the blocking findings from the four reviews: `27c25f0` (testable helper + the
+`getgrouplist` that denied admin to anyone in more than 64 groups + the invariants checker),
+`6a82746` (migration engine: the volume vanishing between plan and copy, an unreadable subtree
+passing verification, a lower bound accepted as a measurement, and the `abort`/`forget` pair finally
+terminating), `a422bf9` (helper kept out of any artifact this repository can currently produce),
+`be14599` (public surface saying only what was measured, plus `KNOWN-ISSUES-AT-PUBLICATION.md`) and
+`953aedb` (the record of the review pass).
 
-Quatro portões, exit code conferido direto em cada um: build sem warnings, **269 testes / 0 falhas**,
-`scripts/helper-invariants.sh` e a suíte do redator (32 checks).
+Four gates, exit code checked directly on each: warning-free build, **269 tests / 0 failures**,
+`scripts/helper-invariants.sh`, and the redactor's suite (32 checks).
 
-**O branch passou a ser `main`.** A convenção deste repositório é seguir o padrão do GitHub quando
-não houver razão concreta para divergir. O rename foi local — não existe remote — e o único lugar
-onde `master` ainda é correto é o `git fetch` do bundle pré-reescrita, porque a ref dentro do bundle
-tem esse nome. Está anotado lá para ninguém "corrigir".
+**The branch became `main`.** This repository's convention is to follow GitHub's default unless there
+is a concrete reason to diverge. The rename was local — there was no remote yet — and the one place
+`master` is still correct is the `git fetch` of the pre-rewrite bundle, because the ref inside the
+bundle has that name. It is annotated there so nobody "corrects" it.
 
-**O push está segurado por decisão do dono do repositório**, não por falta de preparo: antes dele vem
-uma revisão ampla de arquitetura, código e agentes. As quatro revisões já feitas cobriram o helper, a
-superfície que mexe em dados, o diff da sessão e a superfície pública — **arquitetura e a configuração
-agêntica (`.claude/`, `.codex/`) nunca entraram em escopo**. Quem for conduzir essa revisão deve ler
-`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` antes, para não re-litigar decisões que foram tomadas
-com motivo registrado.
+**The push was held by the repository owner's decision**, not for lack of readiness: a broad review of
+architecture, code and agents came first. The four reviews already done covered the helper, the
+data-moving surface, the session diff and the public surface — **architecture and the agentic
+configuration (`.claude/`, `.codex/`) were never in scope**. Whoever conducts that review should read
+`docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` first, so as not to re-litigate decisions that were
+made with the reason recorded.

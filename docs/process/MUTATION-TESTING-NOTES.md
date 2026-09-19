@@ -122,3 +122,52 @@ per-file exemptions, mutate a file without one.
 This is the same family as "a rule that is duplicated, with no test on a row where the copies
 disagree", recorded above — both are cases where the sample chosen cannot falsify the claim.
 
+
+## Five passes on one function, each of which hardened the wrong thing
+
+Rehoused from `STATUS.md` (2026-09-14 entry) under issue #22, because it was the only surviving copy
+of the sequence. The *residuals* of this work are in `KNOWN-ISSUES-AT-PUBLICATION.md` and the *why*
+is in `MigrationEngine.swift`'s comments; what existed nowhere else is the shape of the failure —
+that it took five review passes, and how each one was wrong.
+
+The change: `resume` recovered its `categoryID` by splitting the journal's free-text `summary` on
+spaces, with `?? "archives"` when that failed, and spent the result on deletion decisions. The
+category, the vault volume and the direction are all fields on the PLAN line now, read as fields.
+
+| pass | what the author thought had been done | what was true |
+|---|---|---|
+| 1 | removed the parser from a deletion path | removed it from the value that only *decides*; `aside`, which names the victim and reaches `removeItem`, was still read from the journal |
+| 2 | added the vault and PLAN-line guards | both survived their own deletion — guards with no test |
+| 3 | hardened `resume` | the same hole lived in `abort`, and `forget` (the author's own escape hatch) orphaned partial copies |
+| 4 | made `abort` check the vault | broke every *restore*, whose partial copy is at the canonical home path by construction — and the refusal message said it was not this migration's copy when it was exactly that |
+| 5 | factored the abort/forget rule into one function | the rule was factored for "a PLAN line exists" and re-derived for "it does not" — the same bug one level up, introduced by the pass that fixed it |
+
+**The pattern, which is why this is here and not only in the changelog.** Every pass but the last
+produced a fix that was *correct about the thing it named* and wrong about the thing it implied. The
+recurring error is not carelessness; it is that a fix's scope is read from where the author was
+looking rather than from where the value flows. Pass 1 fixed the decision and missed the deletion.
+Pass 3 fixed one verb and missed its two siblings. Pass 5 factored a rule and then re-derived it
+fifteen lines later for the other branch.
+
+Three things that would have shortened it, worth trying before declaring a guard done:
+
+- **Follow the value, not the function.** Ask where the parsed thing ends up, not which function
+  parses it. Pass 1's miss was one `grep` away.
+- **Enumerate the siblings.** `resume`, `abort` and `forget` all act on the same journal entry;
+  fixing one and not asking about the other two is what pass 3 did.
+- **Delete the guard and run the suite.** Passes 2's guards both survived their own deletion, which
+  is the whole subject of this document: a guard nothing turns red for is not yet a guard.
+
+Two data-loss paths were real and are closed. A line appended to the journal setting `aside` to the
+destination would have had `resume` delete the vault copy, because a tree verifies as identical
+against itself. And `abort` — the command the tool *tells* the user to run — deleted local data in
+the ordinary disconnect case: crash during COPY, reboot, the volume loses the mount race, a plain
+directory sits at the mount point, `lstat` succeeds, and the mount-point check does not fire because
+the *volume* would be the mount point while the destination is several levels below it.
+
+`migration forget --i-verified-both-copies-myself` exists because refusing is not free: a refused
+`resume` left the operation `started`, which blocks every future migration, while `abort` refused
+too. The pair is governed by one sentence — *`forget` declines anything `abort` can still clean up* —
+and, since pass five, by one function. That termination bound has since been re-broken twice by
+later changes and caught both times by the tests that pin it, most recently under issue #25; see
+`MountAnswerTests.testAbortRefusesTheDeletionWhenTheMountQuestionCannotBeAnswered`.

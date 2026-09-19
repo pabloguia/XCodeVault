@@ -125,8 +125,14 @@ public enum StorageCatalog {
             regenerability: .regenerable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged],
             evidence:
-                "F22 (2026-09-13): a booted device reaped 19 of 19 pre-existing entries (1.5 GB → 306 MB) in a single sweep while a shutdown sibling stayed byte-identical at 676 MB; the three entries created just before the sweep were still present an hour later",
-            evidenceStatus: .verified,
+                "F22 (2026-09-13, on this machine): a booted device reaped 19 of 19 pre-existing entries (1.5 GB → 306 MB) in a single sweep while a shutdown sibling stayed byte-identical at 676 MB; the three entries created just before the sweep were still present an hour later",
+            // Demoted from `.verified` under issue #20. The status claimed more than F22 carries:
+            // one machine, one occurrence, and — as the fourth note below already said — "an
+            // observation with a control, not a controlled experiment". It also cited an evidence
+            // tag that the matrix had no entry for at all, so nothing could be checked against it;
+            // the entry now exists and says `probable`. Demoting costs nothing here, because this
+            // category is `.appleManaged` with no relocation or cleanup strategy.
+            evidenceStatus: .probable,
             notes: [
                 "Never cleaned by us, and this is a conclusion rather than a hesitation: the system already does it. Measured 2026-09-13 — a booted device went from 15 entries / 1.5 GB to 3 / 306 MB, while a shutdown sibling did not change by a single byte over the same hours.",
                 "What is NOT known is the cadence, and an earlier draft of this note overclaimed it. The sweep was a single bulk event, not a rolling timer: it removed everything that predated it, and the three entries created shortly before it were still there an hour later, untouched. So the honest statement is `booting gets it collected`, not `booting collects it within N minutes`. Do not promise a schedule this evidence does not show.",
