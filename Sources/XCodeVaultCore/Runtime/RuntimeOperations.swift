@@ -163,8 +163,12 @@ public struct RuntimeOperations: Sendable {
         /// into Core.
         ///
         /// Optional because the lookup can fail — a filesystem that reports no UUID, or a path that
-        /// cannot be read. `nil` means "this entry predates the field, or the volume had no
-        /// identity to record", and `Doctor` treats that as *unverifiable* rather than as matching.
+        /// cannot be read. On a *plan*, `nil` means exactly that and nothing else: a plan is never
+        /// rebuilt from the journal (`checked()` is its only maker, and the preflight that calls it
+        /// has just run the lookup), so "an entry from before this field existed" cannot reach here.
+        /// That case is real one layer out, where the value is read back off disk, and
+        /// `Doctor+CoreSimulator` handles it there. Either way `Doctor` treats the absence as
+        /// *unverifiable* rather than as matching.
         public let installerVolumeUUID: String?
         public let runtimeIdentifier: String?
         public let version: String?

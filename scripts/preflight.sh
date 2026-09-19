@@ -1,5 +1,11 @@
 #!/bin/bash
-# Runs every gate CI runs, in CI's order, on this machine.
+# Runs the CI gates that can be run here, in CI's order, on this machine.
+#
+# Nine of CI's eleven steps. The two it leaves out are named rather than silently missing:
+# "Toolchain" only prints versions, and the read-only gating experiments (E1/E8) **write evidence
+# files into `docs/research/evidence/`** — running them before every push would dirty the working
+# tree as a side effect of checking it, which is a worse habit than the coverage is worth. Run
+# `scripts/experiments/e1-mountability.sh` deliberately, when you mean to record evidence.
 #
 # **Why this exists.** CI was red for four consecutive pushes on `swift format lint --strict`,
 # while the author had run `swift test`, `helper-invariants.sh` and `check-doc-mirror.sh` locally
@@ -12,7 +18,7 @@
 # here is silently missing. `--list` prints what it runs so the two can be compared by eye; the
 # assertion below fails loudly when the workflow grows a step this script does not know about.
 #
-#   scripts/preflight.sh          # everything, stopping at the first failure
+#   scripts/preflight.sh          # every gate runs; failures are reported together at the end
 #   scripts/preflight.sh --fast   # skip the suite (~45 s) — for a docs- or script-only change
 #   scripts/preflight.sh --list   # name the gates without running them
 set -u -o pipefail
@@ -27,6 +33,7 @@ GATES=(
     "helper-invariants:bash scripts/helper-invariants.sh"
     "redaction:bash scripts/experiments/test-common.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
+    "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl report --json"
 )
 
 if [ "${1:-}" = "--list" ]; then
@@ -96,6 +103,7 @@ if [ ${#failed[@]} -eq 0 ]; then
     exit 0
 fi
 echo "preflight: ${#failed[@]} gate(s) failed: ${failed[*]}" >&2
+echo "preflight: every gate ran — this list is complete, not the first failure." >&2
 echo "preflight: re-run the failing one directly to see its output — this script hides it deliberately," >&2
 echo "preflight: because a wall of passing output is how the one failing line gets missed." >&2
 exit 1

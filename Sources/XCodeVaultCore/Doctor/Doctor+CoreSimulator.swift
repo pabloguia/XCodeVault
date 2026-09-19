@@ -455,35 +455,43 @@ extension Doctor {
             guard lstat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return false }
             return st.st_size >= 500_000_000
         }
-        /// Whether the file now at that path is on the volume this offload verified (#26).
-        ///
-        /// The whole safety argument for `runtime offload` is "delete the installed runtime only
-        /// because an installer exists to restore it from", and this rule re-states that argument
-        /// to the user. It used to re-state it from a **path**. On a machine with two external
-        /// drives — or one that comes back as `/Volumes/VAULT 1` after an unclean eject, leaving
-        /// the original mount-point directory behind — a file of the right size at the right path
-        /// can belong to somebody else entirely, and the user would be told their devices are
-        /// recoverable from an image nothing checked.
-        ///
-        /// `notRecorded` means the journal has no identity to check: entries written before the
-        /// field existed, and filesystems that report no UUID. Those stay in `reachable` rather
-        /// than being demoted — demoting them would tell a user with a perfectly good installer
-        /// that their devices are unrecoverable, which is the more dangerous error of the two —
-        /// and `unverifiable` below carries them through to the wording, so nothing promises more
-        /// than was actually checked.
-        ///
-        /// An earlier version of this comment claimed that separation while the code did not make
-        /// it: a `nil`-identity entry whose runtime id matched went into `matched` and collected the
-        /// full "Re-import instead" promise with no qualifier at all. A reviewer caught the comment
-        /// asserting a property its own code lacked, which is worse than the gap — the next reader
-        /// trusts it.
-        ///
-        /// The comparison itself lives in `MountStatus` so this and `RuntimeOperations.offload`
-        /// cannot drift: one warns about a deletion the other performs.
+        // Why this rule checks a volume identity at all (#26).
+        //
+        // Plain comments, not `///`: this block documents the reasoning for the classification
+        // below, and the predicate it was originally attached to no longer exists. Left as a doc
+        // comment it silently became the documentation for `enum Disposition`, which it does not
+        // describe — there was no blank line between the two, so the whole run attached to the
+        // enum.
+        //
+        // The whole safety argument for `runtime offload` is "delete the installed runtime only
+        // because an installer exists to restore it from", and this rule re-states that argument
+        // to the user. It used to re-state it from a **path**. On a machine with two external
+        // drives — or one that comes back as `/Volumes/VAULT 1` after an unclean eject, leaving
+        // the original mount-point directory behind — a file of the right size at the right path
+        // can belong to somebody else entirely, and the user would be told their devices are
+        // recoverable from an image nothing checked.
+        //
+        // `notRecorded` means the journal has no identity to check: entries written before the
+        // field existed, and filesystems that report no UUID. Those stay in `reachable` rather
+        // than being demoted — demoting them would tell a user with a perfectly good installer
+        // that their devices are unrecoverable, which is the more dangerous error of the two —
+        // and `unverifiable` below carries them through to the wording, so nothing promises more
+        // than was actually checked.
+        //
+        // An earlier version of this comment claimed that separation while the code did not make
+        // it: a `nil`-identity entry whose runtime id matched went into `matched` and collected the
+        // full "Re-import instead" promise with no qualifier at all. A reviewer caught the comment
+        // asserting a property its own code lacked, which is worse than the gap — the next reader
+        // trusts it.
+        //
+        // The comparison itself lives in `MountStatus` so this and `RuntimeOperations.offload`
+        // cannot drift: one warns about a deletion the other performs.
+
         /// What one offload entry is, decided **once**.
         ///
         /// **Why a stored value and not six `filter`s (issue #26, B2).** The predicates are syscalls:
-        /// `isUsableImage` does an `lstat`, `identity` reads a volume UUID. The previous version
+        /// `isUsableImage` does an `lstat`, and the identity check reads a volume UUID through
+        /// `volumeUUIDAt`. The previous version
         /// evaluated them two and three times per entry across separate passes, and the claim that
         /// the six lists partitioned the entries held only if the filesystem answered identically
         /// every time. It does not have to: eject the drive mid-`diagnose` and one entry is `usable`
@@ -657,6 +665,15 @@ extension Doctor {
                     + "\(foreignVolume.count == 1 ? "is" : "are") on a different volume than the one that was verified "
                     + "(\(foreignVolume.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", "))). Do not rely on "
                     + "\(foreignVolume.count == 1 ? "it" : "them") to restore anything until you have checked `xcodevaultctl volumes`.")
+        }
+        if !missingOnMountedVolume.isEmpty, !remediation.contains("is not there") {
+            // Added after the first version appended warnings for the other two categories and left
+            // this one able to disappear the same way — the gap it closed, reopened one case over.
+            warnings.append(
+                "Separately: \(missingOnMountedVolume.count == 1 ? "an installer" : "\(missingOnMountedVolume.count) installers") recorded by an "
+                    + "earlier offload \(missingOnMountedVolume.count == 1 ? "is" : "are") not on the volume where the journal says "
+                    + "\(missingOnMountedVolume.count == 1 ? "it was" : "they were") — the drive is mounted and the file is not there, or is too "
+                    + "small to be one (\(missingOnMountedVolume.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", "))).")
         }
         if !interrupted.isEmpty, !remediation.contains("never recorded how it ended") {
             warnings.append(

@@ -336,9 +336,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         let outcome = Self.removeContents(of: fd)
         // The success message says what was *checked*, not just what was done (issue #24). A bare
         // "cleaned" is the sentence a shadow-data deletion would also produce, and the issue's
-        // minimum ask is that those two cannot render identically. `history` is `.none` here — the
-        // `.observed(.wasMountPoint)` branch above returned — so this states the weaker, true thing:
-        // nothing this daemon has seen says a volume was ever grafted here.
+        // minimum ask is that those two cannot render identically. Reached with `history` either
+        // `.none` or `.observed(.wasPlainDirectory)` — the `.observed(.wasMountPoint)` branch above
+        // returned and the other two were refused earlier — which is why the ternary below has an
+        // else at all. An earlier version of this comment said `.none` and so declared that else
+        // unreachable, while a test in the same change asserted it. The identical slip was corrected
+        // twenty lines up and left standing here.
         let checked = history == .none ? " (no prior mount ever observed here)" : " (previously observed as a plain directory)"
         return HelperResult(
             ok: outcome.failures == 0,
@@ -693,8 +696,11 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             guard !bytes.isEmpty, !bytes.contains(0x2F), !bytes.contains(0x00), name != ".", name != ".." else {
                 close(fd); return .failure(GuardFailure(component: name, reason: "refusing an empty, relative, slash-bearing or NUL-bearing component"))
             }
-            // `O_NONBLOCK` so a FIFO planted at a component name fails instead of blocking the
-            // daemon's single serial queue forever; the `S_IFDIR` check in `check` then rejects it.
+            // `O_NONBLOCK` is belt-and-braces here: `O_DIRECTORY` is what rejects a FIFO, immediately
+            // and with `ENOTDIR` (measured, Darwin 25.6.0), so this open cannot block and `check`
+            // never sees one. An earlier version of this comment credited the flag with preventing a
+            // wedge it does not prevent — see `HelperMountHistory`, where the same flag on an open
+            // *without* `O_DIRECTORY` genuinely does.
             let next = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
             // Read **before** the `close`, which is a syscall that may set `errno`. A successful
             // `close` should not, so this was theoretical — but since this diff the value decides

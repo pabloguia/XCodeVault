@@ -12,6 +12,9 @@ import XCTest
 /// the mount query *truthfully* answers `.isNotMountPoint`, and the contents are deleted with
 /// `ok: true, "cleaned …"`.
 ///
+/// That the stub reappears at all is **inferred, not observed** — see `HelperMountHistory` for the
+/// evidence that does exist and for why the guard is correct whether or not it does.
+///
 /// The fix gives the verb the state its reviewer identified as missing — a record of what it has
 /// previously observed at each target — so a plain directory where a mount point used to be is a
 /// refusal rather than a cache clean.

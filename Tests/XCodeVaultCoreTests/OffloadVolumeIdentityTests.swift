@@ -509,4 +509,34 @@ final class OffloadVolumeIdentityTests: XCTestCase {
             "\(attempt.thrown as Any)")
         XCTAssertFalse(attempt.runner.invocations.contains { $0.contains("delete") }, "\(attempt.runner.invocations)")
     }
+
+    /// The third arm of the same rule: a category must not vanish because another entry won the
+    /// branch. `foreignVolume` and `interrupted` were given appended warnings and this one was not,
+    /// which reopened the gap one case over.
+    func testAMissingInstallerIsMentionedEvenWhenAnotherEntryWinsTheBranch() throws {
+        let good = try makeImage()
+        defer { try? FileManager.default.removeItem(at: good.deletingLastPathComponent()) }
+        let absentDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: absentDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: absentDir) }
+        let absent = absentDir.appendingPathComponent("iphonesimulator_26.5_23F77.dmg")
+
+        let text =
+            try findingFromJournal(
+                { journal in
+                    for path in [good.path, absent.path] {
+                        try journal.record(
+                            id: UUID().uuidString, kind: .runtimeOffload, state: .completed, summary: "offloaded", paths: [path],
+                            detail: [
+                                "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-5", "installer": path,
+                                "installerVolumeUUID": "AAAA-1111",
+                            ])
+                    }
+                }, actualUUID: "AAAA-1111")?.remediation ?? ""
+
+        XCTAssertTrue(text.contains("Re-import instead"), "the good installer is still offered. Got: \(text)")
+        XCTAssertTrue(
+            text.contains("is not there"),
+            "and the one that is missing from a mounted drive must still be named. Got: \(text)")
+    }
 }

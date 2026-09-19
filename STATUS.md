@@ -14,8 +14,12 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-- Post-publication issue backlog, worked in batches. See `gh issue list` for the live queue and
-  `git log` for which batch closed what — each batch commit names its issues.
+- Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
+  publication are closed; `gh issue list` is the live queue and `git log` records which commit
+  closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
+  identity) each took four and two independent reviews respectively, and **every review returned
+  REQUEST CHANGES with at least one real defect** — several of them in the fix rather than in the
+  original code. That ratio is the useful number here, not the issue count.
 - Test count and gate state move every batch, so this section does not restate them: `swift test`,
   `swift format lint --strict`, `scripts/helper-invariants.sh` and `scripts/check-doc-mirror.sh`
   are the four gates, and CI runs them on `macos-15` and `macos-26`. A number written here goes
@@ -53,10 +57,14 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 _Item 1 was "Publish" until 2026-09-18; the repository is public and CI runs on both runners, so it
 is done. The post-publication issue backlog replaced it._
 
-1. **Work the issue backlog.** `gh issue list` is the current queue — the findings the pre-publication
-   review left deliberately, plus what the independent reviews have opened since. They are worked in
-   batches, each batch commit naming the issues it closes. Structural work (`Doctor.swift` and
-   `MigrationEngine.swift` seams) is sequenced before the file renames that depend on it.
+1. **The backlog is empty, so the next action is to refill it honestly rather than to declare
+   done.** Known gaps that are not yet issues: nothing in the tree opens an XPC connection, so the
+   entire privileged helper — including both fixes above — is unreachable in a shipped artifact
+   (that is M4, below, and it is the largest untested surface in the project); the
+   `mayTakeOwnership` call site in `doCreateVaultDirectory` still needs a real mounted volume to
+   pin; `MigrationEngine.volumeUUIDAt` is a `public var` while `Doctor`'s is now a `let`, for the
+   reason recorded at `Doctor.swift`; and E6's disconnect half still needs hands on the Mac, which
+   is what would turn issue #24's central premise from inferred into observed.
 2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
    the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
    signed bundle — cannot be tested unsigned.

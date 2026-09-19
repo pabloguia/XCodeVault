@@ -14,6 +14,18 @@ import XCodeVaultHelperProtocol
 /// as a successful cache clean, and `NON_GOALS_AND_SAFETY.md` rule 6 requires shadow data to be
 /// **detected and reported**, never auto-resolved by deleting a copy.
 ///
+/// **The premise, and its evidence.** That the local stub *reappears* after the volume goes away
+/// is **inferred, not observed** — nothing in `docs/research/evidence/` records it, and the
+/// disconnect half of E6 still needs hands on the Mac. What is measured is the ownership and mode
+/// of those paths in their ordinary state (`COMPATIBILITY_MATRIX.md`, "755 root:admin
+/// /Library/Developer/CoreSimulator/Caches/dyld", one configuration), which is what makes the
+/// guarded walk pass.
+///
+/// The guard is right either way, and that is worth stating rather than leaving to be re-derived:
+/// if the stub does not reappear, the path is simply absent, the verb returns "nothing to do"
+/// before reaching any of this, and the issue was never reachable. The premise decides whether the
+/// *bug* exists, not whether the *fix* is correct.
+///
 /// The reviewer's diagnosis names the missing thing exactly: the verb "has no state that would let
 /// it distinguish 'a cache directory' from 'the stub of a volume that was mounted here five minutes
 /// ago'". This is that state.
@@ -148,10 +160,14 @@ enum HelperMountHistory {
                     return .failure(StoreFailure(reason: "could not create \(component): \(why)"))
                 }
             }
-            // `O_NONBLOCK` because `O_NOFOLLOW` stops symlinks and not FIFOs: opening a FIFO without
-            // it blocks until a peer appears, and every verb runs on one serial queue, so a single
-            // planted FIFO wedges the whole daemon. The `S_IFDIR` check below then rejects it — but
-            // it only runs if the open returns.
+            // `O_NONBLOCK` is belt-and-braces **here**, and the first version of this comment said
+            // otherwise. It claimed `O_NOFOLLOW` does not stop FIFOs and that without `O_NONBLOCK`
+            // this open would block — true of an `open` without `O_DIRECTORY`, and false of this
+            // one. Measured on Darwin 25.6.0: a FIFO opened `O_RDONLY|O_DIRECTORY|O_NOFOLLOW`
+            // returns `ENOTDIR` immediately, so `O_DIRECTORY` is what prevents the wedge and the
+            // type check below is never reached. The flag stays because it costs nothing and the
+            // next person to drop `O_DIRECTORY` should not also lose this; the reasoning is
+            // recorded where it is actually load-bearing, at the two record-file opens.
             let next = openat(fd, component, O_RDONLY | O_NOFOLLOW | O_DIRECTORY | O_NONBLOCK)
             let openError = errno
             close(fd)
@@ -230,10 +246,27 @@ enum HelperMountHistory {
 
         // Descriptor-relative and `O_NOFOLLOW`: the file this opens is inside the directory the
         // walk verified, not whatever the name resolves to on a second pass.
+        // **`O_NONBLOCK` is load-bearing on this line**, unlike the directory opens above.
+        // `O_NOFOLLOW` stops symlinks and not FIFOs, and there is no `O_DIRECTORY` here to reject
+        // one by type: measured on Darwin 25.6.0, this open **blocks** on a FIFO without the flag
+        // and succeeds with it. Every verb runs on one serial queue, so one planted FIFO would wedge
+        // the whole daemon. The `S_IFREG` check below then rejects it.
         let fd = openat(dirFD, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         if fd < 0 {
             let code = errno
-            if code == ENOENT || code == ENOTDIR { return .none }
+            // `ENOENT` alone. `ENOTDIR` was here too, and it made the security model's flat claim
+            // ("absence means ENOENT and nothing else") false one screen below where it is written.
+            // It is also unreachable: `name` is a single component and `dirFD` was `fstat`-verified
+            // as a directory, so nothing on this path can produce it. Keeping an unreachable case
+            // that widens a proceed-and-delete answer costs a reader the doubt.
+            //
+            // **No test pins this, and none can**: the branch is unreachable, so nothing
+            // distinguishes this version from the one that also accepted `ENOTDIR`. This comment and
+            // `SECURITY_MODEL.md` are the artifact. What makes the change safe regardless is its
+            // direction — narrowing absence can only move an answer toward refusal, never toward a
+            // deletion — which a reviewer measured rather than assumed: through a verified directory
+            // descriptor, every entry type gives `ENOENT`, `ELOOP` or `EOPNOTSUPP`, never `ENOTDIR`.
+            if code == ENOENT { return .none }
             return .unreadable(String(cString: strerror(code)))
         }
         defer { close(fd) }
@@ -299,7 +332,7 @@ enum HelperMountHistory {
         // helper-invariants: allow deletion
         if unlinkat(dirFD, name, 0) == 0 { return .success(true) }
         let code = errno
-        if code == ENOENT || code == ENOTDIR { return .success(false) }
+        if code == ENOENT { return .success(false) }  // see `read` — `ENOTDIR` is unreachable here and widened the answer
         return .failure(StoreFailure(reason: String(cString: strerror(code))))
     }
 

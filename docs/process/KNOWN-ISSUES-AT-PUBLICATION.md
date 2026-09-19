@@ -190,9 +190,16 @@ correct, and it now fails five rows of a truth table. **What it did not predict 
 interesting half** — extracting and testing the guard did not pin the *call site*, and the first
 attempt at this change left all three call sites mutation-clean while looking thoroughly tested.
 
-Still open: `doCreateVaultDirectory` itself has no test that calls it, so the `mayTakeOwnership`
-call site remains unpinned even though the predicate is exhaustively covered. See issue #5, which
-needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor anyway.
+**Narrowed 2026-09-19.** Issue #5 closed and did rework the verb onto `openat`/`mkdirat` against a
+parent descriptor, so that half of the sentence above is no longer outstanding.
+`VaultDirectoryVerbTests` now calls `doCreateVaultDirectory` itself and pins the four refusals that
+precede the mount lookup — the authorization gate at its call site among them, which removing the
+`authorize()` line demonstrably fails (the invariants script catches it too, independently).
+
+Still open, and it is the half a unit test cannot reach: everything past the mount lookup needs a
+real volume mounted under `/Volumes`, so the `mayTakeOwnership` call site remains unpinned even
+though the predicate is exhaustively covered. That is stated in the test file rather than only
+here, so the gap is visible from the code.
 
 ### Structural findings with named seams
 
