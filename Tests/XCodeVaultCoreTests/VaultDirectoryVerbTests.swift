@@ -182,7 +182,12 @@ final class VaultDirectoryVerbTests: XCTestCase {
                 // identical PASS with nothing distinguishing "pinned the fchown" from "asserted a
                 // tautology" — so a single-group CI container would silently delete the only
                 // coverage of that line.
-                XCTContext.runActivity(named: "fchown NOT pinned: this account belongs to one group only") { _ in }
+                //
+                // `print`, not `XCTContext.runActivity`: that method is `@MainActor`, and calling it
+                // from a synchronous nonisolated context is an error under the macos-15 runner's
+                // toolchain while the local one accepted it. `preflight.sh` cannot catch that — it
+                // runs one toolchain and says so.
+                print("note: fchown NOT pinned — this account belongs to one group only")
             }
         }
     }

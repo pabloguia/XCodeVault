@@ -60,7 +60,12 @@ jobs:
             # *below* the first line. A failure whose message listed which files tripped it showed
             # only the header "These name this machine:" and then the group ended — three pushes were
             # spent re-running CI to learn something the log already had and was cutting off.
-            grep -A 12 -E 'error: -\[|XCTAssert.*failed|XCTSkip' "$RUNNER_TEMP/test.log" || echo "(no assertion lines found; see the full log artifact)"
+            # `error:` on its own as well as the XCTest shapes. The step failed once on a compile
+            # error in the test target — `XCTContext.runActivity` is `@MainActor` and one runner's
+            # toolchain rejected the call the other accepted — and this group printed "(no assertion
+            # lines found)", which is true and useless. A test step can fail without a failing test.
+            grep -A 12 -E 'error: -\[|error:|XCTAssert.*failed|XCTSkip' "$RUNNER_TEMP/test.log" \
+              | head -80 || echo "(nothing matched; see the full log artifact)"
             echo "::endgroup::"
             exit 1
           }
