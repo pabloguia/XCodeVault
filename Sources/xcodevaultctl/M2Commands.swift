@@ -232,7 +232,7 @@ struct Locations: ParsableCommand {
             let warnings = try XcodeLocations.preflightDerivedData(
                 path: path, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: acknowledge)
             for w in warnings { print("! \(w)") }
-            try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: path))
+            try XcodeLocations.apply(.init(key: .derivedData, newValue: path))
             print("IDECustomDerivedDataLocation = \(path). Existing DerivedData was not moved (it is regenerable; `clean --category derivedData` reclaims it).")
         }
     }
@@ -246,7 +246,7 @@ struct Locations: ParsableCommand {
         func run() throws {
             let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
             for w in try XcodeLocations.preflightArchives(path: path, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning()) { print("! \(w)") }
-            try XcodeLocations.apply(.init(key: XcodeLocations.archivesKey, newValue: path))
+            try XcodeLocations.apply(.init(key: .archives, newValue: path))
             print("IDECustomDistributionArchivesLocation = \(path). Xcode adds YYYY-MM-DD/<Scheme>.xcarchive folders under it.")
         }
     }
@@ -254,7 +254,7 @@ struct Locations: ParsableCommand {
         static let configuration = CommandConfiguration(commandName: "reset-archives", abstract: "Restore Xcode's default Archives location.")
         func run() throws {
             _ = try XcodeLocations.preflightArchives(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning())
-            try XcodeLocations.apply(.init(key: XcodeLocations.archivesKey, newValue: nil)); print("Archives location reset to the default.")
+            try XcodeLocations.apply(.init(key: .archives, newValue: nil)); print("Archives location reset to the default.")
         }
     }
     struct SetCompilationCache: ParsableCommand {
@@ -273,7 +273,7 @@ struct Locations: ParsableCommand {
             for w in try XcodeLocations.preflightDerivedData(
                 path: path, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: acknowledge)
             { print("! \(w)") }
-            try XcodeLocations.apply(.init(key: XcodeLocations.compilationCacheKey, newValue: path))
+            try XcodeLocations.apply(.init(key: .compilationCache, newValue: path))
             print("IDECustomCompilationCacheLocation = \(path).")
         }
     }
@@ -281,14 +281,14 @@ struct Locations: ParsableCommand {
         static let configuration = CommandConfiguration(commandName: "reset-compilation-cache", abstract: "Restore the default compilation cache location.")
         func run() throws {
             _ = try XcodeLocations.preflightArchives(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning())
-            try XcodeLocations.apply(.init(key: XcodeLocations.compilationCacheKey, newValue: nil)); print("Compilation cache location reset to the default.")
+            try XcodeLocations.apply(.init(key: .compilationCache, newValue: nil)); print("Compilation cache location reset to the default.")
         }
     }
     struct ResetDerivedData: ParsableCommand {
         static let configuration = CommandConfiguration(commandName: "reset-derived-data", abstract: "Restore Xcode's default DerivedData location.")
         func run() throws {
             _ = try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: true)
-            try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: nil))
+            try XcodeLocations.apply(.init(key: .derivedData, newValue: nil))
             print("DerivedData location reset to the default.")
         }
     }

@@ -101,3 +101,47 @@ final class DoctorFamilyCompositionTests: XCTestCase {
         }
     }
 }
+
+/// Issue #15 — `XCodeVaultCore` shipped as a `.library` product with no access-level discipline.
+final class PublicSurfaceDisciplineTests: XCTestCase {
+    private var repoRoot: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    /// The fix, pinned. Re-adding the product is a deliberate act with a precondition — decide
+    /// which types are the API first — and it should not be possible to do it by accident while
+    /// adding an unrelated product.
+    func testCoreIsNotExportedAsALibraryProduct() throws {
+        let manifest = try String(contentsOf: repoRoot.appendingPathComponent("Package.swift"), encoding: .utf8)
+        let productLines =
+            manifest
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix(".library(") }
+        XCTAssertTrue(
+            productLines.filter { $0.contains("XCodeVaultCore") }.isEmpty,
+            """
+            `XCodeVaultCore` is declared as a library product again. That makes its whole public \
+            surface a semver commitment to consumers outside this repository, which is issue #15. \
+            If this is deliberate, narrow the surface first and say in the release note what the \
+            supported API is — then update this test with the reason.
+
+            \(productLines.joined(separator: "\n"))
+            """)
+    }
+
+    /// The three in-repo consumers reach Core through the *target*, which is what makes removing
+    /// the product free. If this stops being true the manifest has been restructured and the
+    /// reasoning above needs re-checking.
+    func testTheInRepoConsumersDependOnTheTargetNotAProduct() throws {
+        let manifest = try String(contentsOf: repoRoot.appendingPathComponent("Package.swift"), encoding: .utf8)
+        for consumer in ["xcodevaultctl", "XCodeVault", "XCodeVaultCoreTests"] {
+            XCTAssertTrue(
+                manifest.contains(consumer),
+                "\(consumer) is no longer declared in Package.swift; the dependency shape this test reasons about has changed")
+        }
+        XCTAssertTrue(
+            manifest.contains("\"XCodeVaultCore\""),
+            "nothing depends on XCodeVaultCore by target name any more")
+    }
+}

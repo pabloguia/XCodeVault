@@ -831,8 +831,8 @@ final class XcodeLocationsTests: XCTestCase {
             "defaults write": .init(status: 0, stdout: "", stderr: ""), "defaults delete": .init(status: 0, stdout: "", stderr: ""),
             "defaults read": .init(status: 1, stdout: "", stderr: ""),
         ])
-        try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: "/tmp/dd"), runner: runner, journal: journal)
-        try XcodeLocations.apply(.init(key: XcodeLocations.derivedDataKey, newValue: nil), runner: runner, journal: journal)
+        try XcodeLocations.apply(.init(key: .derivedData, newValue: "/tmp/dd"), runner: runner, journal: journal)
+        try XcodeLocations.apply(.init(key: .derivedData, newValue: nil), runner: runner, journal: journal)
         XCTAssertEqual(try journal.entries().map(\.state), [.started, .completed, .started, .completed])
     }
 }

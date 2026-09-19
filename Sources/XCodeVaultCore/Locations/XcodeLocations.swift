@@ -33,10 +33,42 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
             compilationCache: get(compilationCacheKey))
     }
 
+    /// The four `com.apple.dt.Xcode` keys this tool owns.
+    ///
+    /// A closed enumeration rather than a `String` (issue #16). `Change.key` used to be a
+    /// `public var String` written straight into `defaults write com.apple.dt.Xcode`, with nothing
+    /// in the type saying which keys this tool may write. The rule was held by discipline at six
+    /// call sites — and it had held; no caller ever passed an unowned key. But the value being
+    /// free-form is what makes "hold it at six sites" the mechanism, and the domain being written
+    /// is Xcode's entire preferences domain, where an unowned key is a setting of the user's that
+    /// this tool has no business touching.
+    ///
+    /// With this, an unowned key cannot be *constructed*, so there is nothing to reject at write
+    /// time. The four cases carry their own defaults key rather than the call sites naming
+    /// `XcodeLocations.derivedDataKey` alongside a `Change`, which is how the two could disagree.
+    public enum Key: String, Sendable, Equatable, CaseIterable, Codable {
+        case derivedData
+        case buildLocationStyle
+        case archives
+        case compilationCache
+
+        /// The literal written to `defaults`. Deliberately a switch and not a raw value: the raw
+        /// values are the short names used in journal entries and CLI output, and tying the two
+        /// together would make renaming one silently rewrite a real Xcode preference key.
+        public var defaultsKey: String {
+            switch self {
+            case .derivedData: return XcodeLocations.derivedDataKey
+            case .buildLocationStyle: return XcodeLocations.buildLocationStyleKey
+            case .archives: return XcodeLocations.archivesKey
+            case .compilationCache: return XcodeLocations.compilationCacheKey
+            }
+        }
+    }
+
     public struct Change: Sendable, Equatable {
-        public var key: String
+        public var key: Key
         public var newValue: String?  // nil = delete (reset to default)
-        public init(key: String, newValue: String?) { self.key = key; self.newValue = newValue }
+        public init(key: Key, newValue: String?) { self.key = key; self.newValue = newValue }
     }
 
     /// Preflight for pointing DerivedData at `path`. Returns warnings; throws on blockers.
@@ -127,11 +159,14 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
     /// Applies a change through `defaults` (which talks to cfprefsd correctly). Journaled.
     public static func apply(_ change: Change, runner: CommandRunning = ProcessCommandRunner(), journal: Journal = Journal()) throws {
         let op = UUID().uuidString
-        let previous = (try? runner.run(Tools.defaults, ["read", domain, change.key]))?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // One resolution of the key, used for the read, the journal and the write. Three separate
+        // `change.key` reads would be three chances for them to name different keys.
+        let key = change.key.defaultsKey
+        let previous = (try? runner.run(Tools.defaults, ["read", domain, key]))?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         try journal.record(
-            id: op, kind: .xcodeLocationChange, state: .started, summary: "\(change.key) → \(change.newValue ?? "<default>")",
-            detail: ["key": change.key, "previous": previous, "new": change.newValue ?? ""])
-        let args = change.newValue.map { ["write", domain, change.key, "-string", $0] } ?? ["delete", domain, change.key]
+            id: op, kind: .xcodeLocationChange, state: .started, summary: "\(key) → \(change.newValue ?? "<default>")",
+            detail: ["key": key, "previous": previous, "new": change.newValue ?? ""])
+        let args = change.newValue.map { ["write", domain, key, "-string", $0] } ?? ["delete", domain, key]
         let r = try runner.run(Tools.defaults, args)
         try journal.record(id: op, kind: .xcodeLocationChange, state: r.succeeded ? .completed : .failed, summary: r.succeeded ? "applied" : r.stderr)
         guard r.succeeded else { throw CommandError(executable: Tools.defaults, arguments: args, result: r, underlying: nil) }

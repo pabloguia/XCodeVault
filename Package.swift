@@ -6,7 +6,23 @@ let package = Package(
     name: "XCodeVault",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "XCodeVaultCore", targets: ["XCodeVaultCore"]),
+        // `XCodeVaultCore` is deliberately NOT a product (issue #15).
+        //
+        // It was declared `.library(name: "XCodeVaultCore", targets: ["XCodeVaultCore"])`, which
+        // made its entire public surface — 502 declarations — a semver commitment from the day the
+        // repository opened, when every actual consumer is inside this repository: the CLI, the
+        // app, and the test target. Nothing distinguished the types a consumer is meant to depend
+        // on from the ones that are `public` only because they had to cross a target boundary, so
+        // the commitment was to a surface nobody had chosen.
+        //
+        // Removing the product is the part of the fix that closes the exposure, and it closes all
+        // of it: the three in-repo consumers depend on the *target*, which still works, while an
+        // external package can no longer depend on any of it. The `package`/`internal` narrowing
+        // is hygiene that can now proceed incrementally instead of being one large break — and
+        // narrowing a surface nobody can reach is not a breaking change at all.
+        //
+        // Re-adding it is a deliberate act with a precondition: decide first which types are the
+        // API, mark only those `public`, and say so in a release note.
         .executable(name: "xcodevaultctl", targets: ["xcodevaultctl"]),
         .executable(name: "xcodevault-helper", targets: ["XCodeVaultHelper"]),
         .executable(name: "XCodeVault", targets: ["XCodeVault"]),
