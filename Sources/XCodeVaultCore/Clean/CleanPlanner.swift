@@ -68,6 +68,14 @@ public struct CleanPlanner: Sendable {
                 continue
             }
             if item.isMountPoint { skipped.append("\(item.path): is a mount point — never cleaned"); continue }
+            // The unanswerable case is skipped on the same terms as the answered one (issue #25).
+            // `CleanExecutor` re-asks immediately before deleting and refuses there too, so this
+            // is not the only guard — but without it the plan would offer to clean a path the
+            // executor is going to refuse, which reads to a user as the tool contradicting itself.
+            if item.mountStateUndetermined {
+                skipped.append("\(item.path): could not determine whether it is a mount point — never cleaned")
+                continue
+            }
             guard item.allocatedBytes > 0 else { continue }
             if let mounts = item.usage?.skippedMountPoints, !mounts.isEmpty {
                 skipped.append("\(item.path): contains mount points (\(mounts.joined(separator: ", "))) — never cleaned"); continue
@@ -141,7 +149,7 @@ public struct CleanResult: Sendable, Codable, Equatable {
     public struct FailedAction: Sendable, Codable, Equatable { public var path: String; public var error: String }
 }
 
-public struct CleanError: Error, CustomStringConvertible, Sendable {
+public struct CleanError: DescribedError, Sendable {
     public let description: String
     public init(_ d: String) { description = d }
 }
@@ -294,7 +302,16 @@ public struct CleanExecutor: Sendable {
         // the deletion path with the whole suite green. There is no parameter to supply here now;
         // `scripts/helper-invariants.sh` guards the one seam that remains, on
         // `XcodeLocations.shadowDataRefusal`.
-        guard !MountStatus.isMountPoint(a.path) else { throw CleanError("\(a.path) is a mount point — refusing") }
+        //
+        // Three-valued as of issue #25: the `Bool` form collapses "could not read the attribute"
+        // into "not a mount point", and in a `guard !…` on a deletion path that collapse is the
+        // difference between refusing and deleting the contents of a mounted volume.
+        switch MountStatus.mountAnswer(a.path) {
+        case .isMountPoint: throw CleanError("\(a.path) is a mount point — refusing")
+        case .undetermined:
+            throw CleanError("\(a.path): could not determine whether it is a mount point — refusing rather than assuming it is not")
+        case .isNotMountPoint: break
+        }
         guard st.st_uid == getuid() else { throw CleanError("\(a.path) is not owned by the current user — refusing") }
         // The path must be inside a catalog template for its category, by canonical path (no `..`, no interior symlinks).
         guard let c = StorageCatalog.category(a.categoryID), c.allowedStrategies.contains(.safeCleanup) else {

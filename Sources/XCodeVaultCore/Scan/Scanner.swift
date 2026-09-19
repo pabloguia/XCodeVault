@@ -130,12 +130,17 @@ public struct Scanner: Sendable {
         let exists = lstat(path, &st) == 0
         let isLink = exists && (st.st_mode & S_IFMT) == S_IFLNK
         let target = isLink ? (try? FileManager.default.destinationOfSymbolicLink(atPath: path)) : nil
-        let isMount = exists && !isLink && MountStatus.isMountPoint(path)
+        // Asked three-valued (issue #25) and recorded three-valued. The `Bool` form answers `false`
+        // both for "not a mount point" and for "could not read the attribute", and `CleanPlanner`
+        // reads a `false` here as permission to plan a delete. A path that exists and is not a
+        // symlink but whose mount state is unreadable is exactly the case that must not be planned.
+        let answer = (exists && !isLink) ? MountStatus.mountAnswer(path) : .isNotMountPoint
         let fs = exists ? MountStatus.filesystem(containing: path) : nil
         let usage = (exists && measureSizes) ? DiskUsage.measure(path) : nil
         return StorageItem(
             categoryID: categoryID, path: path, exists: exists, isSymlink: isLink, symlinkTarget: target,
-            isMountPoint: isMount, usage: usage, volumeMountPoint: fs?.mountPoint,
+            isMountPoint: answer == .isMountPoint, mountStateUndetermined: answer == .undetermined,
+            usage: usage, volumeMountPoint: fs?.mountPoint,
             onBootVolume: fs != nil && fs?.mountPoint == bootMountPoint)
     }
 

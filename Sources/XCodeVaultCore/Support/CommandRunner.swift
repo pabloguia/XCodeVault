@@ -13,7 +13,7 @@ public struct CommandResult: Sendable, Equatable {
     }
 }
 
-public struct CommandError: Error, CustomStringConvertible, Sendable {
+public struct CommandError: DescribedError, Sendable {
     public let executable: String
     public let arguments: [String]
     public let result: CommandResult?

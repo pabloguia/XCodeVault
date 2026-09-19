@@ -177,7 +177,10 @@ struct StorageView: View {
                 let c = report.category(for: it); Text((c?.recommendedStrategy.rawValue ?? "") + ((c?.isExperimental ?? false) ? " (experimental)" : ""))
             }
             TableColumn("Path") { it in
-                Text(it.path + (it.isSymlink ? "  → SYMLINK" : "") + (it.isMountPoint ? "  [mount point]" : "")).font(.system(.body, design: .monospaced))
+                Text(
+                    it.path + (it.isSymlink ? "  → SYMLINK" : "") + (it.isMountPoint ? "  [mount point]" : "")
+                        + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
+                ).font(.system(.body, design: .monospaced))
             }
         }
     }

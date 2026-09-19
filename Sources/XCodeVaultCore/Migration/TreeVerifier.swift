@@ -63,6 +63,26 @@ public struct TreeVerifier: Sendable {
         while let ent = fts_read(fts) {
             let info = Int32(ent.pointee.fts_info)
             let path = String(cString: ent.pointee.fts_path)
+            // Left as the `Bool` collapse deliberately (issue #25), and it is worth being exact
+            // about what this line decides, because a first version of this comment was not.
+            //
+            // It does **not** control descent. `fts_open` above passes `FTS_XDEV`, so a real
+            // nested mount is never walked into whatever this answers. What it controls is whether
+            // the mount-point directory *entry itself* is recorded in the inventory.
+            //
+            // `.undetermined` therefore reads as "not a mount point", the entry is recorded, and a
+            // recorded entry on one side with nothing matching on the other is a mismatch — which
+            // is the fail-closed direction for a function whose answer decides whether the source
+            // may now be deleted. Skipping on `.undetermined` instead would omit the entry from
+            // both inventories, they would agree, and `verify` would report identical.
+            //
+            // What actually produces `.undetermined` here is a filesystem that does not answer
+            // `ATTR_DIR_MOUNTSTATUS` at all, or an I/O error — not an unreadable child. A reviewer
+            // corrected an earlier claim that it was the latter: `getattrlist` needs search
+            // permission on the *parent*, and FTS only yields an entry whose parent it enumerated
+            // successfully, so a directory FTS reports as `FTS_DNR` normally answers
+            // `.isNotMountPoint`. In the filesystem case every directory answers `.undetermined`
+            // and the walk behaves exactly as it did before this type existed.
             if info == FTS_D, ent.pointee.fts_level > 0, MountStatus.isMountPoint(path) { fts_set(fts, ent, FTS_SKIP); continue }
             // FTS_DNR (directory unreadable), FTS_NS (stat failed) and FTS_ERR used to fall through
             // the guard below and disappear — the directory *and* everything beneath it. When the

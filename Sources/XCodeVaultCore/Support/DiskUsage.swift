@@ -51,10 +51,30 @@ public struct DiskUsage: Sendable, Equatable, Codable {
             switch info {
             case FTS_D:
                 // A nested mount point is recorded and pruned, never descended into.
-                if ent.pointee.fts_level > 0 && MountStatus.isMountPoint(entPath) {
-                    usage.skippedMountPoints.append(entPath)
-                    fts_set(fts, ent, FTS_SKIP)
-                    continue
+                //
+                // Three-valued as of issue #25, and the reason is not the descent. `FTS_XDEV`
+                // already stops a real mount being walked into whatever this answers. What the
+                // answer decides is whether the path gets *recorded* — and `CleanPlanner` skips a
+                // whole item when `skippedMountPoints` is non-empty. With the `Bool` collapse an
+                // unreadable nested mount was silently absent from that list, so the planner saw
+                // a clean tree and offered to remove it; `FileManager.removeItem` would then take
+                // the siblings and fail on the mount itself. Recording the unanswerable case is
+                // what keeps the planner's premise true.
+                if ent.pointee.fts_level > 0 {
+                    switch MountStatus.mountAnswer(entPath) {
+                    case .isMountPoint:
+                        usage.skippedMountPoints.append(entPath)
+                        fts_set(fts, ent, FTS_SKIP)
+                        continue
+                    case .undetermined:
+                        usage.skippedMountPoints.append(entPath)
+                        // Also a lower bound: the subtree is deliberately not walked, so these
+                        // bytes are missing from the total and the report must say so.
+                        usage.unreadable.append(entPath)
+                        fts_set(fts, ent, FTS_SKIP)
+                        continue
+                    case .isNotMountPoint: break
+                    }
                 }
                 usage.directoryCount += 1
                 if let sp = ent.pointee.fts_statp { usage.allocatedBytes += UInt64(sp.pointee.st_blocks) * 512 }

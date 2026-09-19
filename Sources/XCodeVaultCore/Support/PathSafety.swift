@@ -3,7 +3,7 @@ import Foundation
 /// Canonical-path containment checks. String prefix tests are not enough: `..`, interior
 /// symlinks and trailing slashes all escape them (migration-safety review, 2026-09-06).
 public enum PathSafety {
-    public struct Violation: Error, CustomStringConvertible, Sendable {
+    public struct Violation: DescribedError, Sendable {
         public let description: String
         public init(_ d: String) { description = d }
     }

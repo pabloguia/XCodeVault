@@ -4,9 +4,41 @@ import Foundation
 /// the cheap, race-free "is something mounted here?" check (research F5), preferred over
 /// Disk Arbitration for synchronous decisions.
 public enum MountStatus {
-    /// True if `path` is a directory that is currently a mount point (i.e. a filesystem is
-    /// mounted on it). False for ordinary directories and for non-directories.
-    public static func isMountPoint(_ path: String) -> Bool {
+    /// Three answers, because two was a collapse.
+    ///
+    /// This is the third instance of one defect, and the third is the reason it is written this
+    /// way rather than fixed in place. The helper's own `isMountPoint` failed open inside the
+    /// cleanup verb (issue #2); `abort`, `forget` and `leftoverPartialCopies` read a failing
+    /// `lstat` as "the partial copy is gone" (issue #8). Both were a question with three answers
+    /// written with two, where the missing answer silently took the value of the safe-sounding
+    /// one. `isMountPoint` below returned `false` both for "this is not a mount point" and for
+    /// "the attribute could not be read", and an `EACCES` on a destination's parent is enough to
+    /// produce the second.
+    ///
+    /// **Why this is not the helper's `MountAnswer`, given that it is the same idea.** Sharing one
+    /// type would mean `XCodeVaultHelperCore` importing `XCodeVaultCore`. The helper is a root
+    /// daemon whose isolation is a security property: `scripts/helper-invariants.sh` exists partly
+    /// to hold the rule that nothing but two permitted targets may depend on `HelperCore`, and
+    /// widening the helper's dependency closure to all of Core to save an eight-line enum is the
+    /// wrong trade. The duplication is deliberate; the two must be kept in step by hand, and
+    /// `MountAnswerTests.testTheTwoMountAnswerSpellingsHaveTheSameCases` fails if their case
+    /// sets drift.
+    public enum MountAnswer: Equatable, Sendable {
+        case isMountPoint
+        case isNotMountPoint
+        /// The question could not be answered — the path is missing, unreadable, `ELOOP`, on a
+        /// filesystem that does not answer `ATTR_DIR_MOUNTSTATUS`, or an I/O error occurred.
+        /// **Never treat this as "no".** Which direction it must fail in is a property of the
+        /// caller, not of this type, which is the whole reason it is a separate case.
+        case undetermined
+    }
+
+    /// Whether `path` is a mount point, or that the question could not be answered.
+    ///
+    /// Prefer this to `isMountPoint` at any site where the answer gates an action on the user's
+    /// data. The rule for reading it: a guard that must *stop* on `.undetermined` cannot use the
+    /// `Bool` form, because there the collapse is fail-open.
+    public static func mountAnswer(_ path: String) -> MountAnswer {
         var attrList = attrlist()
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrList.dirattr = attrgroup_t(ATTR_DIR_MOUNTSTATUS)
@@ -15,9 +47,48 @@ public enum MountStatus {
         let rc = buffer.withUnsafeMutableBytes { raw -> Int32 in
             getattrlist(path, &attrList, raw.baseAddress, raw.count, UInt32(FSOPT_NOFOLLOW))
         }
-        guard rc == 0, buffer[0] >= 8 else { return false }
-        return (buffer[1] & UInt32(DIR_MNTSTATUS_MNTPOINT)) != 0
+        // A short reply means the attribute was not returned, which is not the same as a cleared
+        // flag — the same class as parsing `ATTR_VOL_UUID` without `ATTR_CMN_RETURNED_ATTRS`.
+        if rc == 0, buffer[0] >= 8 {
+            return (buffer[1] & UInt32(DIR_MNTSTATUS_MNTPOINT)) != 0 ? .isMountPoint : .isNotMountPoint
+        }
+
+        // No answer from the attribute — but for one class of object the question has a definite
+        // answer anyway: **only a directory can be a mount point.** `ATTR_DIR_MOUNTSTATUS` is a
+        // directory attribute, so every regular file, device node and socket comes back as a short
+        // reply, and reading that as "unknown" is wrong twice over. It is wrong on the facts, and
+        // it was about to be wrong in the product: `Scanner` asks this of every existing catalog
+        // path, so a catalog entry that is a plain file would have been marked
+        // `mountStateUndetermined` and then refused by `CleanPlanner` — a regression introduced by
+        // the fix for issue #25 and caught by probing what the syscall actually answers for each
+        // shape of path, rather than by assuming a short reply means ignorance.
+        //
+        // The `lstat` is a second syscall on a second resolution of the same name, which is why it
+        // is consulted only in the branch that already has no answer, and why it is `lstat` rather
+        // than `stat` — matching the `FSOPT_NOFOLLOW` above. Racing it can only turn
+        // `.undetermined` into `.isNotMountPoint` for an object that is *now* not a directory, and
+        // that object cannot be a mount point either.
+        var st = stat()
+        if lstat(path, &st) == 0, (st.st_mode & S_IFMT) != S_IFDIR { return .isNotMountPoint }
+
+        // Everything left is genuinely unanswered: the path is missing, the parent is unreadable,
+        // an I/O error occurred, or the filesystem does not answer the attribute at all.
+        return .undetermined
     }
+
+    /// True if `path` is a directory that is currently a mount point. False for ordinary
+    /// directories, for non-directories, **and for a question that could not be answered.**
+    ///
+    /// That last collapse is why this is a convenience and not the primitive. It is safe only
+    /// where `.undetermined` collapsing to `false` fails in the direction the caller wants:
+    ///
+    /// - **Safe**: `guard isMountPoint(x) else { throw }` — `.undetermined` refuses.
+    /// - **Safe**: anywhere a wrong answer costs a wrong *number* rather than a wrong action —
+    ///   `DiskUsage`, `TreeVerifier`, the display flags.
+    /// - **Not safe**: `guard !isMountPoint(x) else { throw }` — `.undetermined` proceeds. Every
+    ///   such site now calls `mountAnswer` and handles the third case;
+    ///   `MountAnswerTests.testNoGuardNegatesTheBoolConvenience` fails if a new one appears.
+    public static func isMountPoint(_ path: String) -> Bool { mountAnswer(path) == .isMountPoint }
 
     /// The volume UUID of the filesystem **containing** `path` — nil when the attribute cannot be
     /// read at all (path missing, unreadable, `ELOOP`, I/O error) or the filesystem reports none.

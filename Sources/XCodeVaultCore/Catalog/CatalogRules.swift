@@ -14,7 +14,7 @@ public enum CatalogRules {
     /// Nothing under here is ever modified by us (only Apple's own tools may).
     public static let neverModifyPrefixes: [String] = ["/System"]
 
-    public struct Violation: Error, CustomStringConvertible, Sendable {
+    public struct Violation: DescribedError, Sendable {
         public let categoryID: String
         public let message: String
         public var description: String { "[\(categoryID)] \(message)" }

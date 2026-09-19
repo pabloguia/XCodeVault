@@ -45,7 +45,8 @@ public enum TextRenderer {
             let extra =
                 it.isSymlink
                 ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
-                : (it.isMountPoint ? "  [mount point]" : "") + (it.onBootVolume ? "" : "  [not on boot volume]")
+                : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
+                    + (it.onBootVolume ? "" : "  [not on boot volume]")
                     + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
                     // Without this the rows stop adding up to the Summary and nothing says why: a
                     // breakdown row's bytes are already inside its parent's row, and are counted

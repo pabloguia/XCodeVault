@@ -25,7 +25,7 @@ public struct MigrationOutcome: Sendable, Codable, Equatable {
     public var sourceRemoved: Bool
 }
 
-public struct MigrationError: Error, CustomStringConvertible, Sendable {
+public struct MigrationError: DescribedError, Sendable {
     public let description: String
     public init(_ d: String) { description = d }
 }
@@ -189,7 +189,15 @@ public struct MigrationEngine: Sendable {
         var st = stat()
         guard lstat(source, &st) == 0 else { throw MigrationError("\(source) does not exist.") }
         guard (st.st_mode & S_IFMT) == S_IFDIR else { throw MigrationError("\(source) is not a directory (symlink?). Fix with doctor first.") }
-        guard !MountStatus.isMountPoint(source) else { throw MigrationError("\(source) is a mount point; refusing.") }
+        // Three-valued on purpose (issue #25). The `Bool` form collapses "could not read the
+        // attribute" into "not a mount point", and in a `guard !…` that collapse *proceeds* —
+        // an unreadable mount point would have been migrated as an ordinary directory.
+        switch MountStatus.mountAnswer(source) {
+        case .isMountPoint: throw MigrationError("\(source) is a mount point; refusing.")
+        case .undetermined:
+            throw MigrationError("Could not determine whether \(source) is a mount point; refusing rather than assuming it is not.")
+        case .isNotMountPoint: break
+        }
         // `containsPath`, not a prefix test against `pathTemplates`: for a per-device category the
         // templates name the enclosing device set, so a prefix test accepted the set, every device
         // root, and every app container inside them as "a path of this category".
@@ -341,7 +349,27 @@ public struct MigrationEngine: Sendable {
             // than stuck. Only the directory this operation created is ever removed.
             var cleanupNote = ""
             if claimed {
-                do { try FileManager.default.removeItem(atPath: plan.destination) } catch {
+                do {
+                    // The same mount question `abort` asks before removing the same partial copy
+                    // (issue #25). A reviewer found this site had neither the three-valued check
+                    // nor the `Bool` one: `abort`'s copy of this deletion was guarded and this one
+                    // was not, on the reasoning that `claimed` and `assertVaultVolumeStillPresent`
+                    // bound it. They do bound it — this was a consistency gap, not a live hole —
+                    // but "audit every caller" means every caller, and two deletions of the same
+                    // object that refuse on different grounds is how the weaker one gets reached.
+                    switch MountStatus.mountAnswer(plan.destination) {
+                    case .isMountPoint:
+                        throw MigrationError("\(plan.destination) is a mount point; refusing to remove it.")
+                    case .undetermined:
+                        let p = MigrationEngine.presence(of: plan.destination)
+                        if p != .absent {
+                            throw MigrationError(
+                                "Could not determine whether \(plan.destination) is a mount point (\(p.explanation)); refusing to remove it.")
+                        }
+                    case .isNotMountPoint: break
+                    }
+                    try FileManager.default.removeItem(atPath: plan.destination)
+                } catch {
                     cleanupNote = "; the partial copy at \(plan.destination) could not be removed: \(error.localizedDescription)"
                 }
                 // And the category directory, but only when this operation created it, and only
@@ -827,8 +855,31 @@ public struct MigrationEngine: Sendable {
         // symlink, so this is reachable with the real `MountStatus`. A first attempt injected
         // the answer instead, which merely moved the untested mutation to the line feeding the
         // guard, where it reads as plumbing.
-        guard !MountStatus.isMountPoint(destination) else {
+        //
+        // Three-valued as of issue #25. This is the site the reviewer used to establish the
+        // disposition in the deadlock scenario it found: an `EACCES` on the destination's parent
+        // makes `getattrlist` fail, the `Bool` form reads that as "not a mount point", and the
+        // destination sails past this guard and is classified `.cleanable`.
+        //
+        // **`.undetermined` deliberately does NOT decline here, and that is not an oversight.**
+        // A first attempt made it `.declined` and re-broke the abort/forget termination bound —
+        // the same wedge, through a fourth door. `abortDisposition` runs *before* any journal
+        // line: declining here means `ABORT_FAILED` is never written, `abortFailures` never
+        // advances, `forget`'s `.cleanable` case has no non-throwing exit, and both verbs refuse
+        // forever. Two tests caught it —
+        // `testAbortRefusesRatherThanClaimingAbsenceItCouldNotVerify` and
+        // `testForgettingWithTheVaultUnpluggedStillLeavesTheCopyNamed`. That bound took five
+        // passes to get right and this is the lesson each pass relearned: a refusal that happens
+        // before the record of the attempt is a refusal the product cannot recover from.
+        //
+        // So the classification stays permissive and the *refusal moved to the deletion*, in
+        // `abort`, inside the `do` block whose `catch` writes `ABORT_FAILED`. The entry still
+        // closes; the mount point is still never removed. Issue #25 says as much in its own
+        // words: reaching `.cleanable` here "is survivable rather than a wedge".
+        switch MountStatus.mountAnswer(destination) {
+        case .isMountPoint:
             return .declined("\(destination) is a mount point; refusing.")
+        case .undetermined, .isNotMountPoint: break
         }
 
         switch direction {
@@ -936,6 +987,34 @@ public struct MigrationEngine: Sendable {
         // never read.
         if before.mayBePresent {
             do {
+                // The mount question, re-asked at the point of deletion (issue #25).
+                //
+                // It is asked *here* rather than in `abortDisposition` because this is inside the
+                // `do` whose `catch` writes `ABORT_FAILED`. Refusing in the disposition happens
+                // before any journal line and wedges the abort/forget pair — the lesson the
+                // comment above records, relearned once more. Refusing here refuses the deletion
+                // and still advances the bound, so the second attempt lets `forget` close the
+                // entry with the copy named.
+                //
+                // Two answers stop it, for two different reasons. `.isMountPoint` is the case the
+                // guard exists for: `removeItem` recurses across a mount boundary and would take a
+                // mounted volume's contents. `.undetermined` on a path that is not definitely
+                // absent is the issue #25 case — the question was never answered, and a recursive
+                // delete is not the operation to run on an unanswered question. A definitely
+                // `.absent` path cannot be a mount point, so it passes: `removeItem` will fail
+                // with ENOENT and the existing handling takes it from there.
+                switch MountStatus.mountAnswer(destination) {
+                case .isMountPoint:
+                    throw MigrationError("\(destination) is a mount point; refusing to remove it.")
+                case .undetermined:
+                    let p = MigrationEngine.presence(of: destination)
+                    if p != .absent {
+                        throw MigrationError(
+                            "Could not determine whether \(destination) is a mount point (\(p.explanation)); "
+                                + "refusing to remove it rather than assuming it is not.")
+                    }
+                case .isNotMountPoint: break
+                }
                 try FileManager.default.removeItem(atPath: destination)
                 removed = true
             } catch {

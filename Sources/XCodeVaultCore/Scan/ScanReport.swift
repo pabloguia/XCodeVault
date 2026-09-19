@@ -9,6 +9,18 @@ public struct StorageItem: Sendable, Codable, Equatable, Identifiable {
     public var isSymlink: Bool
     public var symlinkTarget: String?
     public var isMountPoint: Bool
+    /// True when the mount-state question could not be answered for this path at scan time.
+    ///
+    /// Separate from `isMountPoint` rather than folded into it, because the two say different
+    /// things and a consumer is entitled to both. `isMountPoint` means "a filesystem is mounted
+    /// here"; setting it for an unreadable path would make the scan report assert something it
+    /// does not know. This flag means "do not rely on `isMountPoint` being `false` here" — and a
+    /// planner deciding whether to delete has to treat it exactly as it treats `isMountPoint`.
+    ///
+    /// Defaulted so that decoding a report written before this field existed keeps working, and
+    /// so that the many test fixtures constructing `StorageItem` by hand did not all have to
+    /// assert a value for a question they are not about.
+    public var mountStateUndetermined: Bool = false
     public var usage: DiskUsage?
     /// Where the bytes physically are (mount point of the filesystem serving the path).
     public var volumeMountPoint: String?

@@ -477,6 +477,8 @@ public struct Doctor: Sendable {
         var out: [Finding] = []
         for r in runtimes {
             let name = r.runtimeIdentifier ?? r.identifier
+            // Collapse direction (issue #25): `.undetermined` raises the finding. A runtime that
+            // claims Ready at a path whose mount state cannot be read is worth saying out loud.
             if let mp = r.mountPath, r.state == "Ready", !MountStatus.isMountPoint(mp) {
                 out.append(
                     Finding(

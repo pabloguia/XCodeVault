@@ -36,7 +36,7 @@ public struct RuntimeInstaller: Sendable, Codable, Equatable, Identifiable {
     }
 }
 
-public struct RuntimeOperationError: Error, CustomStringConvertible, Sendable {
+public struct RuntimeOperationError: DescribedError, Sendable {
     public let description: String
     public init(_ d: String) { description = d }
 }

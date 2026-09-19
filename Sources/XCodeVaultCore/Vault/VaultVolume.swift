@@ -66,7 +66,7 @@ public struct VaultVolumeCheck: Sendable, Codable, Equatable {
     public var isUsable: Bool { state == .verified || state == .movedMountPoint }
 }
 
-public struct VaultError: Error, CustomStringConvertible, Sendable {
+public struct VaultError: DescribedError, Sendable {
     public let description: String
     public init(_ d: String) { description = d }
 }

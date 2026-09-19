@@ -81,6 +81,9 @@ extension Doctor {
         for n in names where !n.hasPrefix(".") {
             let p = "/Volumes/" + n
             var st = stat(); guard lstat(p, &st) == 0, (st.st_mode & S_IFMT) == S_IFDIR else { continue }
+            // Direction of the `Bool` collapse here (issue #25): `.undetermined` reads as "not a
+            // mount point", so this does *not* `continue` and the path is examined for shadow
+            // data. Over-reporting is the safe direction for a diagnostic that only proposes.
             if MountStatus.isMountPoint(p) { continue }
             guard let u = DiskUsage.measure(p), u.fileCount > 0 else { continue }
             out.append(
@@ -218,6 +221,9 @@ extension Doctor {
                         path: path, remediation: "Reconnect the volume, or `xcodevaultctl locations reset-…` to go back to the default.", evidence: "H3"))
             } else if path.hasPrefix("/Volumes/"), let name = path.split(separator: "/", omittingEmptySubsequences: true).dropFirst().first {
                 let top = "/Volumes/" + name
+                // Same collapse, same direction (issue #25): `.undetermined` raises the finding
+                // rather than suppressing it. A `/Volumes/<name>` whose mount state cannot be
+                // read is a thing worth telling the user about either way.
                 if !MountStatus.isMountPoint(top) {
                     out.append(
                         Finding(
