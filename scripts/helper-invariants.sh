@@ -336,7 +336,16 @@ NEEDLES
 # legitimate `or` is the bounded identifier allowlist inside parentheses, so parenthesised groups
 # are removed before looking. Three substring checks cannot see this: appending
 # " or anchor apple generic" keeps all three and accepts everything.
-if code_of "$PROTOCOL" | sed -E 's/\([^)]*\)//g' | grep -qE '[[:space:]]or[[:space:]]'; then
+# `[[:space:]]or[[:space:]]` was the first spelling and it is not enough: the requirement grammar
+# terminates a string literal at its closing quote, so `"TEAM"or anchor …` parses with no whitespace
+# anywhere. Word boundaries instead — `-w` treats the quote and the parenthesis as boundaries, which
+# is exactly what the grammar does, and it still does not match the `or` inside `anchor`.
+# Escape sequences are normalised first. In the *source* a `\n` is the two characters backslash and
+# `n`, so `\nor anchor` reads to `grep -w` as the word `nor` and slips through — while the string the
+# daemon actually parses contains a newline and a bare `or`. Measured: that spelling parses and
+# weakens the requirement. Replacing `\n`/`\t`/`\r` with spaces makes the shell see what the
+# requirement grammar sees.
+if code_of "$PROTOCOL" | sed -E 's/\\[nrt]/ /g; s/\([^)]*\)//g' | grep -qwE 'or'; then
     violation "$PROTOCOL — the client requirement has a disjunction outside the identifier allowlist" \
         "an unparenthesised or accepts everything on its weaker side"
 fi
@@ -511,6 +520,55 @@ while IFS= read -r f; do
     forbid "$f" 'csrutil (disabl[e]|enabl[e])|nvram boot-arg[s]|amfi_get_out_of_my_wa[y]' \
         "SIP/AMFI manipulation is never allowed"
 done < <(find . \( -path ./.build -o -path ./.git -o -path ./dist \) -prune -o -type f -print 2>/dev/null)
+
+# ---- the client side of peer validation (issue #30) -------------------------------------------
+# **A prohibition, not a proof, and the third shape this rule has taken.**
+#
+# The first two versions tried to verify that a file constructing a connection to the daemon also
+# validated it. Reviewers defeated that eleven ways across two passes — a `// TODO` comment
+# satisfied it, then a string literal did; tokens borrowed across two connections in one file; the
+# call was made on a different object; `machServiceName :` with a space, an argument on the next
+# line and `NSXPCConnection.init(` all escaped detection; and comment-stripping ate a `.resume()`
+# that followed a URL in a string. Each fix was correct and the next defeat was as easy as the last,
+# because the shape was wrong: `grep` cannot prove a positive about code.
+#
+# **What this holds, stated at its real strength.** One negative: no file under `Sources/` outside
+# the allowlist textually names `NSXPCConnection(machServiceName:` or the libxpc primitive it wraps,
+# `xpc_connection_create_mach_service`. That is not "nothing may connect" — a fourth reviewer
+# measured the residue, and it is worth knowing rather than discovering:
+#
+#   - a `typealias` for `NSXPCConnection`, or any factory that does not name the type
+#     (a line break *between* the type and `.init(` is caught — that was a missing `*` in the
+#     pattern, found by a sixth reviewer; fixing it was better than lengthening this list, because
+#     the sentence below about squeezing has to be true)
+#   - a comment between the paren and the argument label
+#   - `NSXPCConnection(listenerEndpoint:)`, which reaches a peer by endpoint rather than by name
+#   - anything under `Tests/`, which this loop does not read
+#
+# Those stay with review, as they must — they are not grep-shaped. What the rule buys is that the
+# ordinary spellings, including the C one a lot of sample code uses, cannot land without a visible
+# line in the allowlist below, in the same diff, where the peer validation gets reviewed.
+#
+# The allowlisted file does not exist yet: nothing in the tree opens a connection to the daemon.
+XPC_CLIENT_ALLOWLIST="Sources/XCodeVaultHelperClient/HelperClient.swift"
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    for allowed in $XPC_CLIENT_ALLOWLIST; do
+        [ "$f" = "$allowed" ] && continue 2
+    done
+    # The daemon target is NOT exempt. An earlier version skipped it "for the daemon's own listener",
+    # which buys nothing — the listener is `NSXPCListener(machServiceName:)` and this pattern names
+    # `NSXPCConnection` — while blanket-exempting the one target that runs as root from the only rule
+    # saying nothing may open a connection to the daemon.
+    #
+    # Squeezed, so formatting cannot hide the call. Detection is deliberately broad: a false positive
+    # is a *mention* in prose, and the remedy for that is to reword the mention — not to add the file
+    # to the allowlist, which would exempt it from the prohibition for good.
+    tr -s '[:space:]' ' ' < "$f" \
+        | grep -qE 'NSXPCConnection *(\.init)? *\( *machServiceName *:|xpc_connection_create_mach_service' \
+        && violation "$f — constructs an XPC connection to the privileged helper" \
+            "only $XPC_CLIENT_ALLOWLIST may do that; add it there in the same diff that writes the client, so the peer validation is reviewed"
+done < <(find Sources -name '*.swift' -type f 2>/dev/null | sort)
 
 if [ "$fails" -eq 0 ]; then
     echo "helper invariants: ok"
