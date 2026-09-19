@@ -106,6 +106,40 @@ public enum MountStatus {
     /// re-check inside a transaction. The point of this primitive is to be cheap enough that
     /// "is the volume I verified a moment ago still the volume under my feet?" can be asked
     /// immediately before a write, closing the window between the check and the use.
+    /// Comparing a recorded volume identity against what is at that path now (#26).
+    ///
+    /// Four answers, not a `Bool`, for the reason this project keeps rediscovering: "not a match" and
+    /// "could not be checked" are different facts, and so is "there was nothing to check against".
+    /// Collapsing them is how a promise gets made about an installer nothing verified.
+    public enum VolumeIdentityMatch: Equatable {
+        /// The journal has no identity: written before the field existed, or a filesystem that
+        /// reports no UUID. Nothing to contradict — the caller keeps its pre-#26 behaviour, and must
+        /// say so rather than claim the check passed.
+        case notRecorded
+        case matches
+        case differs(recorded: String, found: String)
+        /// An identity was recorded and the volume cannot be read now. Not a match.
+        case unreadable(recorded: String)
+    }
+
+    /// One implementation so `Doctor` and `RuntimeOperations.offload` cannot drift apart: one warns
+    /// about a deletion the other performs, and they have to agree on what "same volume" means.
+    ///
+    /// Parsed before comparing where both sides parse (review finding F7). `getattrlist` returns
+    /// `ATTR_VOL_UUID` as a `uuid_t` that this file formats, so the shapes match today — but a
+    /// journal entry is written once and read back for as long as the machine lives, and a
+    /// case-insensitive string compare quietly says "different volume" for the same volume written
+    /// in a different case by a future version. Non-UUID identifiers still compare
+    /// case-insensitively, since some filesystems report something else entirely.
+    public static func compareVolumeIdentity(recorded: String?, found: String?) -> VolumeIdentityMatch {
+        guard let recorded, !recorded.isEmpty else { return .notRecorded }
+        guard let found, !found.isEmpty else { return .unreadable(recorded: recorded) }
+        if let a = UUID(uuidString: recorded), let b = UUID(uuidString: found) {
+            return a == b ? .matches : .differs(recorded: recorded, found: found)
+        }
+        return found.caseInsensitiveCompare(recorded) == .orderedSame ? .matches : .differs(recorded: recorded, found: found)
+    }
+
     public static func volumeUUID(at path: String) -> String? {
         var attrList = attrlist()
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)

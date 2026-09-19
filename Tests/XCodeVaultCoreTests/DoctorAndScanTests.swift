@@ -1233,10 +1233,32 @@ final class UnavailableDeviceAdviceTests: XCTestCase {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
         let unrelated = try installerFile(dir, "DerivedData-leftover")
-        let (d, _) = try doctor([], extra: [(.clean, .completed, [unrelated]), (.runtimeOffload, .started, [unrelated])])
+        let (d, _) = try doctor([], extra: [(.clean, .completed, [unrelated])])
         let r = try remediation(d, [device("iPhone", available: false)])
         XCTAssertFalse(r.contains("Do NOT run"), "a cleanup path is not a runtime installer: \(r)")
         XCTAssertFalse(r.contains(unrelated), r)
+    }
+
+    /// The `.started` half of the case above, separated out because the two properties diverged.
+    ///
+    /// This fixture used to sit inside the test above, asserting that a `.started` offload produced
+    /// no advice at all. It now produces *different* advice, and the change is the point: an offload
+    /// that began and never recorded an end means the runtime may already be gone while the
+    /// installer is fine, and staying silent sends the user to the branch that says nothing was
+    /// offloaded and deletion is safe (issue #26, review finding B1).
+    ///
+    /// What has not changed, and is what the test above is really about: a `.started` offload is
+    /// still **not** a recoverable installer. It is never offered as one.
+    func testAStartedOffloadIsSurfacedAsUnknownButNeverOfferedAsARecovery() throws {
+        let dir = NSTemporaryDirectory() + "/inst-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: dir) }
+        let unrelated = try installerFile(dir, "DerivedData-leftover")
+        let (d, _) = try doctor([], extra: [(.clean, .completed, [unrelated]), (.runtimeOffload, .started, [unrelated])])
+        let r = try remediation(d, [device("iPhone", available: false)])
+        XCTAssertFalse(r.contains("Re-import instead"), "an unfinished offload is not evidence that anything can be restored: \(r)")
+        XCTAssertFalse(r.contains("journal records no offloaded runtime"), "and the journal does record one: \(r)")
+        XCTAssertTrue(r.contains("never recorded how it ended"), r)
     }
 
     /// An offload → import → offload cycle records the same installer twice; naming it twice reads

@@ -146,6 +146,26 @@ public struct RuntimeOperations: Sendable {
         public let installerPath: String
         public let installerFileName: String
         public let installerSizeBytes: UInt64
+        /// The volume UUID of the filesystem holding the installer, resolved at preflight (#26).
+        ///
+        /// The safety argument for `runtime offload` is "delete the installed runtime only because
+        /// an installer exists to restore it from", and `doctor` re-states that argument to the
+        /// user later — from the journal. Restating it from a **path** is what this field replaces.
+        /// On a machine with two external drives, or with one that comes back as `/Volumes/VAULT 1`
+        /// after an unclean eject and leaves the original mount-point directory behind, the path
+        /// can resolve to a file that is not the installer this operation verified. `doctor` would
+        /// then tell the user their devices are recoverable from an image nobody checked.
+        ///
+        /// The rest of the project already treats volume identity this way: `VaultVolume` is keyed
+        /// by `volumeUUID` with a sentinel, and `MIGRATION_ENGINE.md` requires UUID + sentinel
+        /// rather than `/Volumes/<name>` precisely because mount points are not identities. The
+        /// offload path predates that discipline and was not brought in line when its policy moved
+        /// into Core.
+        ///
+        /// Optional because the lookup can fail — a filesystem that reports no UUID, or a path that
+        /// cannot be read. `nil` means "this entry predates the field, or the volume had no
+        /// identity to record", and `Doctor` treats that as *unverifiable* rather than as matching.
+        public let installerVolumeUUID: String?
         public let runtimeIdentifier: String?
         public let version: String?
         public let build: String?
@@ -164,12 +184,13 @@ public struct RuntimeOperations: Sendable {
         /// capability the access level did not deliver.
         private init(
             identifier: String, installerPath: String, installerFileName: String, installerSizeBytes: UInt64,
-            runtimeIdentifier: String?, version: String?, build: String?, sizeBytes: UInt64?
+            installerVolumeUUID: String?, runtimeIdentifier: String?, version: String?, build: String?, sizeBytes: UInt64?
         ) {
             self.identifier = identifier
             self.installerPath = installerPath
             self.installerFileName = installerFileName
             self.installerSizeBytes = installerSizeBytes
+            self.installerVolumeUUID = installerVolumeUUID
             self.runtimeIdentifier = runtimeIdentifier
             self.version = version
             self.build = build
@@ -178,11 +199,12 @@ public struct RuntimeOperations: Sendable {
 
         /// The only way to make one, so a plan cannot exist without the checks that justify it.
         fileprivate static func checked(
-            identifier: String, installer: RuntimeInstaller, runtime: SimulatorRuntime
+            identifier: String, installer: RuntimeInstaller, runtime: SimulatorRuntime, installerVolumeUUID: String?
         ) -> OffloadPlan {
             OffloadPlan(
                 identifier: identifier, installerPath: installer.path, installerFileName: installer.fileName,
-                installerSizeBytes: installer.sizeBytes, runtimeIdentifier: runtime.runtimeIdentifier,
+                installerSizeBytes: installer.sizeBytes, installerVolumeUUID: installerVolumeUUID,
+                runtimeIdentifier: runtime.runtimeIdentifier,
                 version: runtime.version, build: runtime.build, sizeBytes: runtime.sizeBytes)
         }
 
@@ -195,6 +217,10 @@ public struct RuntimeOperations: Sendable {
             [
                 "runtimeIdentifier": runtimeIdentifier ?? "", "version": version ?? "", "build": build ?? "",
                 "installer": installerPath,
+                // The identity, alongside the path rather than instead of it: the path is what a
+                // user needs in order to find the file, and the UUID is what `doctor` needs in
+                // order to know the file at that path is the one this operation verified.
+                "installerVolumeUUID": installerVolumeUUID ?? "",
             ].filter { !$0.value.isEmpty }
         }
     }
@@ -229,7 +255,8 @@ public struct RuntimeOperations: Sendable {
         installedRuntimes: [SimulatorRuntime],
         isMountPoint: (String) -> Bool = MountStatus.isMountPoint,
         listLibrary: (String) throws -> [RuntimeInstaller] = RuntimeOperations.library(at:),
-        imageIsReadable: ((String) throws -> Bool)? = nil
+        imageIsReadable: ((String) throws -> Bool)? = nil,
+        volumeUUIDAt: (String) -> String? = MountStatus.volumeUUID(at:)
     ) throws -> (plan: OffloadPlan, warnings: [String]) {
         guard let rt = installedRuntimes.first(where: { $0.identifier == identifier }) else {
             throw RuntimeOperationError("No installed runtime with identifier \(identifier).")
@@ -254,7 +281,20 @@ public struct RuntimeOperations: Sendable {
         if rt.sizeBytes == nil {
             warnings.append("simctl did not report this runtime's size, so how much this frees cannot be stated up front.")
         }
-        return (OffloadPlan.checked(identifier: identifier, installer: inst, runtime: rt), warnings)
+        // Resolved here, at preflight, and not at journal-write time: this is the moment the
+        // installer was verified readable, so it is the moment whose answer the journal should
+        // carry. A lookup done later would describe whatever is mounted then.
+        let volumeUUID = volumeUUIDAt(inst.path)
+        if volumeUUID == nil {
+            warnings.append(
+                "The filesystem holding \(inst.path) reports no volume UUID, so the journal cannot record which drive this "
+                    + "installer is on. `doctor` will be able to say the image is unreachable but not whether a file later found "
+                    + "at that path is the same one.")
+        }
+        return (
+            OffloadPlan.checked(identifier: identifier, installer: inst, runtime: rt, installerVolumeUUID: volumeUUID),
+            warnings
+        )
     }
 
     private var defaultImageIsReadable: (String) throws -> Bool {
@@ -284,7 +324,11 @@ public struct RuntimeOperations: Sendable {
     }
 
     @discardableResult
-    public func offload(_ plan: OffloadPlan, confirmedByUser confirmation: OffloadConfirmation) throws -> CommandResult {
+    public func offload(
+        _ plan: OffloadPlan, confirmedByUser confirmation: OffloadConfirmation,
+        volumeUUIDAt: (String) -> String? = MountStatus.volumeUUID(at:),
+        isMountPoint: (String) -> Bool = MountStatus.isMountPoint
+    ) throws -> CommandResult {
         // Re-validated here, not just in the preflight. `OffloadPlan` is `Sendable` and all-`let`
         // — designed to be held and passed — so "was true when checked" is not "is true now". In
         // the CLI that window is microseconds; in the SwiftUI app it is however long the
@@ -293,7 +337,12 @@ public struct RuntimeOperations: Sendable {
         // installer that moved, and then journaling `.completed` with the stale path, is exactly
         // the state `Doctor` reads as "merely disconnected, devices recoverable".
         let installerDirectory = (plan.installerPath as NSString).deletingLastPathComponent
-        guard !RuntimeOperations.isNotOnAMountedVolume(destination: installerDirectory) else {
+        // The seam `preflightOffload` has had all along. Without it this guard was unkillable: every
+        // test runs under `NSTemporaryDirectory()`, which is never a `/Volumes` path, so the
+        // predicate was constantly false and deleting these four lines left the suite green — on the
+        // guard defending "the vault was unplugged between the preflight and the confirmation",
+        // which is the #26 family.
+        guard !RuntimeOperations.isNotOnAMountedVolume(destination: installerDirectory, isMountPoint: isMountPoint) else {
             throw RuntimeOperationError(
                 "\(installerDirectory) is no longer a mounted volume. Nothing was deleted — the runtime is intact. "
                     + "Reconnect the drive and run the offload again.")
@@ -301,6 +350,36 @@ public struct RuntimeOperations: Sendable {
         guard try defaultImageIsReadable(plan.installerPath) else {
             throw RuntimeOperationError(
                 "\(plan.installerPath) is no longer readable by hdiutil. Nothing was deleted — the runtime is intact.")
+        }
+        // **Same volume, not merely the same path** (issue #26, review finding F1).
+        //
+        // The two guards above re-check that *something* mounted is at that path and that it is a
+        // readable image. Neither establishes it is the same drive the preflight verified, and that
+        // is the whole safety argument for this verb: delete the installed runtime only because an
+        // installer exists to restore it from. Between the preflight and here the vault can be
+        // unplugged and another drive can mount at `/Volumes/VAULT` — or the vault itself can return
+        // as `/Volumes/VAULT 1` after an unclean eject, leaving the old mount-point directory for
+        // something else to occupy. A 900 MB readable `.dmg` belonging to somebody else satisfies
+        // both guards, and then 12 GB is deleted against it.
+        //
+        // This is the one place the recorded identity can prevent a **loss** rather than a wrong
+        // sentence later, so it refuses on anything short of a match: an identity that was recorded
+        // and cannot be read now is not a match either. `notRecorded` proceeds — an entry from before
+        // the field existed, or a filesystem that reports no UUID, and refusing there would break
+        // offload on those machines for a check that was never possible.
+        switch MountStatus.compareVolumeIdentity(recorded: plan.installerVolumeUUID, found: volumeUUIDAt(plan.installerPath)) {
+        case .notRecorded, .matches:
+            break
+        case .differs(let recorded, let found):
+            throw RuntimeOperationError(
+                "\(plan.installerPath) is on a different volume than the one this offload verified (recorded \(recorded), found "
+                    + "\(found)). Nothing was deleted — the runtime is intact. Most likely another drive is mounted at that path, or the "
+                    + "vault returned under a different name; check `xcodevaultctl volumes`, reconnect the original drive and run the offload again.")
+        case .unreadable(let recorded):
+            throw RuntimeOperationError(
+                "\(plan.installerPath) is on a volume whose identity cannot be read, and this offload recorded \(recorded). Nothing was "
+                    + "deleted — the runtime is intact. Refusing rather than deleting against an installer that cannot be confirmed to be the "
+                    + "one that was verified.")
         }
         let op = UUID().uuidString
         var detail = plan.journalDetail

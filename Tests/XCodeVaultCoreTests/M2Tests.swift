@@ -620,14 +620,26 @@ final class RuntimeOperationsTests: XCTestCase {
     func testOffloadJournalsStartedThenCompletedAndCarriesTheRuntimeIdentity() throws {
         let f = offloadFixture()
         let path = f.t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        // `volumeUUIDAt` supplied because this fixture's installer does not exist on disk, and the
+        // real lookup answers nil for a path it cannot stat — which since issue #26 is a warning.
+        // Production never reaches that state: `imageIsReadable` verified the file a line earlier.
+        // Stating it here keeps this test about the journal transitions rather than about an
+        // environmental accident.
         let (plan, warnings) = try f.ops.preflightOffload(
             identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
-            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] }, imageIsReadable: { _ in true })
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] }, imageIsReadable: { _ in true },
+            volumeUUIDAt: { _ in "F1F1F1F1-0000-0000-0000-000000000001" })
         XCTAssertTrue(warnings.isEmpty)
         XCTAssertEqual(plan.installerPath, path)
         XCTAssertEqual(plan.sizeBytes, 12_000_000_000)
 
-        try f.ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "test"))
+        try f.ops.offload(
+            plan, confirmedByUser: .explicitUserIntent(recordedAs: "test"),
+            // The same seam as the preflight above, for the same reason: this fixture's installer
+            // does not exist on disk, so the real lookup answers nil and `offload` correctly refuses
+            // to delete against a volume it cannot identify (issue #26 F1). In production both calls
+            // are the same function on the same path, so they agree.
+            volumeUUIDAt: { _ in "F1F1F1F1-0000-0000-0000-000000000001" })
 
         let mine = try f.journal.entries().filter { $0.kind == .runtimeOffload }
         XCTAssertEqual(mine.map(\.state), [.started, .completed], "both transitions, in order")
@@ -792,9 +804,12 @@ final class RuntimeOperationsTests: XCTestCase {
             supportedArchitectures: ["arm64"])
         let (plan, warnings) = try f.ops.preflightOffload(
             identifier: "R1", library: f.t.path, installedRuntimes: [rt],
-            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(f.t.path + "/x.dmg")] }, imageIsReadable: { _ in true })
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(f.t.path + "/x.dmg")] }, imageIsReadable: { _ in true },
+            // Same reason as the journal test above: this fixture's installer is not on disk, and
+            // the warning about that is a different subject from the one being asserted.
+            volumeUUIDAt: { _ in "F1F1F1F1-0000-0000-0000-000000000001" })
         XCTAssertNil(plan.sizeBytes)
-        XCTAssertEqual(warnings.count, 1)
+        XCTAssertEqual(warnings.count, 1, "exactly the size warning, and nothing else: \(warnings)")
         XCTAssertTrue(warnings[0].contains("did not report"), "unexpected: \(warnings)")
     }
 }

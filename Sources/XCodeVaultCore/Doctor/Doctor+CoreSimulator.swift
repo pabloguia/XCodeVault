@@ -397,13 +397,38 @@ extension Doctor {
         // An installer that was offloaded and later re-imported is no longer standing in for a
         // missing runtime; the stale offload entry must not keep claiming recoverability.
         let reimported = Set(entries.filter { $0.kind == .runtimeImport && $0.state == .completed }.flatMap(\.paths))
+        /// An offload that wrote `.started` and never wrote a terminal line.
+        ///
+        /// **A reviewer found this reading the journal end to end (issue #26, B1).** `offload`
+        /// journals `.started`, runs `simctl runtime delete`, then journals `.completed`. Lose power,
+        /// or ^C a hung `simctl`, in between and the runtime is gone, the devices are unavailable,
+        /// the installer is on the vault — and the journal holds only `.started`. This rule used to
+        /// read `.completed` and nothing else, so that entry vanished, every category came out empty,
+        /// and control reached the final branch: "the journal records no offloaded runtime that could
+        /// bring these back", which green-lights a permanent delete. Exactly the F2 falsehood, by the
+        /// crash route instead of the foreign-drive route.
+        ///
+        /// `.failed` is deliberately not here: it means the delete did not happen.
+        let terminal = Set(entries.filter { $0.kind == .runtimeOffload && ($0.state == .completed || $0.state == .failed) }.map(\.id))
+
+        struct Offload {
+            let installer: String
+            let rid: String?
+            let volumeUUID: String?
+            /// False when the journal never recorded how this offload ended.
+            let finished: Bool
+        }
         var seen = Set<String>()
         let offloads =
             entries
-            .filter { $0.kind == .runtimeOffload && $0.state == .completed }
-            .compactMap { e -> (installer: String, rid: String?)? in
+            .filter { $0.kind == .runtimeOffload && ($0.state == .completed || ($0.state == .started && !terminal.contains($0.id))) }
+            .compactMap { e -> Offload? in
                 guard let path = e.detail["installer"] ?? e.paths.first, !reimported.contains(path), seen.insert(path).inserted else { return nil }
-                return (path, e.detail["runtimeIdentifier"])
+                // Empty means the entry predates the field (#26) or the filesystem reported no
+                // UUID — either way it is "no identity recorded", which is not the same as a
+                // recorded identity that fails to match.
+                let uuid = e.detail["installerVolumeUUID"].flatMap { $0.isEmpty ? nil : $0 }
+                return Offload(installer: path, rid: e.detail["runtimeIdentifier"], volumeUUID: uuid, finished: e.state == .completed)
             }
 
         /// A recorded path is only evidence of a recoverable runtime when it is a real image we can
@@ -421,18 +446,101 @@ extension Doctor {
             guard lstat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return false }
             return st.st_size >= 500_000_000
         }
-        let reachable = offloads.filter { isUsableImage($0.installer) }
-        // Not reachable, but on a /Volumes path with nothing mounted: the vault is unplugged, not
-        // gone. Distinguished with the same mount primitive `runtime export`/`offload` use.
-        let disconnected = offloads.filter { !isUsableImage($0.installer) && RuntimeOperations.isNotOnAMountedVolume(destination: $0.installer) }
+        /// Whether the file now at that path is on the volume this offload verified (#26).
+        ///
+        /// The whole safety argument for `runtime offload` is "delete the installed runtime only
+        /// because an installer exists to restore it from", and this rule re-states that argument
+        /// to the user. It used to re-state it from a **path**. On a machine with two external
+        /// drives — or one that comes back as `/Volumes/VAULT 1` after an unclean eject, leaving
+        /// the original mount-point directory behind — a file of the right size at the right path
+        /// can belong to somebody else entirely, and the user would be told their devices are
+        /// recoverable from an image nothing checked.
+        ///
+        /// `notRecorded` means the journal has no identity to check: entries written before the
+        /// field existed, and filesystems that report no UUID. Those stay in `reachable` rather
+        /// than being demoted — demoting them would tell a user with a perfectly good installer
+        /// that their devices are unrecoverable, which is the more dangerous error of the two —
+        /// and `unverifiable` below carries them through to the wording, so nothing promises more
+        /// than was actually checked.
+        ///
+        /// An earlier version of this comment claimed that separation while the code did not make
+        /// it: a `nil`-identity entry whose runtime id matched went into `matched` and collected the
+        /// full "Re-import instead" promise with no qualifier at all. A reviewer caught the comment
+        /// asserting a property its own code lacked, which is worse than the gap — the next reader
+        /// trusts it.
+        ///
+        /// The comparison itself lives in `MountStatus` so this and `RuntimeOperations.offload`
+        /// cannot drift: one warns about a deletion the other performs.
+        /// What one offload entry is, decided **once**.
+        ///
+        /// **Why a stored value and not six `filter`s (issue #26, B2).** The predicates are syscalls:
+        /// `isUsableImage` does an `lstat`, `identity` reads a volume UUID. The previous version
+        /// evaluated them two and three times per entry across separate passes, and the claim that
+        /// the six lists partitioned the entries held only if the filesystem answered identically
+        /// every time. It does not have to: eject the drive mid-`diagnose` and one entry is `usable`
+        /// in the first pass and not in the third, which lands it in two categories — or, with the
+        /// opposite flip, in none, and a single such entry sends the whole finding to the branch that
+        /// says nothing was offloaded. That is the same TOCTOU class this issue's other fix closed in
+        /// `offload()`, one file over.
+        ///
+        /// One `map`, one answer per entry, and the partition becomes a property of the code instead
+        /// of a property of the disk holding still.
+        enum Disposition {
+            /// A usable image, on the volume this offload verified.
+            case verified
+            /// A usable image, and nothing was recorded to check it against.
+            case unverifiable
+            /// A usable image on a **different** volume than the one verified — the case the path
+            /// alone cannot see, and the one issue #26 exists for.
+            case foreignVolume
+            /// No usable image, and the path is on a `/Volumes` location with nothing mounted: the
+            /// vault is unplugged, not gone.
+            case disconnected
+            /// No usable image, and that volume **is** mounted (finding F2).
+            case missingOnMountedVolume
+            /// The journal never recorded how this offload ended (finding B1).
+            case interrupted
+        }
+        let classified: [(offload: Offload, disposition: Disposition)] = offloads.map { o in
+            guard o.finished else { return (o, .interrupted) }
+            if isUsableImage(o.installer) {
+                switch MountStatus.compareVolumeIdentity(recorded: o.volumeUUID, found: volumeUUIDAt(o.installer)) {
+                case .matches: return (o, .verified)
+                case .notRecorded: return (o, .unverifiable)
+                case .differs, .unreadable: return (o, .foreignVolume)
+                }
+            }
+            return (o, RuntimeOperations.isNotOnAMountedVolume(destination: o.installer) ? .disconnected : .missingOnMountedVolume)
+        }
+        func inState(_ states: Disposition...) -> [Offload] {
+            classified.filter { states.contains($0.disposition) }.map(\.offload)
+        }
+
+        let reachable = inState(.verified, .unverifiable)
+        /// Reachable, and nothing was recorded to check it against. Kept usable — demoting it would
+        /// tell a user with a perfectly good installer that their devices are unrecoverable — but
+        /// named, because the sentence a user reads must not say the drive was confirmed.
+        let unverifiable = inState(.unverifiable)
+        let foreignVolume = inState(.foreignVolume)
+        let disconnected = inState(.disconnected)
+        let missingOnMountedVolume = inState(.missingOnMountedVolume)
+        let interrupted = inState(.interrupted)
 
         // Identity matching where the journal carries it. Entries written before `detail` gained the
         // runtime identity have `rid == nil` and cannot be matched — those degrade to neutral wording
         // rather than an affirmative promise about devices they may have nothing to do with.
-        let matched = reachable.filter { rid in rid.rid.map(deviceRuntimes.contains) ?? false }
+        let matched = reachable.filter { $0.rid.map(deviceRuntimes.contains) ?? false }
         let unidentified = reachable.filter { $0.rid == nil }
+        /// Reachable, identified, and belonging to some *other* set of devices than these.
+        ///
+        /// `matched` and `unidentified` do not cover `reachable`, and the remainder used to fall to
+        /// the final branch. That sentence is true there only if the `runtimeIdentifier` recorded
+        /// from `simctl runtime list` is byte-identical to the key `simctl list devices` reports —
+        /// an unverified string-equality assumption between two subcommands, carrying a
+        /// delete-green-light. A neutral branch costs three lines and removes the assumption.
+        let unmatched = reachable.filter { o in o.rid.map { !deviceRuntimes.contains($0) } ?? false }
 
-        func importList(_ items: [(installer: String, rid: String?)]) -> String {
+        func importList(_ items: [Offload]) -> String {
             let shown = items.prefix(5).map { "`xcodevaultctl runtime import \(OwnershipAdvice.shellQuoted($0.installer))`" }
             let more = items.count > 5 ? " (+\(items.count - 5) more — see `xcodevaultctl runtime library`)" : ""
             return shown.joined(separator: ", then ") + more
@@ -449,9 +557,19 @@ extension Doctor {
         let remediation: String
         let evidence: String
         if !matched.isEmpty {
+            // Named rather than assumed: if any of these had no recorded volume identity, the
+            // promise is still the right one — an installer is there and its runtime id matches —
+            // but it rests on a path, and the user is told so in the same breath.
+            let unchecked = matched.filter { m in unverifiable.contains { $0.installer == m.installer } }
+            let identityCaveat =
+                unchecked.isEmpty
+                ? ""
+                : " Note: \(unchecked.count == 1 ? "one of these entries predates" : "\(unchecked.count) of these entries predate") "
+                    + "recording which drive the installer was on (or the drive reports no identity), so this matched the file by path and "
+                    + "size, not by volume — confirm it is the drive you expect before relying on it."
             remediation =
                 "Do NOT run `xcrun simctl delete unavailable` — it is permanent. Re-import instead: \(importList(matched)). "
-                + "The devices should return to Shutdown with their data. \(caveat) "
+                + "The devices should return to Shutdown with their data.\(identityCaveat) \(caveat) "
                 + "Delete them only if you have decided you no longer want these devices at all."
             evidence = "docs/architecture/HYPOTHESES.md H4 (E8 import round trip)"
         } else if !unidentified.isEmpty {
@@ -461,6 +579,27 @@ extension Doctor {
                 + "predates recording which runtime it was, so this cannot confirm it matches these devices. "
                 + "Check `xcodevaultctl runtime library --dir <your library>` before deleting anything."
             evidence = "docs/architecture/HYPOTHESES.md H4 (E8 import round trip)"
+        } else if !foreignVolume.isEmpty {
+            // Ordered before `disconnected` deliberately: a file *is* present at the path, so the
+            // disconnected branch's sentence ("on a volume that is not mounted") would be false.
+            // This is the case issue #26 exists for, and it has to read as a warning about
+            // identity, not as a missing file.
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable`, and do NOT assume the image at that path will restore these devices. XCodeVault "
+                + "offloaded \(foreignVolume.count == 1 ? "a runtime" : "\(foreignVolume.count) runtimes") and recorded which drive the installer "
+                + "was on. There IS a file at \(foreignVolume.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", ")), "
+                + "but it is on a different volume than the one that was verified — most likely another drive mounted at the same path, or the vault "
+                + "returned as `\u{27}<name> 1\u{27}` after an unclean eject and left its old mount-point directory behind. Reconnect the original "
+                + "drive and re-run `xcodevaultctl doctor`; check `xcodevaultctl volumes` to see which is which."
+            evidence = "CLAUDE.md rule 6 (a mount point is not an identity)"
+        } else if !interrupted.isEmpty {
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable` — it is permanent. XCodeVault began "
+                + "\(interrupted.count == 1 ? "an offload" : "\(interrupted.count) offloads") and never recorded how it ended, most likely a "
+                + "crash or a power loss between deleting the runtime and writing the result. The runtime may already be gone while the installer "
+                + "at \(interrupted.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", ")) is perfectly good. "
+                + "Check `xcodevaultctl journal` and `xcodevaultctl runtime library --dir <your library>`, then re-import before deleting anything."
+            evidence = "CLAUDE.md rule 5 (an offload is recorded; its outcome is not)"
         } else if !disconnected.isEmpty {
             remediation =
                 "Do NOT run `xcrun simctl delete unavailable` — it is permanent, and these devices may be recoverable. XCodeVault offloaded "
@@ -468,6 +607,23 @@ extension Doctor {
                 + "\(disconnected.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", ")), on a volume that is not mounted. "
                 + "Reconnect it and re-run `xcodevaultctl doctor`."
             evidence = "CLAUDE.md rule 6 (a disconnected volume is a first-class failure mode)"
+        } else if !missingOnMountedVolume.isEmpty {
+            remediation =
+                "Do NOT run `xcrun simctl delete unavailable` yet — it is permanent. XCodeVault offloaded "
+                + "\(missingOnMountedVolume.count == 1 ? "a runtime" : "\(missingOnMountedVolume.count) runtimes") and recorded the installer at "
+                + "\(missingOnMountedVolume.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", ")). "
+                + "That volume IS mounted and the installer is not there, or is too small to be one — it may have been moved or deleted, or "
+                + "another drive may be mounted at that path. Check `xcodevaultctl runtime library --dir <your library>` and "
+                + "`xcodevaultctl volumes` before deleting anything."
+            evidence = "CLAUDE.md rule 5 (the journal records an offload; the installer is not where it was)"
+        } else if !unmatched.isEmpty {
+            remediation =
+                "Not advising deletion. XCodeVault offloaded "
+                + "\(unmatched.count == 1 ? "a runtime" : "\(unmatched.count) runtimes") and the installer is on the vault, but the recorded "
+                + "runtime identity does not match any of these unavailable devices — so these devices are probably not the ones that offload "
+                + "was about. `xcrun simctl delete unavailable` is permanent; check `xcodevaultctl journal` and "
+                + "`xcodevaultctl runtime library --dir <your library>` first."
+            evidence = "CLAUDE.md rule 5"
         } else if read == nil || read?.isComplete == false {
             remediation =
                 "Not advising deletion: XCodeVault could not read its journal in full, so it cannot tell whether these devices' runtime was offloaded "
@@ -479,11 +635,33 @@ extension Doctor {
                 + "journal records no offloaded runtime that could bring these back."
             evidence = "simctl help"
         }
+        // **Appended, not exclusive (review finding N3).** The chain above picks one sentence, and a
+        // category that loses the race used to go unmentioned: two offload entries, one reachable and
+        // matching, one sitting on a foreign drive at the vault's old mount point, and the user was
+        // told "Re-import instead" with no word about the second. The chosen sentence was the safe
+        // one, so this was never a deletion path — but `MIGRATION_ENGINE.md` requires shadow data to
+        // be *surfaced*, and #26 exists precisely to surface that entry.
+        var warnings: [String] = []
+        if !foreignVolume.isEmpty, !remediation.contains("different volume") {
+            warnings.append(
+                "Separately: \(foreignVolume.count == 1 ? "an installer" : "\(foreignVolume.count) installers") recorded by an earlier offload "
+                    + "\(foreignVolume.count == 1 ? "is" : "are") on a different volume than the one that was verified "
+                    + "(\(foreignVolume.prefix(3).map { OwnershipAdvice.shellQuoted($0.installer) }.joined(separator: ", "))). Do not rely on "
+                    + "\(foreignVolume.count == 1 ? "it" : "them") to restore anything until you have checked `xcodevaultctl volumes`.")
+        }
+        if !interrupted.isEmpty, !remediation.contains("never recorded how it ended") {
+            warnings.append(
+                "Separately: the journal shows \(interrupted.count == 1 ? "an offload that began" : "\(interrupted.count) offloads that began") "
+                    + "and never recorded how it ended — most likely a crash or a power loss mid-operation. The runtime may already be gone while "
+                    + "the installer is fine. Check `xcodevaultctl journal` before deleting anything.")
+        }
+        let fullRemediation = ([remediation] + warnings).joined(separator: " ")
+
         return [
             Finding(
                 id: "unavailable-devices", severity: .warning, title: "\(bad.count) simulator device(s) unavailable (\(ByteCount.format(bytes)))",
                 detail: bad.prefix(5).map { "\($0.name): \($0.availabilityError ?? "runtime missing")" }.joined(separator: "; "),
-                path: home + "/Library/Developer/CoreSimulator/Devices", remediation: remediation, evidence: evidence)
+                path: home + "/Library/Developer/CoreSimulator/Devices", remediation: fullRemediation, evidence: evidence)
         ]
     }
 }

@@ -35,13 +35,31 @@ public struct Doctor: Sendable {
     /// apart from "XCodeVault offloaded this runtime and the installer is still on the vault", which
     /// is the difference between advice that frees space and advice that destroys the user's devices.
     public var journal: Journal
+    /// The volume identity of the filesystem holding a path.
+    ///
+    /// Injected for the reason `MigrationEngine.volumeUUIDAt` is, and the same spelling is used on
+    /// purpose: the question "is the file now at this path on the volume that was verified?" (#26)
+    /// cannot be staged from a unit test without two real drives and root. A test's two volumes are
+    /// the same `/tmp`, and the real lookup correctly says so.
+    ///
+    /// **The residual, stated rather than discovered later:** flipping the *production default*
+    /// below to something that always matches would disable the identity check with the whole suite
+    /// green, because the tests supply their own. That is the failure mode issue #13 documented for
+    /// the mount-point seams, and the answer there — use a real primitive instead — is not available
+    /// here. This one is held by review.
+    /// `let`, not `var`: a mutable seam on a shipped type is a second way to disable the check —
+    /// any caller could assign `{ _ in nil }` (refuse everything) or a matching stub (disable the
+    /// identity comparison) with the whole suite green. Set once, through `init`.
+    public let volumeUUIDAt: @Sendable (String) -> String?
     public init(
         home: String = NSHomeDirectory(), runner: CommandRunning = ProcessCommandRunner(),
-        dyldCacheRoot: String = "/Library/Developer/CoreSimulator/Caches/dyld", journal: Journal? = nil
+        dyldCacheRoot: String = "/Library/Developer/CoreSimulator/Caches/dyld", journal: Journal? = nil,
+        volumeUUIDAt: @escaping @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) }
     ) {
         self.home = home
         self.runner = runner
         self.dyldCacheRoot = dyldCacheRoot
+        self.volumeUUIDAt = volumeUUIDAt
         // Derived from `home`, not from `Journal.defaultURL`. The default reads `NSHomeDirectory()`
         // directly, so a test that injected `home` still got this machine's real journal — the
         // injection looked complete and was not, which is how a test can pass against production data.
