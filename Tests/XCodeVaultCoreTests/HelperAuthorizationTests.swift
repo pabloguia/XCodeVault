@@ -280,9 +280,16 @@ final class HelperPrivilegedVerbTests: XCTestCase {
         let base = try tempDir(label, mode: mode)
         let target = base + "/Library/Developer/CoreSimulator/Caches/dyld"
         try FileManager.default.createDirectory(atPath: target, withIntermediateDirectories: true)
+        // `/Library/Application Support` exists on every Mac, and the verb now writes its mount
+        // history under it (issue #24). A fixture without it is not a machine the verb will ever
+        // meet, and leaving it out made these tests assert against a state production cannot reach.
+        // The store is not created here on purpose: the anchor must pre-exist and be trustworthy,
+        // and everything below it is the daemon's to create.
+        try FileManager.default.createDirectory(
+            atPath: base + "/Library/Application Support", withIntermediateDirectories: true)
         // The walk requires every component from the anchor down, so fix the whole chain.
         for p in [
-            "/Library", "/Library/Developer", "/Library/Developer/CoreSimulator",
+            "/Library", "/Library/Application Support", "/Library/Developer", "/Library/Developer/CoreSimulator",
             "/Library/Developer/CoreSimulator/Caches", "/Library/Developer/CoreSimulator/Caches/dyld",
         ] {
             try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o755)], ofItemAtPath: base + p)

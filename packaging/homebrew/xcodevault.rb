@@ -23,10 +23,22 @@ cask "xcodevault" do
   uninstall launchctl: "com.xcodevault.helper",
             quit:      "com.xcodevault.app"
 
-  zap trash: [
-    "~/Library/Application Support/XCodeVault",
-    "~/Library/Preferences/com.xcodevault.app.plist",
-  ]
+  zap trash:  [
+        "~/Library/Application Support/XCodeVault",
+        "~/Library/Preferences/com.xcodevault.app.plist",
+      ],
+      # Root-owned, so it needs `delete:` (which sudoes) rather than `trash:`, and it is listed
+      # separately because it is the one thing the helper leaves outside the app bundle. The daemon
+      # itself is registered with SMAppService from `Contents/Library/LaunchDaemons`, so removing
+      # the app removes the plist and the binary with it; this directory is not in the bundle.
+      #
+      # It holds `helper-mount-history` (issue #24): what the cleanup verb has observed at each
+      # allowlisted target. Leaving it behind is not dangerous — a reinstall reading its own old
+      # records is the conservative direction, it refuses rather than deletes — but a package that
+      # says it zaps should not leave a root-owned directory on the machine.
+      delete: [
+        "/Library/Application Support/XCodeVault",
+      ]
 
   # No caveat telling anyone to enable the privileged helper. It used to say exactly that, while
   # nothing in the shipped code ever connected to it — so following the instruction bought a root

@@ -125,6 +125,20 @@ enum HelperAudit {
             // caller-controlled text reaches it** — the one client-supplied value, the raw
             // argument, goes in `args` and is hashed. If a verb ever interpolates a caller's
             // string into a refusal, this qualifier has to go back.
+            //
+            // Since issue #24 that invariant spans two files. `HelperMountHistory` reads a file
+            // from disk to decide whether to refuse, and its reasons are fixed strings on purpose —
+            // its first version put the record's **bytes** in the reason, which arrived here
+            // unbounded, with interior newlines, and went out `.public`: log injection into a
+            // root-owned trail. The size cap and the contents-free reasons in that file are what
+            // keeps this line safe; a reviewer must read both.
+            //
+            // `args` stays hashed even for the two verbs whose validated value is a closed set
+            // (`coreSimulatorDyldCache`, `cryptexCaches`, `<rejected>`). A hash of a three-element
+            // set names nothing new to anyone reading the log, and it is stable, so two entries for
+            // the same target still correlate — which is what reconstructing an incident needs. An
+            // operator who needs the name enables private-data logging. Per-verb privacy rules
+            // would buy a word and cost the one property this field has: it is hashed, always.
             log.notice(
                 "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=declined reason=\(why, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
             )

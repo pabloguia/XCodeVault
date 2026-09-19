@@ -33,6 +33,66 @@ impossible by construction, not by validation alone.
 Arbitrary filesystem browsing, arbitrary deletion, arbitrary process execution,
 network access, anything not required by an approved migration/mount operation.
 
+## Persistent state the helper keeps (issue #24)
+
+The daemon was stateless until the fix for issue #24, and this section exists because a
+reviewer pointed out that the change made that sentence false while the document still
+said it. It now keeps one thing:
+
+`/Library/Application Support/XCodeVault/helper-mount-history/<target>` — root-owned,
+`0700` directory, `0600` files, one file per allowlisted cleanup target, contents
+`wasMountPoint` or `wasPlainDirectory`. It records what the cleanup verb has observed at
+that target so a plain directory where a mount point used to be is refused as shadow data
+rather than deleted as a cache.
+
+Properties this state has to have, and where each is enforced:
+
+- **Reached by a guarded walk, never by a path.** `HelperMountHistory.openDirectory` walks
+  from `/Library/Application Support` with `openat(… O_NOFOLLOW | O_DIRECTORY)` at every
+  step, verifying through the descriptor that each component is a directory, is owned by
+  whoever owns the anchor, and is not group- or other-writable. The first version used
+  `FileManager` and inherited those properties from a stock macOS install instead of
+  enforcing them; `FileManager.fileExists(atPath:isDirectory:)` also follows symlinks, so a
+  symlinked component sent root's write wherever it pointed.
+- **Its contents never reach a `.public` log field.** The read is size-capped and returns
+  fixed reasons; the first version put the file's bytes in the refusal message, which
+  `HelperAudit` emits `privacy: .public`, at unbounded length with interior newlines
+  intact — log injection into a root-owned audit trail.
+- **Failure to read it is not "never seen".** `ReadResult` has three cases. Absence of the
+  store is absence; anything the walk rejects is `.unreadable`, which refuses. "Absence" means
+  `ENOENT` and nothing else. It briefly also meant `ENOTDIR`, which looks harmless and is not:
+  with `O_DIRECTORY` set, Darwin evaluates the type before the symlink rule, so a **symlinked**
+  ancestor returns `ENOTDIR`, not `ELOOP` (measured on Darwin 25.6.0). Classifying that as
+  absence turns a redirected store into "nothing was ever recorded here, proceed and delete".
+  Anyone tempted to widen that test again should read `testASymlinkedAnchorComponentIsRefused‑
+  RatherThanReadAsNeverSeen` first.
+- **Failure to write it is reported, not swallowed.** Both call sites check the result. An
+  unrecorded observation silently disables the guard for the following run.
+
+**What `forgetMountObservation` leaves standing, stated plainly.** With that verb in the API,
+the issue #24 guard is defeatable by any caller authorized to reach the XPC surface — so it
+is a safety control against *accident*, not a security control against a hostile client. A
+caller that satisfies the code-signing requirement and runs as an admin uid could already
+call `removeRegenerableSystemDirectoryContents`; `forget` restores exactly that pre-#24
+behaviour for one enum-named target and grants nothing beyond it. The confirmation that
+would make it safe against a hostile client can only live in the client, which this threat
+model assumes is attacker-controlled. Any client exposing this verb must require explicit
+interactive confirmation naming the target.
+
+It is **sticky on purpose**: nothing expires it, because an expiry would re-open the hole
+on exactly the timescale a disconnected volume sits unplugged. `forgetMountObservation` is
+therefore part of the allowlisted API rather than an omission — without it a user whose
+vault volume is gone for good could never clean that cache again. It is gated and audited
+like every other state-changing verb, because clearing the record re-enables a root
+deletion, and it is a separate call so that no single message can both forget an
+observation and act on having forgotten it.
+
+Two consequences worth stating rather than discovering later:
+
+- Uninstalling the app does not remove this directory. `packaging/homebrew/` zaps it, but a
+  user who removes the app by hand leaves a root-owned directory behind.
+- It is per-machine, not per-user, and it is not synced or backed up by design.
+
 ## SIP
 
 The helper must never disable, weaken, or instruct disabling of SIP, and must never

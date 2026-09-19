@@ -16,6 +16,17 @@ import Foundation
     /// credentials, never from the request). The helper resolves the UUID to a mount point itself;
     /// the client cannot pass a path.
     func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void)
+
+    /// Forgets what the cleanup verb previously observed at an allowlisted target (issue #24).
+    ///
+    /// The cleanup verb refuses when a target that was last seen as a mount point is now a plain
+    /// directory, because that is the local half of a split brain. When the volume is genuinely gone
+    /// for good that refusal is correct and permanent, and this is the only thing that lifts it.
+    ///
+    /// It takes the same closed enum as the cleanup verb — no path crosses the wire — and it is a
+    /// separate call on purpose: forgetting re-enables deletion, so the user's intent is stated, and
+    /// audited, before anything is removed.
+    func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
 }
 
 /// The vault directory's name, which is part of the client↔helper contract: the helper creates it,

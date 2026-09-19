@@ -185,6 +185,18 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         }
     }
 
+    func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+        privilegedWork.async {
+            let result = self.doForgetMountObservation(target: target)
+            HelperAudit.emit(
+                .from(
+                    verb: "forgetMountObservation", callerUID: self.callerUID,
+                    validatedArguments: ["target": HelperCleanupTarget(rawValue: target)?.rawValue ?? "<rejected>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
+    }
+
     /// Whether this result is the authorization gate's refusal — read from the result the caller
     /// actually received, so the record and the enforcement cannot come from two evaluations that
     /// disagree. See `unauthorizedMessage`.
@@ -252,10 +264,68 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // UNPINNED, unavoidably: reverting this to a bare `mount(fd)` fails no test, because the
         // branch it protects is the one no test can enter — a test anchored at `/` would walk the
         // real `/Library/Developer/CoreSimulator` and delete it.
-        switch base == "/" ? Self.mountStatus(ofDescriptor: fd) : mount(fd) {
-        case .isMountPoint: return HelperResult(ok: false, message: "target is a mount point")
-        case .undetermined: return HelperResult(ok: false, message: "could not determine whether \(dir) is a mount point; refusing")
-        case .isNotMountPoint: break
+        let answer = base == "/" ? Self.mountStatus(ofDescriptor: fd) : mount(fd)
+
+        // What this verb has seen here before (issue #24). Read before acting on `answer`, because
+        // the interesting case is the one where `answer` is a truthful `.isNotMountPoint`.
+        let history = HelperMountHistory.read(target: t, under: base)
+        if case .unreadable(let why) = history {
+            // Fail closed. `.none` means "never seen, proceed"; this means "there may be an
+            // observation saying stop", and the two must not collapse — the defect this project
+            // has now found four times.
+            return HelperResult(ok: false, message: "could not read what was previously observed at \(dir) (\(why)); refusing")
+        }
+
+        switch answer {
+        case .isMountPoint:
+            // Record before refusing. This is the observation the whole mechanism turns on, and a
+            // refusal that forgets what it saw teaches the next run nothing.
+            //
+            // **The return value is checked, and the first version of this discarded it.** A
+            // reviewer pointed out the asymmetry: the cheap `.wasPlainDirectory` write was guarded
+            // and the load-bearing one was not, so an ENOSPC or an EACCES here refused *this* call
+            // — which it was going to do anyway — recorded nothing, and let the next call after the
+            // disconnect read `.none`, meaning "never seen, proceed", and delete. That is the
+            // issue #24 deletion reached with no attacker involved, through the arm that exists to
+            // prevent it. On a near-full disk it is not hypothetical.
+            if !HelperMountHistory.write(.wasMountPoint, target: t, under: base) {
+                return HelperResult(
+                    ok: false,
+                    message:
+                        "\(dir) is a mount point, and this could not be recorded. Nothing was removed — but until the record can "
+                        + "be written, a later disconnect will not be told apart from an ordinary cache here.")
+            }
+            return HelperResult(ok: false, message: "target is a mount point")
+        case .undetermined:
+            return HelperResult(ok: false, message: "could not determine whether \(dir) is a mount point; refusing")
+        case .isNotMountPoint:
+            // **The composition this issue is about.** Every check above passed, truthfully. If this
+            // path was a mount point when last seen, a plain directory here now is the local half of
+            // a split brain — the stub macOS recreates after a disconnect — and deleting it is
+            // exactly what rule 6 forbids: shadow data auto-resolved by removing a copy.
+            if case .observed(.wasMountPoint) = history {
+                return HelperResult(
+                    ok: false,
+                    message:
+                        "\(dir) was a mount point when last seen and is a plain directory now. That is shadow data left by a "
+                        + "disconnect, not a cache. Reconnect the volume and run `xcodevaultctl doctor`; if that volume is gone "
+                        + "for good, the helper's `forgetMountObservation` verb clears this record and lifts the refusal. "
+                        + "Nothing was removed.")
+            }
+            // Reached with `history` either `.none` or `.observed(.wasPlainDirectory)` — an earlier
+            // comment here said only `.none`, which the ternary below already handled correctly and
+            // the prose did not. In this codebase the prose is the review artifact.
+            //
+            // Recording the ordinary observation is what makes the *next* run able to see a change.
+            // A failed write is reported rather than swallowed: it does not endanger this call, but
+            // it silently disables the guard for the following one.
+            if !HelperMountHistory.write(.wasPlainDirectory, target: t, under: base) {
+                return HelperResult(
+                    ok: false,
+                    message:
+                        "could not record what was observed at \(dir), so a later disconnect could not be told apart from an "
+                        + "ordinary cache. Nothing was removed.")
+            }
         }
 
         // Everything below is descriptor-relative. The children come from the directory this call
@@ -264,10 +334,48 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // The descriptor is the one the walk verified and has not left this function.
         // helper-invariants: allow deletion
         let outcome = Self.removeContents(of: fd)
+        // The success message says what was *checked*, not just what was done (issue #24). A bare
+        // "cleaned" is the sentence a shadow-data deletion would also produce, and the issue's
+        // minimum ask is that those two cannot render identically. `history` is `.none` here — the
+        // `.observed(.wasMountPoint)` branch above returned — so this states the weaker, true thing:
+        // nothing this daemon has seen says a volume was ever grafted here.
+        let checked = history == .none ? " (no prior mount ever observed here)" : " (previously observed as a plain directory)"
         return HelperResult(
             ok: outcome.failures == 0,
-            message: outcome.failures == 0 ? "cleaned \(dir)" : "\(outcome.failures) item(s) could not be removed",
+            message: outcome.failures == 0 ? "cleaned \(dir)\(checked)" : "\(outcome.failures) item(s) could not be removed",
             bytesFreed: outcome.freed)
+    }
+
+    /// Clears the cleanup verb's record for one target (issue #24).
+    ///
+    /// This re-enables deletion at a path the verb is currently refusing, so it is gated like every
+    /// other state-changing verb and audited before the reply is sent — the trail has to show the
+    /// permission being lifted, not only the deletion that follows it.
+    ///
+    /// It does **not** delete anything itself, and it deliberately does not chain into the cleanup
+    /// verb. Two calls means the user states the intent while the data is still there, and it means
+    /// no single message can both forget a mount observation and act on having forgotten it.
+    ///
+    /// `base` is the same test seam `doRemoveRegenerableSystemDirectoryContents` documents, with the
+    /// same argument for why it is acceptable: no client can reach it — the XPC protocol declares
+    /// one parameter and the dispatch above passes only that.
+    func doForgetMountObservation(target: String, under base: String = "/") -> HelperResult {
+        if let denied = authorize() { return denied }
+        guard let t = HelperCleanupTarget(rawValue: target) else { return HelperResult(ok: false, message: "unknown target") }
+        let dir = base == "/" ? t.path : base + t.path
+        switch HelperMountHistory.forget(target: t, under: base) {
+        case .success(let removed):
+            // The two outcomes are reported apart. "There was nothing to forget" and "a refusal has
+            // been lifted" are different facts about the machine, and a single cheerful message
+            // covering both would let a user believe they had cleared a block they had not.
+            return HelperResult(
+                ok: true,
+                message: removed
+                    ? "forgot what was previously observed at \(dir). The next cleanup there will be treated as a first run."
+                    : "nothing was recorded for \(dir); no change.")
+        case .failure(let f):
+            return HelperResult(ok: false, message: "could not forget what was observed at \(dir) (\(f.reason)); nothing was changed.")
+        }
     }
 
     func doCreateVaultDirectory(volumeUUID: String) -> HelperResult {
@@ -456,6 +564,17 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     struct GuardFailure: Error, Equatable {
         let component: String
         let reason: String
+        /// Whether the walk stopped because the component is simply not there.
+        ///
+        /// A flag rather than something a caller infers from `reason`, because a caller did infer it
+        /// from `reason` and got it wrong: `HelperMountHistory` treated "the store does not exist" as
+        /// "nothing has ever been recorded, proceed" by matching the suffix `"does not exist"` — the
+        /// wording of *its own* message for a missing owned component. An absent trust anchor comes
+        /// out of `openat` as `strerror(ENOENT)`, i.e. "No such file or directory", which did not
+        /// match, so every cleanup refused permanently on a machine without
+        /// `/Library/Application Support`. Nine tests caught it; a user would have seen a verb that
+        /// never worked.
+        var isAbsence: Bool = false
     }
 
     /// Opens `path` one component at a time from the root, refusing at any level that is not owned
@@ -518,8 +637,20 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // already carries for `VaultDirectory.name`; only its NUL half had been brought across.
         let components = pathBytes.dropFirst(anchorBytes.count).split(separator: 0x2F).map { String(decoding: $0, as: UTF8.self) }
 
-        var fd = open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
-        guard fd >= 0 else { return .failure(GuardFailure(component: base, reason: String(cString: strerror(errno)))) }
+        var fd = open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
+        guard fd >= 0 else {
+            let e = errno
+            // **`ENOENT` only.** `ENOTDIR` was in this test until a reviewer measured what Darwin
+            // actually returns: with `O_DIRECTORY` set, `openat` evaluates the type before the
+            // symlink rule, so a symlinked component comes back `ENOTDIR`, not `ELOOP` (Darwin
+            // 25.6.0 — symlink→dir, symlink→file and a dangling symlink all give `ENOTDIR`; `ELOOP`
+            // appears only without `O_DIRECTORY`). Calling that absence tells
+            // `HelperMountHistory.read` "nothing was ever recorded here, proceed", which is the
+            // deletion this whole mechanism exists to stop — and it contradicted the comment beside
+            // the check that promised a symlinked ancestor would refuse. Nothing needs `ENOTDIR`
+            // here: a genuinely missing component is `ENOENT`.
+            return .failure(GuardFailure(component: base, reason: String(cString: strerror(e)), isAbsence: e == ENOENT))
+        }
 
         // Whoever owns the anchor is the identity every component must match.
         var anchor = stat()
@@ -562,9 +693,20 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             guard !bytes.isEmpty, !bytes.contains(0x2F), !bytes.contains(0x00), name != ".", name != ".." else {
                 close(fd); return .failure(GuardFailure(component: name, reason: "refusing an empty, relative, slash-bearing or NUL-bearing component"))
             }
-            let next = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+            // `O_NONBLOCK` so a FIFO planted at a component name fails instead of blocking the
+            // daemon's single serial queue forever; the `S_IFDIR` check in `check` then rejects it.
+            let next = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK)
+            // Read **before** the `close`, which is a syscall that may set `errno`. A successful
+            // `close` should not, so this was theoretical — but since this diff the value decides
+            // `isAbsence`, i.e. proceed-and-delete versus refuse, and that is not a decision to
+            // leave resting on "should not".
+            let e = errno
             close(fd)
-            guard next >= 0 else { return .failure(GuardFailure(component: name, reason: String(cString: strerror(errno)))) }
+            guard next >= 0 else {
+                // `ENOENT` only — see the anchor open above. This is the reachable site: a symlink at
+                // `/Library` or `/Library/Application Support` arrives here as `ENOTDIR`.
+                return .failure(GuardFailure(component: name, reason: String(cString: strerror(e)), isAbsence: e == ENOENT))
+            }
             fd = next
             if let f = check(fd, name) { close(fd); return .failure(f) }
         }
