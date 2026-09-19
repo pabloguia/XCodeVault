@@ -196,10 +196,32 @@ parent descriptor, so that half of the sentence above is no longer outstanding.
 precede the mount lookup — the authorization gate at its call site among them, which removing the
 `authorize()` line demonstrably fails (the invariants script catches it too, independently).
 
-Still open, and it is the half a unit test cannot reach: everything past the mount lookup needs a
-real volume mounted under `/Volumes`, so the `mayTakeOwnership` call site remains unpinned even
-though the predicate is exhaustively covered. That is stated in the test file rather than only
-here, so the gap is visible from the code.
+**Narrowed 2026-09-19** (issue #28) — "closed" was the first wording and a reviewer corrected it,
+since the privileged success arm is still exercised only by the E-series runbooks. The region below the mount lookup moved into
+`HelperService.claimDirectory`, which takes the **parent descriptor** the verb has already verified
+rather than a path — so a test opens a directory it owns and drives the create/adopt branches, the
+`isTheObjectThisCallJustCreated` switch, the `mayTakeOwnership` decision and the `fchown`. A
+descriptor is strictly narrower than a path as a seam: an in-module caller must already hold an open
+directory to pass one, and nothing on the XPC wire can supply one. No owner is injected — the uid
+granted is still the service's own `callerUID`, which is what both reviewers required when they
+rejected the `requiredOwner` knob.
+
+Demonstrated rather than asserted, and the numbers were re-measured by a reviewer rather than taken
+on trust: ignoring `mayTakeOwnership` at its call site fails one assertion, ignoring
+`isTheObjectThisCallJustCreated` fails four, dropping `AT_SYMLINK_NOFOLLOW` fails one, deleting the
+`fchown` fails two, and removing the name validation fails eight.
+
+That last one is a defect the extraction introduced and the review caught: `name` reaches
+`mkdirat`/`openat` directly, so `"../OUTSIDE"` created — and `"../VICTIM"` chowned — a directory
+outside the anchor subtree. The byte check lived in the caller under a comment saying containment
+"is a property this function is responsible for", and moving the syscalls out of that function left
+the property in one place and its enforcement in another. It is now checked in both.
+
+One arm stays out of reach and is asserted as its refusal instead: a directory *created by this
+call* must be root-owned, which it never is unprivileged. A skip would have been the other option
+and is not available — CI asserts a baseline of zero skipped tests, so a test that skips on every
+ordinary machine fails that gate rather than documenting the gap. The E-series runbooks are where
+that arm runs.
 
 ### Structural findings with named seams
 

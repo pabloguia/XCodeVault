@@ -445,10 +445,84 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             return HelperResult(ok: false, message: "could not determine whether \(name) sits on a mounted volume; refusing")
         }
 
+        return claimDirectory(inParent: parentFD, named: name, reportedAs: dir)
+    }
+
+    /// Creates `name` under an **already-verified** parent descriptor — or adopts it when it is
+    /// already there and belongs to the caller — checks that what it opened is what it expected, and
+    /// hands it over. The two branches differ: on the create path the check is that the directory is
+    /// root-owned, empty and on the parent's device; on the adopt path only the device comparison
+    /// applies, and `mayTakeOwnership` carries the rest.
+    ///
+    /// **Why this is a separate function (issue #28).** Everything it does was inline in
+    /// `doCreateVaultDirectory`, below a mount lookup that needs a real volume under `/Volumes` — so
+    /// no test could reach it, and both `isTheObjectThisCallJustCreated` and `mayTakeOwnership` were
+    /// exhaustively covered *as predicates* while the lines that consult them were covered by
+    /// nothing. Deleting either call passed the build, the suite and the invariants script. This
+    /// project has already written down why that distinction matters: testing a guard does not pin
+    /// the site that reads it.
+    ///
+    /// **Why a descriptor and not a path, and why this is not the `requiredOwner` knob that was
+    /// rejected.** It takes no owner and no device: the uid it grants to is this service's
+    /// `callerUID`, and the parent's device number is read from `parentFD` here rather than accepted
+    /// from the caller. A descriptor is narrower than a path for the *parent*: an in-module caller
+    /// must already hold an open directory to pass one, and nothing on the XPC wire can supply one.
+    ///
+    /// `parentDevice` **was** a parameter, and a reviewer pointed out the diff contained its own
+    /// proof that it should not be: a test passed `0x7FFF_FFFF` and the function accepted it. The
+    /// cross-device arm of `isTheObjectThisCallJustCreated` is what catches a volume mounted onto
+    /// the name between `mkdirat` and `openat` — the reason any of this runs under `/Volumes` — and
+    /// a second caller passing a stale or child device would have disabled it with every test green.
+    /// That is the `requiredOwner` shape this paragraph disclaims, in a different field.
+    ///
+    /// **`name` is the part that is not narrow, and it is validated here rather than trusted.** An
+    /// earlier version of this comment claimed the function "takes no path", which was false —
+    /// `name` reaches `fstatat`/`mkdirat`/`openat` directly, and a reviewer demonstrated that
+    /// `"../OUTSIDE"` creates a directory outside the anchor subtree while `"../VICTIM"` returns
+    /// `ok: true` having `fchown`ed one. `O_NOFOLLOW` does not constrain `..`, and intermediate
+    /// components in `"link/inner"` resolve through symlinks.
+    ///
+    /// The caller does validate — `doCreateVaultDirectory` checks the same bytes, under a comment
+    /// saying containment "is a property this function is responsible for". Extracting the syscalls
+    /// out of that function left the property in one place and its enforcement in another, which is
+    /// the split that comment exists to prevent. `openGuardedDirectory`, the precedent this seam
+    /// leans on, re-validates every component inside the callee even though its callers validate
+    /// too; a non-validating seam cannot borrow a validating seam's argument.
+    ///
+    /// **What this function does NOT re-check, and therefore what a second caller would owe.** The
+    /// argument above — that a non-validating seam cannot borrow a validating seam's argument — was
+    /// applied to `name` and, a reviewer noted, silently not applied to anything else.
+    /// `doCreateVaultDirectory` still owns all of it: the authorization gate, the `callerUID >= 500`
+    /// / `callerGID >= 20` floor, the `/Volumes/<one component>` shape, and the descriptor being a
+    /// mount point (`mountStatus(ofDescriptor:)`). This function verifies only that the descriptor
+    /// is a directory and that `name` is one safe component. A second caller that skips those is the
+    /// trap this extraction invites, and naming them is cheaper than discovering it.
+    ///
+    /// `reportedAs` is echoed in the success message and is never resolved or acted on.
+    ///
+    /// **Neither it nor `name` appears in any refusal string**, and that is load-bearing rather than
+    /// stylistic: decline messages reach `HelperAudit` and go out `privacy: .public`. An earlier
+    /// version interpolated `name` into four of them, which was safe only because the single caller
+    /// passes a constant — the byte check above blocks NUL and `/` but not newlines, and that is the
+    /// log-injection shape `SECURITY_MODEL.md` already records once. There is exactly one vault
+    /// directory name, so the messages lose nothing by not quoting it.
+    func claimDirectory(inParent parentFD: Int32, named name: String, reportedAs reportedPath: String) -> HelperResult {
+        // On bytes, and for the reason `doCreateVaultDirectory` gives where it does the same: a "/"
+        // carrying a combining mark does not match `String.contains("/")` while the kernel splits on
+        // the 0x2F byte regardless, and an embedded NUL truncates the C string.
+        let nameBytes = Array(name.utf8)
+        guard !nameBytes.isEmpty, !nameBytes.contains(0x2F), !nameBytes.contains(0x00), name != ".", name != ".." else {
+            return HelperResult(ok: false, message: "invalid vault directory name")
+        }
+        var parentST = stat()
+        guard fstat(parentFD, &parentST) == 0, (parentST.st_mode & S_IFMT) == S_IFDIR else {
+            return HelperResult(ok: false, message: "the parent descriptor is not a directory")
+        }
+        let parentDevice = parentST.st_dev
         var created = false
         var st = stat()
         if fstatat(parentFD, name, &st, AT_SYMLINK_NOFOLLOW) == 0 {
-            guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "\(name) exists and is not a directory") }
+            guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "the vault directory name exists and is not a directory") }
         } else if mkdirat(parentFD, name, 0o755) == 0 {
             created = true
         } else {
@@ -462,22 +536,22 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         guard fstat(fd, &fst) == 0, (fst.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "not a directory") }
 
         switch Self.isTheObjectThisCallJustCreated(
-            created: created, directoryDevice: fst.st_dev, parentDevice: parentST.st_dev,
+            created: created, directoryDevice: fst.st_dev, parentDevice: parentDevice,
             linkCount: fst.st_nlink, directoryUID: fst.st_uid)
         {
         case .yes: break
         case .differentFilesystem:
-            return HelperResult(ok: false, message: "\(name) is on a different filesystem than the volume root; refusing")
+            return HelperResult(ok: false, message: "the vault directory is on a different filesystem than the volume root; refusing")
         case .notWhatWeCreated:
             return HelperResult(
-                ok: false, message: "\(name) is not the directory this call just created; refusing to take ownership of it")
+                ok: false, message: "the vault directory is not the one this call just created; refusing to take ownership of it")
         }
 
         guard Self.mayTakeOwnership(created: created, directoryUID: fst.st_uid, callerUID: callerUID) else {
-            return HelperResult(ok: false, message: "\(name) already exists and belongs to uid \(fst.st_uid); refusing to take ownership of it")
+            return HelperResult(ok: false, message: "the vault directory already exists and belongs to uid \(fst.st_uid); refusing to take ownership of it")
         }
         guard fchown(fd, callerUID, callerGID) == 0 else { return HelperResult(ok: false, message: "chown failed: \(String(cString: strerror(errno)))") }
-        return HelperResult(ok: true, message: dir)
+        return HelperResult(ok: true, message: reportedPath)
     }
 
     // MARK: helpers (no shell, no Process)
