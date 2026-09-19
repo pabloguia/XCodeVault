@@ -51,11 +51,15 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // Root LaunchDaemon (SMAppService.daemon). Allowlisted verbs only; no Process, no shell.
-        // `scripts/helper-invariants.sh` checks that over a fixed list of helper directories, and
-        // the helper-security review is what actually decides — the script is a lint that has been
-        // defeated in every round it has been mutation-tested, and it does not read this file, so
-        // nothing mechanical notices if this target gains a dependency. This target is the
-        // bootstrap only.
+        // `scripts/helper-invariants.sh` checks that, and as of issue #7 it **does** read this
+        // file: it parses the target graph, enforces that only the helper executable and the test
+        // target depend on `XCodeVaultHelperCore`, holds each helper target to a dependency
+        // allowlist, and derives its scan directories from that parse. Adding a dependency to this
+        // target now turns the gate red rather than relying on a reviewer noticing.
+        //
+        // That is a mechanical check, not the control. The script is a text matcher that a
+        // reviewer has defeated in every round it has been mutation-tested; the helper-security
+        // review is what actually decides. This target is the bootstrap only.
         .executableTarget(
             name: "XCodeVaultHelper",
             dependencies: ["XCodeVaultHelperCore", "XCodeVaultHelperProtocol"],

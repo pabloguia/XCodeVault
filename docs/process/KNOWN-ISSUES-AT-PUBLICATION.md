@@ -83,20 +83,31 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
 
 ## `scripts/helper-invariants.sh`
 
-The checker has been mutation-tested by a reviewer three times and defeated every time. The current
-round left thirteen known bypasses. Its header states its ceiling, and the important thing is that
-**nothing in the project may cite it as evidence that a change is safe** — the helper-security
-review is the control. Specific gaps worth closing, in rough order of value:
+The gaps the pre-publication review listed "in rough order of value" are closed as of 2026-09-19
+(issue #7), except the one that cannot be:
 
-- It does not read `Package.swift`, so it cannot see the helper target gaining a dependency, and the
-  "only two dependents" property is held by human review alone.
-- Function bodies are extracted by a fixed-indent terminator rather than brace balance, so a
-  one-line body runs into the next function and can borrow its `authorize()`.
-- The helper directory list is hardcoded; a new target added to the helper's dependency closure is
-  invisible.
-- Comment stripping is line-based and quote-aware only crudely.
-- It cannot detect semantic neutering — `_ = authorize()`, or an `authorize()` rewritten to return
-  nil — and no text matcher can.
+- ~~It does not read `Package.swift`~~ — it does now. It parses the target graph and fails when any
+  target outside the permitted two depends on `XCodeVaultHelperCore`, and when a helper target
+  gains a dependency outside its allowlist. Mutation-tested three ways: the app taking a dependency
+  on `HelperCore`, `HelperCore` taking an external product, and the bootstrap taking Core. All three
+  turn it red.
+- ~~Function bodies are extracted by a fixed-indent terminator~~ — replaced with brace balancing.
+  The defect was demonstrated rather than reasoned about: with the old terminator, a one-line body
+  followed by a function containing `authorize()` extracted **1** match; with brace balance it
+  extracts **0**, which is the truth.
+- ~~The helper directory list is hardcoded~~ — derived from the manifest parse, so a new target in
+  the helper's closure is scanned rather than invisible.
+- Comment stripping is still line-based and only crudely quote-aware. Unchanged.
+- **It cannot detect semantic neutering, and no text matcher can.** `_ = authorize()`, or an
+  `authorize()` rewritten to `return nil`, leaves every rule green while every gate is dead. This is
+  why the project rule stands: **nothing may cite this script as evidence that a change is safe.**
+  The helper-security review is the control, and it is mandatory for every change to these files.
+
+A fourth round of mutation testing (2026-09-19) is worth recording because the defeat came from a
+*widening made in good faith*: teaching the dispatch matcher the shape the audit trail required made
+it match any self-call, and a decoy function then satisfied both the gate rule and the audit rule for
+a verb that had neither — **exit 0, "helper invariants: ok"**, on a root verb that was ungated and
+unlogged. Both rules now key off the XPC protocol's own verb list, which a decoy cannot join.
 
 ## Migration engine
 

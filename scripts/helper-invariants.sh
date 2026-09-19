@@ -24,10 +24,25 @@
 # mention, it cannot follow control flow, and it cannot detect semantic neutering: replacing
 # `if let denied = authorize() { return denied }` with `_ = authorize()`, or rewriting `authorize()`
 # to `return nil`, leaves every rule here green while every gate is dead. A reviewer has defeated
-# this file in each of the three rounds it has been mutation-tested, and the honest reading is that
+# this file in each of the four rounds it has been mutation-tested, and the honest reading is that
 # it catches carelessness, not intent. **The control for intent is the helper-security review**, and
-# nothing in this script is evidence that a change is safe. It also does not read `Package.swift`,
-# so it cannot see the helper target gaining a dependency — that property is held by review alone.
+# nothing in this script is evidence that a change is safe.
+#
+# Round four (2026-09-19, issue #4's audit rules) is the sharpest example yet, because the defeat
+# came from a *widening* made in good faith: teaching the dispatch matcher a new shape made it match
+# any self-call, and a decoy function then satisfied both the gate and the audit rule for a verb
+# that had neither. Both rules now key off the XPC protocol's own verb list.
+#
+# **What it does read, as of issue #7:** `Package.swift`. It parses the target graph and enforces
+# that only the helper executable and the test target depend on `XCodeVaultHelperCore`, that each
+# helper target's dependency closure matches an allowlist, and it derives the directory list from
+# that parse instead of hardcoding it — so a new target in the helper's closure is scanned rather
+# than invisible. Function bodies are extracted by brace balance rather than a fixed-indent
+# terminator, which is what let a one-line body run past its own closing brace and borrow the next
+# function's `authorize()`.
+#
+# The gap that stays open by construction: no text matcher detects semantic neutering. `_ = authorize()`
+# and an `authorize()` rewritten to `return nil` leave every rule here green while every gate is dead.
 #
 # Run it locally and in CI:
 #
@@ -40,16 +55,10 @@
 set -uo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)" || { echo "helper invariants: cannot reach the repository root" >&2; exit 2; }
 
-HELPER_DIRS="Sources/XCodeVaultHelper Sources/XCodeVaultHelperCore Sources/XCodeVaultHelperProtocol"
 PROTOCOL=Sources/XCodeVaultHelperProtocol/HelperProtocol.swift
+MANIFEST=Package.swift
+[ -f "$MANIFEST" ] || { echo "helper invariants: $MANIFEST is missing; refusing to report ok" >&2; exit 2; }
 
-for required in $HELPER_DIRS "$PROTOCOL"; do
-    [ -e "$required" ] || { echo "helper invariants: $required is missing; refusing to report ok" >&2; exit 2; }
-done
-
-# SwiftPM compiles subdirectories into a target; a `*.swift` glob does not see them.
-helper_files=$(find $HELPER_DIRS -name '*.swift' -type f | sort)
-[ -n "$helper_files" ] || { echo "helper invariants: no Swift sources under the helper targets; refusing to report ok" >&2; exit 2; }
 
 fails=0
 violation() { printf 'VIOLATION  %s\n           %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
@@ -63,6 +72,127 @@ forbid() {  # forbid <file> <extended-regex> <why>
     [ -n "$hit" ] && violation "$f — $why" "$(printf '%s' "$hit" | tr '\n' ' ')"
     return 0
 }
+
+# Extracts one function body by **brace balance**, not by a fixed-indent terminator (issue #7).
+#
+# The old form stopped at the first line equal to `    }`. A one-line body — `func f() { return x }`
+# — never produces such a line, so extraction ran on past the closing brace and into the next
+# function, and the gate check then found an `authorize()` that belonged to somebody else. The
+# issue calls this "a one-line body runs into the next function and can borrow its `authorize()`".
+#
+# Braces inside string literals and inside comments are excluded, crudely but deliberately: the
+# alternative is a Swift parser, and the header of this file already says what this script is. A
+# body that cannot be located at all is a **violation** at every call site below, never a pass.
+body_of() {  # body_of <file> <func-name>
+    code_of "$1" | awk -v want="$2" '
+        !inside && $0 ~ ("func " want "\\(") { inside = 1 }
+        inside {
+            print
+            line = $0
+            gsub(/"[^"]*"/, "", line)          # string literals
+            sub(/\/\/.*$/, "", line)           # trailing line comment
+            n = gsub(/\{/, "{", line)
+            m = gsub(/\}/, "}", line)
+            depth += n - m
+            if (seen && depth <= 0) exit
+            if (n > 0) seen = 1
+        }
+    '
+}
+
+
+# ---- Package.swift, parsed (issue #7) ----------------------------------------------------------
+# This file used to hardcode the helper directory list and never read the manifest at all, so the
+# rule that **nothing but two permitted targets may depend on `XCodeVaultHelperCore`** was held by
+# a reviewer noticing. That rule is what keeps the root daemon's dependency closure small; the
+# alternative to enforcing it is a comment in `Package.swift` claiming an enforcement that does not
+# exist, which is worse than no comment because it is the one the next reviewer trusts.
+#
+# `target_deps` prints one `target<TAB>dep` line per declared dependency, by tracking the target
+# opener and the `dependencies: [ … ]` array that follows it. `.product(name: "X", package: …)` is
+# emitted as `X` too: an external package in the helper's closure is exactly as interesting as an
+# internal one.
+#
+# It is awk rather than a Swift or Python helper on purpose. A security control that needs an
+# interpreter this repository does not otherwise depend on has one more way to be unavailable —
+# and an unavailable check that exits 0 is the failure mode this whole file is written against.
+target_deps() {
+    code_of "$MANIFEST" | awk '
+        /\.(executableTarget|testTarget|target)\(/ { intarget = 1; name = ""; indeps = 0 }
+        intarget && !name && match($0, /name: *"[^"]+"/) {
+            name = substr($0, RSTART + 7, RLENGTH - 8)
+        }
+        intarget && /dependencies: *\[/ { indeps = 1 }
+        indeps {
+            s = $0
+            while (match(s, /"[^"]+"/)) {
+                dep = substr(s, RSTART + 1, RLENGTH - 2)
+                if (dep != name) print name "\t" dep
+                s = substr(s, RSTART + RLENGTH)
+            }
+            if (/\]/) indeps = 0
+        }
+        intarget && /^        \)/ { intarget = 0 }
+    '
+}
+
+# Every target name the manifest declares, so a typo in a rule below is a violation rather than a
+# silent no-match.
+declared_targets=$(code_of "$MANIFEST" | awk '
+    /\.(executableTarget|testTarget|target)\(/ { intarget = 1; next }
+    intarget && match($0, /name: *"[^"]+"/) { print substr($0, RSTART + 7, RLENGTH - 8); intarget = 0 }
+')
+for required in XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol; do
+    printf '%s\n' "$declared_targets" | grep -qx "$required" \
+        || { echo "helper invariants: $MANIFEST declares no target named $required; the parse is wrong or the layout changed. Refusing to report ok" >&2; exit 2; }
+done
+
+# **The rule this issue is about.** Only these two may depend on the helper's logic.
+while IFS="$(printf '\t')" read -r tgt dep; do
+    [ "$dep" = "XCodeVaultHelperCore" ] || continue
+    case "$tgt" in
+        XCodeVaultHelper | XCodeVaultCoreTests) ;;
+        *) violation "$MANIFEST — target $tgt depends on XCodeVaultHelperCore" \
+            "only the helper executable and the test target may; this widens the root daemon's closure" ;;
+    esac
+done <<EOF
+$(target_deps)
+EOF
+
+# And the helper targets' own closures, stated as allowlists rather than as "nothing unexpected" —
+# a negative is not checkable here.
+check_closure() {  # check_closure <target> <permitted...>
+    local tgt="$1"; shift
+    local permitted=" $* "
+    while IFS="$(printf '\t')" read -r t d; do
+        [ "$t" = "$tgt" ] || continue
+        case "$permitted" in
+            *" $d "*) ;;
+            *) violation "$MANIFEST — $tgt depends on $d" "not in its permitted closure; a root daemon's dependencies are reviewed, not inherited" ;;
+        esac
+    done <<EOF
+$(target_deps)
+EOF
+}
+check_closure XCodeVaultHelperProtocol
+check_closure XCodeVaultHelperCore XCodeVaultHelperProtocol
+check_closure XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol
+
+# The directory list is now derived from the parse rather than written out here, so a new target in
+# the helper's closure is scanned instead of being invisible — the third gap this issue names.
+HELPER_DIRS=""
+for t in XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol; do
+    [ -d "Sources/$t" ] || { echo "helper invariants: Sources/$t does not exist; refusing to report ok" >&2; exit 2; }
+    HELPER_DIRS="$HELPER_DIRS Sources/$t"
+done
+
+for required in $HELPER_DIRS "$PROTOCOL"; do
+    [ -e "$required" ] || { echo "helper invariants: $required is missing; refusing to report ok" >&2; exit 2; }
+done
+
+# SwiftPM compiles subdirectories into a target; a `*.swift` glob does not see them.
+helper_files=$(find $HELPER_DIRS -name '*.swift' -type f | sort)
+[ -n "$helper_files" ] || { echo "helper invariants: no Swift sources under the helper targets; refusing to report ok" >&2; exit 2; }
 
 for f in $helper_files; do
     forbid "$f" '/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawn|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun' \
@@ -181,10 +311,7 @@ if [ "$delegate_count" -ne 1 ]; then
     echo "helper invariants: expected exactly one file implementing shouldAcceptNewConnection, found $delegate_count; refusing to report ok" >&2
     exit 2
 fi
-delegate_body=$(code_of "$delegate_file" | awk '
-    /func listener\(.*shouldAcceptNewConnection/ { inside = 1 }
-    inside { print }
-    inside && /^    \}$/ { exit }')
+delegate_body=$(body_of "$delegate_file" "listener")
 printf '%s' "$delegate_body" | grep -qE 'setCodeSigningRequirement' \
     || violation "$delegate_file — the connection is accepted without setting a code-signing requirement in that function" \
         "shouldAcceptNewConnection body has no setCodeSigningRequirement"
@@ -283,10 +410,7 @@ verb_count=$(printf '%s\n' "$verbs" | grep -c .)
 # inside the XPC method, so keying the gate check to the verb body alone reported a false
 # violation on correct code. Both were found by running the thing rather than reading it.
 for v in $verbs; do
-    verb_body=$(code_of "$impl_file" | awk -v m="$v" '
-        $0 ~ ("func " m "\\(") { inside = 1 }
-        inside { print }
-        inside && /^    \}$/ { exit }')
+    verb_body=$(body_of "$impl_file" "$v")
     if [ -z "$verb_body" ]; then
         violation "$impl_file — no implementation of the XPC verb $v" "a verb declared in the protocol must be implemented where this check can see it"
         continue
@@ -309,10 +433,7 @@ for v in $verbs; do
         continue
     fi
 
-    impl_body=$(code_of "$impl_file" | awk -v m="$impls" '
-        $0 ~ ("func " m "\\(") { inside = 1 }
-        inside { print }
-        inside && /^    \}$/ { exit }')
+    impl_body=$(body_of "$impl_file" "$impls")
     if [ -z "$impl_body" ]; then
         violation "$impl_file — cannot locate the body of $impls, which $v dispatches to" "the gate cannot be verified"
         continue
