@@ -134,6 +134,201 @@ public struct RuntimeOperations: Sendable {
         return false
     }
 
+    // MARK: offload (the destructive one)
+
+    /// Everything `preflightOffload` established, so `offload` re-derives nothing.
+    ///
+    /// The two halves are separate for the same reason `export` splits them: the checks have to be
+    /// runnable, and printable, without performing the deletion. `offload` takes this value rather
+    /// than the raw arguments precisely so it cannot be called on a request that was never checked.
+    public struct OffloadPlan: Sendable, Equatable {
+        public let identifier: String
+        public let installerPath: String
+        public let installerFileName: String
+        public let installerSizeBytes: UInt64
+        public let runtimeIdentifier: String?
+        public let version: String?
+        public let build: String?
+        /// The installed runtime's size, when simctl reported one. A floor, not the total: deleting
+        /// a runtime also drops its MobileAsset copy.
+        public let sizeBytes: UInt64?
+
+        /// Private on purpose, and `private` at type scope still reaches the extensions in this
+        /// file — so `preflightOffload` can build one and nothing else in `XCodeVaultCore` can.
+        ///
+        /// Without this the implicit memberwise initialiser is `internal`: a review hand-built a
+        /// plan naming `/nonexistent/never-checked.dmg`, passed it to `offload`, and it compiled.
+        /// Every guard skipped, 12 GB deleted, and the journal recording `.completed` against an
+        /// installer that was never there — which `Doctor` then reads as "merely unreachable" and
+        /// reassures the user their Unavailable devices are recoverable. The doc below promised a
+        /// capability the access level did not deliver.
+        private init(
+            identifier: String, installerPath: String, installerFileName: String, installerSizeBytes: UInt64,
+            runtimeIdentifier: String?, version: String?, build: String?, sizeBytes: UInt64?
+        ) {
+            self.identifier = identifier
+            self.installerPath = installerPath
+            self.installerFileName = installerFileName
+            self.installerSizeBytes = installerSizeBytes
+            self.runtimeIdentifier = runtimeIdentifier
+            self.version = version
+            self.build = build
+            self.sizeBytes = sizeBytes
+        }
+
+        /// The only way to make one, so a plan cannot exist without the checks that justify it.
+        fileprivate static func checked(
+            identifier: String, installer: RuntimeInstaller, runtime: SimulatorRuntime
+        ) -> OffloadPlan {
+            OffloadPlan(
+                identifier: identifier, installerPath: installer.path, installerFileName: installer.fileName,
+                installerSizeBytes: installer.sizeBytes, runtimeIdentifier: runtime.runtimeIdentifier,
+                version: runtime.version, build: runtime.build, sizeBytes: runtime.sizeBytes)
+        }
+
+        /// What goes in the journal. The runtime's identity, not just the image UUID — `doctor` has
+        /// to decide whether an unavailable *device* is recoverable, and devices are keyed by
+        /// `runtimeIdentifier`. Without it the only link is the installer's filename, which for an
+        /// `.exportedBundle` is `…/Restore/WatchOSSimulatorRuntime_Cryptex.dmg` and carries neither
+        /// platform nor version.
+        public var journalDetail: [String: String] {
+            [
+                "runtimeIdentifier": runtimeIdentifier ?? "", "version": version ?? "", "build": build ?? "",
+                "installer": installerPath,
+            ].filter { !$0.value.isEmpty }
+        }
+    }
+
+    /// Everything that must be true before the most destructive verb in the product runs.
+    ///
+    /// This is the verb that deletes 5–25 GB against a copy, and until 2026-09-18 all four of its
+    /// guards lived in `Sources/xcodevaultctl`, an executable target no test can import — the
+    /// `getgrouplist` pattern this project has already paid for once. Moving them here is the whole
+    /// point of the change; the seams below exist so the guards can be exercised without a real
+    /// multi-gigabyte image.
+    ///
+    /// The order matters and is not alphabetical:
+    ///
+    /// 1. **Is the library actually on a mounted volume?** First, because it is the only check whose
+    ///    failure means the user's mental model is wrong rather than their arguments. With the drive
+    ///    absent and a stale installer in a leftover `/Volumes` directory on the internal disk,
+    ///    `library(at:)` lists it, `hdiutil imageinfo` reads it, and the runtime is deleted — a
+    ///    source removed against a copy that is not where the user believes it is, on a disk that
+    ///    just lost the space twice over. Rule 6.
+    /// 2. **Is there an installer for this runtime?** Nothing may be deleted without one.
+    /// 3. **Can `hdiutil` actually read it?** A file of the right name and size is not an image.
+    ///
+    /// - Parameters:
+    ///   - isMountPoint: seam. `/Volumes` is root-owned, so an unmounted-volume directory cannot be
+    ///     staged for real without privilege this tool refuses to take.
+    ///   - listLibrary: seam, so a test needs no directory of multi-gigabyte files.
+    ///   - imageIsReadable: seam for `hdiutil imageinfo`, so a test needs no real disk image.
+    public func preflightOffload(
+        identifier: String,
+        library: String,
+        installedRuntimes: [SimulatorRuntime],
+        isMountPoint: (String) -> Bool = MountStatus.isMountPoint,
+        listLibrary: (String) throws -> [RuntimeInstaller] = RuntimeOperations.library(at:),
+        imageIsReadable: ((String) throws -> Bool)? = nil
+    ) throws -> (plan: OffloadPlan, warnings: [String]) {
+        guard let rt = installedRuntimes.first(where: { $0.identifier == identifier }) else {
+            throw RuntimeOperationError("No installed runtime with identifier \(identifier).")
+        }
+        guard !RuntimeOperations.isNotOnAMountedVolume(destination: library, isMountPoint: isMountPoint) else {
+            throw RuntimeOperationError(
+                "\(library) is under /Volumes but no volume is mounted there — most likely a mount-point directory left behind by an unclean eject. "
+                    + "The runtime is NOT deleted. Reconnect the drive and check `xcodevaultctl volumes`.")
+        }
+        let lib = try listLibrary(library)
+        guard let inst = RuntimeOperations.installer(for: rt, in: lib) else {
+            let platformArg = rt.platformName == "iphone" ? "iOS" : rt.platformName
+            throw RuntimeOperationError(
+                "No installer for \(rt.platformName) \(rt.version ?? "?") in \(library). "
+                    + "Run `xcodevaultctl runtime export \(platformArg) --to \(library)` first — the runtime is NOT deleted.")
+        }
+        let readable = try (imageIsReadable ?? defaultImageIsReadable)(inst.path)
+        guard readable else {
+            throw RuntimeOperationError("hdiutil cannot read \(inst.path); refusing to delete the installed runtime.")
+        }
+        var warnings: [String] = []
+        if rt.sizeBytes == nil {
+            warnings.append("simctl did not report this runtime's size, so how much this frees cannot be stated up front.")
+        }
+        return (OffloadPlan.checked(identifier: identifier, installer: inst, runtime: rt), warnings)
+    }
+
+    private var defaultImageIsReadable: (String) throws -> Bool {
+        { path in try self.runner.run(Tools.hdiutil, ["imageinfo", path]).succeeded }
+    }
+
+    /// Performs the offload a `preflightOffload` already authorised: journal `started`, delete,
+    /// journal `completed` or `failed`.
+    ///
+    /// Takes a plan rather than an identifier so it cannot be reached without the checks, and
+    /// records `failed` before rethrowing so a deletion that did not happen is not left looking
+    /// like one that is still in flight.
+    /// How the user said yes. A value rather than a `Bool` so it cannot be satisfied by a
+    /// stray `true`, and so the journal can record *what* was agreed to.
+    ///
+    /// The refactor that moved this verb's guards into Core initially moved four of the five and
+    /// left this one — the one that encodes user intent — behind in the target no test can
+    /// import. Safety rule 5 is about explicit, specific user intent; a plan that records only
+    /// what was *checked* does not record what was *agreed*.
+    public enum OffloadConfirmation: Sendable, Equatable {
+        case explicitUserIntent(recordedAs: String)
+        var recorded: String {
+            switch self {
+            case .explicitUserIntent(let s): return s
+            }
+        }
+    }
+
+    @discardableResult
+    public func offload(_ plan: OffloadPlan, confirmedByUser confirmation: OffloadConfirmation) throws -> CommandResult {
+        // Re-validated here, not just in the preflight. `OffloadPlan` is `Sendable` and all-`let`
+        // — designed to be held and passed — so "was true when checked" is not "is true now". In
+        // the CLI that window is microseconds; in the SwiftUI app it is however long the
+        // confirmation sheet is on screen, which is long enough for a drive to be bumped, a Mac
+        // to sleep, or the vault to come back as `/Volumes/VAULT 1`. Deleting 12 GB against an
+        // installer that moved, and then journaling `.completed` with the stale path, is exactly
+        // the state `Doctor` reads as "merely disconnected, devices recoverable".
+        let installerDirectory = (plan.installerPath as NSString).deletingLastPathComponent
+        guard !RuntimeOperations.isNotOnAMountedVolume(destination: installerDirectory) else {
+            throw RuntimeOperationError(
+                "\(installerDirectory) is no longer a mounted volume. Nothing was deleted — the runtime is intact. "
+                    + "Reconnect the drive and run the offload again.")
+        }
+        guard try defaultImageIsReadable(plan.installerPath) else {
+            throw RuntimeOperationError(
+                "\(plan.installerPath) is no longer readable by hdiutil. Nothing was deleted — the runtime is intact.")
+        }
+        let op = UUID().uuidString
+        var detail = plan.journalDetail
+        detail["confirmation"] = confirmation.recorded
+        try journal.record(
+            id: op, kind: .runtimeOffload, state: .started,
+            summary: "offload \(plan.identifier) (installer \(plan.installerPath))", paths: [plan.installerPath], detail: detail)
+        let result: CommandResult
+        do {
+            result = try delete(identifier: plan.identifier)
+        } catch {
+            // `delete` throws on a non-zero exit as well as on a launch failure, so this one arm
+            // covers both. An earlier draft added a second `guard result.succeeded` below for the
+            // non-zero case; it was unreachable, and unreachable safety code is the kind a later
+            // reader trusts.
+            try journal.record(
+                id: op, kind: .runtimeOffload, state: .failed,
+                summary: "offload \(plan.identifier) failed: \(error)", paths: [plan.installerPath], detail: detail)
+            throw RuntimeOperationError(
+                "Could not delete runtime \(plan.identifier): \(error). The installer at \(plan.installerPath) is untouched, "
+                    + "so nothing has been lost — re-run once the cause is cleared.")
+        }
+        try journal.record(
+            id: op, kind: .runtimeOffload, state: .completed,
+            summary: "offloaded \(plan.identifier)", paths: [plan.installerPath], detail: detail)
+        return result
+    }
+
     /// Validates an export request against the installed Xcode and host. Returns warnings; throws on
     /// blockers. `isMountPoint` is a seam for tests only: `/Volumes` is root-owned, so an unmounted-volume
     /// directory cannot be staged for real without privilege this tool refuses to take.

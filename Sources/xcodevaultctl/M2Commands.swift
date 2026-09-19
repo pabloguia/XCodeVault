@@ -158,69 +158,45 @@ extension Runtime {
         @Option(name: .long, help: "Runtime Library directory.") var library: String
         @Flag(name: .long, help: "Confirm deletion.") var yes = false
         func run() throws {
+            // Argument parsing and presentation only. Every guard, and all three journal
+            // transitions, moved to `RuntimeOperations` on 2026-09-18 (issue #14): they lived here,
+            // in an executable target no test can import, guarding the verb that deletes 5-25 GB.
             let (x, h) = try selectedXcode()
-            let rts = try SimulatorDiscovery.runtimes()
-            guard let rt = rts.first(where: { $0.identifier == identifier }) else {
-                throw ValidationError("No installed runtime with identifier \(identifier).")
-            }
-            // The same rule-6 check `export` does, and it matters more here: this is the verb that
-            // deletes 5–25 GB. With the volume absent and a stale installer sitting in a leftover
-            // /Volumes directory on the internal disk, `library(at:)` lists it, `hdiutil imageinfo`
-            // reads it, and the installed runtime is deleted — a source removed against a copy that
-            // is not where the user believes it is, on a disk that just lost the space twice over.
-            guard !RuntimeOperations.isNotOnAMountedVolume(destination: library) else {
-                throw ValidationError(
-                    "\(library) is under /Volumes but no volume is mounted there — most likely a mount-point directory left behind by an unclean eject. "
-                        + "The runtime is NOT deleted. Reconnect the drive and check `xcodevaultctl volumes`.")
-            }
-            let lib = try RuntimeOperations.library(at: library)
-            guard let inst = RuntimeOperations.installer(for: rt, in: lib) else {
-                throw ValidationError(
-                    "No installer for \(rt.platformName) \(rt.version ?? "?") in \(library). Run `xcodevaultctl runtime export \(rt.platformName == "iphone" ? "iOS" : rt.platformName) --to \(library)` first — the runtime is NOT deleted."
-                )
-            }
-            // Verify the installer is a readable disk image before deleting anything.
-            let info = try ProcessCommandRunner().run(Tools.hdiutil, ["imageinfo", inst.path])
-            guard info.succeeded else { throw ValidationError("hdiutil cannot read \(inst.path); refusing to delete the installed runtime.") }
-            print("Installer readable (hdiutil imageinfo): \(inst.fileName) (\(ByteCount.format(inst.sizeBytes))). Seal validation happens on import.")
-            guard yes else {
-                print("Would delete runtime \(rt.runtimeIdentifier ?? identifier) (\(ByteCount.format(rt.sizeBytes ?? 0))). Pass --yes to proceed."); return
-            }
             let ops = RuntimeOperations(xcode: x, host: h)
-            let op = UUID().uuidString
-            // `detail` carries the runtime's identity, not just the image UUID. `doctor` has to decide
-            // whether an unavailable *device* is recoverable, and devices are keyed by
-            // runtimeIdentifier — without this the only link is the installer's filename, which for a
-            // `.exportedBundle` is `…/Restore/WatchOSSimulatorRuntime_Cryptex.dmg` and carries neither
-            // platform nor version.
-            let identity = [
-                "runtimeIdentifier": rt.runtimeIdentifier ?? "", "version": rt.version ?? "", "build": rt.build ?? "",
-                "installer": inst.path,
-            ].filter { !$0.value.isEmpty }
-            try ops.journal.record(
-                id: op, kind: .runtimeOffload, state: .started, summary: "offload \(identifier) (installer \(inst.path))", paths: [inst.path],
-                detail: identity)
-            let r: CommandResult
-            do { r = try ops.delete(identifier: identifier) } catch {
-                try ops.journal.record(id: op, kind: .runtimeOffload, state: .failed, summary: "offload \(identifier) failed: \(error)", paths: [inst.path]);
-                throw error
+            let plan: RuntimeOperations.OffloadPlan
+            let warnings: [String]
+            do {
+                (plan, warnings) = try ops.preflightOffload(
+                    identifier: identifier, library: library, installedRuntimes: try SimulatorDiscovery.runtimes())
+            } catch let e as RuntimeOperationError {
+                // Preserved as a ValidationError so the CLI's exit code and presentation are what
+                // they were before the policy moved.
+                throw ValidationError(e.description)
             }
-            try ops.journal.record(
-                id: op, kind: .runtimeOffload, state: .completed, summary: "offloaded \(identifier)", paths: [inst.path], detail: identity)
+            for w in warnings { print("Note: \(w)") }
+            print(
+                "Installer readable (hdiutil imageinfo): \(plan.installerFileName) (\(ByteCount.format(plan.installerSizeBytes))). "
+                    + "Seal validation happens on import.")
+            guard yes else {
+                let size = plan.sizeBytes.map { " (\(ByteCount.format($0)))" } ?? ""
+                print("Would delete runtime \(plan.runtimeIdentifier ?? identifier)\(size). Pass --yes to proceed.")
+                return
+            }
+            let r = try ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "--yes"))
             // `simctl runtime delete` prints nothing on success, so the old `print(stdout + stderr)`
             // emitted a blank line and the command finished having said only what it checked
             // beforehand — leaving the user to guess whether 10 GB had actually been deleted.
             let tail = (r.stdout + r.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
             if !tail.isEmpty { print(tail) }
-            // No parenthetical when the size is unknown: "0 B" answers "how much did this free?" with
-            // a confident wrong number. The image size is also a floor, not the total — deleting the
-            // runtime drops its MobileAsset copy too.
-            let freed = rt.sizeBytes.map { " (at least \(ByteCount.format($0)))" } ?? ""
-            print("Deleted runtime \(rt.runtimeIdentifier ?? identifier)\(freed) from the internal volume.")
+            // No parenthetical when the size is unknown: "0 B" answers "how much did this free?"
+            // with a confident wrong number. The image size is also a floor, not the total —
+            // deleting the runtime drops its MobileAsset copy too.
+            let freed = plan.sizeBytes.map { " (at least \(ByteCount.format($0)))" } ?? ""
+            print("Deleted runtime \(plan.runtimeIdentifier ?? identifier)\(freed) from the internal volume.")
             // The surprising part, and the reason `doctor` now refuses to suggest deleting them:
             // the devices survive, they just cannot run until the runtime is back.
             print("Devices for this runtime are now Unavailable, NOT deleted — they return to Shutdown with their data when it is re-imported (E11).")
-            print("Re-install later with: xcodevaultctl runtime import \"\(inst.path)\"")
+            print("Re-install later with: xcodevaultctl runtime import \"\(plan.installerPath)\"")
         }
     }
 }

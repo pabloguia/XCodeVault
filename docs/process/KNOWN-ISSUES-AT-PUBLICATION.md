@@ -177,10 +177,37 @@ needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor
   `MigrationEngine` (the source already says "UNPINNED, knowingly" beside it), the free-space guard,
   `XcodeLocations.preflightLocation`'s shadow-data check, and `CleanExecutor.preflight`'s
   nested-mount-point guard.
-- The `runtime offload` transaction — four guards, an `hdiutil` verification and three journal
-  transitions — lives in `Sources/xcodevaultctl/M2Commands.swift`, an executable target no test can
-  import. It is the most destructive verb in the product. This is the `getgrouplist` pattern the
-  project has already paid for once.
+- ~~The `runtime offload` transaction lives in an executable target no test can import.~~
+  **Fixed 2026-09-18** (issue #14). The policy moved to `RuntimeOperations.preflightOffload` and
+  `offload`, matching the shape `preflightExport`/`preflightImport`/`delete` already used, leaving
+  `M2Commands.swift` as argument parsing and presentation. Three seams — `isMountPoint`,
+  `listLibrary`, `imageIsReadable` — let the guards run without a real multi-gigabyte image, and
+  all four are now pinned by mutation, along with both journal transitions and the failure path.
+
+  Three things fell out of writing tests that could not have been written before. `offload` had
+  an unreachable `guard result.succeeded` after its `do/catch`, because `delete` already throws on
+  a non-zero exit — unreachable safety code that a later reader would have trusted. The `.failed`
+  journal line now says the installer is untouched, which is the fact a user needs at the moment a
+  12 GB deletion has just refused. And `offload` now re-validates the mount and the installer's
+  readability before deleting: `OffloadPlan` is `Sendable` and all-`let`, built to be held across
+  a confirmation sheet, and "was true at preflight" is not "is true now".
+
+  **The first version of this entry claimed all four guards were pinned by mutation. That was
+  false, and the way it was false is the point.** Every test injected `imageIsReadable:`, so the
+  production closure — the only one that runs when the product runs — had no coverage at all: a
+  reviewer replaced it with `{ _ in true }`, deleting the last check between a 12 GB deletion and
+  a truncated `.dmg`, and the whole suite stayed green. Two more mutations survived by pointing
+  that check at a *different* installer than the one about to be restored from, which is the same
+  defect one guard to the left that this change had already fixed once. And because the fake
+  runner recorded nothing, `--dry-run` and `--keep-asset` could both be appended to the deletion
+  unnoticed — one reports a deletion that never happened, the other leaves the space it claimed to
+  free. All five are now pinned, by a runner that records its invocations and by asserting *which*
+  path was checked rather than how many were.
+
+  Still deliberately not closed: the journal records the installer's path but no volume identity,
+  so `doctor` cannot tell "the vault is unplugged" from "a different drive is mounted at
+  `/Volumes/VAULT`". That is filed as its own issue rather than folded in here. There is also no
+  fault injection for a crash mid-`delete`, which would leave the entry at `.started`.
 
 ### API surface
 

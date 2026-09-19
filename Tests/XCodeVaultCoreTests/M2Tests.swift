@@ -477,6 +477,326 @@ final class RuntimeOperationsTests: XCTestCase {
         XCTAssertNoThrow(try ops.delete(identifier: "ABC", keepAsset: true, dryRun: true))
         XCTAssertEqual(try journal.entries().count, 4, "dry runs are not journaled")
     }
+
+    // MARK: - offload, the verb that was structurally untestable (issue #14)
+
+    /// Until 2026-09-18 every one of these assertions was impossible to write. The four guards and
+    /// the three journal transitions lived in `Sources/xcodevaultctl`, an executable target no test
+    /// can import — the `getgrouplist` pattern this project had already paid for once, on the verb
+    /// that deletes 5-25 GB against a copy.
+    private func offloadFixture() -> (ops: RuntimeOperations, t: TempDir, journal: Journal, runtime: SimulatorRuntime) {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(
+            // `hdiutil imageinfo` is answered because `offload` re-validates readability before
+            // deleting — a plan records what WAS true, and these fixtures must go through the
+            // real check rather than around it.
+            runner: FakeRunner(responses: [
+                "xcrun simctl runtime delete": CommandResult(status: 0, stdout: "", stderr: ""),
+                "hdiutil imageinfo": CommandResult(status: 0, stdout: "", stderr: ""),
+            ]),
+            journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", platformIdentifier: "com.apple.platform.iphonesimulator",
+            version: "26.5", build: "23F77",
+            sizeBytes: 12_000_000_000, supportedArchitectures: ["arm64"])
+        return (ops, t, journal, rt)
+    }
+
+    private func installer(_ path: String, _ name: String = "iOS 26.5 Simulator Runtime.dmg") -> RuntimeInstaller {
+        RuntimeInstaller(
+            path: path, fileName: name, sizeBytes: 7_000_000_000, modifiedAt: Date(), platform: "iOS", version: "26.5", build: "23F77")
+    }
+
+    /// Guard 1, and the one that matters most: rule 6. With the volume absent and a stale installer
+    /// in a leftover `/Volumes` directory on the internal disk, the library lists it, `hdiutil`
+    /// reads it, and the runtime is deleted — a source removed against a copy that is not where the
+    /// user believes it is, on a disk that just lost the space twice over.
+    func testOffloadRefusesWhenTheLibraryIsAStaleMountPointDirectory() throws {
+        let f = offloadFixture()
+        let lib = "/Volumes/VAULT/RuntimeLibrary"
+        XCTAssertThrowsError(
+            try f.ops.preflightOffload(
+                identifier: "R1", library: lib, installedRuntimes: [f.runtime],
+                isMountPoint: { _ in false },  // nothing is mounted at /Volumes/VAULT
+                listLibrary: { _ in [self.installer(lib + "/iOS 26.5 Simulator Runtime.dmg")] },
+                imageIsReadable: { _ in true })
+        ) { e in
+            XCTAssertTrue("\(e)".contains("no volume is mounted"), "unexpected: \(e)")
+            XCTAssertTrue("\(e)".contains("NOT deleted"), "the message must say the runtime survived: \(e)")
+        }
+        XCTAssertEqual(try f.journal.entries().count, 0, "a refused preflight must journal nothing")
+    }
+
+    /// Guard 2: nothing may be deleted without an installer to restore *this* runtime from.
+    ///
+    /// Two cases, and the second is the one that matters. An empty library is the easy miss; a
+    /// library full of installers for other platforms is the dangerous one, because "there is an
+    /// installer here" is not "there is an installer for what you are about to delete". Deleting
+    /// an iOS runtime against a watchOS image loses 12 GB with no way back.
+    ///
+    /// The first version of this test only passed an empty library, and a mutation that fell back
+    /// to `lib.first` survived it — the test could not tell the two cases apart.
+    func testOffloadRefusesWhenTheLibraryHasNoInstallerForThisRuntime() throws {
+        let f = offloadFixture()
+        for (label, library) in [
+            ("an empty library", [RuntimeInstaller]()),
+            (
+                "a library holding only other platforms' installers",
+                [
+                    RuntimeInstaller(
+                        path: f.t.path + "/watchOS 26.5 Simulator Runtime.dmg", fileName: "watchOS 26.5 Simulator Runtime.dmg",
+                        sizeBytes: 7_000_000_000, modifiedAt: Date(), platform: "watchOS", version: "26.5", build: "23F77"),
+                    RuntimeInstaller(
+                        path: f.t.path + "/iOS 18.0 Simulator Runtime.dmg", fileName: "iOS 18.0 Simulator Runtime.dmg",
+                        sizeBytes: 7_000_000_000, modifiedAt: Date(), platform: "iOS", version: "18.0", build: "22A1"),
+                ]
+            ),
+        ] {
+            XCTAssertThrowsError(
+                try f.ops.preflightOffload(
+                    identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
+                    isMountPoint: { _ in true }, listLibrary: { _ in library }, imageIsReadable: { _ in true }),
+                label
+            ) { e in
+                XCTAssertTrue("\(e)".contains("No installer"), "\(label): unexpected: \(e)")
+                XCTAssertTrue("\(e)".contains("runtime export"), "\(label): the refusal must name the verb that fixes it: \(e)")
+            }
+        }
+    }
+
+    /// And the positive control for the pair above: a library that *does* hold the right installer
+    /// must be accepted, so the refusals are not passing for want of any match at all.
+    func testOffloadAcceptsTheInstallerThatMatchesThisRuntime() throws {
+        let f = offloadFixture()
+        let right = installer(f.t.path + "/iOS 26.5 Simulator Runtime.dmg")
+        let wrong = RuntimeInstaller(
+            path: f.t.path + "/watchOS 26.5 Simulator Runtime.dmg", fileName: "watchOS 26.5 Simulator Runtime.dmg",
+            sizeBytes: 7_000_000_000, modifiedAt: Date(), platform: "watchOS", version: "26.5", build: "23F77")
+        var asked: [String] = []
+        let (plan, _) = try f.ops.preflightOffload(
+            identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
+            isMountPoint: { _ in true }, listLibrary: { _ in [wrong, right] },
+            imageIsReadable: { p in
+                asked.append(p)
+                return true
+            })
+        XCTAssertEqual(plan.installerPath, right.path, "it must pick the matching installer, not merely the first one")
+        XCTAssertEqual(asked, [right.path], "and the readability check must be about the installer it picked")
+    }
+
+    /// Guard 3: a file of the right name and size is not a disk image.
+    func testOffloadRefusesWhenHdiutilCannotReadTheInstaller() throws {
+        let f = offloadFixture()
+        var asked: [String] = []
+        XCTAssertThrowsError(
+            try f.ops.preflightOffload(
+                identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
+                isMountPoint: { _ in true },
+                listLibrary: { _ in [self.installer(f.t.path + "/iOS 26.5 Simulator Runtime.dmg")] },
+                imageIsReadable: { p in
+                    asked.append(p); return false
+                })
+        ) { e in
+            XCTAssertTrue("\(e)".contains("hdiutil cannot read"), "unexpected: \(e)")
+        }
+        // WHICH path, not how many. Counting only proves something was checked; a mutation that
+        // pointed the check at a different installer survived that, and verifying the watchOS
+        // image before deleting the iOS runtime is the whole failure.
+        XCTAssertEqual(asked, [f.t.path + "/iOS 26.5 Simulator Runtime.dmg"])
+    }
+
+    /// Guard 4: an identifier that names nothing installed.
+    func testOffloadRefusesAnIdentifierThatIsNotInstalled() throws {
+        let f = offloadFixture()
+        XCTAssertThrowsError(
+            try f.ops.preflightOffload(
+                identifier: "NOPE", library: f.t.path, installedRuntimes: [f.runtime],
+                isMountPoint: { _ in true }, listLibrary: { _ in [] }, imageIsReadable: { _ in true })
+        ) { e in XCTAssertTrue("\(e)".contains("No installed runtime"), "unexpected: \(e)") }
+    }
+
+    /// The happy path, and the three journal transitions that go with it.
+    func testOffloadJournalsStartedThenCompletedAndCarriesTheRuntimeIdentity() throws {
+        let f = offloadFixture()
+        let path = f.t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let (plan, warnings) = try f.ops.preflightOffload(
+            identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] }, imageIsReadable: { _ in true })
+        XCTAssertTrue(warnings.isEmpty)
+        XCTAssertEqual(plan.installerPath, path)
+        XCTAssertEqual(plan.sizeBytes, 12_000_000_000)
+
+        try f.ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "test"))
+
+        let mine = try f.journal.entries().filter { $0.kind == .runtimeOffload }
+        XCTAssertEqual(mine.map(\.state), [.started, .completed], "both transitions, in order")
+        XCTAssertEqual(Set(mine.map(\.id)).count, 1, "one operation id across both")
+        // The identity, not just the image UUID: `doctor` decides whether an unavailable *device*
+        // is recoverable, and devices are keyed by runtimeIdentifier.
+        XCTAssertEqual(mine.last?.detail["runtimeIdentifier"], "com.apple.CoreSimulator.SimRuntime.iOS-26-5")
+        XCTAssertEqual(mine.last?.detail["build"], "23F77")
+        XCTAssertEqual(mine.last?.detail["installer"], path)
+    }
+
+    /// `delete` throws on a non-zero exit, so this arrives through `offload`'s `catch`. The
+    /// property under test is that the catch journals `.failed` and never `.completed` — an
+    /// earlier version of this comment claimed simctl "can exit non-zero without throwing",
+    /// which is the opposite of the fact that made a second guard here unreachable.
+    func testOffloadJournalsFailedWhenSimctlExitsNonZero() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(
+            runner: FakeRunner(responses: [
+                "xcrun simctl runtime delete": CommandResult(status: 1, stdout: "", stderr: "busy"),
+                "hdiutil imageinfo": CommandResult(status: 0, stdout: "", stderr: ""),
+            ]),
+            journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", platformIdentifier: "com.apple.platform.iphonesimulator",
+            version: "26.5", build: "23F77",
+            sizeBytes: 12_000_000_000, supportedArchitectures: ["arm64"])
+        let path = t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let (plan, _) = try ops.preflightOffload(
+            identifier: "R1", library: t.path, installedRuntimes: [rt],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] }, imageIsReadable: { _ in true })
+
+        XCTAssertThrowsError(try ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "test"))) { e in
+            XCTAssertTrue("\(e)".contains("untouched"), "the message must say the installer survived: \(e)")
+        }
+        let mine = try journal.entries().filter { $0.kind == .runtimeOffload }
+        XCTAssertEqual(mine.map(\.state), [.started, .failed], "a non-zero exit must journal .failed, never .completed")
+    }
+
+    /// The production `hdiutil` check, reached the way production reaches it.
+    ///
+    /// Every other test here injects `imageIsReadable:`, which meant the one closure that
+    /// actually runs when the product runs had zero coverage: a review replaced
+    /// `defaultImageIsReadable` with `{ _ in true }` — deleting the last check between a 12 GB
+    /// deletion and a truncated `.dmg` — and all 27 tests passed. The refactor moved the guard
+    /// somewhere testable and, in the same motion, stopped testing it.
+    func testTheRealHdiutilCheckIsReachedAndItsAnswerIsObeyed() throws {
+        let t = TempDir()
+        let path = t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+            platformIdentifier: "com.apple.platform.iphonesimulator", version: "26.5", build: "23F77",
+            sizeBytes: 12_000_000_000, supportedArchitectures: ["arm64"])
+
+        for (status, shouldPass) in [(Int32(1), false), (Int32(0), true)] {
+            let runner = RecordingRunner(responses: ["hdiutil imageinfo": CommandResult(status: status, stdout: "", stderr: "")])
+            let ops = RuntimeOperations(
+                runner: runner, journal: Journal(url: URL(fileURLWithPath: t.path + "/j-\(status).jsonl")),
+                xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+            // No `imageIsReadable:` — this is the whole point of the test.
+            let call = {
+                try ops.preflightOffload(
+                    identifier: "R1", library: t.path, installedRuntimes: [rt],
+                    isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] })
+            }
+            if shouldPass {
+                XCTAssertNoThrow(try call(), "hdiutil exit 0 must be accepted")
+            } else {
+                XCTAssertThrowsError(try call()) { e in
+                    XCTAssertTrue("\(e)".contains("hdiutil cannot read"), "unexpected: \(e)")
+                }
+            }
+            XCTAssertEqual(
+                runner.invocations, ["hdiutil imageinfo \(path)"],
+                "the real check must shell out to hdiutil imageinfo against the chosen installer")
+        }
+    }
+
+    /// What `offload` actually asks simctl to do.
+    ///
+    /// Asserting the *return value* left `--dry-run` and `--keep-asset` free to be appended: one
+    /// reports a deletion that never happened, the other leaves 5-25 GB of MobileAsset behind
+    /// while the journal says offloaded. Both survived mutation until the runner recorded its
+    /// invocations.
+    func testOffloadInvokesADeletionThatIsNeitherADryRunNorAssetKeeping() throws {
+        let t = TempDir()
+        let path = t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let runner = RecordingRunner(responses: [
+            "hdiutil imageinfo": CommandResult(status: 0, stdout: "", stderr: ""),
+            "xcrun simctl runtime delete": CommandResult(status: 0, stdout: "", stderr: ""),
+        ])
+        let ops = RuntimeOperations(
+            runner: runner, journal: Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl")),
+            xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+            platformIdentifier: "com.apple.platform.iphonesimulator", version: "26.5", build: "23F77",
+            sizeBytes: 12_000_000_000, supportedArchitectures: ["arm64"])
+        let (plan, _) = try ops.preflightOffload(
+            identifier: "R1", library: t.path, installedRuntimes: [rt],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] })
+
+        try ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "--yes"))
+
+        XCTAssertTrue(
+            runner.invocations.contains("xcrun simctl runtime delete R1"),
+            "the exact deletion, with no extra flags: \(runner.invocations)")
+        XCTAssertFalse(runner.invocations.contains { $0.contains("--dry-run") }, "a dry run deletes nothing and would journal .completed")
+        XCTAssertFalse(runner.invocations.contains { $0.contains("--keep-asset") }, "keeping the asset leaves the space it claimed to free")
+    }
+
+    /// A plan is a record of what WAS true. `offload` re-checks, because the plan is `Sendable`
+    /// and all-`let` — built to be held across a confirmation sheet, which is long enough for a
+    /// drive to be bumped.
+    func testOffloadRefusesWhenTheInstallerStoppedBeingReadableAfterThePreflight() throws {
+        let t = TempDir()
+        let path = t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let runner = RecordingRunner(responses: ["hdiutil imageinfo": CommandResult(status: 0, stdout: "", stderr: "")])
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ops = RuntimeOperations(runner: runner, journal: journal, xcode: xcode26, host: host(free: 3_000_000_000, arm: true))
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+            platformIdentifier: "com.apple.platform.iphonesimulator", version: "26.5", build: "23F77",
+            sizeBytes: 12_000_000_000, supportedArchitectures: ["arm64"])
+        let (plan, _) = try ops.preflightOffload(
+            identifier: "R1", library: t.path, installedRuntimes: [rt],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] })
+
+        // Between the preflight and the confirmation, the image stops being readable.
+        runner.responses = ["hdiutil imageinfo": CommandResult(status: 1, stdout: "", stderr: "")]
+
+        XCTAssertThrowsError(try ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "--yes"))) { e in
+            XCTAssertTrue("\(e)".contains("no longer readable"), "unexpected: \(e)")
+            XCTAssertTrue("\(e)".contains("Nothing was deleted"), "the user must be told the runtime survived: \(e)")
+        }
+        XCTAssertFalse(
+            runner.invocations.contains { $0.contains("simctl runtime delete") },
+            "nothing may be deleted once re-validation has refused")
+        XCTAssertEqual(try journal.entries().filter { $0.kind == .runtimeOffload }.count, 0, "and a refusal before .started journals nothing")
+    }
+
+    /// The consent the user gave is recorded, not just acted on.
+    func testTheConfirmationIsCarriedIntoTheJournal() throws {
+        let f = offloadFixture()
+        let path = f.t.path + "/iOS 26.5 Simulator Runtime.dmg"
+        let (plan, _) = try f.ops.preflightOffload(
+            identifier: "R1", library: f.t.path, installedRuntimes: [f.runtime],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(path)] }, imageIsReadable: { _ in true })
+        try f.ops.offload(plan, confirmedByUser: .explicitUserIntent(recordedAs: "--yes"))
+        let mine = try f.journal.entries().filter { $0.kind == .runtimeOffload }
+        XCTAssertEqual(mine.first?.detail["confirmation"], "--yes", "the .started line must record what was agreed to")
+        XCTAssertEqual(mine.last?.detail["confirmation"], "--yes")
+    }
+
+    /// An unknown size is reported as a warning rather than rendered as a confident zero.
+    func testOffloadWarnsWhenTheRuntimeSizeIsUnknown() throws {
+        let f = offloadFixture()
+        let rt = SimulatorRuntime(
+            identifier: "R1", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", platformIdentifier: "com.apple.platform.iphonesimulator",
+            version: "26.5", build: "23F77",
+            supportedArchitectures: ["arm64"])
+        let (plan, warnings) = try f.ops.preflightOffload(
+            identifier: "R1", library: f.t.path, installedRuntimes: [rt],
+            isMountPoint: { _ in true }, listLibrary: { _ in [self.installer(f.t.path + "/x.dmg")] }, imageIsReadable: { _ in true })
+        XCTAssertNil(plan.sizeBytes)
+        XCTAssertEqual(warnings.count, 1)
+        XCTAssertTrue(warnings[0].contains("did not report"), "unexpected: \(warnings)")
+    }
 }
 
 final class XcodeLocationsTests: XCTestCase {
