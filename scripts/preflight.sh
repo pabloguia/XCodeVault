@@ -56,6 +56,7 @@ fi
 log=$(mktemp -t xcv-preflight)
 trap 'rm -f "$log"' EXIT
 failed=()
+ran=0
 for g in "${GATES[@]}"; do
     name="${g%%:*}"
     cmd="${g#*:}"
@@ -64,6 +65,7 @@ for g in "${GATES[@]}"; do
         continue
     fi
     printf '  %-20s ' "$name"
+    ran=$((ran + 1))
     case "$name" in
         tests)
             # Tee'd because the no-skips gate reads the suite's own output rather than re-running it.
@@ -99,7 +101,13 @@ for g in "${GATES[@]}"; do
 done
 
 if [ ${#failed[@]} -eq 0 ]; then
-    echo "preflight: ok (${#GATES[@]} gates)"
+    # The count is what **ran**, not how many exist. "ok (9 gates)" after `--fast` skipped two was
+    # a false statement printed by the script whose entire purpose is that green means green.
+    if [ "$ran" -eq "${#GATES[@]}" ]; then
+        echo "preflight: ok ($ran gates)"
+    else
+        echo "preflight: ok ($ran of ${#GATES[@]} gates — $(( ${#GATES[@]} - ran )) skipped by --fast; this is NOT a full check)"
+    fi
     exit 0
 fi
 echo "preflight: ${#failed[@]} gate(s) failed: ${failed[*]}" >&2

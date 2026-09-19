@@ -57,13 +57,16 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 _Item 1 was "Publish" until 2026-09-18; the repository is public and CI runs on both runners, so it
 is done. The post-publication issue backlog replaced it._
 
-1. **The backlog is empty, so the next action is to refill it honestly rather than to declare
-   done.** Known gaps that are not yet issues: nothing in the tree opens an XPC connection, so the
-   entire privileged helper — including both fixes above — is unreachable in a shipped artifact
-   (that is M4, below, and it is the largest untested surface in the project); the
-   `mayTakeOwnership` call site in `doCreateVaultDirectory` still needs a real mounted volume to
-   pin; and E6's disconnect half still needs hands on the Mac, which
-   is what would turn issue #24's central premise from inferred into observed.
+1. **Work the refilled backlog.** The gaps that were prose here on 2026-09-19 are now issues:
+   #28 (the `mayTakeOwnership` call site — **done**), #31 (`MigrationEngine`'s remaining mutable
+   seams), #29 (E6b: whether a stub reappears after a disconnect, the premise #24 rests on) and #30
+   (nothing opens an XPC connection, so the whole privileged helper is unreachable in a shipped
+   artifact — the largest untested surface in the project).
+
+   #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
+   machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
+   a scripted software variant for #29, the client-side code-signing requirement and its tests for
+   #30 — so what remains on each is the part that genuinely requires the thing it is blocked on.
 2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
    the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
    signed bundle — cannot be tested unsigned.

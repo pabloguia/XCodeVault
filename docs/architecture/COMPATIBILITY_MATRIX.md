@@ -413,6 +413,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | Experiment | Gates | Status |
 |---|---|---|
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
+| E6b mount stub at a cache path | H14, issue #24's premise | **pending — manual**, needs `sudo` and a yankable drive. Runbook: `docs/process/RUNBOOK-E6b-disconnect.md`; script: `scripts/experiments/e6b-mount-stub-reappearance.sh`. Distinct from E6 above: that measures a vault volume under `/Volumes`, this measures a mount at `/Library/Developer/CoreSimulator/Caches/dyld` |
 | E7 shadow-data defense | H3 | **done (2026-09-07)** — see entry below; does not crash Xcode; low priority after ADR-0004 |
 | E8 export/import round trip | H4 | **done** — export (2026-09-06) + import with functional boot probe (2026-09-07) both pass; see entries above |
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |

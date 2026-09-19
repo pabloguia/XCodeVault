@@ -565,3 +565,39 @@ regardless of whether it works.
 **Status: still unverified, still R&D, but promoted from "no clear mechanism" to "blocked on
 platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
 26.x update; the check is cheap (build Apple's sample, `mount -F`).
+
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(new, 2026-09-19, unverified)*
+
+**The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
+disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a
+mount point.
+
+**Why it is here rather than assumed.** Issue #24 added a guard to the privileged cleanup verb on
+the strength of a three-step sequence, and this is its middle step. The verb refuses while the path
+is a mount point; after a disconnect it sees a plain directory, the mount query truthfully agrees,
+and the old code deleted the contents as an ordinary cache. Step two has never been observed by
+this project. An independent audit went looking through `docs/research/evidence/` and found nothing.
+
+**What is measured, and is not this.** The ordinary-state ownership and mode of that path —
+`755 root:admin` — is recorded in `COMPATIBILITY_MATRIX.md` on one configuration. That is the state
+*before* any mount, and it is what makes the helper's guarded walk pass. It says nothing about what
+happens after a volume is removed.
+
+**Adjacent, and not a substitute.** E9 recorded CoreSimulator rebuilding a `Devices/` skeleton after
+a **service restart** — different path, different trigger. `e6-software-unmount.sh` records whether
+a plain `/Volumes/<name>` directory appears after a vault unmount — that is the mount-point
+directory under `/Volumes`, not a cache path inside `/Library/Developer`. Neither answers this.
+
+**What turns on the answer, stated precisely so it is not over-read.** Nothing about whether the
+#24 guard is correct. If no stub reappears, the path is absent, the verb returns "nothing to do"
+before it ever reads its record, and the composition #24 describes was unreachable by this route.
+**This hypothesis sizes the bug, not the fix.** What it does change is whether a shipped safety
+mechanism is defending against something real, and — if a stub does appear — whether its owner and
+mode are what the guarded walk assumes.
+
+**How it is proven or falsified.** `docs/process/RUNBOOK-E6b-disconnect.md`, in two variants:
+a scripted software unmount (`scripts/experiments/e6b-mount-stub-reappearance.sh`) and a manual
+physical yank. Both are needed — a clean `umount` is not obviously the same event as a surprise
+removal, and assuming they are is the same shortcut this hypothesis exists to avoid. Blocked on
+`sudo` and on hands at the machine. Tracked as issue #29.
+
