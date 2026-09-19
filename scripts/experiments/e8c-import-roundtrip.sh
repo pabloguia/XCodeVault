@@ -299,7 +299,7 @@ cleanup() {
 
   # Two identifiers, two namespaces — the previous rewrite collapsed them and would have passed the
   # wrong one to `runtime delete`. `simctl create` wants the SimRuntime.* identifier; the CLI's
-  # `runtime delete` wants the runtime IMAGE UUID (M2Commands.swift: "UUID from runtime list"),
+  # `runtime delete` wants the runtime IMAGE UUID (RuntimeCommands.swift: "UUID from runtime list"),
   # which comes from `simctl runtime list -j` — a different command, keyed by that UUID.
   IMG_UUID=$(xcrun simctl runtime list -j 2>/dev/null | /usr/bin/python3 -c \
 'import json,sys

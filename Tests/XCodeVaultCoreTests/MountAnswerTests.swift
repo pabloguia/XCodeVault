@@ -98,7 +98,12 @@ final class MountAnswerTests: XCTestCase {
     private static let negatedReadAllowlist: [String: String] = [
         // Diagnostics. `.undetermined` raises the finding rather than suppressing it, and
         // over-reporting is the safe direction for a rule that only proposes.
-        "Doctor.swift": "diagnostic — over-reports on .undetermined",
+        //
+        // `Doctor.swift` was on this list until issue #11 moved the CoreSimulator rules into
+        // `Doctor+CoreSimulator.swift`. The staleness assertion below caught that in the same run
+        // that introduced it, which is the whole reason it exists: an allowlist entry for a file
+        // that no longer contains the thing it exempts is an exemption nobody is reading.
+        "Doctor+CoreSimulator.swift": "diagnostic — over-reports on .undetermined",
         "Doctor+Vault.swift": "diagnostic — over-reports on .undetermined",
         // Double negation: the function returns "is NOT on a mounted volume", and both callers
         // turn that into a refusal. `.undetermined` therefore refuses. Documented at its :112.

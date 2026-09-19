@@ -47,9 +47,19 @@ jobs:
         # missing; the step after the tests says whether anything was actually skipped.
         run: bash scripts/ci-environment-assertions.sh
       - name: Unit tests
+        # `tail -60` alone hid a real failure on 2026-09-19: with 363 tests, XCTest prints the
+        # failing assertion where it happens and the per-suite summaries afterwards, so the last
+        # sixty lines were sixty "Executed N tests, 0 failures" lines and the one line naming the
+        # failure had scrolled off. CI said "1 failure" and would not say which — the log has to
+        # answer that or the run is only a bell.
         run: |
           set -o pipefail
-          swift test 2>&1 | tee "$RUNNER_TEMP/test.log" | tail -60
+          swift test 2>&1 | tee "$RUNNER_TEMP/test.log" | tail -60 || {
+            echo "::group::Failing assertions"
+            grep -E 'error: -\[|XCTAssert.*failed|XCTSkip' "$RUNNER_TEMP/test.log" || echo "(no assertion lines found; see the full log artifact)"
+            echo "::endgroup::"
+            exit 1
+          }
       - name: No tests were skipped
         # The committed baseline is zero, measured on 2026-09-18. This reads what the suite did
         # rather than what the environment can do, so a skip introduced by a test gating on

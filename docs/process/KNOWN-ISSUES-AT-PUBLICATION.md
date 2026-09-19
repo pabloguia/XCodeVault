@@ -185,11 +185,25 @@ needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor
 
 ### Structural findings with named seams
 
-- `Doctor.swift` (1,025 lines) has a real two-reasons-to-change seam at lines 471-941: the
-  CoreSimulator rules are versioned by *Apple's* release schedule, everything else by this
-  project's. `Doctor+Vault.swift` already proves the extension-in-its-own-file pattern works.
-- `MigrationEngine.swift` (839 lines) has one at 660-839: journal forensics that migrate nothing and
-  read only `[JournalEntry]`. `abortDisposition` is already near-pure over its input.
+- ~~`Doctor.swift` (1,025 lines) has a real two-reasons-to-change seam at lines 471-941~~ —
+  **split 2026-09-19** (issue #11). The five CoreSimulator rules are now
+  `Doctor/Doctor+CoreSimulator.swift`, following the shape `Doctor+Vault.swift` established;
+  `Doctor.swift` is 573 lines. `checkPerDeviceRegenerables` is arguably also Apple-versioned and was
+  deliberately left behind: moving it would have made the split something other than the boundary
+  the issue stated in advance, and a structural move is only verifiable against a stated boundary.
+- ~~`MigrationEngine.swift` (839 lines) has one at 660-839~~ — **split 2026-09-19** (issue #12) into
+  `Migration/MigrationJournalForensics.swift`; the engine is 901 lines.
+
+  **The boundary moved, and that is the finding worth keeping.** The issue described a contiguous
+  tail in an 839-line file. The file had grown to 1,094 lines and `abort` — which calls `removeItem`
+  — now sits *between* `abortDisposition` and the two read-only journal queries at the end. Taking
+  the contiguous range would have carried a deletion path into a file named for forensics, which is
+  the opposite of the property the split exists to create. What moved is the set the issue's
+  *description* names: reads only `[JournalEntry]`, migrates nothing.
+
+  Both splits were proved behaviour-preserving by the method `REVIEW-2026-09-17.md` §S2 prescribes —
+  the test-name list captured before and after and diffed to empty (363 either side), the suite
+  re-run, and every moved function byte-identical to its previous text.
 - ~~Four injection seams are missing, each blocking a specific test.~~ **Five mount-point guards
   were unpinned; all five fixed 2026-09-18** (issue #13) — and **not by adding seams**, which is
   the useful part.
@@ -255,7 +269,7 @@ needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor
 - ~~The `runtime offload` transaction lives in an executable target no test can import.~~
   **Fixed 2026-09-18** (issue #14). The policy moved to `RuntimeOperations.preflightOffload` and
   `offload`, matching the shape `preflightExport`/`preflightImport`/`delete` already used, leaving
-  `M2Commands.swift` as argument parsing and presentation. Three seams — `isMountPoint`,
+  `RuntimeCommands.swift` (then `M2Commands.swift`) as argument parsing and presentation. Three seams — `isMountPoint`,
   `listLibrary`, `imageIsReadable` — let the guards run without a real multi-gigabyte image, and
   all four are now pinned by mutation, along with both journal transitions and the failure path.
 
@@ -344,10 +358,25 @@ whose header calls it an evidence ledger. Evidence is append-only, so these are 
 
 ### Naming
 
-`M2Commands.swift` and `M3Commands.swift` are named for a milestone scheme that appears nowhere in
-`README.md`, `CONTRIBUTING.md`, `CLAUDE.md` or `AGENTS.md` — the docs say "Phase 0…6". The code's
-vocabulary is not recoverable from the repository. Renaming by content is cheap and internal; it was
-left because it would collide with the structural splits above, which should happen first.
+~~`M2Commands.swift` and `M3Commands.swift` are named for a milestone scheme that appears nowhere in
+`README.md`, `CONTRIBUTING.md`, `CLAUDE.md` or `AGENTS.md`~~ — **renamed 2026-09-19** (issue #21),
+after the two structural splits it was waiting on, so the names landed on the final shape rather
+than an intermediate one.
+
+Renamed by content, following the convention `BenchCommand.swift` already established in the same
+directory — one top-level command per file: `CleanCommand.swift`, `RuntimeCommands.swift`,
+`LocationsCommands.swift`, `JournalCommand.swift`, `VaultCommands.swift`,
+`MigrationCommands.swift`. That is a larger change than the rename the issue asked for, and the
+reason is that no single accurate name exists for a file holding `clean`, `runtime` and `locations`:
+naming it for all three is the filename admitting it is three files.
+
+The sibling finding in the same issue — experiment IDs appearing in `--help` with no pointer to
+where they are defined — was already fixed: `XCodeVaultCTL.swift`'s discussion text names
+`docs/architecture/EXPERIMENTS.md`.
+
+Historical references to the old names survive in `REVIEW-2026-09-17.md` and in `STATUS.md`'s dated
+log, deliberately: those are records of what was true when they were written, and rewriting them
+would be editing evidence.
 
 
 ## Experiment harness and evidence ledger — audited 2026-09-19 (issue #23)

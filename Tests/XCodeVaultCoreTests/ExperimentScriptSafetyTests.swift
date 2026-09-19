@@ -191,6 +191,25 @@ final class ExperimentScriptSafetyTests: XCTestCase {
     /// Deliberately not checked: CoreSimulator runtime and device identifiers, and Apple's APFS
     /// partition-type GUID. `Redaction.swift` says at length why those survive — several findings
     /// are unreadable without them, and none identifies a person.
+    /// Volume names that identify nobody, and would otherwise make this test fail on a machine
+    /// that merely happens to have one mounted.
+    ///
+    /// Added after the first CI run of this test went red. The property being asserted is "no
+    /// evidence file names *this developer's* drive", and a volume called `Data` or `Recovery` is
+    /// a macOS system volume, not a drive anyone named. The committed evidence legitimately
+    /// contains `/Volumes/Data` — it came out of `diskutil list` on the machine that ran the
+    /// experiment — and on a host where a volume by that name is mounted, comparing by name alone
+    /// reads that as a leak of the host's identity. It is not: the string carries no information
+    /// about either machine.
+    ///
+    /// This is a list, and a list is a thing that rots. The residual is stated rather than hidden:
+    /// a developer whose external drive is called `Data` gets no protection from this test. That is
+    /// an acceptable trade for a check whose whole purpose is catching the ordinary case, and the
+    /// redaction in `common.sh` — which substitutes by value at write time — is the real control.
+    static let genericVolumeNames: Set<String> = [
+        "Data", "Preboot", "Recovery", "Update", "VM", "xarts", "iSCPreboot", "Hardware", "Macintosh HD",
+    ]
+
     func testNoEvidenceFileNamesThisMachine() throws {
         let home = NSHomeDirectory()
         let user = NSUserName()
@@ -209,10 +228,14 @@ final class ExperimentScriptSafetyTests: XCTestCase {
                     leaks.append("\(name): contains the account name as a bare word")
                 }
             }
-            // Volume names only in their `/Volumes/` form — the same rule and the same reason:
-            // a boot volume called `MacOS` appears inside every app bundle's `Contents/MacOS`.
-            for volume in (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? [] where !volume.hasPrefix(".") {
-                if text.contains("/Volumes/" + volume) { leaks.append("\(name): names the mounted volume '\(volume)'") }
+            // Volume names only in their `/Volumes/` form — the same rule and the same reason
+            // `Redaction.swift` gives: a boot volume called `MacOS` appears inside every app
+            // bundle's `Contents/MacOS`.
+            for volume in (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? []
+            where !volume.hasPrefix(".") && !Self.genericVolumeNames.contains(volume) {
+                if text.contains("/Volumes/" + volume) {
+                    leaks.append("\(name): names the mounted volume '\(volume)'")
+                }
             }
         }
         XCTAssertTrue(
