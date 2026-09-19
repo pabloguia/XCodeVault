@@ -51,6 +51,31 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         try preflightLocation(path: path, volumes: volumes, xcodeRunning: xcodeRunning, acknowledgeExternalTests: true, warnsAboutTests: false)
     }
 
+    /// Refuses a resolved path that sits under a `/Volumes/<name>` which is not a mount point.
+    ///
+    /// Extracted so the rule can be tested on a literal. The alternative — injecting what a path
+    /// "resolves to" — was tried and was a hole rather than a seam: it is not a relocation of the
+    /// mount question but an off switch, because a resolver that never returns a `/Volumes/`
+    /// prefix makes this branch not run at all. It also sat on the *public* archives entry point,
+    /// the non-regenerable category, while `preflightDerivedData` did not carry it. A reviewer
+    /// pointed out that this is backwards, and that the real resolution — `canonicalize` then
+    /// `realpath`, which is what stops a symlink into `/Volumes` bypassing the check — was then
+    /// itself unpinned, because every test passed a resolver instead of exercising it.
+    ///
+    /// `isMountPoint` stays injectable: staging a plain directory under `/Volumes` needs root,
+    /// which this project refuses to take.
+    static func shadowDataRefusal(resolved: String, isMountPoint: (String) -> Bool = MountStatus.isMountPoint) throws {
+        guard resolved.hasPrefix("/Volumes/"),
+            let name = resolved.split(separator: "/", omittingEmptySubsequences: true).dropFirst().first
+        else { return }
+        let top = "/Volumes/" + name
+        guard isMountPoint(top) else {
+            throw RuntimeOperationError(
+                "\(top) is a plain directory, not a mounted volume — pointing Xcode there would write shadow data to the internal disk. Connect the volume (and check `doctor`) first."
+            )
+        }
+    }
+
     static func preflightLocation(path: String?, volumes: [Volume], xcodeRunning: Bool, acknowledgeExternalTests: Bool, warnsAboutTests: Bool) throws
         -> [String]
     {
@@ -70,14 +95,16 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
                     defer { free(r) }; return String(cString: r)
                 }
             } ?? path
-        if resolved.hasPrefix("/Volumes/"), let name = resolved.split(separator: "/", omittingEmptySubsequences: true).dropFirst().first {
-            let top = "/Volumes/" + name
-            guard MountStatus.isMountPoint(top) else {
-                throw RuntimeOperationError(
-                    "\(top) is a plain directory, not a mounted volume — pointing Xcode there would write shadow data to the internal disk. Connect the volume (and check `doctor`) first."
-                )
-            }
-        }
+        // UNPINNED, knowingly — the call, not the rule.
+        //
+        // `shadowDataRefusal` itself is covered (both directions). Deleting THIS LINE fails no
+        // test, because reaching the refusal through here needs a path that really resolves
+        // under a `/Volumes/<name>` which is not a mount point, and staging one needs root.
+        // That is the same constraint that left this guard with a skipping test in the first
+        // place; extracting the rule moved the untestable part from the whole guard down to one
+        // line, which is progress, not a fix. Said out loud rather than left for the next
+        // mutation run.
+        try shadowDataRefusal(resolved: resolved)
         let fs = MountStatus.filesystem(containing: path)
         if let fs, fs.typeName != "apfs" { w.append("\(path) is on a \(fs.typeName) filesystem; Xcode expects APFS/HFS+ semantics.") }
         let vol = volumes.first { $0.mountPoint == fs?.mountPoint }

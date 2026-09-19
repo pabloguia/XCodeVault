@@ -702,10 +702,12 @@ final class ReviewFixCleanTests: XCTestCase {
 }
 
 final class ReviewFixLocationsTests: XCTestCase {
+    /// The opportunistic version of the rule now covered deterministically by
+    /// `testPointingXcodeAtAnUnmountedVolumesDirectoryIsRefusedDeterministically`. Kept because
+    /// it exercises the *real* `MountStatus` and the real resolution against whatever this
+    /// machine actually has under `/Volumes`, which the seamed test deliberately does not — but
+    /// it is no longer the only thing standing behind the guard, so its `XCTSkip` costs nothing.
     func testRefusesPlainDirectoryUnderVolumes() throws {
-        // /Volumes/<name> that is not a mount point ⇒ shadow-data trap ⇒ refuse. We cannot create
-        // one without root, so exercise the check through a path whose top component is verifiably
-        // not a mount point when such a directory exists; otherwise assert the mount-point rule holds for a real one.
         if let names = try? FileManager.default.contentsOfDirectory(atPath: "/Volumes"),
             let plain = names.first(where: { !MountStatus.isMountPoint("/Volumes/" + $0) && !$0.hasPrefix(".") })
         {
@@ -995,5 +997,146 @@ final class PrePublicationReviewTests: XCTestCase {
         XCTAssertEqual(
             try engine.knownLeftoversAfterForget().map(\.id), [plan.operationID],
             "but the copy must still be named somewhere, or the user is the only record of it")
+    }
+
+    // MARK: - Three mount-point guards that had no test that could fail (issue #13)
+
+    /// `/` is a real mount point on every Mac, exists, and is not a symlink — so all three rules
+    /// below can be reached with the real `MountStatus` and none of them needs an injected
+    /// answer. A first version of this change added seams instead. A reviewer showed that only
+    /// moved the untested mutation: the guard became covered and the line feeding it did not,
+    /// so switching the production call to `{ _ in false }` disabled the refusal on the deletion
+    /// path with the whole suite still green. The seams are gone.
+
+    /// The executor must refuse a mount point, and refuse it before deleting anything. This
+    /// drives `execute` rather than `preflight`, because an earlier version asserted "deletes
+    /// nothing" against a function that contains no deletion code — the assertion could not have
+    /// failed, and the name claimed a property the test did not establish.
+    func testCleanExecutorRefusesAMountPointAndDeletesNothing() throws {
+        let t = TempDir()
+        let dd = t.file("Library/Developer/Xcode/DerivedData/ProjA-abc/Build/a.o", bytes: 4096)
+        let cleanable = (dd as NSString).deletingLastPathComponent.replacingOccurrences(of: "/Build", with: "")
+        let executor = CleanExecutor(
+            journal: Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl")), home: t.path, useTrash: false, isXcodeRunning: { false })
+        func action(_ path: String) -> CleanAction {
+            CleanAction(
+                categoryID: "derivedData", categoryName: "DerivedData", path: path, bytes: 4096, isExperimental: true, risk: .low,
+                requiresRoot: false, notes: [])
+        }
+
+        let result = try executor.execute(CleanPlan(actions: [action(cleanable), action("/")], skipped: [], warnings: []))
+
+        XCTAssertEqual(result.deleted.map(\.path), [cleanable], "the ordinary action must still run, so the refusal is about the mount point")
+        let refusal = try XCTUnwrap(result.failedPairs.first { $0.path == "/" })
+        XCTAssertTrue(refusal.error.contains("is a mount point"), "unexpected: \(refusal.error)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: "/System"), "sanity: the root filesystem is intact")
+    }
+
+    /// The shadow-data trap: pointing Xcode at `/Volumes/<name>` when nothing is mounted there
+    /// writes to a directory on the internal disk that looks like the external drive.
+    ///
+    /// The rule is tested on a literal resolved path. The test that covered it before had to
+    /// hunt for a plain directory some unclean eject had left under `/Volumes` and `XCTSkip`
+    /// when the machine was clean — a guard whose test skips on most machines has no test on
+    /// most machines.
+    func testPointingXcodeAtAnUnmountedVolumesDirectoryIsRefusedDeterministically() throws {
+        XCTAssertThrowsError(
+            try XcodeLocations.shadowDataRefusal(resolved: "/Volumes/VAULT/Archives", isMountPoint: { _ in false })
+        ) { e in
+            XCTAssertTrue("\(e)".contains("not a mounted volume"), "unexpected: \(e)")
+            XCTAssertTrue("\(e)".contains("shadow data"), "the message must say what goes wrong, not just that it refused: \(e)")
+            XCTAssertTrue("\(e)".contains("/Volumes/VAULT"), "and name the volume, not the full path: \(e)")
+        }
+    }
+
+    /// The other side of it, twice over: a genuine mount point must not be refused, and neither
+    /// must a path that is not under `/Volumes` at all. Without the first, the guard would block
+    /// every external archive location — the product's whole purpose.
+    func testTheShadowDataRuleRefusesNothingElse() throws {
+        XCTAssertNoThrow(try XcodeLocations.shadowDataRefusal(resolved: "/Volumes/VAULT/Archives", isMountPoint: { _ in true }))
+        XCTAssertNoThrow(try XcodeLocations.shadowDataRefusal(resolved: "/Users/someone/Archives", isMountPoint: { _ in false }))
+        XCTAssertNoThrow(try XcodeLocations.shadowDataRefusal(resolved: "/Volumes", isMountPoint: { _ in false }), "no volume named at all")
+    }
+
+    /// An ordinary directory passes the whole public preflight.
+    ///
+    /// Named for what it actually asserts. An earlier version of this was called
+    /// `testTheRealResolutionIsUsedByTheProductionPath` and asserted `XCTAssertNoThrow`, which
+    /// is true whether or not `preflightLocation` calls the shadow-data rule at all — a pin that
+    /// pins nothing. Deleting that call still fails no test, and the call site now says so:
+    /// reaching the refusal through the production path needs a real directory under a
+    /// `/Volumes/<name>` that is not a mount point, which needs root.
+    func testAnOrdinaryDirectoryPassesThePublicPreflight() throws {
+        let t = TempDir()
+        let real = t.path + "/archives"
+        try FileManager.default.createDirectory(atPath: real, withIntermediateDirectories: true)
+        XCTAssertNoThrow(try XcodeLocations.preflightArchives(path: real, volumes: [], xcodeRunning: false))
+    }
+
+    /// `abortDisposition` declines a destination that is a mount point. Its own source comment
+    /// said this was "UNPINNED, knowingly" — kept for consistency, with nothing able to fail it.
+    /// The project had already watched an unpinned guard be replaced with `true` and pass every
+    /// gate, which made that comment a standing invitation rather than a reassurance.
+    func testAbortDeclinesAMountPointDestination() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let op = UUID().uuidString
+        try f.journal.record(
+            id: op, kind: .migration, state: .planned, summary: "x", paths: [f.archives, "/"],
+            detail: ["vault": "VU", "phase": "PLAN", "category": "archives", "direction": "externalize"])
+        try f.journal.record(id: op, kind: .migration, state: .failed, summary: "COPY", paths: [f.archives, "/"], detail: ["phase": "COPY"])
+        let entries = try f.journal.entries().filter { $0.id == op }
+
+        let d = engine.abortDisposition(entries: entries, operationID: op)
+
+        guard case .declined(let reason) = d else { return XCTFail("a mount-point destination must be declined, got \(d)") }
+        XCTAssertTrue(reason.contains("mount point"), "and declined for THAT reason, not another: \(reason)")
+    }
+
+    /// The source side of the same rule. A review pointed out that pinning the destination guard
+    /// and leaving this one is half a job: `preflightSource` is what stands between a migration
+    /// and copying *out of* a mounted volume, and `/` reaches it exactly as it reaches the others.
+    func testMigrationRefusesAMountPointAsItsSource() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let archives = try XCTUnwrap(StorageCatalog.category("archives"))
+        XCTAssertThrowsError(try engine.preflightSource("/", category: archives)) { e in
+            XCTAssertTrue("\(e)".contains("is a mount point"), "unexpected: \(e)")
+        }
+        // Control: an ordinary directory of the right category is accepted, so the refusal above
+        // is the mount rule and not the containment check below it.
+        XCTAssertNoThrow(try engine.preflightSource(f.archives, category: archives))
+    }
+
+    /// The planner skips a scanned item that is a mount point. This one needed no root and no
+    /// `/`: `isMountPoint` is a plain `Bool` on `StorageItem`, so the rule was a one-line test
+    /// that nobody had written.
+    func testThePlannerSkipsAScannedMountPointRatherThanPlanningIt() throws {
+        let t = TempDir()
+        let dir = t.dir("Library/Developer/Xcode/DerivedData/ProjA-abc")
+        func item(_ mounted: Bool) -> StorageItem {
+            StorageItem(
+                categoryID: "derivedData", path: dir, exists: true, isSymlink: false, isMountPoint: mounted,
+                usage: DiskUsage(
+                    allocatedBytes: 4096, logicalBytes: 4096, fileCount: 1, directoryCount: 1,
+                    symlinkCount: 0, skippedMountPoints: [], unreadable: []),
+                volumeMountPoint: "/", onBootVolume: true)
+        }
+        func report(_ items: [StorageItem]) -> ScanReport {
+            ScanReport(
+                generatedAt: Date(), toolVersion: "t", catalogVersion: "c",
+                host: HostEnvironment(
+                    macOSVersion: "26.6", macOSBuild: "x", architecture: "arm64", homeDirectory: t.path,
+                    dataVolumeFreeBytes: 1, dataVolumeTotalBytes: 2, userName: "t", isRoot: false),
+                xcodes: [], runtimes: [], devices: [], volumes: [], items: items, summary: ScanSummary(), warnings: [])
+        }
+        let planner = CleanPlanner(home: t.path)
+
+        let planned = planner.plan(report: report([item(false)]))
+        XCTAssertEqual(planned.actions.map(\.path), [dir], "precondition: this item is plannable when it is not a mount point")
+
+        let skipped = planner.plan(report: report([item(true)]))
+        XCTAssertTrue(skipped.actions.isEmpty, "a mount point must never be planned for deletion")
+        XCTAssertTrue(skipped.skipped.contains { $0.contains("is a mount point") }, "and the reason must say so: \\(skipped.skipped)")
     }
 }

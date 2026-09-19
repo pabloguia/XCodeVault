@@ -287,6 +287,13 @@ public struct CleanExecutor: Sendable {
         var st = stat()
         guard lstat(a.path, &st) == 0 else { throw CleanError("\(a.path) no longer exists") }
         guard (st.st_mode & S_IFMT) != S_IFLNK else { throw CleanError("\(a.path) is a symlink — refusing") }
+        // No seam. `/` is a real mount point on every Mac, exists, and is not a symlink, so this
+        // rule is reachable with the real `MountStatus` and needs no injectable answer. An
+        // earlier version added one; a reviewer showed it had only moved the untested mutation,
+        // because flipping the production call to `{ _ in false }` then disabled the refusal on
+        // the deletion path with the whole suite green. There is no parameter to supply here now;
+        // `scripts/helper-invariants.sh` guards the one seam that remains, on
+        // `XcodeLocations.shadowDataRefusal`.
         guard !MountStatus.isMountPoint(a.path) else { throw CleanError("\(a.path) is a mount point — refusing") }
         guard st.st_uid == getuid() else { throw CleanError("\(a.path) is not owned by the current user — refusing") }
         // The path must be inside a catalog template for its category, by canonical path (no `..`, no interior symlinks).

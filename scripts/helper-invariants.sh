@@ -98,6 +98,80 @@ for f in $helper_files; do
         | grep -vE '[[:<:]]func +remove' || true)
 done
 
+# Lines in Sources/ that CALL a seam-bearing function and supply a mount answer.
+# Comment lines are dropped first: a doc comment naming the parameter is not a call.
+# A failure here is a violation, not a pass — the first version of this helper had an unbalanced
+# pattern, printed a grep error, and still exited 0.
+code_of_tree() {
+    local fn=$1 out rc
+    out=$(grep -rn "${fn}(" Sources/ 2>&1); rc=$?
+    if [ $rc -gt 1 ]; then
+        echo "helper invariants: the seam scan could not run: $out" >&2
+        exit 1
+    fi
+    printf '%s\n' "$out" \
+        | grep -v -E ':[0-9]+:[[:space:]]*(//|\*)' \
+        | grep -v -E "func[[:space:]]+${fn}\(" \
+        | grep -E 'isMountPoint[[:space:]]*:' || true
+}
+
+# ---- test seams on safety guards -------------------------------------------------------------------
+# A guard that takes its primitive from an injectable parameter is only as good as the line that
+# feeds it. Three seams were added on 2026-09-18 so mount-point refusals could be tested, and a
+# review showed they had merely moved the untested mutation: flipping the PRODUCTION call site to
+# `{ _ in false }` disabled the refusal on the deletion path with the whole suite green. It reads
+# as plumbing, which is what makes it worse than editing the guard.
+#
+# The seams were removed — `/` is a real mount point, so the rules are reachable with the real
+# primitive — and this keeps the one that remains from being fed from production.
+#
+# THE CEILING, stated because the first version of this rule claimed more than it delivered. It
+# lists the functions that HAVE a mount-answer parameter and forbids production code supplying it.
+# It is not a general ban on the identifier: `isMountPoint` is also a plain `Bool` property on
+# `ScanItem` and a local in `Scanner`, and a rule broad enough to catch every spelling of an
+# injected answer also caught those. A new seam parameter must be added to this list by hand —
+# which is the point, since adding one should be a deliberate act.
+seam_bearing_functions='shadowDataRefusal'
+seam_violations=0
+while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    case "$hit" in
+        *"isMountPoint: isMountPoint"*) continue ;;  # self-forwarding, not a supplied answer
+        *"-> Bool"* | *"->Bool"*) continue ;;        # the declaration itself
+    esac
+    printf 'VIOLATION  %s\n' "$hit" >&2
+    seam_violations=$((seam_violations + 1))
+done < <(code_of_tree "$seam_bearing_functions" || true)
+if [ "$seam_violations" -gt 0 ]; then
+    echo "helper invariants: $seam_violations safety-guard seam(s) supplied from production code" >&2
+    echo "  A mount-point answer must come from the real primitive outside tests." >&2
+    exit 1
+fi
+
+# ---- safety calls, not just safety symbols ---------------------------------------------------------
+# The negative rule above stops a guard being fed a lie. It does nothing about a guard that is
+# simply no longer called, and that is this script's own round-one lesson, recorded at the top of
+# this file: the authorization rule required the gate's SYMBOL and not its CALL SITES, so deleting
+# all three calls left CI green.
+#
+# `shadowDataRefusal` is the case that needs it. The rule itself is tested both directions, but
+# deleting the call from `preflightLocation` fails no test: reaching the refusal for real needs a
+# directory under a `/Volumes/<name>` that is not a mount point, and `/Volumes` is root-owned.
+required_call="Sources/XCodeVaultCore/Locations/XcodeLocations.swift:shadowDataRefusal("
+f=${required_call%%:*}; needle=${required_call#*:}
+if [ ! -f "$f" ]; then
+    echo "helper invariants: $f is missing; the required-call rule cannot be evaluated" >&2
+    exit 1
+fi
+if ! grep -q 'func shadowDataRefusal(' "$f"; then
+    echo "helper invariants: $f no longer declares shadowDataRefusal; update this rule deliberately" >&2
+    exit 1
+fi
+# The declaration itself matches the needle, so require a second occurrence: the call.
+if [ "$(grep -c "$needle" "$f")" -lt 2 ]; then
+    violation "$f — preflightLocation no longer calls shadowDataRefusal(); the shadow-data rule is orphaned" "$needle"
+fi
+
 # ---- peer validation -----------------------------------------------------------------------------
 # The subject is located, not assumed. Round two defeated this by moving ListenerDelegate into a
 # sibling file; a rule keyed to a filename silently stopped applying.

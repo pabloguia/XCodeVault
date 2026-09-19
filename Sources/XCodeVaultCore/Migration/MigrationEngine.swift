@@ -796,12 +796,37 @@ public struct MigrationEngine: Sendable {
         // Also here rather than at the deletion site, for the same reason: a refusal `abort` makes
         // that the disposition does not know about is a row where the two verbs disagree again.
         //
-        // UNPINNED, knowingly. Moving this back out of the disposition fails no test, because
-        // nothing distinguishes it: `MountStatus.isMountPoint` reads the real mount table and the
-        // fixtures cannot make a temp directory into a mount point, while every path that could be
-        // one fails the containment checks above it first. It is here for consistency — one place
-        // decides — and not because a test proves it must be. Said out loud rather than left for
-        // someone to discover with a mutation run.
+        // This guard is load-bearing, and the comment it replaces said the opposite.
+        //
+        // That comment read: UNPINNED knowingly — here for consistency, one place decides, not
+        // because a test proves it must be; fixtures cannot make a temp directory into a mount
+        // point, "and every path that could be one fails the containment checks first". The
+        // last clause was wrong twice over. The containment checks run *after* this guard, in
+        // the `switch` below — and they do not exclude mount points anyway:
+        //
+        //   `.externalize` only asks `PathSafety.isContained(destination, in: vaultDir)`, and a
+        //   disk image mounted under `/Volumes/VAULT/XCodeVault/…` is contained. This project
+        //   attaches images itself.
+        //
+        //   `.restore` only asks `atOwnHome`, and a volume mounted at the category's canonical
+        //   path is at its own home. That is the canonical-mount strategy ADR-0004 demoted but
+        //   did not delete.
+        //
+        // Containment and mount-ness are orthogonal — `/System/Volumes/Data` is both a mount
+        // point and contained in `/System/Volumes`. So nothing else refuses first, and `abort`
+        // reaching `.cleanable` calls `removeItem`, which recurses across a mount boundary.
+        // This guard is the only thing between a mount point and a recursive delete of a
+        // mounted volume's contents.
+        //
+        // A reviewer caught the first repair of this comment asserting "it still holds" while
+        // correcting the ordering that was its only support — the wrong claim promoted from an
+        // excuse for having no test to a standing assertion. What is kept from the original is
+        // "one place decides": the rule lives here rather than at each caller.
+        //
+        // Pinned as of 2026-09-18 (issue #13): `/` is a real mount point, exists, and is not a
+        // symlink, so this is reachable with the real `MountStatus`. A first attempt injected
+        // the answer instead, which merely moved the untested mutation to the line feeding the
+        // guard, where it reads as plumbing.
         guard !MountStatus.isMountPoint(destination) else {
             return .declined("\(destination) is a mount point; refusing.")
         }

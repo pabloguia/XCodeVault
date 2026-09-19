@@ -173,10 +173,68 @@ needs the same verb reworked onto `mkdirat`/`openat` against a parent descriptor
   project's. `Doctor+Vault.swift` already proves the extension-in-its-own-file pattern works.
 - `MigrationEngine.swift` (839 lines) has one at 660-839: journal forensics that migrate nothing and
   read only `[JournalEntry]`. `abortDisposition` is already near-pure over its input.
-- Four injection seams are missing, each blocking a specific test: `isMountPoint` in
-  `MigrationEngine` (the source already says "UNPINNED, knowingly" beside it), the free-space guard,
-  `XcodeLocations.preflightLocation`'s shadow-data check, and `CleanExecutor.preflight`'s
-  nested-mount-point guard.
+- ~~Four injection seams are missing, each blocking a specific test.~~ **Five mount-point guards
+  were unpinned; all five fixed 2026-09-18** (issue #13) — and **not by adding seams**, which is
+  the useful part.
+
+  The issue named three of them. A reviewer found two more of the same shape while checking the
+  fix — `MigrationEngine.preflightSource` (the *source* side of the rule the change had just
+  pinned on the destination side) and `CleanPlanner`'s skip of a scanned mount point, which
+  needed neither root nor the `/` trick because `isMountPoint` is a plain `Bool` on
+  `StorageItem`. A third, `Doctor+Vault`'s shadow-data *detection*, remains unpinned: it needs a
+  path that exists under a `/Volumes/<name>` which is not a mount point, the same root-only
+  staging as below. It also duplicates the `/Volumes/<name>` parse that
+  `XcodeLocations.shadowDataRefusal` now owns, which is the "decided twice" shape
+  `MUTATION-TESTING-NOTES.md` warns about.
+
+  The first attempt added `isMountPoint` seams to `MigrationEngine.abortDisposition` and
+  `CleanExecutor.preflight`, and both an `isMountPoint` and a `resolve` seam to
+  `XcodeLocations.preflightLocation`. A review showed the first two had only moved the untested
+  mutation: flipping the *production call site* to `{ _ in false }` disabled the mount-point
+  refusal on the deletion path with the whole suite green — the guard covered, the line feeding
+  it not, one line further from the guard where it reads as plumbing. It is the same shape as an
+  owner knob removed from the privileged helper for the same reason. The `resolve` seam was
+  worse: public API on the *archives* entry point (the non-regenerable category, while
+  `preflightDerivedData` did not carry it), and not a relocation of the question but an off
+  switch, since a resolver that never returns a `/Volumes/` prefix makes the branch not run.
+
+  All three seams are gone. `/` is a real mount point, exists and is not a symlink, so the two
+  mount rules are reachable with the real `MountStatus`; the shadow-data rule was extracted as
+  `XcodeLocations.shadowDataRefusal(resolved:isMountPoint:)` and is tested on a literal, so the
+  real `canonicalize`-then-`realpath` still runs in production. Removing any of the three guards
+  now fails a named test, and `scripts/helper-invariants.sh` refuses a production caller that
+  supplies a mount answer to `shadowDataRefusal` — the one seam parameter left in the tree —
+  positive-controlled against a closure literal, a named function reference and a space before
+  the colon, the last two of which defeated the rule's first version. The rule is scoped to
+  named seam-bearing functions rather than to the identifier, because `isMountPoint` is also a
+  plain `Bool` on `ScanItem`; a broad rule flagged that too. Adding a new seam parameter means
+  adding it to that list by hand, which is the intent.
+
+  A second rule requires `preflightLocation` to *call* `shadowDataRefusal`. That is this
+  script's own round-one lesson — it once required the authorization gate's symbol rather than
+  its call sites, so deleting all three calls left CI green — and it is what closes the gap
+  below as far as a control can.
+
+  **Still unpinned, and labelled at the line:** the *call* to `shadowDataRefusal` from
+  `preflightLocation`. Deleting it fails no test, because reaching the refusal through the
+  production path needs a real directory under a `/Volumes/<name>` that is not a mount point,
+  and staging one needs root. Extracting the rule moved the untestable part from the whole guard
+  down to one line. That is progress, not a fix, and the line says so.
+
+  The fourth — the free-space guard — was never missing a seam. `Doctor.checkFreeSpace(host:)`
+  takes a `HostEnvironment` by value, so there is no primitive to inject, and
+  `testLowFreeSpaceSeverity` already pinned all three bands; mutating the 40 GB threshold fails
+  it. The entry above was wrong about it, which is the second time a finding in this document has
+  been inverted (see the note on issue #23).
+
+  Two things worth keeping from the work. `XcodeLocations` needed a second seam — the existence
+  check runs on the path the caller gave while the `/Volumes` rule runs on what it *resolves to*,
+  so controlling only the mount answer left the branch unreachable from a temp directory. And the
+  test that had covered that rule, `testRefusesPlainDirectoryUnderVolumes`, only ran when the
+  machine happened to have a plain directory left under `/Volumes` by an unclean eject; it
+  `XCTSkip`ped otherwise. A guard whose test skips on most machines has no test on most machines.
+  That skip site is one of the ones issue #18 is about; it is now backed by a deterministic test
+  rather than replaced by one.
 - ~~The `runtime offload` transaction lives in an executable target no test can import.~~
   **Fixed 2026-09-18** (issue #14). The policy moved to `RuntimeOperations.preflightOffload` and
   `offload`, matching the shape `preflightExport`/`preflightImport`/`delete` already used, leaving
