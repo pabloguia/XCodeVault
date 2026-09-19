@@ -89,7 +89,25 @@ public struct MigrationEngine: Sendable {
     /// The volume identity of the filesystem containing a path. Injected for the same reason
     /// `isMountPoint` is injected elsewhere in this codebase: a test's vault is a directory in
     /// `/tmp` with an invented UUID, and the real lookup correctly answers with the boot volume's.
-    public var volumeUUIDAt: @Sendable (String) -> String?
+    /// `let`, not `var` (issue #27). It is already settable through `init`, so the `var` bought
+    /// nothing a test needs and cost a second surface: any caller of a shipped type could assign
+    /// `{ _ in nil }` — which makes every volume unreadable and refuses everything — or a stub that
+    /// always matches, which disables the identity comparison this engine's disconnect safety rests
+    /// on, with the whole suite green.
+    ///
+    /// `Doctor.volumeUUIDAt` was converted for the same reason while closing #26, and the comment
+    /// there named this one as the inconsistent sibling. Two seams of the same shape in the same
+    /// module with opposite mutability is how the wrong one gets copied later.
+    ///
+    /// **This closes one seam of several, and the others are larger.** A reviewer was right to push
+    /// back on an earlier version of this comment, which implied the engine's seams were now
+    /// immutable. They are not: `verifier`, `afterCopy`, `afterRenameAside`, `runner`, `journal`,
+    /// `home` and `isXcodeRunning` are all still `public var` on this struct. `verifier` is the
+    /// bigger lever by some distance — assigning a stub to it disables verification wholesale,
+    /// which is a stronger move than making one lookup lie. They are not converted here because two
+    /// of them are assigned post-construction by existing tests, so that is a change with its own
+    /// churn and its own review. Issue #31.
+    public let volumeUUIDAt: @Sendable (String) -> String?
 
     public init(
         runner: CommandRunning = ProcessCommandRunner(), journal: Journal = Journal(), verifier: VaultVerifier = VaultVerifier(),

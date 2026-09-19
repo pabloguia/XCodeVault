@@ -62,8 +62,7 @@ is done. The post-publication issue backlog replaced it._
    entire privileged helper — including both fixes above — is unreachable in a shipped artifact
    (that is M4, below, and it is the largest untested surface in the project); the
    `mayTakeOwnership` call site in `doCreateVaultDirectory` still needs a real mounted volume to
-   pin; `MigrationEngine.volumeUUIDAt` is a `public var` while `Doctor`'s is now a `let`, for the
-   reason recorded at `Doctor.swift`; and E6's disconnect half still needs hands on the Mac, which
+   pin; and E6's disconnect half still needs hands on the Mac, which
    is what would turn issue #24's central premise from inferred into observed.
 2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
    the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the

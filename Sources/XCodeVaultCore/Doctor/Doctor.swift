@@ -51,11 +51,11 @@ public struct Doctor: Sendable {
     /// any caller could assign `{ _ in nil }` (refuse everything) or a matching stub (disable the
     /// identity comparison) with the whole suite green. Set once, through `init`.
     ///
-    /// The argument indicts its own sibling, and saying so here is cheaper than letting the next
-    /// reader find the inconsistency and wonder which one is deliberate:
-    /// `MigrationEngine.volumeUUIDAt` is still a `public var`. Converting it means changing the
-    /// tests that assign it, in code that moves user data, so it belongs in a change that carries
-    /// the migration-safety review rather than riding along with a doctor fix.
+    /// The argument indicted its own sibling, which is why this comment used to name
+    /// `MigrationEngine.volumeUUIDAt` as still being a `public var`. It was converted under issue
+    /// #27, with the migration-safety review that change needed. The rest of that struct's seams
+    /// are still mutable and are tracked as issue #31 — `verifier` in particular is a larger lever
+    /// than either of these two.
     public let volumeUUIDAt: @Sendable (String) -> String?
     public init(
         home: String = NSHomeDirectory(), runner: CommandRunning = ProcessCommandRunner(),

@@ -256,7 +256,12 @@ final class MigrationEngineTests: XCTestCase {
             try registry.save([VaultVolume(volumeUUID: "VU", volumeName: "VAULT", lastMountPoint: vaultMount, registeredAt: Date(), sentinelID: "tok")])
         }
         /// A verifier that reports the vault as verified at `vaultMount` (bypassing the real mount check, which temp dirs cannot satisfy).
-        func engine(afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil) -> MigrationEngine {
+        /// `volumeUUIDAt` is a parameter rather than something a caller assigns afterwards (issue
+        /// #27): the engine's seam is `let`, so the answer has to be chosen when the engine is built.
+        func engine(
+            afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil,
+            volumeUUIDAt: @escaping @Sendable (String) -> String? = { _ in "VU" }
+        ) -> MigrationEngine {
             let mp = vaultMount
             let vol = Volume(
                 deviceNode: "/dev/disk98s1", volumeName: "VAULT", volumeUUID: "VU", mountPoint: mp, filesystemPersonality: "APFS", filesystemType: "apfs",
@@ -267,8 +272,8 @@ final class MigrationEngineTests: XCTestCase {
                 afterCopy: afterCopy,
                 // The fixture's "vault" is a directory in /tmp, so the real lookup answers with the
                 // boot volume's UUID — correctly, which is the whole point of the check under test.
-                // Tests that want the volume to *vanish* override this with a different answer.
-                volumeUUIDAt: { _ in "VU" })
+                // Tests that want the volume to *vanish* pass a different answer above.
+                volumeUUIDAt: volumeUUIDAt)
         }
     }
 
@@ -516,8 +521,7 @@ final class MigrationEngineTests: XCTestCase {
         let f = try Fixture()
         let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
         // Same fixture, but the volume under the destination is now somebody else's.
-        var vanished = f.engine()
-        vanished.volumeUUIDAt = { _ in "SOME-OTHER-VOLUME" }
+        let vanished = f.engine(volumeUUIDAt: { _ in "SOME-OTHER-VOLUME" })
         XCTAssertThrowsError(try vanished.copyAndVerify(plan)) { error in
             XCTAssertTrue("\(error)".contains("not mounted"), "\(error)")
         }
@@ -530,9 +534,12 @@ final class MigrationEngineTests: XCTestCase {
         let f = try Fixture()
         let plan = try f.engine().planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
         let copied = Flag()
-        var engine = f.engine(afterCopy: { _ in copied.set() })
-        // Answers truthfully until the copy has happened, then reports a different volume.
-        engine.volumeUUIDAt = { _ in copied.isSet ? "SOME-OTHER-VOLUME" : "VU" }
+        // Answers truthfully until the copy has happened, then reports a different volume. The
+        // closure reads `copied` when it is called, not when it is built, so supplying it at
+        // construction changes nothing about what this stages.
+        let engine = f.engine(
+            afterCopy: { _ in copied.set() },
+            volumeUUIDAt: { _ in copied.isSet ? "SOME-OTHER-VOLUME" : "VU" })
         XCTAssertThrowsError(try engine.copyAndVerify(plan)) { error in
             XCTAssertTrue("\(error)".contains("not mounted"), "\(error)")
         }
