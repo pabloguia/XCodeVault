@@ -38,7 +38,7 @@ final class AppModel {
             () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
             let report = XCodeVaultCore.Scanner().scan()
             let doctor = Doctor()
-            let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
+            let findings = doctor.diagnoseAll(report: report)
             let checks = (try? VaultVerifier().checkAll()) ?? []
             let plan = CleanPlanner().plan(report: report)
             let journal = (try? Journal().entries()) ?? []

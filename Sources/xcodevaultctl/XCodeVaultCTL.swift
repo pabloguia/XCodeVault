@@ -71,7 +71,7 @@ struct Report: ParsableCommand {
     func run() throws {
         let report = XCodeVaultCore.Scanner().scan()
         let doctor = XCodeVaultCore.Doctor()
-        let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
+        let findings = doctor.diagnoseAll(report: report)
         // Plain `replacingOccurrences` was both weaker and more destructive than it looked: it had
         // no word boundary on the account name (an account called `dev` turned `devicectl` into
         // `<user>icectl`), no anchor on the home, and nothing at all for volume labels or volume
@@ -91,7 +91,7 @@ struct DoctorCommand: ParsableCommand {
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: false).scan()
         let doctor = XCodeVaultCore.Doctor()
-        let findings = doctor.diagnose(report: report) + doctor.diagnoseVault(report: report)
+        let findings = doctor.diagnoseAll(report: report)
         try emit(findings, json: global.json) { TextRenderer.findings(findings) }
         if findings.contains(where: { $0.severity >= .error }) { throw ExitCode(2) }
     }
