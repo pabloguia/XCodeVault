@@ -20,6 +20,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   `swift format lint --strict`, `scripts/helper-invariants.sh` and `scripts/check-doc-mirror.sh`
   are the four gates, and CI runs them on `macos-15` and `macos-26`. A number written here goes
   stale within a day; the commit that changed it is the honest record.
+- `scripts/preflight.sh` runs all of them, in CI's order, before you push. It exists because CI was
+  red for four pushes on `swift format lint --strict` while three of the four gates had been run
+  locally and the tree was believed green — the cheapest check in the set was the one nobody ran.
 
 ## Blocked / pending — manual (ask the user)
 

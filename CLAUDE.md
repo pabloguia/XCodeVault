@@ -55,6 +55,8 @@ daemon's logic, in a library so it is testable) + `Sources/XCodeVaultHelper` (ro
 bootstrap, allowlisted verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
 `Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
 `scripts/helper-invariants.sh` / `scripts/check-doc-mirror.sh` (the two controls that run in CI) ·
+`scripts/preflight.sh` (runs every CI gate locally, in CI's order — run it before pushing; three of
+the four gates passing is not "the gates passed") ·
 `packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) · `.swift-format`
 (4-space indent, 160 cols). Build with `swift build`, test with `swift test`.
 
