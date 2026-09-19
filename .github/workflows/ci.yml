@@ -56,7 +56,11 @@ jobs:
           set -o pipefail
           swift test 2>&1 | tee "$RUNNER_TEMP/test.log" | tail -60 || {
             echo "::group::Failing assertions"
-            grep -E 'error: -\[|XCTAssert.*failed|XCTSkip' "$RUNNER_TEMP/test.log" || echo "(no assertion lines found; see the full log artifact)"
+            # `-A 12`: an XCTAssert message can be multi-line, and the interesting part is often
+            # *below* the first line. A failure whose message listed which files tripped it showed
+            # only the header "These name this machine:" and then the group ended — three pushes were
+            # spent re-running CI to learn something the log already had and was cutting off.
+            grep -A 12 -E 'error: -\[|XCTAssert.*failed|XCTSkip' "$RUNNER_TEMP/test.log" || echo "(no assertion lines found; see the full log artifact)"
             echo "::endgroup::"
             exit 1
           }

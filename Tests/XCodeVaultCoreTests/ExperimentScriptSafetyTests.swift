@@ -206,37 +206,63 @@ final class ExperimentScriptSafetyTests: XCTestCase {
     /// a developer whose external drive is called `Data` gets no protection from this test. That is
     /// an acceptable trade for a check whose whole purpose is catching the ordinary case, and the
     /// redaction in `common.sh` — which substitutes by value at write time — is the real control.
+    /// Account names that belong to a machine nobody owns.
+    ///
+    /// Same shape as `genericVolumeNames`, added for the same reason and after the same symptom: CI
+    /// went red on committed evidence that legitimately contains the phrase `swift test
+    /// --scratch-path (second runner)`, because the GitHub Actions account is called `runner` and the
+    /// word-bounded match fired. The property under test is "no evidence file names *this
+    /// developer's* machine", and `runner` names a disposable VM — the string carries no information
+    /// about either machine, which is exactly the argument the volume list already makes.
+    ///
+    /// The residual, stated rather than hidden: a developer whose account is called `ci` or `admin`
+    /// gets no protection from this test. That is the same acceptable trade, and the redaction in
+    /// `common.sh`, which substitutes by value at write time, remains the real control.
+    static let genericAccountNames: Set<String> = [
+        "runner", "runneradmin", "ci", "build", "builder", "jenkins", "travis", "circleci", "admin", "administrator",
+    ]
+
     static let genericVolumeNames: Set<String> = [
         "Data", "Preboot", "Recovery", "Update", "VM", "xarts", "iSCPreboot", "Hardware", "Macintosh HD",
     ]
 
+    /// The rule, as a function of its inputs rather than of the machine running it.
+    ///
+    /// Extracted after a CI failure this test could not be reproduced locally for: the rule read
+    /// `NSUserName()` directly, so "does it fire for the account name `runner`?" was a question only
+    /// a CI run could answer, and each answer cost a push. A check whose behaviour cannot be
+    /// examined except by triggering it is one nobody can reason about.
+    static func machineIdentityLeaks(in text: String, fileName: String, home: String, user: String, mountedVolumes: [String]) -> [String] {
+        var leaks: [String] = []
+        if !home.isEmpty, text.contains(home) { leaks.append("\(fileName): contains the home directory") }
+        // Word-bounded, for the reason `Redaction.swift` records: an account called `dev`
+        // unanchored turns `devicectl` into a false positive.
+        if !user.isEmpty, user != "root", !genericAccountNames.contains(user.lowercased()) {
+            let pattern = "(^|[^A-Za-z0-9_])" + NSRegularExpression.escapedPattern(for: user) + "([^A-Za-z0-9_]|$)"
+            if let re = try? NSRegularExpression(pattern: pattern),
+                re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+            {
+                leaks.append("\(fileName): contains the account name as a bare word")
+            }
+        }
+        // Volume names only in their `/Volumes/` form — the same rule and the same reason
+        // `Redaction.swift` gives: a boot volume called `MacOS` appears inside every app
+        // bundle's `Contents/MacOS`.
+        for volume in mountedVolumes where !volume.hasPrefix(".") && !genericVolumeNames.contains(volume) {
+            if text.contains("/Volumes/" + volume) { leaks.append("\(fileName): names the mounted volume '\(volume)'") }
+        }
+        return leaks
+    }
+
     func testNoEvidenceFileNamesThisMachine() throws {
         let home = NSHomeDirectory()
         let user = NSUserName()
+        let volumes = (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? []
         var leaks: [String] = []
 
         for name in try FileManager.default.contentsOfDirectory(atPath: evidenceDirectory).sorted() where !name.hasPrefix(".") {
             let text = try String(contentsOfFile: evidenceDirectory + "/" + name, encoding: .utf8)
-            if !home.isEmpty, text.contains(home) { leaks.append("\(name): contains the home directory") }
-            // Word-bounded, for the reason `Redaction.swift` records: an account called `dev`
-            // unanchored turns `devicectl` into a false positive.
-            if !user.isEmpty, user != "root" {
-                let pattern = "(^|[^A-Za-z0-9_])" + NSRegularExpression.escapedPattern(for: user) + "([^A-Za-z0-9_]|$)"
-                if let re = try? NSRegularExpression(pattern: pattern),
-                    re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
-                {
-                    leaks.append("\(name): contains the account name as a bare word")
-                }
-            }
-            // Volume names only in their `/Volumes/` form — the same rule and the same reason
-            // `Redaction.swift` gives: a boot volume called `MacOS` appears inside every app
-            // bundle's `Contents/MacOS`.
-            for volume in (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? []
-            where !volume.hasPrefix(".") && !Self.genericVolumeNames.contains(volume) {
-                if text.contains("/Volumes/" + volume) {
-                    leaks.append("\(name): names the mounted volume '\(volume)'")
-                }
-            }
+            leaks += Self.machineIdentityLeaks(in: text, fileName: name, home: home, user: user, mountedVolumes: volumes)
         }
         XCTAssertTrue(
             leaks.isEmpty,
@@ -245,5 +271,41 @@ final class ExperimentScriptSafetyTests: XCTestCase {
 
             \(leaks.joined(separator: "\n"))
             """)
+    }
+
+    /// The CI case, asserted from any machine. GitHub's macOS runners run as `runner`, and the
+    /// committed evidence legitimately contains `swift test --scratch-path (second runner)` — the
+    /// word-bounded match fired on all three files and CI was red on every push for three commits
+    /// while the suite passed locally.
+    func testTheCheckDoesNotFireOnAGenericCIAccountName() throws {
+        let realEvidence = try FileManager.default.contentsOfDirectory(atPath: evidenceDirectory)
+            .filter { !$0.hasPrefix(".") }
+            .map { (name: $0, text: try String(contentsOfFile: evidenceDirectory + "/" + $0, encoding: .utf8)) }
+        XCTAssertTrue(
+            realEvidence.contains { $0.text.contains("second runner") },
+            "precondition: the committed evidence really does contain the word that broke CI")
+
+        for file in realEvidence {
+            XCTAssertEqual(
+                Self.machineIdentityLeaks(in: file.text, fileName: file.name, home: "/Users/runner", user: "runner", mountedVolumes: []),
+                [], "a disposable CI VM's account name is not this developer's identity")
+        }
+    }
+
+    /// The control, and the reason the test above is not simply a hole. A real account name is still
+    /// caught — including one that appears only as a bare word, with no home directory in the text.
+    func testTheCheckStillFiresForANonGenericAccountName() {
+        let text = "--- swift test --scratch-path (second runner) ---\nwrote /Users/octavia/out.txt as octavia\n"
+        XCTAssertEqual(
+            Self.machineIdentityLeaks(in: text, fileName: "e.txt", home: "/Users/octavia", user: "octavia", mountedVolumes: []),
+            ["e.txt: contains the home directory", "e.txt: contains the account name as a bare word"])
+        XCTAssertEqual(
+            Self.machineIdentityLeaks(in: "owner: octavia\n", fileName: "e.txt", home: "", user: "octavia", mountedVolumes: []),
+            ["e.txt: contains the account name as a bare word"],
+            "the account rule must stand on its own, not only alongside the home-directory rule")
+        XCTAssertEqual(
+            Self.machineIdentityLeaks(in: "mounted at /Volumes/Octavia-SSD\n", fileName: "e.txt", home: "", user: "runner", mountedVolumes: ["Octavia-SSD", "Data"]),
+            ["e.txt: names the mounted volume 'Octavia-SSD'"],
+            "and a named drive is still caught on a CI account, while a generic system volume is not")
     }
 }
