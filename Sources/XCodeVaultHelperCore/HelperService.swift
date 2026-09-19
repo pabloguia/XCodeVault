@@ -108,21 +108,88 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         return list.contains(admin)
     }
 
+    /// The one message `authorize()` refuses with, as a constant rather than a literal.
+    ///
+    /// It is a constant so the audit can classify an outcome from the result the caller actually
+    /// received, instead of evaluating the gate a second time. A reviewer found the second
+    /// evaluation: the dispatch called `authorize()` to label the record and the verb called it
+    /// again to enforce, and the two can disagree — a transient directory-service failure on the
+    /// first and success on the second means the verb **performs the work** while the log records
+    /// `refused-unauthorized`. That is the line this trail exists for, wrong in the direction that
+    /// conceals a performed action.
+    ///
+    /// Comparing against this constant is a string comparison, which is ordinarily a poor way to
+    /// carry a decision — but the string is owned by this file, produced at exactly one site, and
+    /// `HelperAuditAndVolumeTests` fails if any other refusal in this target adopts it.
+    static let unauthorizedMessage = "not authorized: this operation requires an administrator account"
+
     /// Returns a refusal when the caller may not perform a state-changing operation, `nil` when it may.
     private func authorize() -> HelperResult? {
         guard Self.isAdministrator(uid: callerUID) else {
-            return HelperResult(ok: false, message: "not authorized: this operation requires an administrator account")
+            return HelperResult(ok: false, message: Self.unauthorizedMessage)
         }
         return nil
     }
 
-    func version(reply: @escaping @Sendable (String) -> Void) { reply(HelperIdentity.version) }
+    func version(reply: @escaping @Sendable (String) -> Void) {
+        // Audited too, though it changes nothing and needs no gate. A reviewer asked why it was
+        // the one verb with no record: reconstructing an incident is easier when the trail shows
+        // that a client connected and probed at all, and "the only unlogged verb" is a gap a
+        // future change could widen without noticing. It stays synchronous — there is no
+        // privileged work to serialise — so it is exempt from the dispatch rule in
+        // `scripts/helper-invariants.sh`, which reads the verb list from the protocol minus
+        // `version`.
+        HelperAudit.emit(
+            .from(verb: "version", callerUID: callerUID, validatedArguments: [:], result: HelperResult(ok: true, message: "version"), wasUnauthorized: false))
+        reply(HelperIdentity.version)
+    }
+
+    // Both verbs are audited **here**, at the dispatch, rather than inside the `do…` functions
+    // (issue #4). Two reasons, and the second is the one that matters:
+    //
+    //   - This is the only place every invocation passes through, including one that returns
+    //     early. A record written inside the verb is a record the early returns can skip.
+    //   - The `do…` functions are called directly by tests with injected seams. Auditing there
+    //     would put test invocations in the machine's real unified log, and a log whose entries
+    //     are partly synthetic is worse for reconstructing an incident than one that is empty.
+    //
+    // The audit is written after the reply is computed and before it is sent, so nothing can be
+    // returned to a caller that was not first recorded.
 
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-        privilegedWork.async { reply(self.doRemoveRegenerableSystemDirectoryContents(target: target)) }
+        privilegedWork.async {
+            let result = self.doRemoveRegenerableSystemDirectoryContents(target: target)
+            HelperAudit.emit(
+                .from(
+                    verb: "removeRegenerableSystemDirectoryContents", callerUID: self.callerUID,
+                    // Canonical, never the raw parameter. The field's contract is "the arguments
+                    // *after* validation", and passing `target` straight through broke it: a
+                    // reviewer pointed out that validation happens inside the verb, so the audit
+                    // was being handed the unvalidated client string. Nothing leaked — it is
+                    // hashed — but the hash was the only thing between an attacker-chosen
+                    // multi-megabyte `target` and a root-owned log.
+                    validatedArguments: ["target": HelperCleanupTarget(rawValue: target)?.rawValue ?? "<rejected>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
     }
     func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-        privilegedWork.async { reply(self.doCreateVaultDirectory(volumeUUID: volumeUUID)) }
+        privilegedWork.async {
+            let result = self.doCreateVaultDirectory(volumeUUID: volumeUUID)
+            HelperAudit.emit(
+                .from(
+                    verb: "createVaultDirectory", callerUID: self.callerUID,
+                    validatedArguments: ["volumeUUID": UUID(uuidString: volumeUUID)?.uuidString ?? "<rejected>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
+    }
+
+    /// Whether this result is the authorization gate's refusal — read from the result the caller
+    /// actually received, so the record and the enforcement cannot come from two evaluations that
+    /// disagree. See `unauthorizedMessage`.
+    static func wasUnauthorized(_ result: HelperResult) -> Bool {
+        !result.ok && result.message == unauthorizedMessage
     }
 
     /// `base` is a test seam. Production passes nothing and walks from `/`.
@@ -210,7 +277,11 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         // Resolve the UUID to a mount point ourselves (getattrlist ATTR_VOL_UUID over getmntinfo_r_np):
         // no client-supplied path, no diskutil parsing, no shared static buffer.
         guard let mp = Self.mountPoint(forVolumeUUID: volumeUUID) else { return HelperResult(ok: false, message: "volume not mounted") }
-        guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2, Self.isMountPoint(mp) else {
+        // Shape only. The mount-ness of `mp` is asserted below, through the descriptor — asking it
+        // of the *path* here and then re-resolving the same name in `open()` was check-and-use on
+        // two resolutions, which is exactly what the rest of this function was rewritten to remove
+        // (issue #5). A reviewer caught it surviving inside the function that was hardened.
+        guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2 else {
             return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible")
         }
         // The last path component is validated HERE even though it is a compile-time constant no
@@ -232,22 +303,65 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
             return HelperResult(ok: false, message: "invalid vault directory name")
         }
         let dir = mp + "/" + name
-        // O_NOFOLLOW|O_DIRECTORY open of a freshly created (or existing, non-symlink) directory, then
-        // fchown on the descriptor: no path-based TOCTOU between check and chown.
-        var st = stat()
+
+        // Everything below goes through a descriptor for the **parent**, never through the path
+        // again (issue #5). The previous version did `mkdir(dir)` then `open(dir)`, and between
+        // those two calls the name is free: a writer on that volume can rename a different
+        // directory into it, and root then `fchown`s whatever it opened. `O_NOFOLLOW` does not
+        // help — the thing renamed in is a real directory, not a symlink.
+        //
+        // `openat` relative to a parent descriptor removes the parent from the race: `mp` is
+        // resolved once, and every later step names one component relative to a descriptor that
+        // cannot be swapped underneath us. The window between `mkdirat` and `openat` still exists
+        // — POSIX offers no create-and-open for directories — so it is closed by *verification*
+        // rather than by exclusion, with `fstat` on the descriptor, never `stat` on the path.
+        let parentFD = open(mp, O_RDONLY | O_NOFOLLOW | O_DIRECTORY)
+        guard parentFD >= 0 else { return HelperResult(ok: false, message: "open of volume root failed: \(String(cString: strerror(errno)))") }
+        defer { close(parentFD) }
+        var parentST = stat()
+        guard fstat(parentFD, &parentST) == 0, (parentST.st_mode & S_IFMT) == S_IFDIR else {
+            return HelperResult(ok: false, message: "volume root is not a directory")
+        }
+        // The mount question, asked of the descriptor this function will actually act through.
+        // Three-valued, and `.undetermined` refuses: a `/Volumes/<name>` that cannot answer is not
+        // a volume this verb may hand to a caller. The sibling cleanup verb was hardened the same
+        // way under issue #2 and for the same reason — see `mountStatus(ofDescriptor:)`.
+        switch Self.mountStatus(ofDescriptor: parentFD) {
+        case .isMountPoint: break
+        case .isNotMountPoint:
+            return HelperResult(ok: false, message: "only top-level volumes under /Volumes are eligible")
+        case .undetermined:
+            return HelperResult(ok: false, message: "could not determine whether \(name) sits on a mounted volume; refusing")
+        }
+
         var created = false
-        if lstat(dir, &st) == 0 {
+        var st = stat()
+        if fstatat(parentFD, name, &st, AT_SYMLINK_NOFOLLOW) == 0 {
             guard (st.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "\(name) exists and is not a directory") }
-        } else if mkdir(dir, 0o755) == 0 {
+        } else if mkdirat(parentFD, name, 0o755) == 0 {
             created = true
         } else {
             return HelperResult(ok: false, message: "mkdir failed: \(String(cString: strerror(errno)))")
         }
-        let fd = open(dir, O_RDONLY | O_NOFOLLOW | O_DIRECTORY)
+
+        let fd = openat(parentFD, name, O_RDONLY | O_NOFOLLOW | O_DIRECTORY)
         guard fd >= 0 else { return HelperResult(ok: false, message: "open failed: \(String(cString: strerror(errno)))") }
         defer { close(fd) }
         var fst = stat()
         guard fstat(fd, &fst) == 0, (fst.st_mode & S_IFMT) == S_IFDIR else { return HelperResult(ok: false, message: "not a directory") }
+
+        switch Self.isTheObjectThisCallJustCreated(
+            created: created, directoryDevice: fst.st_dev, parentDevice: parentST.st_dev,
+            linkCount: fst.st_nlink, directoryUID: fst.st_uid)
+        {
+        case .yes: break
+        case .differentFilesystem:
+            return HelperResult(ok: false, message: "\(name) is on a different filesystem than the volume root; refusing")
+        case .notWhatWeCreated:
+            return HelperResult(
+                ok: false, message: "\(name) is not the directory this call just created; refusing to take ownership of it")
+        }
+
         guard Self.mayTakeOwnership(created: created, directoryUID: fst.st_uid, callerUID: callerUID) else {
             return HelperResult(ok: false, message: "\(name) already exists and belongs to uid \(fst.st_uid); refusing to take ownership of it")
         }
@@ -256,6 +370,55 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     }
 
     // MARK: helpers (no shell, no Process)
+
+    /// Whether the descriptor just opened refers to the object this call created, or to something
+    /// that arrived in the meantime.
+    ///
+    /// Extracted for the reason `mayTakeOwnership` below was, and the file's own note on that one
+    /// says it best: *a guard no test can fail is a guard the next refactor deletes.* A reviewer
+    /// pointed out that both of these checks were unkillable — no test calls
+    /// `doCreateVaultDirectory`, so deleting either passed the build, the suite and the invariants
+    /// script. As a pure function over four integers the truth table is exhaustible.
+    ///
+    /// The three facts, and what each one is actually claiming:
+    ///
+    /// - **Same filesystem as the parent.** Without it, a volume mounted onto the name between the
+    ///   `mkdirat` and the `openat` would be chowned to the caller — and `/Volumes` is precisely
+    ///   where a mount appears under a name that was a plain directory a moment earlier. Checked
+    ///   whether or not this call created the directory.
+    /// - **Exactly two links**, when this call created it: `.` plus the parent's entry and nothing
+    ///   else. An empty directory.
+    /// - **Owned by root**, when this call created it: root is what created it a moment ago.
+    ///
+    /// The last two together are a claim about *identity*, not about permissions: a directory
+    /// renamed into the name is a directory that existed before, and would have to be both empty
+    /// and root-owned to pass.
+    ///
+    /// **This is a verification, not an exclusion**, and two caveats belong with it rather than in
+    /// a commit message. An attacker who can place an empty root-owned directory on that volume
+    /// defeats it — which needs root on an ordinary filesystem, and was measured: on a `noowners`
+    /// volume an unprivileged `chown 0:0` is `EPERM`, and root reads the true on-disk uid because
+    /// XNU applies the `MNT_IGNORE_OWNERSHIP` substitution only for non-superuser callers. But a
+    /// userspace filesystem (macFUSE) can fabricate `st_uid`, `st_nlink` and `st_dev` freely, so
+    /// there "requires root" is too strong. It buys such an attacker nothing — the verb only
+    /// creates and chowns inside that filesystem and reads no content — but the claim is narrower
+    /// than it first reads.
+    enum CreatedObjectIdentity: Equatable {
+        case yes
+        case differentFilesystem
+        case notWhatWeCreated
+    }
+
+    static func isTheObjectThisCallJustCreated(
+        created: Bool, directoryDevice: dev_t, parentDevice: dev_t, linkCount: nlink_t, directoryUID: uid_t
+    ) -> CreatedObjectIdentity {
+        guard directoryDevice == parentDevice else { return .differentFilesystem }
+        // A pre-existing directory is not claimed to be ours; `mayTakeOwnership` is what decides
+        // whether it may be adopted, and it refuses anything not already owned by the caller.
+        guard created else { return .yes }
+        guard linkCount == 2, directoryUID == 0 else { return .notWhatWeCreated }
+        return .yes
+    }
 
     /// Whether this call may hand `dir` to the caller. A pure decision over three facts, separated
     /// from the filesystem so the truth table can be tested exhaustively — which is the whole
@@ -618,7 +781,69 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         return total
     }
 
+    /// The all-zero UUID. A filesystem that succeeds without supplying `ATTR_VOL_UUID` used to
+    /// yield exactly this, and it is a perfectly valid `UUID` value — so it compared equal to a
+    /// caller who passed the all-zero UUID and acted as a wildcard over every such filesystem.
+    /// Rejected on both sides now: never produced from a reply, never accepted as input.
+    static let nilVolumeUUID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    /// Reads one mounted filesystem's volume UUID, or nil when it does not have one.
+    ///
+    /// Split out so the parsing can be tested against every mounted filesystem on the machine
+    /// without going through the verb. Issue #3: the previous version asked for `ATTR_VOL_UUID`
+    /// and then parsed bytes 4..<20 of the reply **without asking the kernel whether that
+    /// attribute was actually supplied**. `getattrlist` returning 0 does not mean every requested
+    /// attribute came back; a filesystem that answers the call without supporting the attribute
+    /// left the buffer's zeros in place, and the zeros parse as a valid UUID.
+    ///
+    /// The fix is the mechanism the kernel provides for exactly this. `ATTR_CMN_RETURNED_ATTRS`
+    /// makes the reply lead with an `attribute_set_t` saying which attributes it actually
+    /// contains, so "did I get a UUID" becomes a question with an answer instead of an assumption.
+    ///
+    /// The reply layout that follows from requesting it:
+    ///
+    ///     offset  0  u_int32_t        length of the whole reply
+    ///     offset  4  attribute_set_t  which attributes were returned (5 × u_int32 = 20 bytes)
+    ///     offset 24  uuid_t           ATTR_VOL_UUID — present only if the set above says so
+    ///
+    /// The offset is fixed because `ATTR_VOL_UUID` is the only data attribute requested
+    /// (`ATTR_VOL_INFO` is a marker bit and packs nothing). Without `FSOPT_PACK_INVAL_ATTRS` an
+    /// unsupported attribute is simply not packed — which is why the flag check has to come first
+    /// and why reading offset 24 unconditionally would be reading whatever happened to be there.
+    static func volumeUUID(ofMountPoint mp: String) -> UUID? {
+        var attrList = attrlist()
+        attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
+        attrList.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_UUID)
+        var buffer = [UInt8](repeating: 0, count: 64)
+        let rc = buffer.withUnsafeMutableBytes { raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
+        guard rc == 0 else { return nil }
+
+        // The reply must be long enough to hold the returned-attribute set at all, and must not
+        // claim to be longer than the buffer it was written into.
+        let replyLength = buffer.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
+        guard replyLength >= 24, Int(replyLength) <= buffer.count else { return nil }
+
+        // `attribute_set_t` is { commonattr, volattr, dirattr, fileattr, forkattr }; volattr is
+        // the second word, so it starts at offset 4 + 4.
+        let returnedVolAttr = buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: attrgroup_t.self) }
+        guard returnedVolAttr & attrgroup_t(ATTR_VOL_UUID) != 0 else { return nil }
+        guard replyLength >= 40 else { return nil }
+
+        let b = Array(buffer[24..<40])
+        let volUUID = UUID(
+            uuid: (
+                b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+            ))
+        // Belt and braces. A filesystem that reports the attribute *and* fills it with zeros is
+        // not a volume whose identity happens to be zeros; it is a volume with no identity.
+        return volUUID == nilVolumeUUID ? nil : volUUID
+    }
+
     static func mountPoint(forVolumeUUID uuid: String) -> String? {
+        // Refused before any filesystem is examined, so the all-zero UUID cannot match by any
+        // route — including one that does not go through `volumeUUID(ofMountPoint:)`.
+        guard let wanted = UUID(uuidString: uuid), wanted != nilVolumeUUID else { return nil }
         var mounts: UnsafeMutablePointer<statfs>?
         let n = getmntinfo_r_np(&mounts, MNT_NOWAIT)  // reentrant: caller-owned buffer, no shared static state
         guard n > 0, let mounts else { return nil }
@@ -626,20 +851,8 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         for i in 0..<Int(n) {
             var fs = mounts[i]
             let mp = withUnsafePointer(to: &fs.f_mntonname) { $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) } }
-            var attrList = attrlist()
-            attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
-            attrList.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_UUID)
-            var buffer = [UInt8](repeating: 0, count: 64)
-            let rc = buffer.withUnsafeMutableBytes { raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
-            guard rc == 0 else { continue }
-            // Layout: u_int32 length, then uuid_t (16 bytes)
-            let bytes = Array(buffer[4..<20])
-            let volUUID = UUID(
-                uuid: (
-                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12],
-                    bytes[13], bytes[14], bytes[15]
-                ))
-            if volUUID.uuidString.caseInsensitiveCompare(uuid) == .orderedSame { return mp }
+            guard let volUUID = volumeUUID(ofMountPoint: mp) else { continue }
+            if volUUID == wanted { return mp }
         }
         return nil
     }

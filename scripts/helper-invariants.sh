@@ -222,32 +222,133 @@ done
 # ---- the authorization gate ------------------------------------------------------------------------
 # Expected count comes from the XPC surface, not from a naming convention: a new verb that does not
 # happen to be called `doSomething` used to be invisible.
-expected_gates=$(code_of "$PROTOCOL" | grep -cE '[[:space:]]reply: *@escaping')
-expected_gates=$((expected_gates - 1))  # version() is read-only and correctly ungated
+# Counted by excluding the read-only verb **by name**, not by subtracting one from a pattern that
+# never matched it. The previous form was `grep -cE '[[:space:]]reply: *@escaping'` minus one: that
+# pattern requires whitespace before `reply:`, which the two-argument verbs have (`, reply:`) and
+# `version(reply:` does not — so version was never in the count, and subtracting it anyway left
+# `expected_gates` at 1 when there are 2 state-changing verbs.
+#
+# The per-implementation `authorize()` loop below iterates over what it *finds* rather than over
+# this number, so that control was never weakened. What the undercount did weaken is every rule
+# that compares a count against it — including the audit rule added for issue #4, which passed with
+# one of its two calls deleted. Found by mutation-testing that new rule, not by reading.
+expected_gates=$(code_of "$PROTOCOL" | grep -E 'func [a-zA-Z0-9_]+\(.*reply: *@escaping' | grep -cvE 'func version\(')
 [ "$expected_gates" -ge 1 ] || { echo "helper invariants: could not read the XPC verb list from $PROTOCOL" >&2; exit 2; }
 
 # Each dispatched implementation must reach authorize(). Counting gates was not enough: deleting one
 # and adding a decoy elsewhere kept the total unchanged.
 impl_file=$(grep -lE 'privilegedWork\.async' $helper_files 2>/dev/null | head -1)
 [ -n "$impl_file" ] || { echo "helper invariants: cannot find the verb dispatch; refusing to report ok" >&2; exit 2; }
-dispatched=$(code_of "$impl_file" | grep -oE 'reply\(self\.[a-zA-Z0-9_]+\(' | sed -E 's/reply\(self\.//; s/\($//' | sort -u)
-dispatched_count=$(printf '%s\n' "$dispatched" | grep -c .)
-if [ "$dispatched_count" -lt "$expected_gates" ]; then
-    violation "$impl_file — $dispatched_count dispatched implementations for $expected_gates state-changing verbs" \
-        "every verb but version() must dispatch to an implementation this check can find"
-fi
-for m in $dispatched; do
-    body=$(code_of "$impl_file" | awk -v m="$m" '
+# **Keyed to the protocol's verb names, not to what the implementation calls.**
+#
+# This rule was twice wrong in the same place and the second version was worse than the first. It
+# began by matching `reply(self.doX(...))`; the audit trail (issue #4) made that shape impossible,
+# because computing and replying in one expression leaves nowhere to record the invocation in
+# between. Widening the matcher to also accept `= self.doX(...)` taught it the new shape and, in
+# doing so, made the "dispatched implementations" set mean *any method this file calls on itself*.
+#
+# A helper-security reviewer demonstrated the consequence rather than describing it: a
+# `createVaultDirectory` rewritten to do its work inline with no `authorize()` and no audit, plus a
+# decoy `func decoyPad` containing `let _ = self.authorize()` and one `HelperAudit.emit(...)`,
+# produced **exit 0, "helper invariants: ok"**. A state-changing root verb, ungated and unlogged,
+# with the control green. The earlier `expected_gates` undercount fix would have caught it; the
+# widened matcher handed it straight back, so the two changes cancelled.
+#
+# The fix is to stop inferring the verb set at all. `XCodeVaultHelperXPC` already declares it, so
+# read it from there and look each verb up by name. A decoy cannot help a verb that is checked by
+# its own name, and a verb that does not exist is a violation rather than an absence.
+#
+# One residual is structural and is the reason the human review is the control, not this file:
+# `authorize()`'s own body contains the string `authorize()` on its `func` line, so a verb
+# *renamed* to `authorize` would satisfy its own check. Keying to the protocol makes that
+# unreachable — no protocol verb is called `authorize` — but no text matcher detects semantic
+# neutering, and this one does not either.
+verbs=$(
+    code_of "$PROTOCOL" \
+        | grep -E 'func [a-zA-Z0-9_]+\(.*reply: *@escaping' \
+        | grep -vE 'func version\(' \
+        | grep -oE 'func [a-zA-Z0-9_]+\(' | sed -E 's/func //; s/\(//'
+)
+verb_count=$(printf '%s\n' "$verbs" | grep -c .)
+[ "$verb_count" -eq "$expected_gates" ] || {
+    echo "helper invariants: read $verb_count verb names but counted $expected_gates gates; refusing to report ok" >&2
+    exit 2
+}
+
+# For each verb: find the implementation it dispatches to, then check THAT body for the gate.
+#
+# The two halves matter separately. Starting from the protocol's verb list means a decoy function
+# cannot join the set — that was F1. Following the verb to its implementation by name means the
+# gate is looked for where it actually lives: `authorize()` is inside `doRemoveRegenerable…`, not
+# inside the XPC method, so keying the gate check to the verb body alone reported a false
+# violation on correct code. Both were found by running the thing rather than reading it.
+for v in $verbs; do
+    verb_body=$(code_of "$impl_file" | awk -v m="$v" '
         $0 ~ ("func " m "\\(") { inside = 1 }
         inside { print }
         inside && /^    \}$/ { exit }')
-    if [ -z "$body" ]; then
-        violation "$impl_file — cannot locate the body of $m" "the gate cannot be verified"
+    if [ -z "$verb_body" ]; then
+        violation "$impl_file — no implementation of the XPC verb $v" "a verb declared in the protocol must be implemented where this check can see it"
         continue
     fi
-    printf '%s' "$body" | grep -qE 'authorize\(\)' \
-        || violation "$impl_file — $m does not call authorize()" "every state-changing verb must check the caller"
+
+    # The verb itself must record and must serialise. Checked on the verb body, because that is
+    # where both belong: the record has to bracket the reply, and the queue is what orders them.
+    printf '%s' "$verb_body" | grep -qE 'HelperAudit\.emit\(' \
+        || violation "$impl_file — $v records nothing" "every state-changing verb must record its invocation before replying"
+    printf '%s' "$verb_body" | grep -qE 'privilegedWork\.async' \
+        || violation "$impl_file — $v does not dispatch through privilegedWork" "the serial queue is what orders the record before the reply"
+
+    # The implementation this verb dispatches to, named by the verb itself. `self.` is lowercase on
+    # purpose: `Self.helper(...)` is a static utility, not the verb's implementation.
+    impls=$(printf '%s' "$verb_body" | grep -oE 'self\.[a-zA-Z0-9_]+\(' | sed -E 's/^self\.//; s/\($//' | sort -u)
+    impl_count=$(printf '%s\n' "$impls" | grep -c .)
+    if [ "$impl_count" -ne 1 ]; then
+        violation "$impl_file — $v dispatches to $impl_count implementations" \
+            "a verb must name exactly one implementation, or this check cannot say which body holds its gate"
+        continue
+    fi
+
+    impl_body=$(code_of "$impl_file" | awk -v m="$impls" '
+        $0 ~ ("func " m "\\(") { inside = 1 }
+        inside { print }
+        inside && /^    \}$/ { exit }')
+    if [ -z "$impl_body" ]; then
+        violation "$impl_file — cannot locate the body of $impls, which $v dispatches to" "the gate cannot be verified"
+        continue
+    fi
+    printf '%s' "$impl_body" | grep -qE 'authorize\(\)' \
+        || violation "$impl_file — $impls (the implementation of $v) does not reach authorize()" "every state-changing verb must check the caller"
 done
+
+# ---- the audit trail's own file (issue #4) -----------------------------------------------------------
+AUDIT=Sources/XCodeVaultHelperCore/HelperAudit.swift
+if [ -f "$AUDIT" ]; then
+    # `.info` and `.debug` are memory-backed and are dropped rather than persisted, so a daemon
+    # that logged its deletions at either would still have nothing after a reboot — the defect the
+    # file exists to fix, reintroduced by a one-word change.
+    #
+    # Stated as a prohibition, not as "at least one `.notice` exists". Mutation-testing the first
+    # draft showed that rewriting every `log.notice` to `log.info` still passed, because a single
+    # surviving `log.error` satisfied it. A positive existence check cannot express "none of them
+    # may be memory-backed".
+    forbid "$AUDIT" 'log\.(info|debug|trace)\(' "the audit must not emit at a memory-backed level; it would not survive a reboot"
+    code_of "$AUDIT" | grep -qE 'log\.notice\(' \
+        || violation "$AUDIT — the audit no longer emits at .notice" "the durable level is the one the trail depends on"
+
+    # Caller-supplied arguments must never reach a root-owned log in the clear.
+    #
+    # Also a prohibition, and for the same reason the level rule is — a reviewer defeated the
+    # existence-check version of *this* rule twice: once by flipping three of four qualifiers to
+    # `.public` and leaving one `.private`, and once by flipping all four and adding an unrelated
+    # `static let keep = "privacy: .private"`. Both passed. The rule now names the interpolation it
+    # protects, so padding elsewhere in the file buys nothing.
+    forbid "$AUDIT" 'args=\\\(arguments, privacy: \.public' "caller-supplied arguments must never be logged in the clear"
+    code_of "$AUDIT" | grep -qE 'privacy: \.private' \
+        || violation "$AUDIT — nothing in the audit is marked private" "a root-owned log must not disclose paths or volume identity"
+else
+    violation "$AUDIT — missing" "the root daemon's audit trail is required (issue #4)"
+fi
 
 # The bootstrap's two fail-closed guards. Neither was covered by any rule, so both could be
 # deleted without the checker noticing.
