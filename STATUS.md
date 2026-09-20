@@ -82,7 +82,26 @@ is done. The post-publication issue backlog replaced it._
    text called `isMountPoint` the check rule 6 rests on with nothing pinning it (identity rests on
    the UUID comparison, which fails closed; and the seam is pinned by `testVerifierStates`).
 
-   Open: **#29** and **#30**.
+   Open: **#29** and **#30**, both with a further half delivered and both still blocked on the
+   thing they were always blocked on.
+
+   **#29** (b340a66): `e6b-check.sh` says which prerequisite is missing instead of leaving "blocked
+   on hardware" to be rediscovered with a drive in hand; the physical variant is scripted up to the
+   cable pull, removing the transcription step between observation and record. The staging is now
+   shared between both variants — variant A had carried four defects for months, every one found
+   while reviewing its twin, including a `mount_apfs` call that could never succeed and so would
+   have made every probe read `absent`, which is the headline finding, manufactured. **Neither
+   script has ever been executed**: the target holds 7.1 GB and sudo prompts here.
+
+   **#30** (d154143): the XPC client exists, refuses without touching the connection when the team
+   ID is unusable, and sets the code-signing requirement before `resume()` — five properties
+   mutation-verified. The live connection stays gated on a signed build.
+
+   Sonar (baa13db): SonarQube Cloud analysis runs in its own workflow, deliberately not in
+   `ci.yml`, because it needs a secret and so cannot run under `preflight.sh` — putting it there
+   would make that script's central claim false for one step. 0 bugs, 0 vulnerabilities, gate OK,
+   27 open code smells. It does not block merges yet: the gate's `new_coverage` condition passes
+   only because there is no new code, and the first PR that adds a line would score 0%.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
