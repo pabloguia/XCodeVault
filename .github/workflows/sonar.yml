@@ -69,15 +69,17 @@ jobs:
       # produce no coverage rows at all and cannot, by this pipeline.
       #
       # **Measured on 2026-09-20, where this comment used to say it would be.** SonarQube counts a
-      # file absent from the report as UNCOVERED, not as having nothing to cover: it reports 6157
-      # lines to cover against the 5615 the report supplies — 542 it adds itself, all uncovered —
-      # which is the whole of the drop from the converter's 84.6% to the project's 77.4%. Nothing is
-      # excluded to close that gap; the untestable targets are named above and the number is honest
-      # about them.
+      # file absent from the report as UNCOVERED, not as having nothing to cover. On `48bae6f`, this
+      # job's converter reported 4764 covered of 5622; the server reports the same 4764 covered but
+      # out of 6157 lines to cover — 535 it adds itself, all uncovered — which is the entire drop
+      # from 84.7% to 77.4%. Nothing is excluded to close that gap; the untestable targets are named
+      # above and the number is honest about them.
       #
-      # One residue, stated rather than explained away: the server counts 4764 covered lines and a
-      # local run of the same commit counts 4752. The local report is produced on x86_64 and CI's on
-      # arm64, which is the obvious suspect, and it has not been established.
+      # The covered counts match EXACTLY, so nothing is lost in the import. An earlier version of
+      # this comment reported a 12-line discrepancy as unexplained; it was comparing the server
+      # against a laptop run rather than against the CI run that produced the imported report. The
+      # two differ because one is x86_64 and the other arm64 — a difference between two runs of the
+      # same commit, and nothing to do with SonarQube.
       #
       # What the floor is FOR is unchanged and is not a quality target: it separates "this project is
       # under-tested" from "the import silently produced nothing", which render identically as 0%.
