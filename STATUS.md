@@ -108,10 +108,31 @@ is done. The post-publication issue backlog replaced it._
    branch gets a changed-files-only analysis — and because the Scan step carried
    `continue-on-error: true`. Both are fixed; the branch was renamed in SonarCloud.
 
-   The quality gate is **ERROR on one condition**: `new_coverage` 0.0 against a threshold of 80. No
-   coverage is imported, so any commit that adds a line scores 0%. CI does not enforce the gate, so
-   this does not block merges — but a permanently red gate is as useless as a permanently green one,
-   which is issue #34.
+   Coverage and gate enforcement (issue #34, in flight). The gate had been **ERROR on one
+   condition** — `new_coverage` 0.0 against a threshold of 80 — because no coverage was imported, so
+   any commit that added a line scored 0%; and nothing in CI acted on the gate either way. A
+   permanently red gate is as useless as a permanently green one.
+
+   Both halves are now built. `scripts/coverage-to-sonar.sh` converts SwiftPM's LLVM profile to
+   Sonar's Generic Test Coverage XML (via LCOV, so the conversion is a rename rather than an
+   inference over segments), and the Sonar job moved to a macOS runner to produce it. A sixth
+   assertion in `scripts/sonar-verify.sh` reads the quality gate and fails the job with the names of
+   the failing conditions — deliberately there rather than via `sonar.qualitygate.wait=true`, so that
+   a gate failure cannot pre-empt the five assertions that establish the measurement was real.
+
+   Measured locally on 2026-09-20: **84.2%** over the four library targets (37 files, 4728/5615
+   lines). Each new assertion was driven to fail on purpose against the live server before being
+   trusted — coverage floor, gate, stale commit, unreadable task — and each died with a different,
+   nameable message.
+
+   **Not yet measured:** the server-side project-wide coverage number, which is a different
+   population from the 84.2%. The XCTest bundle links the libraries and not the executables, so 1,074
+   of ~9,400 source lines (`XCodeVault` 326, `xcodevaultctl` 712, `XCodeVaultHelper` 36) produce no
+   coverage rows and cannot by this pipeline; whether SonarQube counts a file absent from the report
+   as uncovered or as having nothing to cover decides where the project number lands. The issue's
+   acceptance criterion — the gate going both green and red for reasons a reviewer would act on,
+   demonstrated by pushing a change that should fail it — is **not met until that demonstration
+   exists**, so #34 stays open.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and

@@ -16,9 +16,22 @@
 # main branch. Four consecutive runs reported success having measured two files. The dashboard kept
 # showing a three-hour-old local run, because the dashboard shows the main branch.
 #
-# So this workflow now asserts, after the scan: the server finished processing the report, the
-# analysis is on the main branch, it is for *this* commit, and it covers a plausible amount of code.
-# A scan that measures nothing is the failure this is here to catch.
+# **Why this runs on macOS and builds the project (issue #34).** Swift *analysis* needs no Xcode, and
+# this job ran on `ubuntu-latest` for that reason. Swift *coverage* does: `swift test
+# --enable-code-coverage` writes an LLVM profile that only the Xcode toolchain's `llvm-cov` can read.
+# Without coverage the quality gate scored every commit 0% on new code and was permanently ERROR —
+# a signal nobody would read, which is the same disease as a check that cannot fail, caught from the
+# other side.
+#
+# The alternative was for `ci.yml`'s macOS job to upload a coverage artifact for this workflow to
+# download. It is cheaper — the suite already runs there — and it was rejected anyway: cross-workflow
+# artifact download needs `workflow_run` plumbing, and its failure mode is this job downloading
+# nothing, importing nothing, and reporting 0% coverage that reads exactly like untested code. That
+# is the confusion issue #34 is about. A duplicate test run costs 5-9 minutes of Actions time, which
+# is free on a public repository, and it keeps the whole chain in one file where it can be read.
+#
+# `.build` is deliberately not cached for the same reason: a stale profile converts cleanly and
+# measures the wrong commit.
 name: Sonar
 
 on:
@@ -33,7 +46,7 @@ permissions:
 jobs:
   analysis:
     name: SonarQube Cloud
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     # GitHub withholds secrets from workflows triggered by a fork's pull request, so this job cannot
     # authenticate there. Skipping it is honest; letting it run and fail would train everyone to
     # ignore a red check on exactly the contributions that get the least scrutiny.
@@ -44,11 +57,50 @@ jobs:
       # below that so ordinary deletions do not fail the build, and well above the 111 lines the
       # broken configuration produced. A number nothing can fall below is not a check.
       MIN_NCLOC: "4000"
+      # Likewise for coverage. Note that this floor and the number justifying it are measured over
+      # DIFFERENT populations, so the headroom is an estimate rather than a subtraction:
+      # `scripts/coverage-to-sonar.sh` reported 84.2% locally on 2026-09-20 across the four library
+      # targets it can see, while the assertion reads Sonar's project-wide `coverage` over all of
+      # `sonar.sources`. No server-side value has been observed yet — this is the first run that
+      # imports one.
+      #
+      # The gap is structural: the XCTest bundle links the libraries and not the executables, so
+      # 1,074 of ~9,400 source lines (`XCodeVault` 326, `xcodevaultctl` 712, `XCodeVaultHelper` 36)
+      # produce no coverage rows at all and cannot, by this pipeline. Whether SonarQube counts a file
+      # absent from the report as uncovered or as having nothing to cover decides where the
+      # project-wide number lands, and that is measured on this run rather than guessed at here.
+      #
+      # What the floor is FOR is unchanged and is not a quality target: it separates "this project is
+      # under-tested" from "the import silently produced nothing", which render identically as 0%.
+      MIN_COVERAGE: "60"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Sonar needs full history to attribute issues to commits and to work out "new code".
           fetch-depth: 0
+      - name: Toolchain
+        # One command per line, not `;`-chained: a `;` chain reports only the LAST command's status,
+        # so a missing or unselected Xcode would be recorded in the log and pass the step.
+        run: |
+          set -o pipefail
+          sw_vers
+          xcodebuild -version
+          swift --version
+      - name: Tests, with coverage
+        # Not piped to `tail`. `ci.yml` does that to keep its log readable and has the failure-
+        # reporting machinery to make it safe; here a pipeline would only add a place for a failing
+        # run's one interesting line to scroll away. This job's diagnostics are `ci.yml`'s job.
+        #
+        # A consequence worth naming: a failing suite now aborts this job BEFORE the scan, so no
+        # analysis is uploaded and the dashboard keeps showing the previous commit. That is the
+        # stale-dashboard state assertion 3 of `sonar-verify.sh` exists to catch — and on such a run
+        # assertion 3 does not execute either. The signal is the red `ci.yml` and the red job here,
+        # not the dashboard, which is why neither should be read on its own.
+        run: swift test --enable-code-coverage
+      - name: Convert coverage for Sonar
+        # Fails loudly on an empty or implausibly small report rather than writing one Sonar would
+        # import as 0%.
+        run: bash scripts/coverage-to-sonar.sh coverage.xml
       - name: Java 21
         # Analyses running on a Java runtime below 21 stopped being supported on 2026-07-20. The
         # scanner ships its own JRE, so this is insurance against a runner image that resolves an
