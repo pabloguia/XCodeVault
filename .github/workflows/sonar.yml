@@ -66,9 +66,18 @@ jobs:
       #
       # The gap is structural: the XCTest bundle links the libraries and not the executables, so
       # 1,074 of ~9,400 source lines (`XCodeVault` 326, `xcodevaultctl` 712, `XCodeVaultHelper` 36)
-      # produce no coverage rows at all and cannot, by this pipeline. Whether SonarQube counts a file
-      # absent from the report as uncovered or as having nothing to cover decides where the
-      # project-wide number lands, and that is measured on this run rather than guessed at here.
+      # produce no coverage rows at all and cannot, by this pipeline.
+      #
+      # **Measured on 2026-09-20, where this comment used to say it would be.** SonarQube counts a
+      # file absent from the report as UNCOVERED, not as having nothing to cover: it reports 6157
+      # lines to cover against the 5615 the report supplies — 542 it adds itself, all uncovered —
+      # which is the whole of the drop from the converter's 84.6% to the project's 77.4%. Nothing is
+      # excluded to close that gap; the untestable targets are named above and the number is honest
+      # about them.
+      #
+      # One residue, stated rather than explained away: the server counts 4764 covered lines and a
+      # local run of the same commit counts 4752. The local report is produced on x86_64 and CI's on
+      # arm64, which is the obvious suspect, and it has not been established.
       #
       # What the floor is FOR is unchanged and is not a quality target: it separates "this project is
       # under-tested" from "the import silently produced nothing", which render identically as 0%.

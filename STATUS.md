@@ -108,7 +108,7 @@ is done. The post-publication issue backlog replaced it._
    branch gets a changed-files-only analysis — and because the Scan step carried
    `continue-on-error: true`. Both are fixed; the branch was renamed in SonarCloud.
 
-   Coverage and gate enforcement (issue #34, in flight). The gate had been **ERROR on one
+   Coverage and gate enforcement (issue #34, **closed 2026-09-20**). The gate had been **ERROR on one
    condition** — `new_coverage` 0.0 against a threshold of 80 — because no coverage was imported, so
    any commit that added a line scored 0%; and nothing in CI acted on the gate either way. A
    permanently red gate is as useless as a permanently green one.
@@ -120,10 +120,10 @@ is done. The post-publication issue backlog replaced it._
    the failing conditions — deliberately there rather than via `sonar.qualitygate.wait=true`, so that
    a gate failure cannot pre-empt the five assertions that establish the measurement was real.
 
-   Measured locally on 2026-09-20: **84.2%** over the four library targets (37 files, 4728/5615
-   lines). Each new assertion was driven to fail on purpose against the live server before being
-   trusted — coverage floor, gate, stale commit, unreadable task — and each died with a different,
-   nameable message.
+   Each new assertion was driven to fail on purpose against the live server before being trusted —
+   coverage floor, gate, stale commit, unreadable task — and each died with a different, nameable
+   message. (The figures below supersede the 84.2% this paragraph reported before the tests that
+   closed the gap were written.)
 
    **The red half is demonstrated, with real evidence rather than a contrived failure.** The first
    run with coverage imported (`fa5866c`, Actions run 35507891461) went red on
