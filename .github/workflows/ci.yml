@@ -84,6 +84,11 @@ jobs:
         # The control for SECURITY_MODEL.md, checked over the files as committed. The editor hooks
         # that carry the same rules are a convenience and are bypassable several ways; this is not.
         run: bash scripts/helper-invariants.sh
+      - name: Public surface of MigrationEngine (issue #32)
+        # The compiler's own view of the API, because the source-scanning test that asserts the
+        # same properties was walked past six times by six reviewers. `symbolgraph-extract` sees
+        # every spelling — attribute, generic, extension, factory — that a text scanner does not.
+        run: bash scripts/public-surface.sh
       - name: Redaction helper tests
         # These guard xcv_redact, which every evidence file below is filtered through before it is
         # uploaded as a public artifact.

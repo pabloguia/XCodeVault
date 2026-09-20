@@ -31,6 +31,7 @@ GATES=(
     "no-skips:bash scripts/ci-assert-no-skips.sh"
     "doc-mirror:bash scripts/check-doc-mirror.sh"
     "helper-invariants:bash scripts/helper-invariants.sh"
+    "public-surface:bash scripts/public-surface.sh"
     "redaction:bash scripts/experiments/test-common.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
     "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl report --json"
@@ -46,7 +47,7 @@ fast=0
 # The workflow is the source of truth for what CI runs; drifting from it silently is the one
 # failure this script cannot afford, because its whole value is "green here means green there".
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=11
+expected_steps=12
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2

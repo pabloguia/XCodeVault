@@ -40,10 +40,17 @@ import XCTest
 ///   both build, lint clean, and pass all four tests below, handing a caller outside this module
 ///   both fault-injection hooks with every property still `let` — the capability the fourth test
 ///   denies, reached by a more idiomatic route than `mutating` + `self =`. Enumerating shapes does
-///   not terminate (`callAsFunction`, a public subscript, a factory returning a `KeyPath`…), so
-///   this is recorded rather than patched: the control that would really close it is the
-///   compiler's own view of the public surface — `swift symbolgraph-extract`, asserting no public
-///   member of `MigrationEngine` mentions the hook types — not a bigger lexer here.
+///   not terminate (`callAsFunction`, a public subscript, a factory returning a `KeyPath`…), so it
+///   is not patched here. **`scripts/public-surface.sh` closes it** (issue #32): it asks the
+///   compiler through `swift symbolgraph-extract` and asserts that no public member of
+///   `MigrationEngine` takes a fault-injection hook and no public property is settable. Both
+///   `withHooks` and `withAfterCopy` die there, as does `@MainActor public var` — which neither
+///   this file nor the first version of that gate could see, both for the same reason: a pattern
+///   anchored at the start of a declaration does not survive an attribute being put in front of it.
+///
+///   What that gate does *not* cover, and this file does: in-module settability. A seam reachable
+///   only inside `XCodeVaultCore` never appears in the public surface, and in-module reassignment
+///   is what #27 and #31 were about.
 ///
 /// Closed since, rather than listed: tabs between `init` and its parameter list (`"\t"`/`"\r"` are
 /// now skipped); an unterminated literal blinding the whole-file scan (`engineChars()` fails on a
