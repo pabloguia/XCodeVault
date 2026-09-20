@@ -34,7 +34,7 @@ public struct CleanPlan: Sendable, Codable, Equatable {
 /// never appear here. Root-owned categories are listed but not executable until the
 /// privileged helper exists (M3).
 public struct CleanPlanner: Sendable {
-    public var home: String
+    public let home: String
     public init(home: String = NSHomeDirectory()) { self.home = home }
     /// Categories that are CoreSimulator device sets: emptied with `simctl --set <path> delete all`, not rm.
     public static let deviceSetCategories: Set<String> = ["xctestDevices", "playgroundDevices", "previews"]
@@ -158,11 +158,11 @@ public struct CleanError: DescribedError, Sendable {
 /// Refuses symlinks, mount points, anything outside the home directory or the catalog paths,
 /// and (unless forced) refuses DerivedData deletion while Xcode.app is running.
 public struct CleanExecutor: Sendable {
-    public var journal: Journal
-    public var home: String
-    public var useTrash: Bool
-    public var isXcodeRunning: @Sendable () -> Bool
-    public var runner: CommandRunning
+    public let journal: Journal
+    public let home: String
+    public let useTrash: Bool
+    public let isXcodeRunning: @Sendable () -> Bool
+    public let runner: CommandRunning
 
     public init(
         journal: Journal = Journal(), home: String = NSHomeDirectory(), useTrash: Bool = false,

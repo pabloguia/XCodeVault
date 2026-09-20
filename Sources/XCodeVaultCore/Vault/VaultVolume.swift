@@ -200,10 +200,10 @@ public struct VaultRegistry: Sendable {
 
 /// Answers "is this really our volume, right now?" without trusting names or paths.
 public struct VaultVerifier: Sendable {
-    public var registry: VaultRegistry
-    public var mountedVolumes: @Sendable () -> [Volume]
+    public let registry: VaultRegistry
+    public let mountedVolumes: @Sendable () -> [Volume]
     /// Mount-point predicate; defaults to `ATTR_DIR_MOUNTSTATUS`. Injectable so tests can stand in a directory for a volume.
-    public var isMountPoint: @Sendable (String) -> Bool
+    public let isMountPoint: @Sendable (String) -> Bool
     public init(
         registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
         isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) }

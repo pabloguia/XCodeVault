@@ -63,10 +63,26 @@ is done. The post-publication issue backlog replaced it._
    refusals — the vault-containment check in `removeSource`, `resume`'s destination-present check
    and the Xcode-running refusal on the `resume` branch that deletes — are pinned by tests).
 
-   Open: **#32** (new, from #31's sixth review — the seam guard is a hand-rolled lexer that six
-   reviews walked past six times; the class is not closed, and the control that would close it is
-   `swift symbolgraph-extract` rather than a larger lexer. Lets a future regression pass unnoticed;
-   reaches no user data), **#29** and **#30**.
+   #32 is **done** too (33175ea): `scripts/public-surface.sh` asks the compiler for the module's
+   public API through `swift symbolgraph-extract` and asserts that no public symbol takes a
+   fault-injection hook and no public property of `MigrationEngine` is settable. It is a CI gate
+   (ten now). A reviewer defeated its first version six ways in an hour; all six are caught and
+   verified by mutation, and what remains open is written into the script.
+
+   **#33** is done too: `VaultVerifier` and `CleanExecutor`'s seams are `let`, and the gate covers
+   all four types plus six *safety defaults* — `symbolgraph-extract` renders default arguments
+   verbatim, which pins something no behavioural test on this machine can. Changing
+   `CleanExecutor.init`'s `isXcodeRunning` default to `{ false }`, which in production disables the
+   refusal that stops a delete while Xcode is open, survived all 439 tests; with Xcode closed the
+   stub and the real check are indistinguishable, so the declaration is the only honest place to
+   assert it.
+
+   Two premises I wrote and then measured as wrong, recorded because they nearly drove work: #31's
+   title called `verifier` "a larger lever" than #27's seam (it is a *different* one), and #33's
+   text called `isMountPoint` the check rule 6 rests on with nothing pinning it (identity rests on
+   the UUID comparison, which fails closed; and the seam is pinned by `testVerifierStates`).
+
+   Open: **#29** and **#30**.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and

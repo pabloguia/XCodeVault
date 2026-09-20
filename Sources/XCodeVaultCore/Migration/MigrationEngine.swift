@@ -92,21 +92,19 @@ public struct MigrationEngine: Sendable {
     // silences the record of what happened; `runner` replaces every external command; `home` moves
     // where the engine believes the user's tree is.
     //
-    // **This closes the seams on this struct, not the seam class**, and the pointer matters for the
-    // reason `volumeUUIDAt`'s own comment gives below: two seams of the same shape with opposite
-    // mutability is how the wrong one gets copied. Still `public var`, reachable from `xcodevaultctl`
-    // and the app:
+    // The same shape existed on `VaultVerifier` (`Vault/VaultVolume.swift`) and `CleanExecutor`
+    // (`Clean/CleanPlanner.swift:160`), and issue #33 converted both — two seams of the same shape
+    // with opposite mutability is how the wrong one gets copied. All four types are covered by
+    // `scripts/public-surface.sh`, which asks the compiler rather than reading the source.
     //
-    //   - `VaultVerifier` (`Vault/VaultVolume.swift`) — `registry`, `mountedVolumes`, and
-    //     `isMountPoint`. The last is the `ATTR_DIR_MOUNTSTATUS` check this engine's disconnect
-    //     safety rests on, so `verifier` being `let` here does not stop a caller handing in a
-    //     `VaultVerifier(isMountPoint: { _ in true })`.
-    //   - `CleanExecutor` (`Clean/CleanPlanner.swift:160`) — `journal`, `home`, `useTrash`,
-    //     `isXcodeRunning`, `runner`: the same five shapes, on the type that actually deletes. An
-    //     earlier version of this comment named `CleanPlanner`, which shares the file and exposes
-    //     only `home`; it plans and does not delete, so the pointer sent a reader to the wrong type.
-    //
-    // `MigrationEngineSeamDisciplineTests` pins this struct. Nothing pins those two.
+    // While correcting that, one claim this comment used to make turned out to be wrong and is
+    // worth keeping corrected: it said `isMountPoint` was "the `ATTR_DIR_MOUNTSTATUS` check this
+    // engine's disconnect safety rests on". It is not. Positive identity rests on the UUID
+    // comparison and the sentinel match (`VaultVolume.swift:223`, `:230`, `:148-161`), which fail
+    // closed on every degradation — see the comment at `VaultVolume.swift:141-147`, which says so
+    // in terms. What `isMountPoint` decides is which *non-usable* diagnosis an absent volume gets:
+    // `.foreign`, or the shadow-data measurement returning `.ambiguous` with `shadowBytes`. Both
+    // refuse. Stubbing it degrades the report rule 6 asks for, not the refusal.
     public let runner: CommandRunning
     public let journal: Journal
     public let verifier: VaultVerifier

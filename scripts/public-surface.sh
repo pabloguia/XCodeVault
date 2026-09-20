@@ -1,5 +1,5 @@
 #!/bin/bash
-# Assert MigrationEngine's public surface, as the *compiler* sees it.
+# Assert the public surface of the seam-bearing types, as the *compiler* sees it.
 #
 # **Why this exists (issue #32).** `MigrationEngineSeamDisciplineTests` asserts the same properties
 # by reading the source text, and six independent reviews walked past it six times: it read the
@@ -32,7 +32,7 @@
 # `afterRenameAside`. Both put a caller-supplied call one rename away from every pattern here. The
 # rules are patterns; only the extraction is spelling-proof.
 #
-# Two rules, both about capability rather than style:
+# Three rules, all about capability rather than style:
 #   1. No public member may mention a fault-injection hook — a caller-supplied throwing closure the
 #      engine runs mid-migration. These exist for tests and live behind an `internal` initialiser.
 #   2. No public property may be `var`. Every seam is set through `init` and stays set (#27, #31);
@@ -40,7 +40,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TYPE="MigrationEngine"
+TYPES="MigrationEngine VaultVerifier CleanPlanner CleanExecutor"
 MODULE="XCodeVaultCore"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
@@ -63,27 +63,43 @@ xcrun swift-symbolgraph-extract \
     -module-name "$MODULE" -target "${ARCH}-apple-macosx14.0" \
     -sdk "$SDK" -I "$MODULES" -output-dir "$OUT" >/dev/null
 
-python3 - "$OUT/$MODULE.symbols.json" "$TYPE" <<'PY'
+python3 - "$OUT/$MODULE.symbols.json" $TYPES <<'PY'
 import json, sys, re
 
-graph, type_name = sys.argv[1], sys.argv[2]
+graph, type_names = sys.argv[1], sys.argv[2:]
 symbols = json.load(open(graph))["symbols"]
-members = [s for s in symbols if s["pathComponents"][:1] == [type_name]]
+members = [s for s in symbols if s["pathComponents"][:1] and s["pathComponents"][0] in type_names]
 
 
 def declaration(s):
     return "".join(f["spelling"] for f in s.get("declarationFragments", []))
 
 
-# Positive control. An extraction that silently produced nothing, or that read some other module,
-# would otherwise report a clean surface — the failure mode this whole issue is about. The six
-# seams named here are `let` in the shipped type and are what rule 2 is protecting.
-seams = {"runner", "journal", "verifier", "home", "isXcodeRunning", "volumeUUIDAt"}
-found = {s["pathComponents"][-1] for s in members}
-missing = seams - found
-if missing:
-    print(f"!! the symbol graph does not contain {type_name}'s seams: {sorted(missing)}")
-    print("   Nothing below is checking anything. The extraction read the wrong module, or the type changed shape.")
+# Positive control, per type. An extraction that silently produced nothing, or that read some other
+# module, would otherwise report a clean surface — the failure mode this whole gate is about.
+#
+# Keyed by type, not flattened into one set. A union answers "does this name exist on *any* of these
+# types", and `CleanPlanner`'s only seam is `home`, which two of its siblings also have — so it could
+# vanish from the module entirely and this still reported ok. A reviewer deleted it from a synthetic
+# graph and got `ok (9 members across 4 types, 9 seams verified present)`: the count came from argv,
+# not from what was found. That is the silent-empty failure the control exists to prevent,
+# reintroduced for one of four types by the change that added the other three.
+seams = {
+    "MigrationEngine": {"runner", "journal", "verifier", "home", "isXcodeRunning", "volumeUUIDAt"},
+    "VaultVerifier": {"registry", "mountedVolumes", "isMountPoint"},
+    "CleanPlanner": {"home"},
+    "CleanExecutor": {"journal", "home", "useTrash", "isXcodeRunning", "runner"},
+}
+absent = []
+for owner, want in seams.items():
+    have = {s["pathComponents"][-1] for s in members if s["pathComponents"][0] == owner}
+    if want - have:
+        absent.append(f"{owner}: {sorted(want - have)}")
+if absent:
+    print("!! the symbol graph does not contain these seams:")
+    for a in absent:
+        print(f"   {a}")
+    print("   Nothing below is checking anything. The extraction read the wrong module, or a type changed shape.")
     sys.exit(1)
 
 failures = []
@@ -96,7 +112,7 @@ for s in symbols:
     decl = declaration(s)
     public = s.get("accessLevel") == "public"
     name = ".".join(s["pathComponents"])
-    is_member = s["pathComponents"][:1] == [type_name]
+    is_member = bool(s["pathComponents"][:1]) and s["pathComponents"][0] in type_names
 
     # Rule 1 — a parenthesised throwing closure returning Void is the shape of both hooks. A
     # function that merely `throws` does not match: `copyAndVerify(_:)` reads
@@ -135,11 +151,53 @@ for s in symbols:
         if not re.search(r"\{\s*get\s*\}\s*$", decl):
             failures.append((name, "is publicly settable; every seam must be `let`, set through `init`", decl))
 
+# Rule 3 — the shipped default of a safety seam must be the real check.
+#
+# `symbolgraph-extract` renders default arguments verbatim, which pins something no behavioural test
+# on this machine can. Changing `CleanExecutor.init`'s `isXcodeRunning` default to `{ false }` —
+# which in production disables the refusal that stops a delete while Xcode is open — survives all
+# 439 tests, because with Xcode closed the stub and the real check are indistinguishable. Asserting
+# the *declaration* costs nothing and cannot pass vacuously.
+#
+# `VaultRegistry.register`'s `volumeUUID` is the largest of these: it is the positive identity
+# assertion that disconnect safety actually rests on, it is a parameter rather than a property so
+# rule 2 cannot see it, and no test pins its default either.
+DEFAULTS = [
+    ("CleanExecutor", "init", "isXcodeRunning", "CleanExecutor.xcodeIsRunning"),
+    ("MigrationEngine", "init", "isXcodeRunning", "CleanExecutor.xcodeIsRunning"),
+    ("MigrationEngine", "init", "volumeUUIDAt", "MountStatus.volumeUUID(at:)"),
+    ("VaultVerifier", "init", "isMountPoint", "MountStatus.isMountPoint($0)"),
+    ("VaultRegistry", "register", "isMountPoint", "MountStatus.isMountPoint($0)"),
+    ("VaultRegistry", "register", "volumeUUID", "MountStatus.volumeUUID(at: $0)"),
+]
+for owner, member, param, expected in DEFAULTS:
+    seen = [
+        s for s in symbols
+        if s["pathComponents"][:1] == [owner] and s["pathComponents"][-1].startswith(member) and f"{param}:" in declaration(s)
+    ]
+    # Positive control per entry: a renamed parameter or member makes this rule silently check
+    # nothing, which is the failure this file has had to be rescued from repeatedly.
+    if not seen:
+        failures.append((f"{owner}.{member}", f"declares no `{param}:` — this rule is now checking nothing and must be updated", ""))
+        continue
+    for s in seen:
+        decl = declaration(s)
+        # The `{ ... }` is optional: half of these defaults are a bare function reference
+        # (`CleanExecutor.xcodeIsRunning`) and half are a closure wrapping a call
+        # (`{ MountStatus.isMountPoint($0) }`). Requiring the call to sit immediately after `=`
+        # failed on the second kind — which the gate reported as three regressions on a clean tree,
+        # a false positive that would have taught the next reader to distrust it.
+        if not re.search(rf"{re.escape(param)}\s*:[^=]*=\s*\{{?\s*{re.escape(expected)}", decl):
+            actual = re.search(rf"{re.escape(param)}\s*:[^=]*=\s*([^,]+)", decl)
+            failures.append((
+                f"{owner}.{member}", f"`{param}` no longer defaults to `{expected}` — a safety check replaced at its wiring",
+                (actual.group(0) if actual else decl)[:150]))
+
 if failures:
-    print(f"!! {type_name}'s public surface regressed (issues #27, #31, #32):")
+    print("!! the public surface regressed (issues #27, #31, #32, #33):")
     for name, why, decl in failures:
         print(f"   {name}\n       {why}\n       {decl[:150]}")
     sys.exit(1)
 
-print(f"public-surface: ok ({len(members)} public members of {type_name}, {len(seams)} seams verified present)")
+print(f"public-surface: ok ({len(members)} members across {len(seams)} types; {sum(len(v) for v in seams.values())} seams and {len(DEFAULTS)} safety defaults verified)")
 PY

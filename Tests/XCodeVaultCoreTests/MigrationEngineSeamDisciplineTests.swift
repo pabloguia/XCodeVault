@@ -59,8 +59,9 @@ import XCTest
 /// `blanked(_:)` still handles no multiline (`"""`) or raw (`#"`) literal, and `MigrationEngine`
 /// has neither today. If one appears, the EOF control fires rather than the scan going quiet.
 ///
-/// Nothing here pins `VaultVerifier`'s or `CleanExecutor`'s seams, which remain `public var` — see
-/// the pointer in `MigrationEngine.swift`.
+/// `VaultVerifier`'s and `CleanExecutor`'s seams were `public var` when this file was written and
+/// are `let` since issue #33; `scripts/public-surface.sh` covers all four types. This file still
+/// covers what that gate cannot see: in-module settability, which never appears in a symbol graph.
 ///
 /// The idiom is the one `DoctorFamilyCompositionTests` already uses in this suite: read the source
 /// and assert a shape. It is blunt, and it is the only thing that can fail here.
