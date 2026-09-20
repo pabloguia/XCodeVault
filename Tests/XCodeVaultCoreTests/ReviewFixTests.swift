@@ -46,15 +46,27 @@ final class ReviewFixMigrationTests: XCTestCase {
 
     func testRemoveSourceRefusesWhileXcodeRunsAndRestoresOnPostRenameMutation() throws {
         let f = try Fixture()
-        var engine = f.engine()
+        // One engine, a world that changes around it — which is what this stages, and why the seams
+        // being `let` (issue #31) does not cost anything here. The closures read a flag when they
+        // are called, so the engine is built once and answers differently as the flag moves. That is
+        // closer to the real sequence than rebuilding the engine would be: Xcode quits between two
+        // attempts at the *same* operation.
+        let xcodeHasQuit = Flag()
+        let engine = f.engine(
+            afterRenameAside: { aside in
+                // Only in the second attempt. In the first, `removeSource` refuses before any
+                // rename, so this never fires — gating it on the same flag keeps that true rather
+                // than resting on the order of two checks.
+                guard xcodeHasQuit.isSet else { return }
+                FileManager.default.createFile(atPath: aside + "/late.xcarchive", contents: Data([1]))
+            },
+            isXcodeRunning: { !xcodeHasQuit.isSet })
         let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
         let outcome = try engine.copyAndVerify(plan)
-        engine.isXcodeRunning = { true }
         XCTAssertThrowsError(try engine.removeSource(outcome, confirmNonRegenerable: true)) { XCTAssertTrue("\($0)".contains("Xcode.app is running")) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: f.archives))
         // Mutation after the rename (a write that raced the rename) must fail verification and restore the source.
-        engine.isXcodeRunning = { false }
-        engine.afterRenameAside = { aside in FileManager.default.createFile(atPath: aside + "/late.xcarchive", contents: Data([1])) }
+        xcodeHasQuit.set()
         XCTAssertThrowsError(try engine.removeSource(outcome, confirmNonRegenerable: true)) { XCTAssertTrue("\($0)".contains("restored"), "\($0)") }
         XCTAssertTrue(FileManager.default.fileExists(atPath: f.archives + "/late.xcarchive"), "source restored at its original path with the late write intact")
         XCTAssertTrue(FileManager.default.fileExists(atPath: plan.destination))
@@ -175,6 +187,93 @@ final class ReReviewTests: XCTestCase {
             XCTAssertTrue("\(e)".contains("without guessing"), "a later line supplied the category: \(e)")
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: aside))
+    }
+
+    /// **The split-brain refusal inside the one function that deletes a source**, and nothing pinned
+    /// it until a reviewer ran issue #31's acceptance criterion properly.
+    ///
+    /// `removeSource` re-resolves the vault by UUID and requires the destination to still be inside
+    /// it. Deleting that guard survived the whole suite as it then stood (432 tests) — while its exact
+    /// twin in `resume` was pinned.
+    /// `MIGRATION_ENGINE.md` §Split-brain safety is the reason it is there: after a crash and a
+    /// reboot the external volume can lose the mount race, and a directory holding an older copy can
+    /// sit at the mount point. `lstat` cannot tell those apart, and deleting the original against
+    /// the wrong one leaves shadow data on the internal disk as the only survivor.
+    ///
+    /// Staged as the vault answering from somewhere else between the copy and the removal, which is
+    /// a second engine rather than a mutated one — the seams are `let` now.
+    func testRemoveSourceRefusesWhenTheVaultNoLongerHoldsTheCopy() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let engine = f.engine()
+        let plan = try engine.planExternalize(categoryID: "archives", source: f.archives, vaultRef: "VU")
+        let outcome = try engine.copyAndVerify(plan)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.destination), "precondition: the copy landed")
+
+        // A second, fully valid vault at a different mount point — sentinel and all, because
+        // `resolveUsable` refuses a directory without one long before the containment check, and a
+        // refusal for the wrong reason would pin nothing. The same UUID now answers from there, so
+        // the destination recorded in the plan is no longer inside the verified vault directory.
+        let elsewhere = f.t.dir("somewhere-else")
+        let elsewhereVault = f.t.dir("somewhere-else/" + VaultVolume.directoryName)
+        let sentinel = VaultSentinel(volumeUUID: "VU", sentinelID: "tok", createdAt: Date(), createdBy: "t")
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        try enc.encode(sentinel).write(to: URL(fileURLWithPath: elsewhereVault + "/" + VaultVolume.sentinelName))
+        XCTAssertThrowsError(
+            try f.engine(vaultMountPoint: elsewhere).removeSource(outcome, confirmNonRegenerable: true)
+        ) { e in
+            XCTAssertTrue("\(e)".contains("not on the verified vault volume"), "\(e)")
+        }
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: f.archives),
+            "the original must survive — deleting it here is the shadow-data outcome rule 6 forbids")
+    }
+
+    /// `resume` refuses when the vault copy is gone, and nothing pinned that either. Same pass, same
+    /// reviewer: deleting this guard survived the whole suite as it then stood (432 tests).
+    ///
+    /// It is the disconnect case stated plainly — the operation crashed after the rename, the volume
+    /// went away, and completing the cleanup would delete the only remaining copy.
+    func testResumeRefusesWhenTheVaultCopyIsNoLongerPresent() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let (plan, aside) = try cleanupInterruptedAfterRename(f)
+        try FileManager.default.removeItem(atPath: plan.destination)
+
+        XCTAssertThrowsError(try f.engine().resume(operationID: plan.operationID, confirmNonRegenerable: true)) { e in
+            // Anchored on the parenthetical, which only this refusal emits. `stateSentence()` also
+            // says "is NOT present at ...", and discriminating between the two by the case of one
+            // word is a coin-flip away from passing on the wrong message.
+            XCTAssertTrue("\(e)".contains("(volume disconnected?)"), "\(e)")
+        }
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: aside),
+            "with the vault copy gone the aside copy is the only one left; it must not be removed")
+    }
+
+    /// `resume` refuses while Xcode runs, and nothing pinned that until issue #31.
+    ///
+    /// Found by the mutation testing #31's own acceptance criteria asked for: `isXcodeRunning` gates
+    /// two refusals, and deleting this one — the one guarding the branch that completes a cleanup
+    /// after a crash, which is the branch that **deletes the original** — failed no test.
+    ///
+    /// Its sibling in `removeSource` fails four *assertions, all inside one test*. An earlier
+    /// version of this sentence said "fails four", which reads as four tests and claims a redundancy
+    /// that does not exist: that guard has exactly one witness too.
+    ///
+    /// The guard is not decoration here. `resume` reaches `removeItem` on the aside copy, and Xcode
+    /// writing into that tree while it is being deleted is the race the refusal exists for.
+    func testResumeRefusesToCompleteACleanupWhileXcodeIsRunning() throws {
+        let f = try MigrationEngineTests.Fixture()
+        let (plan, aside) = try cleanupInterruptedAfterRename(f)
+
+        XCTAssertThrowsError(
+            try f.engine(isXcodeRunning: { true }).resume(operationID: plan.operationID, confirmNonRegenerable: true)
+        ) { e in
+            XCTAssertTrue("\(e)".contains("Xcode.app is running"), "\(e)")
+        }
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: aside),
+            "the original must still be at the aside path — a refusal that deleted first would be no refusal")
     }
 
     /// The `aside` path is the one that reaches `removeItem`. It used to come from the journal, so a

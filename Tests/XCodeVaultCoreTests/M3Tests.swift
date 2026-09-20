@@ -260,16 +260,28 @@ final class MigrationEngineTests: XCTestCase {
         /// #27): the engine's seam is `let`, so the answer has to be chosen when the engine is built.
         func engine(
             afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil,
-            volumeUUIDAt: @escaping @Sendable (String) -> String? = { _ in "VU" }
+            afterRenameAside: (@Sendable (String) throws -> Void)? = nil,
+            isXcodeRunning: @escaping @Sendable () -> Bool = { false },
+            volumeUUIDAt: @escaping @Sendable (String) -> String? = { _ in "VU" },
+            /// Where the verifier believes the vault is mounted. Overriding it models the vault
+            /// moving, or a different volume answering to the same UUID, between two operations —
+            /// which is what the containment guards on the deletion paths exist for, and which the
+            /// seams being `let` (issue #31) means a test stages by building a second engine rather
+            /// than by mutating the first.
+            vaultMountPoint: String? = nil
         ) -> MigrationEngine {
-            let mp = vaultMount
+            let mp = vaultMountPoint ?? vaultMount
             let vol = Volume(
                 deviceNode: "/dev/disk98s1", volumeName: "VAULT", volumeUUID: "VU", mountPoint: mp, filesystemPersonality: "APFS", filesystemType: "apfs",
                 isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
                 totalBytes: 1, freeBytes: 1, isBootVolume: false)
+            // Naming both hooks explicitly is what selects the internal initialiser (issue #31): the
+            // public one cannot install a fault-injection hook, and the two are told apart by these
+            // arguments being present rather than defaulted.
             return MigrationEngine(
-                journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home, isXcodeRunning: { false },
-                afterCopy: afterCopy,
+                journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home,
+                isXcodeRunning: isXcodeRunning,
+                afterCopy: afterCopy, afterRenameAside: afterRenameAside,
                 // The fixture's "vault" is a directory in /tmp, so the real lookup answers with the
                 // boot volume's UUID — correctly, which is the whole point of the check under test.
                 // Tests that want the volume to *vanish* pass a different answer above.

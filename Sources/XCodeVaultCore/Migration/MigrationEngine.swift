@@ -77,20 +77,60 @@ extension MigrationEngine {
 }
 
 public struct MigrationEngine: Sendable {
-    public var runner: CommandRunning
-    public var journal: Journal
-    public var verifier: VaultVerifier
-    public var home: String
-    public var isXcodeRunning: @Sendable () -> Bool
+    // Every seam is `let` (issue #31). They were all `var` and all already settable through `init`,
+    // so the mutability bought nothing a caller needed and cost a second surface on each: a shipped
+    // type whose checks can be switched off after construction, with the suite green.
+    //
+    // `verifier` was the one that mattered, though not for the reason this comment first gave. It
+    // does **not** switch off verification: the byte-and-metadata comparison runs through
+    // `verifierFor(_:)`, which builds a `TreeVerifier` and never consults this property. What
+    // `verifier` decides is `resolveUsable` — whether the named vault volume is mounted and usable
+    // at all, and which directory on it is the vault. A stub there points a migration at a path of
+    // the caller's choosing while reporting the vault healthy. That is a different lever from the
+    // `volumeUUIDAt` seam closed under #27, which makes one lookup lie; neither contains the other,
+    // and calling this one "strictly larger" was a guess dressed as a finding. `isXcodeRunning` defeats the "is Xcode running" refusal; `journal` redirects or
+    // silences the record of what happened; `runner` replaces every external command; `home` moves
+    // where the engine believes the user's tree is.
+    //
+    // **This closes the seams on this struct, not the seam class**, and the pointer matters for the
+    // reason `volumeUUIDAt`'s own comment gives below: two seams of the same shape with opposite
+    // mutability is how the wrong one gets copied. Still `public var`, reachable from `xcodevaultctl`
+    // and the app:
+    //
+    //   - `VaultVerifier` (`Vault/VaultVolume.swift`) — `registry`, `mountedVolumes`, and
+    //     `isMountPoint`. The last is the `ATTR_DIR_MOUNTSTATUS` check this engine's disconnect
+    //     safety rests on, so `verifier` being `let` here does not stop a caller handing in a
+    //     `VaultVerifier(isMountPoint: { _ in true })`.
+    //   - `CleanExecutor` (`Clean/CleanPlanner.swift:160`) — `journal`, `home`, `useTrash`,
+    //     `isXcodeRunning`, `runner`: the same five shapes, on the type that actually deletes. An
+    //     earlier version of this comment named `CleanPlanner`, which shares the file and exposes
+    //     only `home`; it plans and does not delete, so the pointer sent a reader to the wrong type.
+    //
+    // `MigrationEngineSeamDisciplineTests` pins this struct. Nothing pins those two.
+    public let runner: CommandRunning
+    public let journal: Journal
+    public let verifier: VaultVerifier
+    public let home: String
+    public let isXcodeRunning: @Sendable () -> Bool
     /// Test hook: called between COPY and VERIFY (fault injection).
-    public var afterCopy: (@Sendable (MigrationPlan) throws -> Void)?
+    ///
+    /// **Internal, and off the public initialiser entirely** — the other half of #31, and a
+    /// different question from mutability. These two execute caller-supplied code in the middle of
+    /// a migration. Making them `let` would stop them being swapped after construction and leave
+    /// them just as constructible; nothing in `Sources/` ever passed either one, so no production
+    /// caller loses anything by not being able to.
+    ///
+    /// They remain reachable from the test target, which imports this module `@testable`, through
+    /// the internal initialiser below.
+    let afterCopy: (@Sendable (MigrationPlan) throws -> Void)?
     /// Test hook: called after the source has been renamed aside, before the final verify+delete.
-    public var afterRenameAside: (@Sendable (String) throws -> Void)?
+    /// Internal for the reason `afterCopy` gives.
+    let afterRenameAside: (@Sendable (String) throws -> Void)?
     /// The volume identity of the filesystem containing a path. Injected for the same reason
     /// `isMountPoint` is injected elsewhere in this codebase: a test's vault is a directory in
     /// `/tmp` with an invented UUID, and the real lookup correctly answers with the boot volume's.
-    /// `let`, not `var` (issue #27). It is already settable through `init`, so the `var` bought
-    /// nothing a test needs and cost a second surface: any caller of a shipped type could assign
+    /// `let`, not `var` (issue #27, then #31 for the rest). It is already settable through `init`,
+    /// so the `var` bought nothing a test needs and cost a second surface: any caller could assign
     /// `{ _ in nil }` — which makes every volume unreadable and refuses everything — or a stub that
     /// always matches, which disables the identity comparison this engine's disconnect safety rests
     /// on, with the whole suite green.
@@ -98,21 +138,36 @@ public struct MigrationEngine: Sendable {
     /// `Doctor.volumeUUIDAt` was converted for the same reason while closing #26, and the comment
     /// there named this one as the inconsistent sibling. Two seams of the same shape in the same
     /// module with opposite mutability is how the wrong one gets copied later.
-    ///
-    /// **This closes one seam of several, and the others are larger.** A reviewer was right to push
-    /// back on an earlier version of this comment, which implied the engine's seams were now
-    /// immutable. They are not: `verifier`, `afterCopy`, `afterRenameAside`, `runner`, `journal`,
-    /// `home` and `isXcodeRunning` are all still `public var` on this struct. `verifier` is the
-    /// bigger lever by some distance — assigning a stub to it disables verification wholesale,
-    /// which is a stronger move than making one lookup lie. They are not converted here because two
-    /// of them are assigned post-construction by existing tests, so that is a change with its own
-    /// churn and its own review. Issue #31.
     public let volumeUUIDAt: @Sendable (String) -> String?
 
+    /// The initialiser production uses. It cannot install a fault-injection hook.
     public init(
         runner: CommandRunning = ProcessCommandRunner(), journal: Journal = Journal(), verifier: VaultVerifier = VaultVerifier(),
         home: String = NSHomeDirectory(), isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning,
-        afterCopy: (@Sendable (MigrationPlan) throws -> Void)? = nil, afterRenameAside: (@Sendable (String) throws -> Void)? = nil,
+        volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:)
+    ) {
+        self.runner = runner; self.journal = journal; self.verifier = verifier; self.home = home
+        self.isXcodeRunning = isXcodeRunning; self.volumeUUIDAt = volumeUUIDAt
+        self.afterCopy = nil
+        self.afterRenameAside = nil
+    }
+
+    /// The initialiser that can install the two fault-injection hooks. Internal: reachable from the
+    /// test target through `@testable`, and from nowhere else.
+    ///
+    /// What keeps the hooks off the public API is this `internal`, and nothing else. An earlier
+    /// version of this comment claimed the hooks' absent defaults did that work — that giving them
+    /// one would make the two initialisers ambiguous and silently reopen the public path. A reviewer
+    /// disproved it: `= nil` draws no diagnostic, and a cross-module caller still fails with `extra
+    /// argument 'afterCopy' in call`.
+    ///
+    /// The absent defaults do a smaller, real job: they are what tells these two initialisers apart
+    /// in-module, so a call naming neither hook lands on the public one by its shape rather than by
+    /// an overload-ranking rule. Pass `nil` explicitly to build a hookless engine through this path.
+    init(
+        runner: CommandRunning = ProcessCommandRunner(), journal: Journal = Journal(), verifier: VaultVerifier = VaultVerifier(),
+        home: String = NSHomeDirectory(), isXcodeRunning: @escaping @Sendable () -> Bool = CleanExecutor.xcodeIsRunning,
+        afterCopy: (@Sendable (MigrationPlan) throws -> Void)?, afterRenameAside: (@Sendable (String) throws -> Void)?,
         volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:)
     ) {
         self.runner = runner; self.journal = journal; self.verifier = verifier; self.home = home
