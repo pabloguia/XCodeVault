@@ -1,0 +1,194 @@
+#!/bin/bash
+# Shared staging for the two E6b variants: resolve a donor, refuse the dangerous ones, mount it over
+# a target path, verify it took, and give everything back afterwards.
+#
+# **Why this exists rather than two copies.** Variant A and variant B do the same staging and
+# differ only in how the volume goes away — a clean `umount` versus a pulled cable. They were
+# separate copies, and three review rounds showed what that costs: every fix landed in the variant
+# under review and the sibling kept the defect. `mount_apfs` was given a mount point instead of a
+# device node in both; the boot-volume guard, the "did the mount take" check, the created-directory
+# ambiguity note and the donor remount were added to B and missing from A — while the runbook told
+# people to run A first. This file is the fix for that, not for any one bug.
+#
+# Deliberately not named `e*.sh`: `ExperimentScriptSafetyTests` requires every experiment script to
+# source `common.sh` and use its header/redaction helpers, and this is a library like `common.sh`
+# itself, not an experiment.
+#
+# Callers must have sourced `common.sh` first, and must have opened fd 3 on the terminal — every
+# refusal and warning here goes to `>&3`, because the caller's stdout is a report file that this
+# code's own cleanup may delete.
+
+# Self-defending rather than merely documented: a caller that forgets `exec 3>&1` would get a
+# bad-fd write on every refusal while `return 1` still fired — a silent refusal, the same shape
+# one level up. Falling back to stderr keeps the message somewhere a person reads.
+{ true >&3; } 2>/dev/null || exec 3>&2
+
+XCV_STAGE_TARGET_CREATED=0
+XCV_STAGE_DONOR_UNMOUNTED=0
+XCV_STAGE_CLEANED=0
+
+xcv_whole_disk() { diskutil info "$1" 2>/dev/null | sed -n 's/^ *Part of Whole: *//p' | head -1; }
+
+# xcv_stage_resolve_donor <mount-point>
+#
+# Sets XCV_DEV, XCV_FS, XCV_DONOR_UUID, XCV_DONOR_DISK. Refuses anything that must never be yanked.
+xcv_stage_resolve_donor() {
+    local mp="$1"
+
+    # Only an external volume. `e6b-check.sh` excludes the boot volume from what it *offers*; the
+    # scripts that actually `diskutil unmount` had no equivalent guard, and a reviewer showed that
+    # `/System/Volumes/Data` cleared every check — mount point, device node, APFS. The script would
+    # have unmounted the internal data volume and asked the operator to pull the internal disk.
+    case "$mp" in
+        "$XCV_VOLUMES_DIR"/*) ;;
+        *)
+            echo "!! $mp is not under $XCV_VOLUMES_DIR. Only an external volume can be a donor." >&3
+            return 1
+            ;;
+    esac
+    mount | grep -q " on $(xcv_re_escape "$mp") " || { echo "!! $mp is not a mount point" >&3; return 1; }
+
+    # `mount_apfs` takes a device special node (`/dev/diskNsM`), not a mount point. Both variants
+    # passed the mount point for months, so the mount could never succeed — and `xcv_run` cannot
+    # report that, because it ends in `echo` and always returns 0.
+    XCV_DEV="$(diskutil info "$mp" 2>/dev/null | sed -n 's/^ *Device Node: *//p' | head -1)"
+    XCV_FS="$(diskutil info "$mp" 2>/dev/null | sed -n 's/^ *File System Personality: *//p' | head -1)"
+    XCV_DONOR_UUID="$(xcv_volume_uuid "$mp")"
+    XCV_DONOR_DISK="$(xcv_whole_disk "$mp")"
+
+    [ -n "$XCV_DEV" ] || { echo "!! could not resolve a device node for $mp" >&3; return 1; }
+    # Required, not optional: `diskutil info ""` exits 1, so an empty UUID makes a later
+    # `! diskutil info "$uuid"` test vacuously true and silently degrades identity to the device
+    # node — the half that is unreliable across a reconnect.
+    [ -n "$XCV_DONOR_UUID" ] \
+        || { echo "!! could not read a volume UUID for $mp; identity would rest on a reusable device node." >&3; return 1; }
+    case "$XCV_FS" in
+        *APFS*) ;;
+        *) echo "!! $mp is $XCV_FS, not APFS; mount_apfs cannot mount it. Use an APFS donor." >&3; return 1 ;;
+    esac
+    # A synthesised APFS container can expose a volume under /Volumes that lives on the same
+    # physical disk as `/`.
+    local boot
+    boot="$(xcv_whole_disk /)"
+    [ -n "$boot" ] && [ "$XCV_DONOR_DISK" = "$boot" ] \
+        && { echo "!! $mp is on $XCV_DONOR_DISK, the same physical disk as /. Refusing." >&3; return 1; }
+    return 0
+}
+
+# xcv_stage_guard_target <target>
+xcv_stage_guard_target() {
+    local target="$1"
+    if mount | grep -q " on $(xcv_re_escape "$target") "; then
+        echo "!! Something is already mounted at $target. Staging over it would hide it, and cleanup" >&3
+        echo "   would force-unmount someone else's filesystem — possibly this product's own vault." >&3
+        return 1
+    fi
+    if [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
+        echo "!! $target is not empty. Run scripts/experiments/e6b-check.sh, which explains this and" >&3
+        echo "   what clearing the cache costs." >&3
+        return 1
+    fi
+    # A *session*, not CoreSimulator's launchd XPC services: those are on-demand, present on any
+    # machine that has ever booted a simulator, and probe 5 deliberately restarts one. Matching them
+    # by the substring "Simulator" is why an earlier version could never have run anywhere.
+    if pgrep -qx "xcodebuild|Xcode|Simulator"; then
+        echo "!! An Xcode, Simulator or xcodebuild session is running. This machine's simulators are" >&3
+        echo "   used by test rigs, so check whose it is before stopping anything." >&3
+        return 1
+    fi
+    return 0
+}
+
+# xcv_stage_mount <target>
+#
+# Unmounts the donor, creates the target if needed, mounts, and VERIFIES that our filesystem is the
+# one mounted there. Writes its narration to stdout (the caller's report).
+xcv_stage_mount() {
+    local target="$1"
+    xcv_run "unmount donor from its mount point" diskutil unmount "$XCV_DEV"
+    XCV_STAGE_DONOR_UNMOUNTED=1
+    if [ ! -d "$target" ]; then
+        # **Recorded, because it changes what a probe means.** "Directory present, not a mount
+        # point" is the one outcome that makes issue #24's bug reachable — and if this run created
+        # the directory, that reading is ambiguous between a macOS-recreated stub and our own mkdir
+        # showing through. Variant A planted it with no note at all, which made its headline finding
+        # a foregone conclusion.
+        mkdir -p "$target"
+        XCV_STAGE_TARGET_CREATED=1
+        echo "NOTE: $target did not exist and was created by this run. A later probe reporting a"
+        echo "      directory that is not a mount point is therefore AMBIGUOUS — it may be this mkdir."
+    fi
+    xcv_run "mount $XCV_DEV at $target" mount_apfs -o nobrowse "$XCV_DEV" "$target"
+
+    # Anchored to OUR device. Asking "is something mounted there" would pass on a leftover mount
+    # from an aborted run while `mount_apfs` had in fact failed.
+    if ! mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on $(xcv_re_escape "$target") "; then
+        echo "!!!! MOUNT DID NOT TAKE: $XCV_DEV is not mounted at $target. Nothing below was run."
+        echo "!! MOUNT DID NOT TAKE — $XCV_DEV is not mounted at $target. Nothing was recorded." >&3
+        return 1
+    fi
+    return 0
+}
+
+# xcv_stage_cleanup <target>
+#
+# Idempotent. Unmounts the staged filesystem, removes a directory this run created, and gives the
+# donor back — reporting loudly on the terminal if it cannot do any of it.
+xcv_stage_cleanup() {
+    local target="$1"
+    [ "$XCV_STAGE_CLEANED" = 1 ] && return 0
+    XCV_STAGE_CLEANED=1
+
+    if mount | grep -q " on $(xcv_re_escape "$target") "; then
+        # Force first: a plain `umount` against a yanked device can block with no timeout, so a
+        # `-f` *fallback* may never be reached.
+        umount -f "$target" 2>/dev/null || umount "$target" 2>/dev/null || true
+    fi
+    if mount | grep -q " on $(xcv_re_escape "$target") "; then
+        echo "!! COULD NOT UNMOUNT $target. A filesystem is still mounted over a system cache path." >&3
+        echo "!! Unmount it before using Xcode or the simulators: sudo umount -f $target" >&3
+    fi
+    if [ "$XCV_STAGE_TARGET_CREATED" = 1 ] && [ -d "$target" ] && [ -z "$(ls -A "$target" 2>/dev/null)" ]; then
+        rmdir "$target" 2>/dev/null || echo "!! could not remove the $target directory this run created" >&3
+    fi
+    # By UUID first: a device node is reused after a reconnect, which is exactly the moment this
+    # runs in variant B.
+    if [ "$XCV_STAGE_DONOR_UNMOUNTED" = 1 ]; then
+        if diskutil info "$XCV_DONOR_UUID" >/dev/null 2>&1 || diskutil info "$XCV_DEV" >/dev/null 2>&1; then
+            # By UUID for the "is it already back?" test too. Asking by node here, two lines above a
+            # remount that deliberately prefers the UUID, meant a renumbered donor read as "not back"
+            # and the node fallback below could then mount whatever now holds that node.
+            diskutil info "$XCV_DONOR_UUID" 2>/dev/null | grep -q "Mounted: *Yes" \
+                || diskutil mount "$XCV_DONOR_UUID" >/dev/null 2>&1 \
+                || echo "!! YOUR DONOR VOLUME IS STILL UNMOUNTED. Remount it: diskutil mount $XCV_DONOR_UUID" >&3
+        fi
+    fi
+}
+
+# xcv_stage_probe <target> <label>
+#
+# The probe both variants write. It was duplicated, and by the time a reviewer looked it had already
+# drifted — variant A printed `containing filesystem` third and variant B fourth, so the two evidence
+# files could not be read side by side, which is the one thing you want when both must be read
+# together before either is the answer. That is the divergence this file exists to end, and probe()
+# was the block it had not absorbed.
+# **Two false claims stood in variant A's copy of this**, and they are recorded because the second
+# was the fix for the first. It claimed to ask "`mountStatus` as the helper asks it": it does not —
+# the helper uses `ATTR_DIR_MOUNTSTATUS` through `MountStatus`, while this parses `mount(8)` and
+# `df`. The replacement claimed `stat -f %SY` prints the containing filesystem's mount point: `%Y` is
+# a *symlink target*, and on a directory it prints nothing and exits 0 — so the `|| df` fallback
+# could never fire and the field was empty in every run that script would ever have produced. It is
+# the only field naming which filesystem the target sits on, which is the whole difference between
+# "a stub on the internal disk" and "the donor is still there".
+xcv_stage_probe() {
+    local target="$1"
+    echo "--- $2 ---"
+    if [ -e "$target" ]; then
+        stat -f '  exists: type=%HT mode=%Sp owner=%Su:%Sg links=%l device=%d' "$target"
+        echo "  containing filesystem: $(df "$target" 2>/dev/null | awk 'NR==2{print $1" on "$NF}')"
+        echo "  is a mount point per mount(8): $(mount | grep -c " on $(xcv_re_escape "$target") ")"
+        echo "  entries: $(ls -A "$target" 2>/dev/null | wc -l | tr -d ' ')"
+    else
+        echo "  absent"
+    fi
+}

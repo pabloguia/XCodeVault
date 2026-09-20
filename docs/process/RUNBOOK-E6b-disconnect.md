@@ -33,72 +33,104 @@ Two reasons, and only the second is about hardware:
    pulled, a bus reset — and a clean `umount` is not obviously the same event. macOS may well
    behave differently. Both variants must be recorded before either is treated as the answer.
 
-## Prerequisites (check, do not assume)
+## Prerequisites (check, do not assume — there is a script for it)
 
-- [ ] An external volume you can afford to yank, mounted, with nothing of yours on it.
-- [ ] `/Library/Developer/CoreSimulator/Caches/dyld` **empty or absent.** The script refuses
-      otherwise, deliberately: mounting over a populated cache and then measuring what is underneath
-      confuses "macOS recreated a stub" with "the old contents were always there" — a mount hides
-      what is beneath it and gives it back on unmount, which is ordinary Unix behaviour and looks
-      exactly like the thing being measured.
+```
+scripts/experiments/e6b-check.sh
+```
 
-      **`xcodevaultctl` cannot clear it for you.** The catalog marks
-      `coreSimulatorSystemCaches` as `privilege: .root`, so `clean` lists it and stops there — the
-      helper that would do it has no client (issue #30). Clearing it is therefore a manual step you
-      perform yourself, with `sudo`, on a path you have read and understood:
+Read-only, no `sudo`, safe to run any time. It answers which prerequisite is missing instead of
+leaving "blocked on hardware" to be rediscovered by sitting down with a drive. It checks the target
+path's contents, whether anything is using the simulators, whether a donor volume is mounted,
+whether `sudo` will prompt, and whether the CLI is built.
 
-      ```
-      ls -la /Library/Developer/CoreSimulator/Caches/dyld     # look first
-      sudo rm -rf /Library/Developer/CoreSimulator/Caches/dyld/*
-      ```
+Two of its answers are worth knowing before you start:
 
-      It is regenerable — this is the 7.4-9.4 GB the canonical-mount strategy targets, rebuilt when
-      simulators next boot — so the cost is a slow first boot per runtime, not lost data. If you are
-      not willing to pay that, run this experiment on a machine where the path is already empty
-      instead of talking yourself past the script's refusal.
-- [ ] No Xcode, no Simulator, and no `xcodebuild` running. **Check this rather than assume it**:
-      `pgrep -l xcodebuild Xcode Simulator`. The shared simulators on this machine are used by test
-      rigs; do not disturb one.
-- [ ] `swift build` has been run, so `.build/debug/xcodevaultctl` exists.
+- **It does not call any volume a suitable donor.** It lists what is mounted and stops there,
+  because it cannot tell a scratch disk from your personal USB drive and the experiment physically
+  disconnects the one you name while a filesystem is mounted over a system cache path.
+- **Clearing the target is yours to do and `xcodevaultctl` cannot help.** The catalog marks
+  `coreSimulatorSystemCaches` as `privilege: .root`, so `clean` lists it and stops — the helper that
+  would do it has a client as of issue #30 but no signed build to run under. Look first, then:
+
+  ```
+  ls -la /Library/Developer/CoreSimulator/Caches/dyld
+  sudo rm -rf /Library/Developer/CoreSimulator/Caches/dyld/*
+  ```
+
+  It is regenerable — 7.4 GB on 2026-09-06 and 9.4 GiB on 2026-09-08, the **same** Intel machine
+  on macOS 26.6.2 / Xcode 26.5 two days apart, the growth being F10 (a removed runtime leaves
+  its dyld shared cache behind). An earlier version of this line called them "two measurements
+  on two machines"; they are one machine, and inventing a provenance in the runbook for the
+  issue about invented provenances is the joke writing itself. So the cost is a
+  slow first boot per runtime, not lost data. If you are not willing to pay it, run this on a
+  machine where the path is already empty rather than talking yourself past the script's refusal.
 
 ## Procedure
 
-### Variant A — software unmount (scriptable, run this first)
+### Variant A — software unmount (run this first)
 
 ```
-scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume>
+sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume>
 ```
 
-It mounts the donor volume at the cache path, probes, unmounts, and probes again — immediately,
-after ten seconds, and after `simctl` has touched CoreSimulator. It prints where it wrote the
-evidence and whether redaction held.
+It mounts the donor at the cache path, probes, unmounts, and probes again — immediately, after ten
+seconds, and after `simctl` has touched CoreSimulator.
 
-Read probes 2 through 4. The only outcome that makes issue #24's bug reachable is **a directory
+**It needs `sudo` and its first action is to unmount your donor**, because a volume cannot be
+mounted twice and `mount_apfs` needs its device node. Both variants share `mount-staging.sh`, so
+both refuse a donor outside `/Volumes` or on the same physical disk as `/`, both verify the mount
+actually took before probing anything, both note in the evidence when they had to create the target
+directory — that makes a later "directory present, not a mount point" reading ambiguous — and both
+give the donor back on the way out, saying so loudly if they cannot.
+
+That sharing is the point rather than tidiness: this script carried four defects for months and
+every one was found while reviewing its twin, including a `mount_apfs` call that could never have
+succeeded — which would have made every probe read `absent`, the headline finding, manufactured.
+
+### Variant B — physical yank (this is the case the issue describes)
+
+```
+sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<your-donor-volume>
+```
+
+It shares its staging with variant A, so the same guards apply: donor unmounted first, refusal of
+anything outside `/Volumes` or on `/`'s disk, mount verified before anything is recorded, and the
+donor given back on the way out. An earlier version accepted `/System/Volumes/Data`, which would
+have unmounted the internal data volume and asked you to pull the internal disk.
+
+Both variants **abort rather than record anything** when the state is not what the evidence would
+claim: neither writes a file if the mount did not take, and variant A also aborts if its `umount`
+did not take. What is specific to this one is the disconnect check — it polls for the donor's UUID
+and device node to disappear and aborts if they do not, rather than taking the operator's word that
+the cable was pulled. A Ctrl-C at either prompt ends the run instead of falling through to a success
+message, which it used to do.
+
+**This used to be seven steps to run by hand and paste into the evidence file.** It is now a script
+that stops and waits for the one thing only a person can do: it stages the mount, records the
+mounted state, prints `PHYSICALLY DISCONNECT <volume> NOW` and waits, then records the result
+immediately, after ten seconds, after a minute, after `simctl` touches CoreSimulator, and again
+after you reconnect. The prompts go to the terminal, not into the evidence file.
+
+The transcription step is what was removed, and that is the point rather than convenience: this
+issue exists because a premise was written down without being observed, and a hand-copied
+observation is one more place for the same failure.
+
+Read probes 2 through 5. **The only outcome that makes issue #24's bug reachable is a directory
 present that is not a mount point.**
-
-### Variant B — physical yank (manual, this is the case the issue describes)
-
-1. Mount the donor volume at the cache path exactly as variant A does:
-   `sudo mount_apfs -o nobrowse /Volumes/<donor> /Library/Developer/CoreSimulator/Caches/dyld`
-2. Confirm it is mounted: `mount | grep Caches/dyld`
-3. Record the "while mounted" state:
-   `stat -f 'type=%HT mode=%Sp owner=%Su:%Sg links=%l device=%d' /Library/Developer/CoreSimulator/Caches/dyld`
-4. **Physically disconnect the drive.** Do not eject it first — the point is the surprise.
-5. Immediately, and then again after ten seconds and after a minute, record:
-   - `stat -f '...' /Library/Developer/CoreSimulator/Caches/dyld` (or that it is absent)
-   - `mount | grep -c Caches/dyld`
-   - `ls -A /Library/Developer/CoreSimulator/Caches/dyld | wc -l`
-6. Run `xcrun simctl list runtimes`, wait five seconds, and record the same three again.
-7. Reconnect the drive. Record whether it returns at the same path, at `/Volumes/<name>`, or as
-   `/Volumes/<name> 1` — the last is the shape ADR-0004 and issue #26 both care about.
-
-Paste steps 3-7 into the evidence file variant A produced, as a manually written section, following
-the convention `RUNBOOK-E9-symlink-coresimulator.md` sets for its interactive steps.
 
 ## Recording the result (mandatory, see `.claude/skills/run-experiment`)
 
-- Evidence: `docs/research/evidence/e6b-mount-stub-<env>.txt`, written by the script plus the
-  manual section. Confirm redaction before committing: `grep -c "$USER" <file>` must be 0.
+- Evidence: `e6b-mount-stub-<env>.txt` (variant A) and `e6b-physical-<env>.txt` (variant B), both
+  under `docs/research/evidence/`, both written entirely by the scripts — there is no manual section
+  to paste any more, which is the point of this change. Each script verifies its own redaction
+  against `$SUDO_USER`; if it finds the account name it **deletes the file and exits non-zero**, so
+  no evidence file survives a failed check — nor a failed redaction or an empty one, which left
+  a zero-byte file behind until a reviewer measured all three branches rather than the one. Precisely: the file is written, checked, and removed on
+  failure — it exists for the duration of the check and never afterwards. The earlier wording here
+  said "exits non-zero without writing" while the code wrote the file, printed `wrote <path>`, and
+  then left it on disk on a leak, with the previous good evidence already renamed `-superseded-`. `$USER` is root under `sudo`, so the old advice to
+  `grep -c "$USER"` would have passed on a file full of the operator's name.
 - `docs/architecture/HYPOTHESES.md`: record the answer against the #24 premise — whether a stub
   reappears, with what owner and mode, and whether the mount query calls it a mount point.
 - `docs/architecture/COMPATIBILITY_MATRIX.md`: an E6b entry in the same format as E7/E8, and update
@@ -115,6 +147,8 @@ the convention `RUNBOOK-E9-symlink-coresimulator.md` sets for its interactive st
 
 - The target path is not empty: stop. The script refuses; do not talk yourself past it by hand.
 - Anything other than the donor volume is mounted at the cache path: stop and unmount nothing.
-- A simulator or `xcodebuild` starts while this is running: stop, unmount the donor, and start over
-  when the machine is idle.
+- A simulator or `xcodebuild` starts while this is running: stop with Ctrl-C and start over when the
+  machine is idle. Ctrl-C now ends the run and unmounts the *target*; the donor was already unmounted
+  during staging and is remounted by the same cleanup. Earlier advice here said to "unmount the
+  donor", which described neither what is mounted nor what the scripts do.
 - The donor volume contains anything you would miss: stop. This yanks a drive mid-mount.

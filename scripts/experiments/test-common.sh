@@ -204,5 +204,87 @@ check "XCV_PRIVATE_DIRS is not glob-expanded" \
 check "a metacharacter label is redacted bare too" \
     "<vault> mounted" "$(redact "Weird.Name+1 mounted")"
 
+# ---- the epilogue's stderr, which four reviews watched go missing ------------------------------
+#
+# The E6b scripts send their evidence to a temp file with `exec >>"$REPORT" 2>&1` and restore the
+# terminal afterwards. Restoring only stdout leaves every `>&2` in the epilogue writing into a file
+# the EXIT trap then deletes — so a run that found the operator's account name in evidence bound for
+# a public repository printed "do not commit it" into an unlinked inode, exited 1, and left the file
+# on disk while the terminal showed `wrote <path>` and nothing else.
+#
+# That shape — a failure message written somewhere nobody reads — has now appeared four times in
+# these scripts, each time in a different disguise: inside a pipeline whose `exit` did not exit, in
+# a trap installed before the terminal fd existed, and twice on a stream that was never restored.
+# The two behavioural checks below prove the hazard is real rather than theoretical; they are
+# positive controls on a synthetic subshell and would have caught nothing in the real scripts.
+# The source loop further down is what would have.
+
+hazard_out="$(mktemp)"
+(
+    f="$(mktemp)"
+    exec 3>&1
+    exec >>"$f" 2>&1
+    exec >&3  # stdout only — the defect
+    echo "visible on stdout"
+    echo "LOST WARNING" >&2
+    rm -f "$f"
+) >"$hazard_out" 2>&1
+check "restoring only stdout loses the epilogue's warnings" \
+    "visible on stdout" "$(cat "$hazard_out")"
+rm -f "$hazard_out"
+
+fixed_out="$(mktemp)"
+(
+    f="$(mktemp)"
+    exec 3>&1
+    exec >>"$f" 2>&1
+    exec >&3 2>&3  # both — the fix
+    echo "visible on stdout"
+    echo "LOST WARNING" >&2
+    rm -f "$f"
+) >"$fixed_out" 2>&1
+check "restoring both streams keeps them" \
+    "visible on stdout
+LOST WARNING" "$(cat "$fixed_out")"
+rm -f "$fixed_out"
+
+# Every script that redirects both streams into a report must restore both. A bare `exec >&3` is the
+# defect, and it is invisible by inspection — which is why this is a check and not a convention.
+#
+# **Derived, not listed.** The first version named two files, so a third script written next month
+# with the same defect would have passed — the gap a reviewer named, and precisely the shape that let
+# variant A keep four defects while variant B was being fixed. The non-empty assertion below is the
+# positive control: a pattern that stops matching would otherwise turn this whole loop into a no-op
+# that reports success.
+# `1?>>` because `exec 1>>"$F" 2>&1` is the same redirect spelled out, and the first version's regex
+# required the `1` to be elided — a script written that way was never discovered, and the non-empty
+# control below stayed green off the back of the two files that were.
+#
+# `*.sh`, not `e*.sh`: this directory holds library files too, and `mount-staging.sh` — added by this
+# very change — is the proof. Scoping the sweep to the experiment prefix would have exempted exactly
+# the kind of file most likely to grow the defect next.
+redirecting=$(grep -lE '^exec 1?>>"\$[A-Za-z_]+" 2>&1$' ./*.sh 2>/dev/null | grep -vE '/(common|test-common)\.sh$')
+check "the stream-restore loop found scripts to check" "yes" "$([ -n "$redirecting" ] && echo yes || echo no)"
+for s in $redirecting; do
+    # Anchored at column 0, because the comments in those scripts *describe* these patterns and an
+    # unanchored count read the prose as code — the same defect the seam-discipline tests had with
+    # braces written in sentences, reproduced here within an hour of writing about it.
+    # The same pattern discovery uses. Hardcoding `$REPORT` here while discovery accepted any
+    # variable name made a *correct* script using a different name fail — a check that cries wolf on
+    # good code, which is the learned-to-ignore hazard the comments two screens up name twice.
+    redirects=$(grep -cE '^exec 1?>>"\$[A-Za-z_]+" 2>&1$' "$s")
+    restores_both=$(grep -cE '^exec >&3 2>&3$' "$s")
+    restores_stdout_only=$(grep -cE '^exec >&3$' "$s")
+    check "$s redirects both streams once" "1" "$redirects"
+    check "$s restores both streams" "1" "$restores_both"
+    check "$s has no stdout-only restore" "0" "$restores_stdout_only"
+    # Counts alone let a restore sit *before* its redirect and still pass. Order matters: the
+    # restore is what ends the redirected section.
+    redirect_line=$(grep -nE '^exec 1?>>"\$[A-Za-z_]+" 2>&1$' "$s" | head -1 | cut -d: -f1)
+    restore_line=$(grep -nE '^exec >&3 2>&3$' "$s" | head -1 | cut -d: -f1)
+    check "$s restores after it redirects" "yes" \
+        "$([ -n "$redirect_line" ] && [ -n "$restore_line" ] && [ "$restore_line" -gt "$redirect_line" ] && echo yes || echo no)"
+done
+
 printf '\n%d checks, %d failures\n' "$run" "$fails"
 [ "$fails" -eq 0 ]
