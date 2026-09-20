@@ -143,8 +143,15 @@ is done. The post-publication issue backlog replaced it._
    defensive guard, not a testing gap, and is annotated as such so nobody "fixes" the coverage by
    deleting it.
 
-   **Still open until the green half lands.** The gate has been seen to go red for a reason a
-   reviewer would act on; it has not yet been seen to go green. That is the next push.
+   **Both directions demonstrated, so #34 is closed.** Red on `fa5866c` (run 35507891461):
+   `new_coverage` 60.9 against 80, CI failed with the condition named. Green on `1cf864c`
+   (run 35508468774): `new_coverage` 98.6, gate OK, and the verification printed what it had checked
+   — `task processed; branch 'main'; commit 1cf864c0; 6189 lines (floor 4000); coverage 77.4%
+   (floor 60%); quality gate OK`, with the scanner logging `Imported coverage data for 37 files`.
+
+   The red was not staged. It was a real defect in real code, and fixing that defect is what turned
+   it green — which is better evidence that the gate grades something than a contrived failure would
+   have been.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
