@@ -79,9 +79,14 @@ printf '%s' "$task_json" | python3 -c 'import json,sys; sys.exit(0 if json.load(
    fail the branch check — it disables it."
 field() { printf '%s' "$task_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['task'].get('$1',''))" 2>/dev/null; }
 analysed_branch="$(field branch)"
-# A pull-request analysis is not a branch analysis. SonarCloud reports it under `pullRequest`, and
-# judging it by the branch rule below would fail every PR with a message about renaming the main
-# branch — a check firing confidently for a reason that has nothing to do with what went wrong.
+# A pull-request analysis is not a branch analysis: SonarCloud reports it under `pullRequest`.
+#
+# **This exemption is belt-and-braces, and the comment here used to claim more.** It said that
+# without it every PR would fail with a message about renaming the main branch. Measured on PR #35,
+# the first this repository ever had: a PR task carries `branch: ""`, so the `[ -n "$analysed_branch" ]`
+# guard below would have skipped on its own. What the exemption buys is that the skip is stated
+# rather than incidental — if SonarCloud ever also sets `branch` on a PR task, the rule stays correct
+# instead of failing every pull request for a reason about the main branch.
 analysed_pr="$(field pullRequest)"
 
 main_branch="$(api "api/project_branches/list?project=$PROJECT_KEY" | python3 -c '
@@ -193,11 +198,17 @@ fi
 # This runs on a pull request too, and it is the only assertion that does. `new_coverage` is graded on
 # new code, which is what a PR is; assertions 3, 4 and 5 are all push-scoped because they speak about
 # the main branch.
-# Two routes to the same answer, because neither is guaranteed on its own. `analysisId` identifies
-# exactly the analysis just verified, which is what this should judge; it was observed present on a
-# push, and has NOT been observed on a pull-request task. The scoped query is the fallback — it asks
-# about the PR or branch rather than about this specific analysis, which is very slightly weaker, and
-# far better than assertion 6 failing every pull request for a reason that is not about the code.
+# Two routes to the same answer. `analysisId` identifies exactly the analysis just verified, which is
+# what this should judge; the scoped query asks about the PR or branch instead, which is very
+# slightly weaker.
+#
+# **The fallback has never been taken, and that is now measured rather than assumed.** It was written
+# because it had not been observed whether a pull-request CE task carries an `analysisId`. PR #35
+# settled it: it does (`analysisId` present, `branch` empty, `pullRequest` set), so every real run so
+# far — push and pull request alike — has gone down the first branch. The fallback was checked by
+# querying it directly for PR #35 and it returned the same verdict, so it is correct; it is simply
+# not exercised by any code path this repository has run. Kept as the safety net it was written to
+# be, labelled honestly rather than described as though it were load-bearing.
 #
 # If BOTH come back unreadable this fails. A gate check that passes when it could not run is the
 # failure mode of the four green runs that measured two files.
