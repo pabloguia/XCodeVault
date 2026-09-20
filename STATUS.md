@@ -57,16 +57,27 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 _Item 1 was "Publish" until 2026-09-18; the repository is public and CI runs on both runners, so it
 is done. The post-publication issue backlog replaced it._
 
-1. **Work the refilled backlog.** The gaps that were prose here on 2026-09-19 are now issues:
-   #28 (the `mayTakeOwnership` call site — **done**), #31 (`MigrationEngine`'s remaining mutable
-   seams), #29 (E6b: whether a stub reappears after a disconnect, the premise #24 rests on) and #30
-   (nothing opens an XPC connection, so the whole privileged helper is unreachable in a shipped
-   artifact — the largest untested surface in the project).
+1. **Work the refilled backlog.** The gaps that were prose here on 2026-09-19 became issues.
+   #27, #28 and #31 are **done** (6cbaac8 closed #31: every `MigrationEngine` seam is `let`, the
+   fault-injection hooks are behind an `internal` initialiser, and three previously unwatched
+   refusals — the vault-containment check in `removeSource`, `resume`'s destination-present check
+   and the Xcode-running refusal on the `resume` branch that deletes — are pinned by tests).
+
+   Open: **#32** (new, from #31's sixth review — the seam guard is a hand-rolled lexer that six
+   reviews walked past six times; the class is not closed, and the control that would close it is
+   `swift symbolgraph-extract` rather than a larger lexer. Lets a future regression pass unnoticed;
+   reaches no user data), **#29** and **#30**.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
    a scripted software variant for #29, the client-side code-signing requirement and its tests for
    #30 — so what remains on each is the part that genuinely requires the thing it is blocked on.
+
+   The pattern worth carrying forward from #31: **mutation testing found guards no test
+   distinguished, and every check written in response was itself vacuous until a positive control
+   was added.** A check that cannot tell "clean" from "I did not run" is not a check — and a run
+   reporting zero failures may mean the build broke or the `--filter` matched nothing, both of which
+   read as success.
 2. **M4:** wire `clean`/`vault`/`externalize` flows into the GUI with the same confirmations as
    the CLI; helper client (`SMAppService.daemon` registration UI, status handling) behind the
    signed bundle — cannot be tested unsigned.
