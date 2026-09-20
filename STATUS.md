@@ -97,11 +97,21 @@ is done. The post-publication issue backlog replaced it._
    ID is unusable, and sets the code-signing requirement before `resume()` — five properties
    mutation-verified. The live connection stays gated on a signed build.
 
-   Sonar (baa13db): SonarQube Cloud analysis runs in its own workflow, deliberately not in
-   `ci.yml`, because it needs a secret and so cannot run under `preflight.sh` — putting it there
-   would make that script's central claim false for one step. 0 bugs, 0 vulnerabilities, gate OK,
-   27 open code smells. It does not block merges yet: the gate's `new_coverage` condition passes
-   only because there is no new code, and the first PR that adds a line would score 0%.
+   Sonar (baa13db, fixed in fe7fb06): SonarQube Cloud analysis runs in its own workflow,
+   deliberately not in `ci.yml`, because it needs a secret and so cannot run under `preflight.sh` —
+   putting it there would make that script's central claim false for one step. **6189 lines of
+   Swift, 0 bugs, 0 vulnerabilities, 0 security hotspots, 27 code smells**, verified on the main
+   branch at the analysed commit by `scripts/sonar-verify.sh`.
+
+   It was measuring **two files** for its first four runs and reporting success, because the
+   project's main branch in SonarCloud was `master` while the repository's is `main` — a non-main
+   branch gets a changed-files-only analysis — and because the Scan step carried
+   `continue-on-error: true`. Both are fixed; the branch was renamed in SonarCloud.
+
+   The quality gate is **ERROR on one condition**: `new_coverage` 0.0 against a threshold of 80. No
+   coverage is imported, so any commit that adds a line scores 0%. CI does not enforce the gate, so
+   this does not block merges — but a permanently red gate is as useless as a permanently green one,
+   which is issue #34.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
