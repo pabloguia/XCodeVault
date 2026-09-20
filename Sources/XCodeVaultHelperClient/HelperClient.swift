@@ -84,6 +84,13 @@ public struct HelperClient: Sendable {
         // `setCodeSigningRequirement` raises an Objective-C exception on a malformed string, and
         // Swift cannot catch that — the process dies. Validating first turns an unhandleable crash
         // into a `Failure` the caller can report.
+        //
+        // **This branch is unreachable today, and stays.** The guard above admits only ten characters
+        // of `[A-Z0-9]`, and every such team ID interpolates into a requirement that parses — so
+        // SonarQube reports this one line uncovered and no test can reach it without weakening
+        // `isUsableTeamID`. It is the last uncovered line in this file, and deleting it to make a
+        // coverage number go up would remove the only thing standing between a malformed requirement
+        // and an uncatchable Objective-C exception, should either function's rules ever change.
         var parsed: SecRequirement?
         guard SecRequirementCreateWithString(requirement as CFString, [], &parsed) == errSecSuccess else {
             throw Failure.requirementDoesNotParse(requirement)
@@ -107,8 +114,25 @@ public struct HelperClient: Sendable {
 
     /// launchd's view of the daemon, as `SMAppService` reports it.
     ///
-    /// Read-only and safe to call unsigned — it answers `.notRegistered` rather than failing, which
-    /// is what lets the app tell a user why nothing works instead of appearing broken.
+    /// Read-only and safe to call unsigned: it answers a not-installed status rather than failing,
+    /// which is what lets the app tell a user why nothing works instead of appearing broken.
+    ///
+    /// **Which** not-installed status comes back is measured, and the causal story is not. This
+    /// comment first said `.notRegistered`; a test written against that claim measured `.notFound`
+    /// (rawValue 3) from a `swift test` bundle. The obvious explanation — the daemon plist ships in
+    /// the app bundle and a test bundle has none — was then falsified by a reviewer, who built an
+    /// ad-hoc-signed `.app` that *did* carry `Contents/Library/LaunchDaemons/` and still measured
+    /// `.notFound`. So: `.notFound` here, for a reason nobody has established. A properly signed,
+    /// `SMAppService`-registered install is *expected* to answer `.notRegistered`, and that is
+    /// unverified — nothing in this repository can produce a signed daemon (issue #30, M5).
+    /// Callers must treat both as "not installed" and neither as an error.
+    ///
+    /// **This is an installation hint, never an authentication signal.** It reports the registration
+    /// state of a plist relative to `Bundle.main`, and says nothing about who holds
+    /// `HelperIdentity.machServiceName` in the bootstrap namespace: a helper installed by any other
+    /// route is reachable while this still answers `.notFound`. The only thing that authenticates the
+    /// peer is the code-signing requirement set before `resume()` in `connect()`. A caller that reads
+    /// `.enabled` as a reason to skip that has removed the peer validation entirely.
     public func serviceStatus() -> SMAppService.Status {
         SMAppService.daemon(plistName: HelperIdentity.plistName).status
     }

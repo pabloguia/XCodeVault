@@ -125,14 +125,26 @@ is done. The post-publication issue backlog replaced it._
    trusted — coverage floor, gate, stale commit, unreadable task — and each died with a different,
    nameable message.
 
-   **Not yet measured:** the server-side project-wide coverage number, which is a different
-   population from the 84.2%. The XCTest bundle links the libraries and not the executables, so 1,074
-   of ~9,400 source lines (`XCodeVault` 326, `xcodevaultctl` 712, `XCodeVaultHelper` 36) produce no
-   coverage rows and cannot by this pipeline; whether SonarQube counts a file absent from the report
-   as uncovered or as having nothing to cover decides where the project number lands. The issue's
-   acceptance criterion — the gate going both green and red for reasons a reviewer would act on,
-   demonstrated by pushing a change that should fail it — is **not met until that demonstration
-   exists**, so #34 stays open.
+   **The red half is demonstrated, with real evidence rather than a contrived failure.** The first
+   run with coverage imported (`fa5866c`, Actions run 35507891461) went red on
+   `new_coverage is 60.9, threshold LT 80`, and CI failed with the condition named. What it caught
+   was real: `HelperClient.swift`, the XPC client added for #30, had shipped with its error
+   descriptions, its production connection factory and its launchd status accessor **never once
+   executed** — 25 of its 54 new lines uncovered, which was every uncovered new line in the project.
+
+   Server-side numbers, now measured: project coverage **77.0%** (6150 lines to cover, 1417
+   uncovered) — not the 84.2% the converter reports, because Sonar counts lines in files the report
+   never mentions. Both are above the 60% floor, and the gap is the reason the floor's justification
+   in `sonar.yml` says the two numbers are different populations.
+
+   Three tests now cover 24 of those 25 lines; `HelperClient.swift` is at 53/54. The last one,
+   `throw Failure.requirementDoesNotParse`, is unreachable: `isUsableTeamID` admits only ten
+   characters of `[A-Z0-9]`, and every such team ID yields a requirement that parses. It is a
+   defensive guard, not a testing gap, and is annotated as such so nobody "fixes" the coverage by
+   deleting it.
+
+   **Still open until the green half lands.** The gate has been seen to go red for a reason a
+   reviewer would act on; it has not yet been seen to go green. That is the next push.
 
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and

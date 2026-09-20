@@ -139,4 +139,94 @@ final class HelperClientTests: XCTestCase {
             client.contains("options: .privileged"),
             "the connection must be .privileged, or it resolves in the per-user bootstrap namespace")
     }
+
+    // MARK: - The paths the quality gate found untested (issue #34)
+    //
+    // SonarQube reported 25 of this file's 54 new lines uncovered, which put `new_coverage` at 60.9%
+    // against a threshold of 80 and turned the gate red. That is the gate doing its job: the client
+    // added for issue #30 shipped with its error messages, its production connection factory and its
+    // launchd status accessor never once executed. These cover them.
+
+    func testEveryFailureExplainsItselfAndTheTeamIDOneDoesNotQuoteTheValue() {
+        // Not "the description is non-empty". The `unusableTeamID` case has a deliberate property —
+        // it must NOT print the value — and the comment in the source says why: naming it invites
+        // "just compare against the placeholder", which is the bug that once produced a detector
+        // unable to detect its own placeholder. An assertion that only checked for non-emptiness
+        // would pass on the version that leaks it.
+        let secret = "ZZZZ999999"
+        let unusable = HelperClient.Failure.unusableTeamID(secret).description
+        XCTAssertFalse(unusable.contains(secret), "the refusal must not print the team ID it rejected")
+        XCTAssertTrue(unusable.contains(HelperIdentity.machServiceName), "it must name what it refused to talk to")
+        XCTAssertTrue(unusable.contains("bundle-app.sh"), "it must say how to get a build that works")
+
+        // The other two exist to carry a value to the reader, so here the value MUST appear.
+        let requirement = "anchor apple generic and certificate leaf[subject.OU] = \"ABCDE12345\""
+        XCTAssertTrue(HelperClient.Failure.requirementDoesNotParse(requirement).description.contains(requirement))
+        XCTAssertTrue(HelperClient.Failure.notRegistered("notFound").description.contains("notFound"))
+    }
+
+    func testThePublicInitialiserProducesAFreshConnectionPerCall() {
+        // Executes the production factory in `init()`, which every other test in this file replaces
+        // with a double — so it had never run. Creating an `NSXPCConnection` performs no IPC; a
+        // connection is inert until `resume()`, which this deliberately never calls.
+        //
+        // **What this does not prove, and who does hold it.** It does not show that `.privileged` was
+        // passed — the property that makes the connection reach a root LaunchDaemon rather than a
+        // per-user agent of the same name. The option is genuinely unreadable: a reviewer confirmed
+        // `value(forKey: "options")` raises `NSUnknownKeyException`, `responds(to:)` is false for
+        // every spelling of it, and `class_copyIvarList(NSXPCConnection.self)` has no options ivar.
+        //
+        // What holds it is `testTheTeamIDMarkerMatchesWhatTheBundleScriptSubstitutes` below, which
+        // source-scans for `options: .privileged`. An earlier version of this comment credited
+        // `scripts/helper-invariants.sh`, which does NOT check it — that script holds a different
+        // property, that no file under `Sources/` outside `HelperClient.swift` constructs such a
+        // connection at all. Someone deleting the source-scan on the strength of the wrong
+        // attribution would have believed the property still held.
+        //
+        // **Residual hazard.** This test is safe only while `makeConnection` stays a pure
+        // constructor. If configuration or `resume()` is ever moved into the factory, this quietly
+        // becomes a test that opens a live, unvalidated privileged connection — and nothing would
+        // catch it, because `helper-invariants.sh` does not read `Tests/`.
+        let client = HelperClient()
+        let first = client.makeConnection(HelperIdentity.machServiceName)
+        let second = client.makeConnection(HelperIdentity.machServiceName)
+        defer {
+            first.invalidate()
+            second.invalidate()
+        }
+        // A factory, not a captured singleton: `connect()` hands the caller a connection it owns, and
+        // a shared one would let an invalidation in one place kill an unrelated caller's.
+        XCTAssertFalse(first === second, "each call must yield its own connection")
+        // `serviceName` IS readable back on a never-resumed connection, unlike `options` — so the
+        // factory's argument is checkable, and this catches one that ignored it or hardcoded a
+        // per-user agent name.
+        XCTAssertEqual(first.serviceName, HelperIdentity.machServiceName)
+    }
+
+    func testServiceStatusReportsTheHelperIsNotInstalledRatherThanFailing() {
+        // Measured, not assumed. This asserted `.notRegistered` on the strength of the source
+        // comment saying so, and the run answered `.notFound` (rawValue 3) — the plist is not
+        // discoverable from a test bundle at all, so launchd is never even asked. The source comment
+        // was corrected along with this test.
+        //
+        // The assertion is the pair rather than either one, because which of the two comes back
+        // depends on where the caller is running from — an installed .app carries the plist and would
+        // answer `.notRegistered`, a `swift test` bundle does not and answers `.notFound`. Both mean
+        // "not installed", which is the property this accessor exists to report.
+        //
+        // It is not a shrug at whatever arrives: `.enabled` and `.requiresApproval` both fail it, and
+        // either would be worth investigating, since nothing in this repository can produce a signed
+        // daemon for `SMAppService` to register.
+        //
+        // It is emphatically NOT a check that the helper is unreachable. This accessor reports a
+        // plist's registration state relative to `Bundle.main`; a helper installed by any other route
+        // — legacy SMJobBless, a pkg dropping into /Library/LaunchDaemons — is fully reachable while
+        // this still answers `.notFound`. Reading a pass here as "no helper is listening" would be
+        // exactly the confusion the source comment on `serviceStatus()` warns against.
+        let status = HelperClient().serviceStatus()
+        XCTAssertTrue(
+            status == .notFound || status == .notRegistered,
+            "expected a not-installed status, got \(status)")
+    }
+
 }

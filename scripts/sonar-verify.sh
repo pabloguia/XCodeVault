@@ -193,13 +193,35 @@ fi
 # This runs on a pull request too, and it is the only assertion that does. `new_coverage` is graded on
 # new code, which is what a PR is; assertions 3, 4 and 5 are all push-scoped because they speak about
 # the main branch.
-analysis_id="$(field analysisId)"
-[ -n "$analysis_id" ] || die "the completed task carries no analysisId, so the quality gate cannot be read.
-   Treating an unreadable gate as a failure: the alternative is a gate check that passes when it cannot run."
+# Two routes to the same answer, because neither is guaranteed on its own. `analysisId` identifies
+# exactly the analysis just verified, which is what this should judge; it was observed present on a
+# push, and has NOT been observed on a pull-request task. The scoped query is the fallback — it asks
+# about the PR or branch rather than about this specific analysis, which is very slightly weaker, and
+# far better than assertion 6 failing every pull request for a reason that is not about the code.
+#
+# If BOTH come back unreadable this fails. A gate check that passes when it could not run is the
+# failure mode of the four green runs that measured two files.
+# Values are percent-encoded before they go into a query string. A branch named `x&y` would
+# otherwise close the `branch=` parameter and open another, and the gate would grade something other
+# than what this script reports it graded — the exact substitution the whole file exists to catch,
+# reintroduced in its newest assertion.
+urlenc() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
 
-gate_json="$(api "api/qualitygates/project_status?analysisId=$analysis_id")"
+analysis_id="$(field analysisId)"
+gate_scope=""
+if [ -n "$analysis_id" ]; then
+    gate_scope="analysisId=$(urlenc "$analysis_id")"
+elif [ -n "$analysed_pr" ]; then
+    gate_scope="projectKey=$(urlenc "$PROJECT_KEY")&pullRequest=$(urlenc "$analysed_pr")"
+else
+    gate_scope="projectKey=$(urlenc "$PROJECT_KEY")&branch=$(urlenc "${analysed_branch:-$main_branch}")"
+fi
+# Fetched ONCE. Asking twice — once for the status, once for the conditions — allows the two to
+# disagree, and the failure message would then list conditions from a different read than the verdict
+# it is explaining.
+gate_json="$(api "api/qualitygates/project_status?$gate_scope")"
 gate_status="$(printf '%s' "$gate_json" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["projectStatus"]["status"])' 2>/dev/null)"
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("projectStatus",{}).get("status",""))' 2>/dev/null)"
 
 case "$gate_status" in
     OK) ;;
