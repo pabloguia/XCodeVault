@@ -2,15 +2,23 @@
 #
 # **Why this is not a step in `ci.yml`.** `scripts/preflight.sh` exists so that "green locally"
 # means "green in CI", and it enforces that by counting `ci.yml`'s steps and refusing to run when
-# the two drift. A Sonar step cannot run locally — it needs `SONAR_TOKEN`, which is a repository
-# secret — so putting it in `ci.yml` would make preflight's central claim false for one step while
-# its own guard reported everything in order. It lives here instead, and preflight says so.
+# the two drift. A Sonar step cannot run locally — it needs `SONAR_TOKEN`, a repository secret — so
+# putting it in `ci.yml` would make preflight's central claim false for one step while its own guard
+# reported everything in order. It lives here instead, and preflight says so.
 #
-# **This does not gate merges yet, and that is deliberate rather than an oversight.** The project
-# had not been analysed once when this landed, so no baseline exists and the quality gate's verdict
-# on a first analysis says more about the backlog than about the change under review. Flipping it
-# to blocking is `-Dsonar.qualitygate.wait=true` plus removing `continue-on-error`, and should
-# happen once a baseline has been read — see the issue this commit references.
+# **The verification step exists because the first version of this file was a check that could not
+# fail.** It carried `continue-on-error: true`, so the workflow went green whatever happened, and
+# the scanner itself prints `ANALYSIS SUCCESSFUL` as soon as it has *uploaded* a report — before the
+# server has processed it, and regardless of how little it analysed. Both were true here at once:
+# the project's main branch in SonarCloud was `master` (the default the scanner picks when a local
+# run provisions a project without naming a branch) while the repository's is `main`, so every CI
+# analysis landed on a *secondary* branch, where SonarCloud analyses only files changed against the
+# main branch. Four consecutive runs reported success having measured two files. The dashboard kept
+# showing a three-hour-old local run, because the dashboard shows the main branch.
+#
+# So this workflow now asserts, after the scan: the server finished processing the report, the
+# analysis is on the main branch, it is for *this* commit, and it covers a plausible amount of code.
+# A scan that measures nothing is the failure this is here to catch.
 name: Sonar
 
 on:
@@ -26,10 +34,16 @@ jobs:
   analysis:
     name: SonarQube Cloud
     runs-on: ubuntu-latest
-    # GitHub withholds secrets from workflows triggered by a fork's pull request, so this job
-    # cannot authenticate there. Skipping it is honest; letting it run and fail would train
-    # everyone to ignore a red check on exactly the contributions that get the least scrutiny.
+    # GitHub withholds secrets from workflows triggered by a fork's pull request, so this job cannot
+    # authenticate there. Skipping it is honest; letting it run and fail would train everyone to
+    # ignore a red check on exactly the contributions that get the least scrutiny.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      PROJECT_KEY: pabloguia_XCodeVault
+      # The floor the verification asserts. The project is ~6100 lines of Swift; this is set well
+      # below that so ordinary deletions do not fail the build, and well above the 111 lines the
+      # broken configuration produced. A number nothing can fall below is not a check.
+      MIN_NCLOC: "4000"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,7 +58,12 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Scan
+        # No `continue-on-error`. It was here, and it is why four runs that measured almost nothing
+        # reported success.
         uses: SonarSource/sonarqube-scan-action@v6
-        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Verify the analysis actually happened
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: bash scripts/sonar-verify.sh

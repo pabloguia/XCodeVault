@@ -58,8 +58,10 @@ bootstrap, allowlisted verbs; every change needs the helper-security review) · 
 `scripts/preflight.sh` (runs every CI gate locally, in CI's order — run it before pushing; three of
 the four gates passing is not "the gates passed") ·
 `packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) ·
-`.github/workflows/sonar.yml` + `sonar-project.properties` (SonarQube Cloud; a separate
-workflow because it needs a secret and so cannot run under `preflight.sh`) · `.swift-format`
+`.github/workflows/sonar.yml` + `sonar-project.properties` + `scripts/sonar-verify.sh` (SonarQube
+Cloud; a separate workflow because it needs a secret and so cannot run under `preflight.sh`. The
+verify script exists because the scanner reports success on *upload*: four runs went green having
+measured two files) · `.swift-format`
 (4-space indent, 160 cols). Build with `swift build`, test with `swift test`.
 
 ## Non-negotiable safety rules (also in NON_GOALS_AND_SAFETY.md — kept here because they must never be missed)
