@@ -142,7 +142,7 @@ declared_targets=$(code_of "$MANIFEST" | awk '
     /\.(executableTarget|testTarget|target)\(/ { intarget = 1; next }
     intarget && match($0, /name: *"[^"]+"/) { print substr($0, RSTART + 7, RLENGTH - 8); intarget = 0 }
 ')
-for required in XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol; do
+for required in XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol XCodeVaultHelperClient; do
     printf '%s\n' "$declared_targets" | grep -qx "$required" \
         || { echo "helper invariants: $MANIFEST declares no target named $required; the parse is wrong or the layout changed. Refusing to report ok" >&2; exit 2; }
 done
@@ -177,9 +177,17 @@ EOF
 check_closure XCodeVaultHelperProtocol
 check_closure XCodeVaultHelperCore XCodeVaultHelperProtocol
 check_closure XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol
+# The client is held to the same rule. It must reach the protocol and nothing else — in particular
+# not XCodeVaultHelperCore, which would let a caller run the verbs in-process and mistake that for
+# having exercised the XPC boundary, which is the one surface issue #30 says has never been tested.
+check_closure XCodeVaultHelperClient XCodeVaultHelperProtocol
 
-# The directory list is now derived from the parse rather than written out here, so a new target in
-# the helper's closure is scanned instead of being invisible — the third gap this issue names.
+# The scanned directories are the three helper targets, written out here. An earlier version of
+# this comment said the list was "derived from the parse"; it is not, and the difference is
+# load-bearing: `Sources/XCodeVaultHelperClient` is NOT covered by the forbid scans below (no
+# Process, no dlopen, no chmod). That is defensible — the client is unprivileged and runs as the
+# user — but it is a decision, not an emergent property, and a reader trusting the old sentence
+# would think the client was being scanned.
 HELPER_DIRS=""
 for t in XCodeVaultHelper XCodeVaultHelperCore XCodeVaultHelperProtocol; do
     [ -d "Sources/$t" ] || { echo "helper invariants: Sources/$t does not exist; refusing to report ok" >&2; exit 2; }
@@ -549,8 +557,15 @@ done < <(find . \( -path ./.build -o -path ./.git -o -path ./dist \) -prune -o -
 # ordinary spellings, including the C one a lot of sample code uses, cannot land without a visible
 # line in the allowlist below, in the same diff, where the peer validation gets reviewed.
 #
-# The allowlisted file does not exist yet: nothing in the tree opens a connection to the daemon.
+# The allowlisted file exists as of issue #30 and is the only connection to the daemon in the
+# tree. Its peer validation was reviewed in the diff that added it, which is the whole purpose
+# of this rule being a prohibition with a one-line allowlist rather than a search for good code.
 XPC_CLIENT_ALLOWLIST="Sources/XCodeVaultHelperClient/HelperClient.swift"
+# The prose above now claims this file exists. Assert it, in the script's own
+# "refusing to report ok" idiom: an allowlist entry pointing at nothing would let the rule
+# report a clean pass over a tree whose client had been deleted or moved.
+[ -f "$XPC_CLIENT_ALLOWLIST" ] \
+    || { echo "helper invariants: $XPC_CLIENT_ALLOWLIST is missing; the XPC allowlist names nothing. Refusing to report ok" >&2; exit 2; }
 while IFS= read -r f; do
     [ -n "$f" ] || continue
     for allowed in $XPC_CLIENT_ALLOWLIST; do

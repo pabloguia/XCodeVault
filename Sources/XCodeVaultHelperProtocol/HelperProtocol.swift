@@ -125,12 +125,16 @@ public enum HelperIdentity {
     /// substituted "exactly as" the daemon is. It is not, and the consequence is concrete: the
     /// client M4 writes has no supply of a team ID at all.
     ///
-    /// TODO(M4): add the client-side substitution, and have the client refuse to connect when
-    /// `isUsableTeamID` is false rather than falling back to an unconstrained connection. Nothing
-    /// enforces that today; it is a requirement written down, not a property held.
+    /// **Both halves of that TODO are now done** (issue #30), and this paragraph says so rather
+    /// than being left to be inherited as still-open: `scripts/bundle-app.sh` substitutes the team
+    /// ID into `Sources/XCodeVaultHelperClient/HelperClient.swift` as well as the daemon's
+    /// `main.swift`, asserting each substitution landed separately; and `HelperClient.connect()`
+    /// throws `Failure.unusableTeamID` without touching the connection when `isUsableTeamID` is
+    /// false. `HelperClientTests` pins both, including that a refused connection is never resumed.
     ///
-    /// Nothing consumes this yet — the connection is M4, gated on signing — so it ships with tests
-    /// and no caller.
+    /// `HelperClient` consumes this function. What is still gated on signing is the *live*
+    /// connection: `SMAppService` will not register an unsigned daemon, so no verb has been driven
+    /// end to end and `COMPATIBILITY_MATRIX.md` records that as pending, not as working.
     ///
     /// **What the invariants rule does and does not do about that**, stated carefully because an
     /// earlier version of this paragraph described a rule the same change had already replaced. It

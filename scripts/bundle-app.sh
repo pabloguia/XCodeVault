@@ -29,19 +29,42 @@ if [ -n "$SIGN" ] && [ -z "$TEAM" ]; then TEAM=$(echo "$SIGN" | sed -E 's/.*\(([
 
 cd "$ROOT"
 HELPER_SRC=Sources/XCodeVaultHelper/main.swift
+# The client needs the same substitution as the daemon (issue #30). Stated in the tense it belongs
+# in: no signed build has ever shipped this client — nothing in `Sources/` depends on
+# `XCodeVaultHelperClient` and `BUILD_PRODUCTS` does not include it — so this is forward-looking,
+# not a repair. What it prevents is the shape the protocol called "a requirement written down, not a
+# property held": a client whose team ID is still the placeholder refuses every connection, which is
+# fail-closed but inert — the daemon installed and nothing able to talk to it.
+# `HelperClientTests` asserts this script still names the file and still asserts its own sed.
+CLIENT_SRC=Sources/XCodeVaultHelperClient/HelperClient.swift
+TEAM_SRCS=("$HELPER_SRC" "$CLIENT_SRC")
 if [ -n "$TEAM" ]; then
   # A team id is interpolated into both a sed expression and Swift source; validate its shape first.
   [[ "$TEAM" =~ ^[A-Z0-9]{10}$ ]] || { echo "refusing: --team must be 10 uppercase alphanumerics, got '$TEAM'" >&2; exit 2; }
-  # Restore from a copy, and arm the trap BEFORE the edit. Previously the trap was installed after
+  # Restore from copies, and arm the trap BEFORE any edit. Previously the trap was installed after
   # the sed, so an interrupt in that window left a real team id sitting in a tracked file — in a
   # public repository. `git checkout --` also discarded any unrelated uncommitted edits to this
-  # file, which is not the script's to do.
-  cp "$HELPER_SRC" "$HELPER_SRC.bundle-bak"
-  trap 'mv -f "$HELPER_SRC.bundle-bak" "$HELPER_SRC" 2>/dev/null || true' EXIT
-  sed -i '' "s/let teamID = \"TEAMID_PLACEHOLDER\"/let teamID = \"$TEAM\"/" "$HELPER_SRC"
-  # A reformat of that line would make the substitution a silent no-op and ship a helper that
-  # refuses every connection — fail-closed, but a silent release. Assert it landed.
-  grep -q "let teamID = \"$TEAM\"" "$HELPER_SRC" || { echo "refusing: team id substitution did not apply to $HELPER_SRC" >&2; exit 1; }
+  # file, which is not the script's to do. With two files the ordering matters more, not less:
+  # both backups are taken and the trap armed before either file is touched.
+  for src in "${TEAM_SRCS[@]}"; do
+    [ -f "$src" ] || { echo "refusing: $src does not exist; the team id substitution has nowhere to land" >&2; exit 2; }
+    # Check the PRE-state, not just the post-state. The assertion after the sed passes either way if
+    # a previous run died on SIGKILL leaving a real team id in a tracked source: the sed then matches
+    # nothing, the grep still succeeds, and the trap restores the contamination — permanently and
+    # silently, in a public repository. This is the check that notices.
+    grep -q "let teamID = \"TEAMID_PLACEHOLDER\"" "$src" \
+      || { echo "refusing: $src does not contain the placeholder. A previous run may have left a real team id in it; inspect it before rebuilding." >&2; exit 1; }
+    cp "$src" "$src.bundle-bak"
+  done
+  trap 'for s in "${TEAM_SRCS[@]}"; do mv -f "$s.bundle-bak" "$s" 2>/dev/null || true; done' EXIT
+  for src in "${TEAM_SRCS[@]}"; do
+    sed -i '' "s/let teamID = \"TEAMID_PLACEHOLDER\"/let teamID = \"$TEAM\"/" "$src"
+    # A reformat of that line would make the substitution a silent no-op and ship a build that
+    # refuses every connection — fail-closed, but a silent release. Assert it landed, per file:
+    # asserting only the first would let a rename in the second pass unnoticed, which is exactly
+    # the shape of the bug this whole block exists to prevent.
+    grep -q "let teamID = \"$TEAM\"" "$src" || { echo "refusing: team id substitution did not apply to $src" >&2; exit 1; }
+  done
 fi
 BUILD_PRODUCTS=(--product XCodeVault --product xcodevaultctl)
 [ "$WITH_HELPER" = 1 ] && BUILD_PRODUCTS+=(--product xcodevault-helper)

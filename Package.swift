@@ -50,6 +50,19 @@ let package = Package(
             dependencies: ["XCodeVaultHelperProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // The XPC client — the only thing permitted to open a connection to the daemon, which
+        // `scripts/helper-invariants.sh` holds as a prohibition with this file as its single
+        // allowlist entry. It depends on the protocol and nothing else: it must not be able to
+        // reach the daemon's own logic, and giving it `XCodeVaultHelperCore` would let a caller
+        // execute the verbs in-process and mistake that for having exercised the boundary.
+        //
+        // Nothing in `Sources/` depends on it yet (issue #30). It is built and tested because the
+        // test target depends on it; wiring it to the app is M4, gated on a signed bundle.
+        .target(
+            name: "XCodeVaultHelperClient",
+            dependencies: ["XCodeVaultHelperProtocol"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         // Root LaunchDaemon (SMAppService.daemon). Allowlisted verbs only; no Process, no shell.
         // `scripts/helper-invariants.sh` checks that, and as of issue #7 it **does** read this
         // file: it parses the target graph, enforces that only the helper executable and the test
@@ -81,7 +94,7 @@ let package = Package(
         ),
         .testTarget(
             name: "XCodeVaultCoreTests",
-            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore"],
+            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore", "XCodeVaultHelperClient"],
             resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
