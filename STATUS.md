@@ -154,6 +154,38 @@ is done. The post-publication issue backlog replaced it._
    it green — which is better evidence that the gate grades something than a contrived failure would
    have been.
 
+   **The `pull_request` path had never run, and now has (PR #35, merged 2026-09-20).** Closing #34
+   made the gate a required check, and every one of the ten Sonar runs to that point was triggered by
+   `push` — this repository had never had a pull request at all. So the branch most likely to be met
+   by an outside contributor was the only one never executed, including code written the same day:
+   assertion 2's PR exemption, the lines naming which checks do not apply to a PR, and the
+   `gate_scope` fallback. A required check with an untested path is the same defect class #34 was
+   about, so it was exercised deliberately rather than discovered by someone else.
+
+   It works — `sonar-verify: ok — task ... processed; pull request #35; quality gate OK`, followed by
+   the line declaring what it did **not** check. And it falsified two things written while that path
+   was unobservable, both corrected in the PR's own commits:
+
+   - The PR exemption was described as the thing preventing every pull request from failing with a
+     message about renaming the main branch. A PR task carries `branch: ""`, so the existing guard
+     skipped on its own. The exemption makes the skip deliberate rather than incidental; it is not
+     what holds the property.
+   - The `gate_scope` fallback exists because it had not been observed whether a PR's CE task carries
+     an `analysisId`. It does. The fallback has therefore **never been taken** on any run. Querying it
+     directly for PR #35 returns the same verdict, so it is correct — it is simply unexercised, and
+     is now labelled that way instead of reading as though it were in use.
+
+   It also settled a discrepancy recorded here as unexplained. The converter in CI reports 4764
+   covered lines and the server reports the same 4764: they match exactly, so nothing is lost on
+   import. The 12-line gap came from comparing the server against a *laptop* run rather than against
+   the CI run whose report it imported — x86_64 and arm64 cover slightly different lines of one
+   commit. The only real gap remains the documented, deliberate one: 535 lines Sonar counts that the
+   report never supplies, all uncovered, being the executable targets the XCTest bundle cannot link.
+
+   One residue, left open on purpose: PR #35 changed a test and two documents, so it added no
+   coverable source lines and the gate evaluated five conditions rather than six. **`new_coverage` has
+   still never been graded on a pull request.** It has been graded on a push, in both directions.
+
    #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
    machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
    a scripted software variant for #29, the client-side code-signing requirement and its tests for
