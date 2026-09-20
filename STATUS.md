@@ -133,8 +133,8 @@ is done. The post-publication issue backlog replaced it._
    descriptions, its production connection factory and its launchd status accessor **never once
    executed** — 25 of its 54 new lines uncovered, which was every uncovered new line in the project.
 
-   Server-side numbers, now measured: project coverage **77.0%** (6150 lines to cover, 1417
-   uncovered) — not the 84.2% the converter reports, because Sonar counts lines in files the report
+   Server-side numbers, now measured: project coverage **77.4%** (6157 lines to cover, 1393
+   uncovered) — not the 84.7% the converter reports, because Sonar counts lines in files the report
    never mentions. Both are above the 60% floor, and the gap is the reason the floor's justification
    in `sonar.yml` says the two numbers are different populations.
 
