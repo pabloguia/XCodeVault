@@ -153,9 +153,23 @@ final class HelperClientTests: XCTestCase {
         // "just compare against the placeholder", which is the bug that once produced a detector
         // unable to detect its own placeholder. An assertion that only checked for non-emptiness
         // would pass on the version that leaks it.
-        let secret = "ZZZZ999999"
+        // Every window of four characters or more, not just the whole string. A reviewer pointed out
+        // that `contains(secret)` passes on a description that prints a prefix, a suffix, or the
+        // middle — `"...team ID Q7X4K2..."` leaks most of it and satisfies the naive check. Four is
+        // the shortest window that cannot collide with the fixed English of the message; the team is
+        // chosen so no window of it appears there by accident.
+        let secret = "Q7X4K2W9VJ"
         let unusable = HelperClient.Failure.unusableTeamID(secret).description
-        XCTAssertFalse(unusable.contains(secret), "the refusal must not print the team ID it rejected")
+        for length in 4...secret.count {
+            for start in 0...(secret.count - length) {
+                let lower = secret.index(secret.startIndex, offsetBy: start)
+                let upper = secret.index(lower, offsetBy: length)
+                let window = String(secret[lower..<upper])
+                XCTAssertFalse(
+                    unusable.contains(window),
+                    "the refusal leaked \(length) characters of the team ID: \(window)")
+            }
+        }
         XCTAssertTrue(unusable.contains(HelperIdentity.machServiceName), "it must name what it refused to talk to")
         XCTAssertTrue(unusable.contains("bundle-app.sh"), "it must say how to get a build that works")
 

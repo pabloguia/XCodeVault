@@ -20,10 +20,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   identity) each took four and two independent reviews respectively, and **every review returned
   REQUEST CHANGES with at least one real defect** — several of them in the fix rather than in the
   original code. That ratio is the useful number here, not the issue count.
-- Test count and gate state move every batch, so this section does not restate them: `swift test`,
-  `swift format lint --strict`, `scripts/helper-invariants.sh` and `scripts/check-doc-mirror.sh`
-  are the four gates, and CI runs them on `macos-15` and `macos-26`. A number written here goes
-  stale within a day; the commit that changed it is the honest record.
+- Test count and gate state move every batch, so this section does not restate them. It said "the
+  four gates" and named four; `scripts/preflight.sh` reports **ten**, which is the joke this bullet
+  is about — a number written here goes stale within a day, including this one. Run the script for
+  the live list; the commit that changed it is the honest record. CI runs them on `macos-15` and
+  `macos-26`, plus the Sonar workflow on `macos-15`.
 - `scripts/preflight.sh` runs all of them, in CI's order, before you push. It exists because CI was
   red for four pushes on `swift format lint --strict` while three of the four gates had been run
   locally and the tree was believed green — the cheapest check in the set was the one nobody ran.
