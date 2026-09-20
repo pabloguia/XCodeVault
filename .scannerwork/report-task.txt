@@ -1,0 +1,7 @@
+organization=pabloguia
+projectKey=pabloguia_XCodeVault
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.107035
+dashboardUrl=https://sonarcloud.io/dashboard?id=pabloguia_XCodeVault
+ceTaskId=AaC8tzwL6COkR7KPVnZQ
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AaC8tzwL6COkR7KPVnZQ

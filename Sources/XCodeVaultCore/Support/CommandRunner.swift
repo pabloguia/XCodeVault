@@ -46,7 +46,11 @@ public extension CommandRunning {
 
 /// Foundation.Process-backed runner (posix_spawn under the hood, no shell).
 public struct ProcessCommandRunner: CommandRunning {
-    public init() {}
+    public init() {
+        // Stateless: there is nothing to configure. This exists only so callers outside the module
+        // can construct one — Swift synthesises an *internal* memberwise initialiser, which the CLI
+        // and the app cannot reach.
+    }
     public func run(_ executable: String, _ arguments: [String], environment: [String: String]?) throws -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)

@@ -13,7 +13,10 @@ struct XCodeVaultApp: App {
                 .task { await model.refresh() }
         }
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                // Deliberately empty — an empty replacement is how AppKit's File > New item is
+                // removed. XCodeVault has no document model, so "New" would have nothing to make.
+            }
             CommandMenu("Scan") {
                 Button("Rescan") { Task { await model.refresh() } }.keyboardShortcut("r")
             }
@@ -113,7 +116,10 @@ struct MainView: View {
             .navigationTitle(section.rawValue)
         }
         .alert("Error", isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
-            Button("OK") {}
+            Button("OK") {
+                // Dismissing is the whole action: SwiftUI clears the binding that presents this
+                // alert, which the `set:` closure above turns into `lastError = nil`.
+            }
         } message: {
             Text(model.lastError ?? "")
         }

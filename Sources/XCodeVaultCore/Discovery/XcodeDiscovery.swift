@@ -22,7 +22,11 @@ public struct XcodeCapabilities: Sendable, Codable, Equatable {
     public var simctlRuntimeVerify = false
     public var simctlRuntimeMatch = false
 
-    public init() {}
+    public init() {
+        // Every capability defaults to `false`: absent until `parse(xcodebuildHelp:)` observes it.
+        // Defaulting to "unsupported" is the fail-closed direction — a capability wrongly assumed
+        // present would route a migration through a mechanism this Xcode does not have.
+    }
 
     /// Parses `xcodebuild -help` text.
     public static func parse(xcodebuildHelp: String) -> XcodeCapabilities {

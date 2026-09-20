@@ -46,6 +46,11 @@ fast=0
 
 # The workflow is the source of truth for what CI runs; drifting from it silently is the one
 # failure this script cannot afford, because its whole value is "green here means green there".
+#
+# `.github/workflows/sonar.yml` is deliberately NOT mirrored here and not counted below. It needs
+# SONAR_TOKEN, a repository secret, so it structurally cannot run locally — putting it in ci.yml
+# would make this script's central claim false for one step while this very guard reported
+# everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
 expected_steps=12
 if [ "$workflow_steps" -ne "$expected_steps" ]; then

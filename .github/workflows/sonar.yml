@@ -1,0 +1,50 @@
+# SonarQube Cloud analysis.
+#
+# **Why this is not a step in `ci.yml`.** `scripts/preflight.sh` exists so that "green locally"
+# means "green in CI", and it enforces that by counting `ci.yml`'s steps and refusing to run when
+# the two drift. A Sonar step cannot run locally — it needs `SONAR_TOKEN`, which is a repository
+# secret — so putting it in `ci.yml` would make preflight's central claim false for one step while
+# its own guard reported everything in order. It lives here instead, and preflight says so.
+#
+# **This does not gate merges yet, and that is deliberate rather than an oversight.** The project
+# had not been analysed once when this landed, so no baseline exists and the quality gate's verdict
+# on a first analysis says more about the backlog than about the change under review. Flipping it
+# to blocking is `-Dsonar.qualitygate.wait=true` plus removing `continue-on-error`, and should
+# happen once a baseline has been read — see the issue this commit references.
+name: Sonar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: SonarQube Cloud
+    runs-on: ubuntu-latest
+    # GitHub withholds secrets from workflows triggered by a fork's pull request, so this job
+    # cannot authenticate there. Skipping it is honest; letting it run and fail would train
+    # everyone to ignore a red check on exactly the contributions that get the least scrutiny.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Sonar needs full history to attribute issues to commits and to work out "new code".
+          fetch-depth: 0
+      - name: Java 21
+        # Analyses running on a Java runtime below 21 stopped being supported on 2026-07-20. The
+        # scanner ships its own JRE, so this is insurance against a runner image that resolves an
+        # older one first, not a requirement.
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
