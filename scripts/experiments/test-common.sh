@@ -373,6 +373,53 @@ done
 # top of it gives the real writer over a fake redactor-input, with `$out` in a temp directory.
 . ./mount-staging.sh
 
+# ---- the target guard's symlink refusal ------------------------------------------------------
+# A symlink anywhere in the target path means the mount lands on the RESOLVED path while every
+# `mount | grep " on $target "` in `mount-staging.sh` — the did-it-take check, both cleanup
+# checks, the probe — greps for the literal one. The filesystem would be mounted somewhere nobody
+# is watching and cleanup would report success. Behaviour, not source shape: the leaf case and
+# the ancestor case are different code and the first version only caught the leaf.
+#
+# Under a PHYSICALLY resolved base, deliberately. `$FIX` comes from `mktemp -d`, which hands back
+# `/var/...`, and `/var` is a symlink to `/private/var` — so the control case refuses for the
+# right reason while proving nothing about the wrong one. Caught by this very check failing on
+# its first run, which is the argument for having it.
+GT="$(cd "$FIX" && pwd -P)/guard"
+mkdir -p "$GT/real/inner"
+ln -s "$GT/real" "$GT/link"
+ln -s "$GT/real/inner" "$GT/real/sym"
+# `type -t` first: a missing function returns non-zero, which would read as "refused" and make
+# every refusal check below pass for the wrong reason. This block sat above the `. ./mount-staging.sh`
+# on its first draft and did exactly that.
+check "the target guard is actually loaded" "function" "$(type -t xcv_stage_guard_target)"
+guard() { xcv_stage_guard_target "$1" >/dev/null 2>&1 3>/dev/null && echo allowed || echo refused; }
+# The one environment-dependent check in this file: the guard also runs `pgrep -qx
+# "xcodebuild|Xcode|Simulator"`, so this fails with Xcode open. It fails loudly rather than
+# vacuously, which is the safe direction, but it is the reason a red run here may not be a code
+# change. This machine runs test rigs on its simulators, so it will happen.
+check "an ordinary directory passes the target guard" "allowed" "$(guard "$GT/real/inner")"
+check "a symlinked ANCESTOR is refused" "refused" "$(guard "$GT/link/inner")"
+check "a symlinked LEAF is refused" "refused" "$(guard "$GT/real/sym")"
+
+# The combination that defeated the first two drafts: a symlinked ancestor AND a parent that does
+# not exist yet. `[ -L ]` is false (it lstats the leaf, resolving ancestors), and stopping the
+# resolution at `dirname` finds nothing to compare — so the guard fell through and
+# `xcv_stage_mount` would then `mkdir -p` the missing components under the RESOLVED ancestor.
+check "a symlinked ancestor with an ABSENT parent is refused" "refused" \
+    "$(guard "$GT/link/notyet/leaf")"
+
+# The predicate itself, and that both callers reach it. It lived in two places for one round —
+# the library's copy pinned, E6c's inline copy not — which is the shape `mount-staging.sh`'s own
+# header exists to record.
+sym() { xcv_stage_refuse_symlinked_path "$1" >/dev/null 2>&1 3>/dev/null && echo allowed || echo refused; }
+check "the shared symlink predicate is loaded" "function" "$(type -t xcv_stage_refuse_symlinked_path)"
+check "the predicate allows a real path" "allowed" "$(sym "$GT/real/inner")"
+check "the predicate refuses a symlinked ancestor" "refused" "$(sym "$GT/link/inner")"
+check "the target guard delegates to it" "1" \
+    "$(grep -cE '^ *xcv_stage_refuse_symlinked_path "\$target" \|\| return 1$' mount-staging.sh)"
+check "e6c delegates to it for its control dir" "1" \
+    "$(grep -cE '^xcv_stage_refuse_symlinked_path "\$PROBE" \|\| exit 1$' e6c-mount-mechanism.sh)"
+
 EV=$(mktemp -d)
 SUDO_USER="$T_USER"
 w_out="$EV/evidence.txt"

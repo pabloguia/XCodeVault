@@ -1,0 +1,32 @@
+# Experiment: E6b variant A: what is left at /Library/Developer/CoreSimulator/Cryptex/Caches after a clean unmount
+# Date: 2026-09-21T14:58:51Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+donor: /Volumes/<vault> (/dev/disk9s1, APFS, whole disk disk9, UUID <vault-uuid>)
+
+NOTE: this is the software variant. The physical-yank variant is the one issue #29 actually
+describes, and a clean umount may well behave differently — record both before treating
+either as the answer. See e6b-physical-disconnect.sh.
+
+--- 0. before anything ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+
+==================== stage the mount ====================
+## unmount donor from its mount point
+$ diskutil unmount /dev/disk9s1
+Volume <vault> on disk9s1 unmounted
+[exit=0]
+
+## mount /dev/disk9s1 at /Library/Developer/CoreSimulator/Cryptex/Caches
+$ mount_apfs -o nobrowse /dev/disk9s1 /Library/Developer/CoreSimulator/Cryptex/Caches
+mount_apfs: volume could not be mounted: Operation not permitted
+[exit=77]
+
+!!!! MOUNT DID NOT TAKE: /dev/disk9s1 is not mounted at /Library/Developer/CoreSimulator/Cryptex/Caches. Nothing below was run.

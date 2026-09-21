@@ -587,6 +587,36 @@ is data loss. After interrupting any experiment, check:
 mount | grep -i XCV ; xcrun simctl list devices | grep xcv-probe ; ls ~/.xcodevault-e2-scratch
 ```
 
+## E6b — does a mount stub reappear at a CoreSimulator cache path? (gates H14, issue #29)
+
+Two variants over one target from the closed set (`dyld` or `cryptex`): a scripted software
+unmount (`scripts/experiments/e6b-mount-stub-reappearance.sh`) and a physical cable pull
+(`e6b-physical-disconnect.sh`). Both are needed — a clean `umount` is not obviously the same event
+as a surprise removal. Procedure in `docs/process/RUNBOOK-E6b-disconnect.md`. Needs root, a
+disposable donor volume and, for the second variant, hands at the machine.
+
+**Status: blocked upstream, 2026-09-21.** Neither variant has produced a finding, because staging
+the mount fails: `mount_apfs` returns `Operation not permitted` to root at the cache path. See
+H14 in `HYPOTHESES.md` for the measurement and the reading rule, and E6c below for the experiment
+that separates the two explanations.
+
+## E6c — is it the path or the mechanism? (unblocks E6b)
+
+`scripts/experiments/e6c-mount-mechanism.sh` fills a mechanism × path matrix: `mount_apfs` and
+`diskutil mount nobrowse -mountPoint`, each against a throwaway directory under
+`/Library/Developer` and against the real cache path. The fourth cell is the E6b measurement and
+is not repeated.
+
+The reading rule is fixed in H14 **before** the run, deliberately: the two outcomes retire or
+merely postpone a hypothesis, and a rule written after seeing the numbers is not a rule. The
+script aborts rather than recording a cell whose REFUSED could have a cause other than the mount
+being refused — a donor that failed to unmount, an absent target — because a false "the path is
+protected" would close H14 on the strength of an open file.
+
+Needs root and a disposable donor. Nothing is written to either target; the run also compares the
+donor's root before and after, because anything a daemon writes to a cache path while the donor is
+mounted over it lands on the donor and survives the unmount.
+
 **Two traps to avoid when re-attempting this.** First, assert the precondition: a test that starts
 with a stale image already mounted measures the previous run, and reports a leak that is not this
 run's. Second, capture the output: three of the attempts above ran with stdout on `/dev/null`, so

@@ -601,3 +601,55 @@ physical yank. Both are needed — a clean `umount` is not obviously the same ev
 removal, and assuming they are is the same shortcut this hypothesis exists to avoid. Blocked on
 `sudo` and on hands at the machine. Tracked as issue #29.
 
+**2026-09-21: blocked upstream. The mount cannot be staged.** The first real run refused before any
+probe ran: `mount_apfs -o nobrowse /dev/diskNsM /Library/Developer/CoreSimulator/Cryptex/Caches`
+returned `Operation not permitted` **to root**, exit 77. Evidence:
+`evidence/e6b-mount-stub-cryptex-FAILED-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+Measured on the target, all negative: no BSD flag (`ls -lO` shows `-`), no ACL, no
+`com.apple.rootless` xattr — only a Time Machine exclusion — and no `rootless.conf` entry for
+`/Library/Developer`. SIP enabled, normally. The donor is a disposable APFS sparse image with
+`Owners: Disabled`. The refusal has no visible cause, which is the **same shape as E4b above**,
+where root could not write `images.plist` on a `root:wheel 644` file with no flags, no ACL and no
+`rootless.conf` entry, while `simdiskimaged` rewrote it freely (F16).
+
+Two explanations fit and they lead to opposite conclusions, so the reading rule is fixed **here,
+before the run**, rather than in whatever the run happens to emit:
+
+- **(a) the PATH is protected, whatever the mechanism.** Then H14 is not merely unverified but
+  *unreachable by mounting* at any privilege a product may use, and the canonical-mount strategy is
+  dead at CoreSimulator paths for the same reason `images.plist` is. That is a finding, not a
+  disappointment: it would mean the #24 guard defends against a state this route cannot produce.
+- **(b) the MECHANISM is refused.** `mount_apfs` called directly by a non-entitled process is
+  blocked and DiskArbitration is the supported route. This is live because **E1b mounted a disk
+  image over a throwaway directory under `/Library/Developer` and it worked** — using
+  `diskutil mount -mountPoint`, not `mount_apfs`. E6b has never used the mechanism this project
+  actually proved. Then E6b can run once staging switches, and H14 is merely still open.
+
+`scripts/experiments/e6c-mount-mechanism.sh` separates them by filling the mechanism × path
+matrix. Cell D (`mount_apfs` at the cache path) is the measurement above and is not repeated.
+
+| | throwaway dir under `/Library/Developer` | `…/CoreSimulator/Cryptex/Caches` |
+|---|---|---|
+| `mount_apfs` | A — pending | D — **REFUSED**, EPERM, 2026-09-21 |
+| `diskutil mount nobrowse -mountPoint` | B — pending (E1b says yes) | C — pending |
+
+**Read it as:**
+
+- **B refuses** → the control cell failed, so the harness or the mechanism is broken and the
+  matrix is **void**. Nothing may be concluded from C in that state.
+- **C mounts** → (b). E6b re-runs on DiskArbitration and H14 stays open.
+- **C refuses while B mounts** → (a). H14 is unreachable by this route and closes as
+  sized-but-unproducible. Note the limit of that claim: two root cells license "unreachable at
+  root by either mechanism", **not** "by any privilege" — Apple's own daemons mount at these
+  paths, which is the F16/E4b observation the argument leans on in the first place.
+- **A mounts while D refused** → the refusal is specific to the CoreSimulator path rather than to
+  `mount_apfs`, which is (a) by a narrower argument.
+
+A cell that reports REFUSED for a reason other than the mount being refused would invalidate the
+matrix, and a false (a) would retire a hypothesis on the strength of an open file. The script
+aborts rather than record the two causes it can detect — a donor that failed to unmount, and an
+absent target — and carries the command's exit status into every REFUSED line for the rest, which
+it cannot distinguish: a malformed invocation and `Operation not permitted` both leave nothing
+mounted. Read the exit status before reading the cell.
+

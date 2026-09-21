@@ -96,6 +96,49 @@ xcv_stage_arm_redaction() {
     export XCV_REDACT_ALSO_LABEL XCV_REDACT_ALSO_UUID
 }
 
+# xcv_stage_refuse_symlinked_path <path>
+#
+# Refuses a path whose leaf OR any ancestor is a symlink. A mount would land on the RESOLVED path
+# while every `mount | grep " on $path "` in this harness — the did-it-take check, both cleanup
+# checks, the probe, `cell`'s verification in E6c — greps for the literal one. The filesystem ends
+# up mounted somewhere nobody is watching and cleanup reports success. Only root can plant one at
+# these paths, which is why this refuses rather than repairs.
+#
+# Three things this gets right that earlier drafts did not:
+#   - `[ -L "$path" ]` alone tests the LAST component. A symlinked `…/CoreSimulator/Cryptex`
+#     defeats the same four checks identically.
+#   - Stopping the resolution at `dirname` fails open when the parent does not exist: `cd` fails,
+#     the resolved value is empty, and a `[ -n ... ]` guard skips the comparison — in precisely
+#     the combination that matters, because `xcv_stage_mount` then `mkdir -p`s the missing
+#     components under the resolved ancestor. Reachable on a CI image that relocates
+#     `/Library/Developer` and has no `Cryptex` directory.
+#
+#     Two clauses, two jobs, and they are easy to confuse: `[ -z "$resolved" ]` is what CLOSES
+#     that hole — an unresolvable path is a refusal, full stop. The walk-up's distinct job is
+#     avoiding FALSE refusals of a legitimately absent nested path whose ancestors are all real.
+#     Reverting only the walk-up kills no test, because the suite pins the safety direction and
+#     nothing pins permissiveness; that is a gap in the tests, not spare code.
+#   - It also refuses a path reached through a legitimately symlinked ancestor such as
+#     `/var` -> `/private/var`. That is correct rather than over-broad — `mount` reports the
+#     resolved path there too — and unreachable in practice, since `xcv_e6b_target` admits only
+#     two literal `/Library/Developer` paths.
+#
+# One function rather than one per caller: this file's own header is a record of what two copies
+# cost. `test-common.sh` pins all four cases.
+xcv_stage_refuse_symlinked_path() {
+    local path="$1" up resolved
+    up="$path"
+    while [ ! -d "$up" ] && [ "$up" != "/" ] && [ -n "$up" ]; do up="$(dirname "$up")"; done
+    resolved="$(cd "$up" 2>/dev/null && pwd -P)"
+    if [ -L "$path" ] || [ -z "$resolved" ] || [ "$resolved" != "$up" ]; then
+        echo "!! $path, or a directory above it, is a symlink. A mount would land on the resolved" >&3
+        echo "   path while every check here greps for the literal one, so it would be invisible." >&3
+        echo "   Refusing." >&3
+        return 1
+    fi
+    return 0
+}
+
 # xcv_stage_guard_target <target>
 xcv_stage_guard_target() {
     local target="$1"
@@ -104,6 +147,7 @@ xcv_stage_guard_target() {
         echo "   would force-unmount someone else's filesystem — possibly this product's own vault." >&3
         return 1
     fi
+    xcv_stage_refuse_symlinked_path "$target" || return 1
     if [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
         echo "!! $target is not empty. Run scripts/experiments/e6b-check.sh, which explains this and" >&3
         echo "   what clearing the cache costs." >&3

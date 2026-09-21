@@ -31,7 +31,12 @@ xcv_run() {
   echo "## $label"
   echo "\$ $*"
   "$@" 2>&1
-  echo "[exit=$?]"
+  # Exposed, not just printed. Callers that decide something on the outcome cannot use this
+  # function's own status — it ends in `echo` and always returns 0, which `mount-staging.sh`
+  # records as having cost months. Keeping the status here lets a caller record WHY a step failed
+  # without changing the return convention every existing call site relies on.
+  XCV_LAST_EXIT=$?
+  echo "[exit=$XCV_LAST_EXIT]"
   echo
 }
 
