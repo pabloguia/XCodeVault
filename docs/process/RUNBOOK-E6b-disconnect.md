@@ -49,9 +49,21 @@ Two of its answers are worth knowing before you start:
 - **It does not call any volume a suitable donor.** It lists what is mounted and stops there,
   because it cannot tell a scratch disk from your personal USB drive and the experiment physically
   disconnects the one you name while a filesystem is mounted over a system cache path.
-- **Clearing the target is yours to do and `xcodevaultctl` cannot help.** The catalog marks
-  `coreSimulatorSystemCaches` as `privilege: .root`, so `clean` lists it and stops — the helper that
-  would do it has a client as of issue #30 but no signed build to run under. Look first, then:
+- **There are two allowlisted targets, and you probably do not need to clear either.** The scripts
+  take a target NAME — `dyld` or `cryptex`, mirroring `HelperCleanupTarget` — and `e6b-check.sh`
+  reports the state of both and names the one to use. On 2026-09-20 on this machine, `dyld` held
+  7.1 GB while `cryptex` (`/Library/Developer/CoreSimulator/Cryptex/Caches`) was **empty**, so the
+  experiment could run with nothing cleared at all. This issue read as "blocked on hardware" for two
+  weeks when what blocked it was a prerequisite on one of two candidates.
+
+  **A `cryptex` run is not a `dyld` run.** Whether macOS recreates a directory can depend on which
+  daemon owns the path, so the evidence filename carries the target and the record must not blur
+  them. Issue #24's guard covers both targets, so either is evidence for the guard; only a `dyld` run
+  is evidence about the canonical-mount strategy's own target.
+
+- **If you do need to clear `dyld`, it is yours to do and `xcodevaultctl` cannot help.** The catalog
+  marks `coreSimulatorSystemCaches` as `privilege: .root`, so `clean` lists it and stops — the helper
+  that would do it has a client as of issue #30 but no signed build to run under. Look first, then:
 
   ```
   ls -la /Library/Developer/CoreSimulator/Caches/dyld
@@ -71,7 +83,7 @@ Two of its answers are worth knowing before you start:
 ### Variant A — software unmount (run this first)
 
 ```
-sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume>
+sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume> <dyld|cryptex>
 ```
 
 It mounts the donor at the cache path, probes, unmounts, and probes again — immediately, after ten
@@ -91,7 +103,7 @@ succeeded — which would have made every probe read `absent`, the headline find
 ### Variant B — physical yank (this is the case the issue describes)
 
 ```
-sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<your-donor-volume>
+sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<your-donor-volume> <dyld|cryptex>
 ```
 
 It shares its staging with variant A, so the same guards apply: donor unmounted first, refusal of
@@ -121,7 +133,7 @@ present that is not a mount point.**
 
 ## Recording the result (mandatory, see `.claude/skills/run-experiment`)
 
-- Evidence: `e6b-mount-stub-<env>.txt` (variant A) and `e6b-physical-<env>.txt` (variant B), both
+- Evidence: `e6b-mount-stub-<target>-<env>.txt` (variant A) and `e6b-physical-<target>-<env>.txt` (variant B), both
   under `docs/research/evidence/`, both written entirely by the scripts — there is no manual section
   to paste any more, which is the point of this change. Each script verifies its own redaction
   against `$SUDO_USER`; if it finds the account name it **deletes the file and exits non-zero**, so

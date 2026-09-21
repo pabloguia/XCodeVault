@@ -26,25 +26,44 @@ say() { printf '%b\n' "$*" >>"$REPORT"; }
 xcv_header "E6b prerequisites" >>"$REPORT"
 say ""
 
-# 1. The target must be empty or absent. A populated cache under a mount would confuse "macOS
-#    recreated a stub" with "the old contents were always there" — a mount hides what is beneath it
-#    and gives it back on unmount, which looks exactly like the thing being measured.
-if [ ! -e "$TARGET" ]; then
-    note "OK" "$TARGET is absent"
-elif [ ! -r "$TARGET" ]; then
-    # Not "empty": unreadable. `ls -A` on a root-owned path returns nothing for permission-denied
-    # exactly as it does for an empty directory, and this script is deliberately no-sudo — so the
-    # cheerful reading would be a false green on the one prerequisite that exists to stop two
-    # different states being confused in the evidence.
-    note "NO" "$TARGET is not readable by you, so its contents are unknown. Check with: sudo ls -A $TARGET"
-elif [ -z "$(ls -A "$TARGET" 2>/dev/null)" ]; then
-    note "OK" "$TARGET is empty"
+# 1. A target must be empty or absent. BOTH allowlisted targets are reported, because for two weeks
+#    this said "NO" and issue #29 read as blocked on hardware, when what it was blocked on was the
+#    dyld cache holding gigabytes — while the other allowlisted target sat empty the whole time. A
+#    check that reports one of two candidates cannot say "not ready" honestly.
+#
+#    A populated target would confuse "macOS recreated a stub" with "the old contents were always
+#    there": a mount hides what is beneath it and gives it back on unmount, which looks exactly like
+#    the thing being measured.
+usable=""
+details=""
+for name in dyld cryptex; do
+    t="$(xcv_e6b_target "$name")"
+    if [ ! -e "$t" ]; then
+        state="absent — usable"
+        usable="$usable $name"
+    elif [ ! -r "$t" ]; then
+        # Not "empty": unreadable. `ls -A` on a root-owned path returns nothing for permission-denied
+        # exactly as it does for an empty directory, and this script is deliberately no-sudo — so the
+        # cheerful reading would be a false green on the one prerequisite that exists to stop two
+        # different states being confused in the evidence.
+        state="NOT READABLE by you, so its contents are unknown. Check with: sudo ls -A $t"
+    elif [ -z "$(ls -A "$t" 2>/dev/null)" ]; then
+        state="empty — usable"
+        usable="$usable $name"
+    else
+        state="holds $(du -sh "$t" 2>/dev/null | cut -f1) — clearing it needs sudo and costs a slow first boot per runtime"
+    fi
+    details="$details         $name: $t
+             $state
+"
+done
+usable="${usable# }"
+if [ -n "$usable" ]; then
+    note "OK" "a stageable target exists: $usable"
 else
-    size=$(du -sh "$TARGET" 2>/dev/null | cut -f1)
-    note "NO" "$TARGET holds ${size:-content}. It is regenerable — this is the cache the canonical-mount"
-    printf '         %s\n' "strategy targets — but clearing it costs a slow first boot per runtime, and" >>"$REPORT"
-    printf '         %s\n' "\`xcodevaultctl clean\` CANNOT do it (privilege: .root; see issue #30)." >>"$REPORT"
+    note "NO" "neither allowlisted target is empty or absent; one must be cleared (sudo) before staging"
 fi
+printf '%s' "$details" >>"$REPORT"
 
 # 2. Nothing may be using the simulators. This machine's are used by test rigs; the runbook says to
 #    check rather than assume, and this is that check.
@@ -122,9 +141,16 @@ if [ "$ready" = 1 ]; then
     # Variant A first, matching the runbook. This line used to send a ready operator straight to the
     # physical variant while the runbook said the opposite — the two files in one change disagreeing
     # about run order.
-    say "ready. Variant A first (software unmount), then variant B (physical yank):"
-    say "  sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<donor>"
-    say "  sudo scripts/experiments/e6b-physical-disconnect.sh   /Volumes/<donor>"
+    # The target is NAMED in the command. Without it the scripts default to `dyld`, and this block
+    # would have told a ready operator to run the one target the check had just reported as holding
+    # 7.1 GB — advice contradicting the finding three lines above it.
+    first_usable="${usable%% *}"
+    say "ready, using the '$first_usable' target. Variant A first (software unmount), then variant B (physical yank):"
+    say "  sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<donor> $first_usable"
+    say "  sudo scripts/experiments/e6b-physical-disconnect.sh   /Volumes/<donor> $first_usable"
+    say ""
+    say "The evidence records which target it measured. A '$first_usable' run is NOT a 'dyld' run:"
+    say "whether macOS recreates a directory can depend on which daemon owns the path."
 else
     say "not ready: the NO lines above are what issue #29 is actually blocked on, one at a time."
 fi

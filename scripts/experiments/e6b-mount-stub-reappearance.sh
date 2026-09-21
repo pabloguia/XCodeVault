@@ -29,10 +29,21 @@ source "$(dirname "$0")/common.sh"
 source "$(dirname "$0")/mount-staging.sh"
 
 MP="$1"
-TARGET="/Library/Developer/CoreSimulator/Caches/dyld"
-out="$XCV_EVIDENCE_DIR/e6b-mount-stub-$(xcv_env_slug).txt"
+# The target is a NAME from a closed set, never a path: this mounts a filesystem over the
+# argument and later force-unmounts it, under sudo. `xcv_e6b_target` mirrors
+# `HelperCleanupTarget`, so the experiment cannot stage over anything the product would not
+# itself treat as regenerable.
+TARGET_NAME="${2:-dyld}"
+TARGET="$(xcv_e6b_target "$TARGET_NAME")" || {
+    echo "!! unknown target '$TARGET_NAME'. Allowed: dyld, cryptex (see scripts/experiments/e6b-check.sh)."
+    exit 2
+}
+# The target is in the FILENAME. Two runs against different targets are different findings —
+# whether macOS recreates a directory can depend on which daemon owns the path — and a shared
+# name would have one rotate the other away as though it superseded it.
+out="$XCV_EVIDENCE_DIR/e6b-mount-stub-$TARGET_NAME-$(xcv_env_slug).txt"
 
-[ -n "$MP" ] || { echo "usage: sudo $0 <donor-volume-mount-point>"; exit 2; }
+[ -n "$MP" ] || { echo "usage: sudo $0 <donor-volume-mount-point> [dyld|cryptex]"; exit 2; }
 [ "$(id -u)" = 0 ] || { echo "!! must run under sudo (mount_apfs/umount)"; exit 2; }
 [ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; redaction cannot be verified. Use \`sudo\`, not \`sudo -i\`."; exit 2; }
 

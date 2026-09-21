@@ -68,6 +68,31 @@ xcv_rotate_out() {
 # break the expression outright.
 xcv_re_escape() { printf '%s' "$1" | sed 's/[][\.*^$#\/]/\\&/g'; }
 
+# xcv_e6b_target <name> — the E6b experiment's target path, from a CLOSED SET.
+#
+# **Why a name and not a path.** These scripts mount a filesystem over the argument and later
+# force-unmount it. Taking a path would let a typo mount a donor volume over something that is not a
+# regenerable cache, and the scripts run under sudo. The set mirrors `HelperCleanupTarget` in
+# `Sources/XCodeVaultHelperProtocol` — the same two paths the privileged cleanup verb allows — so the
+# experiment cannot stage over anything the product would not itself treat as regenerable.
+#
+# **Why more than one target exists here at all.** Issue #29 was blocked for two weeks on a
+# prerequisite nobody had priced: the experiment needs an EMPTY target, and the dyld cache holds
+# gigabytes whose removal costs a slow first boot per simulator runtime — on a machine whose
+# simulators are used by test rigs. `cryptex` was measured empty on 2026-09-20 and needs no clearing.
+#
+# It is not a free substitution, and the evidence must say which was used: whether macOS recreates a
+# directory can depend on which daemon owns the path. A `cryptex` run answers the question for the
+# path it measured, and issue #24's guard covers both targets, so it is evidence either way — but it
+# is not a dyld run, and nothing here should let the two be confused in the record.
+xcv_e6b_target() {
+    case "${1:-dyld}" in
+        dyld) printf '/Library/Developer/CoreSimulator/Caches/dyld' ;;
+        cryptex) printf '/Library/Developer/CoreSimulator/Cryptex/Caches' ;;
+        *) return 1 ;;
+    esac
+}
+
 # The directory scanned for volumes and the UUID lookup are indirected so the tests can drive
 # xcv_redact against a fixture tree instead of whatever happens to be plugged into the machine
 # running them. The defaults are the real ones: detection is what you get when nobody configures

@@ -1,5 +1,7 @@
 import XCTest
 
+@testable import XCodeVaultHelperProtocol
+
 /// Lints the experiment harness from inside the test suite, because `swift test` is this repo's
 /// commit gate and a shell script that nothing runs on every commit is a script nobody checks.
 ///
@@ -308,5 +310,40 @@ final class ExperimentScriptSafetyTests: XCTestCase {
                 in: "mounted at /Volumes/Octavia-SSD\n", fileName: "e.txt", home: "", user: "runner", mountedVolumes: ["Octavia-SSD", "Data"]),
             ["e.txt: names the mounted volume 'Octavia-SSD'"],
             "and a named drive is still caught on a CI account, while a generic system volume is not")
+    }
+
+    /// `xcv_e6b_target` is an allowlist protecting a `mount` under sudo, and its comment claims the
+    /// set "mirrors `HelperCleanupTarget` … the same two paths the privileged cleanup verb allows".
+    ///
+    /// That claim is the whole safety argument — these scripts mount a donor filesystem OVER the
+    /// path and later force-unmount it — and it is written in two places, which is where rules
+    /// drift. Add a case to the enum, or change a path, and the shell copy silently stops
+    /// mirroring: the experiment could then stage over something the product no longer treats as
+    /// regenerable, or refuse a target the product does allow. Nothing else checks it.
+    func testTheE6bTargetAllowlistStillMirrorsTheHelpersCleanupTargets() throws {
+        let common = try String(contentsOfFile: experimentsDirectory + "/common.sh", encoding: .utf8)
+        guard
+            let body = common.range(of: "xcv_e6b_target() {").map({ String(common[$0.upperBound...]) })?
+                .components(separatedBy: "\n}").first
+        else { return XCTFail("xcv_e6b_target is gone; this rule and the E6b scripts need updating together") }
+
+        // Every absolute path the shell function can print.
+        let shellPaths = Set(
+            body.components(separatedBy: "printf ")
+                .dropFirst()
+                .compactMap { chunk -> String? in
+                    guard let open = chunk.firstIndex(of: "'"),
+                        let close = chunk[chunk.index(after: open)...].firstIndex(of: "'")
+                    else { return nil }
+                    return String(chunk[chunk.index(after: open)..<close])
+                }
+                .filter { $0.hasPrefix("/") })
+
+        let helperPaths = Set(HelperCleanupTarget.allCases.map(\.path))
+        XCTAssertFalse(shellPaths.isEmpty, "parsed no paths out of xcv_e6b_target — the parser, not the set, is what broke")
+        XCTAssertEqual(
+            shellPaths, helperPaths,
+            "the E6b allowlist and HelperCleanupTarget have drifted. The scripts mount over these paths under sudo, "
+                + "so the shell set must not name one the helper would refuse, nor miss one it allows.")
     }
 }
