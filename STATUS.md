@@ -210,6 +210,28 @@ is done. The post-publication issue backlog replaced it._
    requires the thing it is blocked on. #29 no longer needs hands at the machine for its next step;
    E6c is a `sudo` run with no cable pull.
 
+   **The E6c experiment ran, and its harness now has a harness** (5945c4f, 9ff47ef). `mount_apfs`
+   mounted at a throwaway directory under `/Library/Developer` and returned EPERM at the
+   CoreSimulator cache path — same mechanism, same root, same donor. The refusal is specific to
+   that path, or some property of it; no `restricted` flag and no `rootless.conf` entry, so the
+   obvious SIP explanation is out and the cause is unidentified. The `diskutil` column was VOID
+   by the rule fixed before the run, which is what stopped a refused cell C obtained through a
+   broken control from closing H14.
+
+   Four review rounds on the script, then one on its test harness. The defects were mine, not
+   macOS's: `rm -rf /` as root on a failed `mktemp`; a plist filter on `content` when the key is
+   `content-hint` (which also means **E1b's plist path never ran** — it passed through its
+   fallback every time, so "we reused the proven extraction" was true only of the dead half);
+   `Part of Whole` resolving the synthesized container rather than the attached image; and a
+   retracted inference where I read `diskutil`'s fixed format string as a symptom.
+
+   `test-e6c-dryrun.sh` is the 11th CI gate: recording stubs ahead of PATH, the real script run
+   unmodified, and a mode that refuses to run as root — the mode that skips the privilege check
+   has to be the one that cannot have privileges. Eight cleanup/interrupt behaviours that a
+   reviewer mutated with impunity now die. While building it, dry runs landed fabricated
+   matrices in `docs/research/evidence/` under the canonical name; nothing was lost only because
+   `xcv_rotate_out` exists. What it still does not cover is listed in its own header.
+
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
    body's own "Done when" anticipated this ("partial credit is possible and probably wise"), but
