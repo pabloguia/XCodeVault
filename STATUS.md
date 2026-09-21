@@ -86,13 +86,30 @@ is done. The post-publication issue backlog replaced it._
    Open: **#29** and **#30**, both with a further half delivered and both still blocked on the
    thing they were always blocked on.
 
-   **#29** (b340a66): `e6b-check.sh` says which prerequisite is missing instead of leaving "blocked
-   on hardware" to be rediscovered with a drive in hand; the physical variant is scripted up to the
-   cable pull, removing the transcription step between observation and record. The staging is now
-   shared between both variants — variant A had carried four defects for months, every one found
-   while reviewing its twin, including a `mount_apfs` call that could never succeed and so would
-   have made every probe read `absent`, which is the headline finding, manufactured. **Neither
-   script has ever been executed**: the target holds 7.1 GB and sudo prompts here.
+   **#29** (b340a66, then ada8434 and efca400): `e6b-check.sh` says which prerequisite is missing
+   instead of leaving "blocked on hardware" to be rediscovered with a drive in hand; the physical
+   variant is scripted up to the cable pull. The staging is shared between both variants — variant A
+   had carried four defects for months, every one found while reviewing its twin, including a
+   `mount_apfs` call that could never succeed and so would have made every probe read `absent`,
+   which is the headline finding, manufactured.
+
+   **2026-09-21: it ran, and was refused before any probe.** `mount_apfs -o nobrowse` at
+   `…/CoreSimulator/Cryptex/Caches` returned `Operation not permitted` to root, exit 77. The first
+   attempt recorded nothing — `cleanup` deleted the run log on the EXIT trap, so the operator saw
+   "Nothing was recorded" while the line saying why went into the same `rm -f`. That is #10's shape
+   again, fixed in ada8434, and the second attempt's preserved log is the evidence
+   (`evidence/e6b-mount-stub-cryptex-FAILED-*.txt`). Fixing it surfaced a worse defect: `xcv_redact`
+   can only see mounted volumes, and both variants filtered their transcript at the one moment the
+   donor could not be seen, so every report would have named the donor's label and UUID in the
+   clear, in a tracked directory. Nothing had leaked only because neither script had ever completed.
+
+   The refusal has no visible cause — no BSD flag, no ACL, no `com.apple.rootless` xattr, no
+   `rootless.conf` entry — which is E4b's shape. And `e1b-mount-probe.sh` mounted under
+   `/Library/Developer` successfully using `diskutil mount -mountPoint`: **E6b has never used the
+   mechanism this project proved.** So #29 is now blocked on **E6c**
+   (`e6c-mount-mechanism.sh`, efca400), which fills the mechanism × path matrix and separates "the
+   path is protected" from "the mechanism is refused" — opposite conclusions, so its reading rule is
+   fixed in H14 before the run. Needs `sudo`; no longer needs hands at the machine for this step.
 
    **#30** (d154143): the XPC client exists, refuses without touching the connection when the team
    ID is unusable, and sets the code-signing requirement before `resume()` — five properties
@@ -186,10 +203,17 @@ is done. The post-publication issue backlog replaced it._
    coverable source lines and the gate evaluated five conditions rather than six. **`new_coverage` has
    still never been graded on a pull request.** It has been graded on a push, in both directions.
 
-   #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo` and hands at the
-   machine, #30 needs a signed build. Both have had the half that *can* be done done — a runbook and
-   a scripted software variant for #29, the client-side code-signing requirement and its tests for
-   #30 — so what remains on each is the part that genuinely requires the thing it is blocked on.
+   #29 and #30 cannot be closed here and say so in their own text: #29 needs `sudo`, #30 needs a
+   signed build. Both have had the half that *can* be done done — for #29 a runbook, a scripted
+   software variant, and now E6c, the experiment that unblocks it; for #30 the client-side
+   code-signing requirement and its tests — so what remains on each is the part that genuinely
+   requires the thing it is blocked on. #29 no longer needs hands at the machine for its next step;
+   E6c is a `sudo` run with no cable pull.
+
+   **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
+   client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
+   body's own "Done when" anticipated this ("partial credit is possible and probably wise"), but
+   reading the body alone will send the next person to write code that exists.
 
    The pattern worth carrying forward from #31: **mutation testing found guards no test
    distinguished, and every check written in response was itself vacuous until a positive control
