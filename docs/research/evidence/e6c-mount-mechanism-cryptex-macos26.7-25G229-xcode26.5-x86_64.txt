@@ -1,0 +1,75 @@
+# Experiment: E6c — mount mechanism × path, after E6b's mount_apfs returned EPERM
+# Date: 2026-09-21T20:53:23Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+donor: /Volumes/<vault> (/dev/disk9s1, APFS, whole disk disk9, UUID <vault-uuid>)
+owners on donor: Disabled
+cache target: /Library/Developer/CoreSimulator/Cryptex/Caches
+control dir:  /Library/Developer/xcv-e6c-probe
+
+## unmount donor from its mount point
+$ diskutil unmount /dev/disk9s1
+Volume <vault> on disk9s1 unmounted
+[exit=0]
+
+
+==================== A. mount_apfs at the control dir ====================
+## A. mount_apfs at the control dir
+$ mount_apfs -o nobrowse /dev/disk9s1 /Library/Developer/xcv-e6c-probe
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/xcv-e6c-probe (apfs, local, journaled, nobrowse)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+## unmount /Library/Developer/xcv-e6c-probe
+$ umount /Library/Developer/xcv-e6c-probe
+[exit=0]
+
+
+==================== B. diskutil at the control dir ====================
+## B. diskutil at the control dir
+$ diskutil mount nobrowse -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume on disk9s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk9s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/xcv-e6c-probe; exit=1)
+
+## re-checking the cache target immediately before cell C
+## stat /Library/Developer/CoreSimulator/Cryptex/Caches
+$ stat -f type=%HT mode=%Sp owner=%Su:%Sg links=%l /Library/Developer/CoreSimulator/Cryptex/Caches
+type=Directory mode=drwxr-xr-x owner=root:admin links=2
+[exit=0]
+
+
+==================== C. diskutil at the cache target ====================
+## C. diskutil at the cache target
+$ diskutil mount nobrowse -mountPoint /Library/Developer/CoreSimulator/Cryptex/Caches /dev/disk9s1
+Volume on disk9s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk9s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/CoreSimulator/Cryptex/Caches; exit=1)
+
+==================== shadow data on the donor ====================
+donor root listing unchanged, top-level names only (.fseventsd)
+
+==================== matrix (complete) ====================
+  D. mount_apfs at /Library/Developer/CoreSimulator/Cryptex/Caches: REFUSED (measured 2026-09-21, EPERM; not repeated here)
+  A. mount_apfs at the control dir: MOUNTED
+  B. diskutil at the control dir: REFUSED (exit 1)
+  C. diskutil at the cache target: REFUSED (exit 1)
+
+Reading (fixed in HYPOTHESES.md H14 before this run, deliberately):
+  B REFUSED             => the harness or the mechanism is broken; the matrix is VOID.
+  C MOUNTED             => the mechanism was the problem. E6b re-runs on DiskArbitration
+                           and H14 stays open.
+  C REFUSED, B MOUNTED  => the CoreSimulator path is unreachable by this route, at root,
+                           by either mechanism. H14 closes as sized-but-unproducible.
+                           NOT 'by any privilege': Apple's own daemons mount these paths
+                           (F16/E4b), and two root cells do not license that claim.
+  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than
+                           to mount_apfs.

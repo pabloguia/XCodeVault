@@ -17,16 +17,51 @@
 #       `diskutil mount -mountPoint`, not `mount_apfs`. So E6b has never used the mechanism this
 #       project actually proved.
 #
-# Four cells; two are already known, so this fills the other two and re-measures one as a control:
+# Six cells. D is a prior measurement and is not repeated; B0 is the control that separates a
+# broken harness from a real change in the environment.
 #
-#                      | throwaway dir under /Library/Developer | real CoreSimulator cache path
-#   -------------------+----------------------------------------+------------------------------
-#   mount_apfs         | cell A                                  | known: EPERM (E6b, 2026-09-21)
-#   diskutil mount     | cell B (E1b says yes; re-measured here) | cell C
+#                      | throwaway dir under /Library/Developer   | real CoreSimulator cache path
+#   -------------------+------------------------------------------+-----------------------------
+#   mount_apfs         | A — MOUNTED (2026-09-21)                 | D — EPERM (E6b, 2026-09-21)
+#   diskutil mount     | B0 (E1b replicated, own sparse image)    | C
+#                      | B1 (E1b's call, the donor) + B2 (nobrowse)|
 #
-# Read the result as: C succeeds → (b), and E6b can run once staging switches mechanism. C fails
-# while B succeeds → (a), and H14 is unreachable by mounting at all, which is itself the finding.
-# A succeeds → the refusal is specific to the CoreSimulator path, not to `mount_apfs`.
+# **What the 2026-09-21 run settled.** A mounted and D refused: same mechanism, same invocation
+# shape, same root, same OS build, same donor device, two paths under /Library/Developer. The
+# refusal is specific to that path — or to some property of it — and not to `mount_apfs`. Two
+# qualifications, because the first draft of this paragraph over-read on both: it was TWO runs
+# about six hours apart, not one session; and the two directories differ in more than their
+# names (`$PROBE` is root:wheel and created by the run, the target is root:admin and
+# system-created). Neither carries the `restricted` flag and `rootless.conf` has no CoreSimulator
+# entry, so the obvious SIP explanation is ruled out and the cause is still unidentified.
+#
+# **What it did not settle.** The diskutil column was VOID by this script's own rule: cell B
+# failed on the control. Five candidate causes — three defects introduced here, and two that
+# would be FINDINGS:
+#
+#   1. `nobrowse` was added to a call E1b had proven WITHOUT it, during review, so that cells A
+#      and B would differ only in mechanism. That traded one confound for a departure from the
+#      only call this project had seen work.
+#   2. The cells ran `mount_apfs` first.
+#   3. `cell` tore mounts down with bare `umount`, bypassing DiskArbitration. Plausible and
+#      UNEVIDENCED: an earlier version of this comment called it the leading suspect because the
+#      failure message looked like it had an emptied volume name. It does not — `diskutil`'s
+#      template for that path is literally `Volume on %@ failed to mount`, with no name field
+#      (`strings /usr/sbin/diskutil`), and cell C produced the same message with no bare `umount`
+#      before it. Reading a fixed format string as a symptom is the error.
+#   4. The donor class. E1b used a fresh hdiutil sparse image; this uses a physical external
+#      drive, which DA may decline for `-mountPoint`.
+#   5. The OS build. E1b ran on 26.6.2 (25G83), this on 26.7 (25G229).
+#
+# 4 and 5 are not defects, and the first design could not tell them from a broken harness because
+# "B1 refused" was pre-labelled VOID. Hence B0. The other three are addressed directly: diskutil
+# cells run first; teardown goes through `diskutil unmount` and RECORDS which mechanism won,
+# tainting every later diskutil cell if it ever fell back outside DA; and `nobrowse` is its own
+# cell. Cell C keeps `nobrowse` unless B2 proves it is the obstacle — a browsable donor over a
+# real cache path is a manufactured shadow-data event, which is rule 6.
+#
+# The full rule set, including every void condition, is printed by `matrix` at the end of the run
+# and is fixed in HYPOTHESES.md H14 before it.
 #
 # Usage: sudo scripts/experiments/e6c-mount-mechanism.sh /Volumes/DONOR [dyld|cryptex]
 #
@@ -38,8 +73,10 @@
 # destinations and must sequence them, and it must NOT create the target — `mount-staging.sh:131`
 # deliberately `mkdir`s a missing one, which here would forge the very cell it is measuring. It
 # does reuse the donor resolution, the target guard and the evidence writer, which is where the
-# safety lives. Its own cleanup is the part that is forked, and it mirrors the library's: `-f`
-# first, re-entrancy guarded, donor given back by UUID.
+# safety lives. Its own cleanup is the part that is forked, and it mirrors the library's:
+# DiskArbitration first with `umount -f` as the fallback, re-entrancy guarded, donor given back
+# by UUID. B0 runs through `cell` for the same reason — a hand-rolled copy of it had none of
+# `cell`'s protections.
 #
 # **If you SIGQUIT (Ctrl-\\) or `kill -9` this**, no cleanup runs: the donor is left mounted over a
 # CoreSimulator cache path, nothing is published, and the shadow-data comparison is never made.
@@ -81,6 +118,28 @@ PROBE_CREATED=0
 # paths that can be reached long before the first cell runs. Under `set -u` that would be an
 # unbound-variable death inside a trap.
 CELLS=""
+# Per-cell outcomes, set by `cell` through `eval` (which is why shellcheck cannot see the writes)
+# and read by the decisions that depend on them: whether cell C may keep `nobrowse`, and which
+# void banners `matrix` prints. Initialised so `set -u` is safe on a run that stops early.
+# shellcheck disable=SC2034
+CELL_RESULT_B0=unmeasured
+CELL_RESULT_B1=unmeasured
+CELL_RESULT_B2=unmeasured
+CELL_RESULT_C=unmeasured
+CELL_RESULT_A=unmeasured
+XCV_LAST_TEARDOWN=""
+DA_BYPASSED=0
+# B0 attaches its own throwaway image; cleanup has to be able to take it away on every path.
+B0_DEV=""
+B0_VOL=""
+B0_IMG=""
+B0_TMPDIR=""
+B0_NAME=""
+B0_CREATED_RC=1
+B0_ATTACH_RC=0
+B0_PLIST=""
+B0_STORE=""
+B0_STORE_DISK=""
 
 exec 3>&1
 xcv_stage_resolve_donor "$MP" || exit 1
@@ -108,12 +167,44 @@ cleanup() {
     # Order matters: unmount everything this script could have mounted BEFORE handing the donor
     # back, or the remount races a mount that is still standing.
     for m in "$PROBE" "$TARGET"; do
-        if mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on $(xcv_re_escape "$m") "; then
-            # `-f` first: a plain `umount` can block with no timeout, and this runs on a trap.
-            umount -f "$m" >/dev/null 2>&1 || umount "$m" >/dev/null 2>&1 \
+        # Whatever is mounted there, ours or B0's. DiskArbitration first for the same reason the
+        # cells use it — a teardown that goes around DA is what may have voided the first run —
+        # then `-f`, because a plain `umount` can block with no timeout and this is a trap.
+        if mount | grep -q " on $(xcv_re_escape "$m") "; then
+            diskutil unmount "$m" >/dev/null 2>&1 || umount -f "$m" >/dev/null 2>&1 || umount "$m" >/dev/null 2>&1 \
                 || echo "!! COULD NOT UNMOUNT $m. Unmount it before doing anything else: sudo umount -f $m" >&3
         fi
     done
+    # B0's throwaway image, if the run died between attach and detach. Removing it cannot touch
+    # the operator's donor: `$B0_DEV` is only ever set from this run's own `hdiutil attach`.
+    # Cleared on success, because the delete below reads it. Cleanup's detach is the one that
+    # runs on every abort path — B0's cell returning 1, a later cell failing, Ctrl-C — so without
+    # this the image is detached, the operator is told it is STILL ATTACHED, handed a command for
+    # a device that no longer exists, and left a 512 MB file nothing will ever collect. The
+    # earlier comment claiming "$B0_DEV is cleared on a successful detach" was true only of the
+    # main-line detach.
+    if [ -n "$B0_DEV" ]; then
+        if hdiutil detach "$B0_DEV" >/dev/null 2>&1 || hdiutil detach -force "$B0_DEV" >/dev/null 2>&1; then
+            B0_DEV=""
+        else
+            echo "!! could not detach B0's image at $B0_DEV. Detach it: hdiutil detach -force $B0_DEV" >&3
+        fi
+    fi
+    # The captured directory, never `dirname "$B0_IMG"` — see the B0 block for why that
+    # spelling was `rm -rf /` as root on a failed `mktemp`.
+    #
+    # And only once nothing is attached to it. `$B0_DEV` is cleared on a successful detach, so a
+    # non-empty value here means the image is still live: deleting its backing file would leave a
+    # `/dev/diskN` over a deleted file, silently. Keeping a 512 MB sparse file in TMPDIR is the
+    # cheaper mistake, and the operator is told where it is.
+    if [ -n "${B0_TMPDIR:-}" ]; then
+        if [ -n "${B0_DEV:-}" ]; then
+            echo "!! B0's image is STILL ATTACHED at $B0_DEV, so its file was kept rather than deleted" >&3
+            echo "!!   under a live device. Detach and remove: hdiutil detach -force $B0_DEV && rm -rf $B0_TMPDIR" >&3
+        else
+            rm -rf "$B0_TMPDIR"
+        fi
+    fi
     [ "$PROBE_CREATED" = 1 ] && rmdir "$PROBE" 2>/dev/null
     if [ "$XCV_STAGE_DONOR_UNMOUNTED" = 1 ]; then
         diskutil info "$XCV_DONOR_UUID" 2>/dev/null | grep -q "Mounted: *Yes" \
@@ -160,14 +251,55 @@ matrix() {
         echo "     mechanism' reading below does NOT apply to this run.$CELLS"
     fi
     echo
-    echo "Reading (fixed in HYPOTHESES.md H14 before this run, deliberately):"
-    echo "  B REFUSED             => the harness or the mechanism is broken; the matrix is VOID."
+    case "$CELL_RESULT_B1" in
+        refused) echo "  !! CELL C IS VOID: its control (B1) refused. Do not read C's line above." ;;
+    esac
+    # A is the trailing control. If the session lost the ability to mount ANYWHERE by the time it
+    # ran, then C's refusal is uninterpretable and so is the A-vs-D comparison that is otherwise
+    # this experiment's firmest result. The rule said so and nothing enforced it — the same gap
+    # B0's banner below was added to close.
+    case "$CELL_RESULT_A" in
+        refused)    echo "  !! A REFUSED: the trailing control could not mount at the throwaway dir either."
+                    echo "     The session lost the ability to mount anywhere. THE WHOLE RUN IS VOID,"
+                    echo "     including the A-vs-D comparison." ;;
+        unmeasured) echo "  !! A NOT MEASURED: the run stopped before the trailing control. Nothing below"
+                    echo "     B0 can be read, because nothing establishes the session could still mount." ;;
+    esac
+    case "$CELL_RESULT_C" in
+        unmeasured) echo "  !! C NOT MEASURED: the cache-path cell did not run." ;;
+    esac
+    case "$CELL_RESULT_B0" in
+        refused)    echo "  !! B0 REFUSED: E1b's own call, on E1b's own kind of volume, no longer works on"
+                    echo "     this OS build. That is the RESULT. Every diskutil cell after it is VOID." ;;
+        unmeasured) echo "  !! B0 NOT MEASURED: the control that separates 'the call' from 'this donor /"
+                    echo "     this OS build' did not run. B1's REFUSED, if any, cannot be attributed." ;;
+    esac
+    echo
+    echo "Reading (fixed in HYPOTHESES.md H14 before the run, deliberately):"
+    echo "  any VOID marker above => a teardown bypassed DiskArbitration before that cell. Its"
+    echo "                           REFUSED is the fallback talking, not macOS. Do not read it."
+    echo "  B0 REFUSED            => E1b's own call, on E1b's own kind of volume, no longer works."
+    echo "                           A RESULT about this OS build, not a harness fault. Stop here."
+    echo "  B0 MOUNTED, B1 REFUSED=> the call works; this DONOR is what diskutil will not take."
+    echo "                           Not a statement about the cache path. Do not read C."
+    echo "  B0 NOT MEASURED       => B1 REFUSED cannot be attributed to the call, the donor or the"
+    echo "                           OS build. Fix B0 and re-run before reading anything below it."
+    echo "  B1 MOUNTED, B2 REFUSED=> \`nobrowse\` is what diskutil refuses, not the path. That alone"
+    echo "                           explains the 2026-09-21 void and is worth recording."
     echo "  C MOUNTED             => the mechanism was the problem. E6b re-runs on DiskArbitration"
     echo "                           and H14 stays open."
-    echo "  C REFUSED, B MOUNTED  => the CoreSimulator path is unreachable by this route, at root,"
+    echo "  C REFUSED, B1 MOUNTED => the CoreSimulator path is unreachable by this route, at root,"
     echo "                           by either mechanism. H14 closes as sized-but-unproducible."
     echo "                           NOT 'by any privilege': Apple's own daemons mount these paths"
     echo "                           (F16/E4b), and two root cells do not license that claim."
+    echo "  A REFUSED             => the session lost the ability to mount ANYWHERE before the"
+    echo "                           trailing control ran. C is uninterpretable and so is the"
+    echo "                           A-vs-D comparison. The whole run is void."
+    echo "  A NOT MEASURED        => the run stopped before the trailing control, so nothing"
+    echo "                           establishes the session could still mount at the end. Read"
+    echo "                           no cell below B0."
+    echo "  C NOT MEASURED        => the cache-path cell did not run; the matrix answers nothing"
+    echo "                           about the question it was built for."
     if [ "$TARGET" = "$D_MEASURED_AT" ]; then
         echo "  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than"
         echo "                           to mount_apfs."
@@ -291,13 +423,19 @@ if mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on "; then
 fi
 
 
-# cell <label> <destination> <command...>
+# cell <label> <device> <destination> <command...>
+#
+# The device is a parameter rather than `$XCV_DEV` because B0 mounts a different volume — its own
+# throwaway image — and a hand-rolled copy of this function for B0 would be the fourth forked
+# block in these scripts. The first draft did exactly that, and the copy lacked every protection
+# below: no mounted-elsewhere detection, no verified teardown, no `DA_BYPASSED` participation, on
+# the one cell whose REFUSED now carries the strongest conclusion in the matrix.
 #
 # Attempts one mount, verifies it took ANCHORED TO OUR DEVICE — `mount_apfs` exits 0 in cases where
 # nothing is mounted, and "is something mounted here" would pass on a leftover from an aborted run —
 # then unmounts so the next cell starts clean. Records PASS/FAIL into the matrix summary.
 cell() {
-    local label="$1" dest="$2"; shift 2
+    local label="$1" dev="$2" dest="$3"; shift 3
     echo
     echo "==================== $label ===================="
     xcv_run "$label" "$@"
@@ -310,24 +448,24 @@ cell() {
     # even unmount. So the whereabouts go in the report on every attempt, and "mounted, but not
     # where we asked" is its own outcome rather than a silent false negative.
     local where
-    where="$(mount | grep "^$(xcv_re_escape "$XCV_DEV") on " || true)"
-    echo "   mounts of $XCV_DEV now: ${where:-<none>}"
-    if [ -n "$where" ] && ! mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on $(xcv_re_escape "$dest") "; then
+    where="$(mount | grep "^$(xcv_re_escape "$dev") on " || true)"
+    echo "   mounts of $dev now: ${where:-<none>}"
+    if [ -n "$where" ] && ! mount | grep -q "^$(xcv_re_escape "$dev") on $(xcv_re_escape "$dest") "; then
         echo "!!!! MOUNTED ELSEWHERE: the command did not refuse — it mounted somewhere other than"
         echo "!!!! $dest. Recording REFUSED would be a false reading, so nothing below was run."
         CELLS="$CELLS
   $label: MOUNTED ELSEWHERE, not at $dest"
-        umount -f "$XCV_DEV" >/dev/null 2>&1 || umount "$XCV_DEV" >/dev/null 2>&1
+        umount -f "$dev" >/dev/null 2>&1 || umount "$dev" >/dev/null 2>&1
         # Verified. If the stray survives, cleanup will NOT find it — its loop knows only $PROBE
         # and $TARGET — and worse, `diskutil info … Mounted: Yes` would then be satisfied by the
         # stray itself, so cleanup would conclude the donor was handed back and say nothing.
         local strays
-        strays="$(mount | grep "^$(xcv_re_escape "$XCV_DEV") on " || true)"
+        strays="$(mount | grep "^$(xcv_re_escape "$dev") on " || true)"
         if [ -n "$strays" ]; then
             echo "!!!! AND IT IS STILL MOUNTED: $strays"
             echo "!! $label mounted at an unexpected place AND could not be unmounted:" >&3
             echo "!!   $strays" >&3
-            echo "!! Unmount it by hand before anything else: sudo umount -f $XCV_DEV" >&3
+            echo "!! Unmount it by hand before anything else: sudo umount -f $dev" >&3
         else
             echo "!! $label mounted somewhere other than $dest. Nothing below was run." >&3
         fi
@@ -335,11 +473,36 @@ cell() {
     fi
 
     if [ -n "$where" ]; then
+        # The outcome as a VALUE, keyed on the cell's short id. The `case` that decides whether
+        # cell C may keep `nobrowse` used to grep a display string out of `$CELLS`; the safety
+        # property it protects — not mounting browsable over a real cache path — must not hang
+        # on two copies of a human-readable label staying byte-identical.
+        eval "CELL_RESULT_${label%%.*}=mounted"
         echo "-> MOUNTED at $dest"
+        # The donor's root, seen through this cell's own mount. `shadow_check` compares once at
+        # the end, and with A now running after C a change there can no longer be pinned on the
+        # cell that caused it. This is that attribution, for free, while the evidence is live.
+        # "volume root", not "donor root": B0 mounts a throwaway image, and this line sits in a
+        # file whose shadow-data section is read for exactly that phrase.
+        echo "   root of the mounted volume ($dev): $(ls -A "$dest" 2>/dev/null | sort | tr '\n' ' ')"
         CELLS="$CELLS
   $label: MOUNTED"
-        xcv_run "unmount $dest" umount "$dest"
-        if mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on $(xcv_re_escape "$dest") "; then
+        # `diskutil unmount` first, and WHICH ONE WON is recorded. Going around DiskArbitration
+        # with bare `umount` is a candidate cause of the 2026-09-21 void, so a teardown that falls
+        # back to it taints every diskutil cell after it: reading such a cell's REFUSED as a fact
+        # about macOS would be reading the fallback. E1b, the one `diskutil mount -mountPoint`
+        # this project ever got to work, unmounted with `diskutil unmount`. Output is NOT
+        # suppressed — a suppressed teardown is how you get a clean-looking control that was not.
+        if xcv_run "unmount $dest via DiskArbitration" diskutil unmount "$dest"; [ "${XCV_LAST_EXIT:-1}" = 0 ]; then
+            XCV_LAST_TEARDOWN=diskutil
+        else
+            echo "!!!! DiskArbitration declined the unmount; falling back OUTSIDE it."
+            xcv_run "unmount $dest (fallback, bypasses DiskArbitration)" umount -f "$dest"
+            XCV_LAST_TEARDOWN=umount-f
+            DA_BYPASSED=1
+        fi
+        echo "   teardown: $XCV_LAST_TEARDOWN"
+        if mount | grep -q "^$(xcv_re_escape "$dev") on $(xcv_re_escape "$dest") "; then
             echo "!!!! COULD NOT UNMOUNT $dest — stopping before the next cell mounts on top of it."
             echo "!! COULD NOT UNMOUNT $dest. Nothing below was run." >&3
             return 1
@@ -349,18 +512,196 @@ cell() {
         # "Operation not permitted" and for "unknown option" alike, and the matrix line is the
         # artefact that travels into HYPOTHESES.md. A bare REFUSED there invites the reader to
         # assume the mount was refused when the invocation may simply have been wrong.
+        eval "CELL_RESULT_${label%%.*}=refused"
         echo "-> REFUSED (nothing of ours is mounted at $dest; exit=${XCV_LAST_EXIT:-?})"
+        # One predicate, used by both the taint and the log capture. Written twice in the first
+        # draft — `case *diskutil*` here and `${label#*diskutil}` below — which is two chances to
+        # drift apart and have the taint apply where the log does not, or the reverse.
+        local is_da=0
+        case "$label" in *diskutil*) is_da=1 ;; esac
+        local taint=""
+        [ "$is_da" = 1 ] && [ "${DA_BYPASSED:-0}" = 1 ] && taint=" — VOID: an earlier teardown bypassed DiskArbitration"
+        [ -n "$taint" ] && echo "!!!!$taint"
         CELLS="$CELLS
-  $label: REFUSED (exit ${XCV_LAST_EXIT:-?})"
+  $label: REFUSED (exit ${XCV_LAST_EXIT:-?})$taint"
+
+        # The reason, if there is one, is not in diskutil's output: its template for this failure
+        # is the bare `Volume on %@ failed to mount`, with a `: "%@"` variant it did not use. So
+        # the only place a cause exists is diskarbitrationd's log. Cheap, and it may end this in
+        # one run instead of a third.
+        # Bounded, and filtered to this run's own disks. Unfiltered, 60s of `diskarbitrationd`
+        # names every volume it touched — including ones NOT mounted at redaction time, which
+        # `xcv_redact` cannot see by its own stated limit, in a tracked and published file.
+        if [ "$is_da" = 1 ]; then
+            echo "## diskarbitrationd, last 60s, filtered to this run's disks (see ADR-0005: an"
+            echo "## unfiltered dump would name volumes the redactor cannot detect)"
+            # Captured first, then reported. `cmd | grep | tail || echo` takes the pipeline's
+            # status from `tail`, which is 0 on empty input — so the fallback text never printed
+            # and "nothing matched" looked identical to "the capture never ran".
+            local da_log
+            da_log="$(log show --last 60s --style compact --predicate 'process == "diskarbitrationd"' 2>/dev/null \
+                | grep -E "$(xcv_re_escape "${XCV_DONOR_DISK:-__none__}")|$(xcv_re_escape "${dev#/dev/}")" \
+                | tail -40)"
+            if [ -n "$da_log" ]; then printf '%s\n' "$da_log"; else echo "   (no matching diskarbitrationd lines)"; fi
+            echo
+        fi
     fi
     return 0
 }
 
-cell "A. mount_apfs at the control dir" "$PROBE" mount_apfs -o nobrowse "$XCV_DEV" "$PROBE" || { XCV_RUN_FAILED=1; exit 1; }
-# `nobrowse` on the diskutil cells too. Without it A and B differ in TWO things — the mechanism
-# and the browse flag — and a divergence would be attributable to neither. It also keeps Finder
-# and Spotlight off a volume mounted under /Library/Developer.
-cell "B. diskutil at the control dir" "$PROBE" diskutil mount nobrowse -mountPoint "$PROBE" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+# **Order, and why it is not the obvious one.** The diskutil cells run BEFORE `mount_apfs`. On
+# 2026-09-21 the order was A-then-B and B failed; a `mount_apfs` mount torn down outside
+# DiskArbitration is a candidate cause, so the mechanism under suspicion now runs first, with
+# nothing before it.
+#
+# **`nobrowse` is isolated rather than assumed harmless.** B1 is E1b's call verbatim — the one
+# `diskutil mount -mountPoint` this project has ever seen succeed. B2 adds `nobrowse`, which the
+# 2026-09-21 run carried and E1b did not. Adding it to match `mount_apfs -o nobrowse` was meant to
+# leave the mechanism as the only difference between the cells and instead departed from the only
+# proven call; splitting it answers both questions instead of trading one confound for another.
+# **B0, the control the first run did not have.** "B1 is E1b's call verbatim" is verbatim in argv
+# only: E1b ran on macOS 26.6.2 (25G83) against a freshly created hdiutil sparse image, and this
+# runs on 26.7 (25G229) against the operator's physical external donor. Either difference could be
+# the whole story — DA on 26.7 refusing `-mountPoint` outside /Volumes, or refusing it for
+# removable physical media — and either would be a FINDING, not a harness defect, while the
+# reading rule would have filed it as "broken". So E1b is replicated first, on its own throwaway
+# image, touching neither the donor nor the cache path.
+#
+#   B0 REFUSED             => something changed since 26.6.2. A real result, not a harness fault.
+#   B0 MOUNTED, B1 REFUSED => it is the donor class, not the call.
+# **Temp handling, spelled out.** The first draft wrote `B0_IMG="$(mktemp -d)/e6c-b0.sparseimage"`
+# and had cleanup `rm -rf "$(dirname "$B0_IMG")"`. A failed `mktemp -d` — a full or unwritable
+# TMPDIR, which is not hypothetical on this machine — makes that `rm -rf /`, as root, on every
+# exit path. `set -u` does not catch an empty command substitution. So: capture the DIRECTORY,
+# validate it, delete that variable and never a re-derived path, and skip B0 entirely rather
+# than proceed with a half-built one.
+B0_TMPDIR="$(mktemp -d 2>/dev/null)" || B0_TMPDIR=""
+case "$B0_TMPDIR" in
+    /*/*) [ -d "$B0_TMPDIR" ] || B0_TMPDIR="" ;;
+    *) B0_TMPDIR="" ;;
+esac
+
+echo
+echo "==================== B0. E1b replicated, on a throwaway image ===================="
+if [ -z "$B0_TMPDIR" ]; then
+    echo "!!!! could not create a temp directory; B0 is NOT MEASURED and B1's reading is weaker."
+    CELLS="$CELLS
+  B0. E1b replicated (sparse image): NOT MEASURED"
+else
+    B0_IMG="$B0_TMPDIR/e6c-b0.sparseimage"
+    # A volume name unique to THIS run. The name is what the volume resolution matches on, and a
+    # leftover `XCVB0` from a run that failed to detach would otherwise be a candidate — its
+    # backing file already deleted, its mount therefore failing, and `cell` recording B0 REFUSED,
+    # which the reading rule turns into "E1b's call no longer works on this OS build". A harness
+    # artifact promoted to a finding about macOS, through the control added to prevent exactly
+    # that. A per-run name makes a stale image unmatchable instead of merely unlikely.
+    B0_NAME="XCVB0-$$"
+    xcv_run "create a 512 MB APFS sparse image" hdiutil create -size 512m -fs APFS -volname "$B0_NAME" -type SPARSE "${B0_IMG%.sparseimage}"
+    B0_CREATED_RC="${XCV_LAST_EXIT:-1}"
+fi
+
+# `hdiutil create`'s status, checked. On a full or unwritable volume — the documented state of
+# this machine — it fails, and the block below would attach a path that does not exist and then
+# fall through to a name match that can only find someone else's volume.
+if [ -n "$B0_TMPDIR" ] && [ "${B0_CREATED_RC:-1}" != 0 ]; then
+    echo "!!!! hdiutil create failed (exit ${B0_CREATED_RC:-?}); B0 is NOT MEASURED."
+    echo "!! B0's image could not be created, so the control did not run." >&3
+    CELLS="$CELLS
+  B0. E1b replicated (sparse image): NOT MEASURED (hdiutil create failed)"
+elif [ -n "$B0_TMPDIR" ]; then
+    # `content-hint`, not `content`. Verified against live `hdiutil info -plist` on 2026-09-21:
+    # every `system-entities` entry carries exactly `['content-hint', 'dev-entry']`, and `content`
+    # is `None` for all of them. `e1b-mount-probe.sh:27` has the same `e.get("content")` and has
+    # therefore ALWAYS fallen through to its `diskutil list` fallback — so "E1b's proven
+    # extraction", the justification for reusing this code, was proven only in its fallback half.
+    # The attach and the parse are SEPARATE statements, so the status belongs to `hdiutil` and
+    # not to python3. Two traps here, both of which a one-liner walks into: the status of a
+    # pipeline is its LAST command's, and `XCV_LAST_EXIT` is written only by `xcv_run` — reading
+    # it after a plain command substitution returns the previous `xcv_run`'s value, which here
+    # was `hdiutil create`, always 0 on this path. That made the attach-failure branch below
+    # dead code in the round that added it.
+    B0_PLIST="$(hdiutil attach -nomount -plist "$B0_IMG" 2>/dev/null)"
+    B0_ATTACH_RC=$?
+    B0_DEV="$(printf '%s' "$B0_PLIST" | plutil -convert json -o - - 2>/dev/null \
+        | python3 -c 'import json, sys
+# Both shapes. `hdiutil attach -plist` puts `system-entities` at the TOP level — which is why
+# E1b reaches it with `plutil -extract system-entities` — while `hdiutil info -plist` nests it
+# under `images`. A first draft of this filter handled only the nested one and was "verified"
+# against `info` output, which is the wrong command: it would have resolved nothing here.
+d = json.load(sys.stdin)
+groups = [d] if isinstance(d, dict) and "system-entities" in d else d.get("images", [])
+for g in groups:
+    for e in g.get("system-entities", []):
+        if (e.get("content-hint") or e.get("content")) == "GUID_partition_scheme":
+            print(e["dev-entry"]); raise SystemExit
+' 2>/dev/null)"
+    B0_VOL="$(diskutil list 2>/dev/null | awk -v n="$B0_NAME" '$0 ~ ("APFS Volume " n "[ \t]") {print "/dev/"$NF}' | head -1)"
+
+    # `APFS Physical Store`, NOT `Part of Whole`. For a disk-image APFS volume `Part of Whole` is
+    # the SYNTHESIZED CONTAINER, not the attached image: measured on the donor, `/dev/disk9s1`
+    # reports `Part of Whole: disk9` and `APFS Physical Store: disk8s1`, while `hdiutil info`
+    # lists that image's entities as disk8 (GUID_partition_scheme), disk8s1, disk9, disk9s1. So
+    # the container is disk9 and the thing `hdiutil detach` wants is disk8. The physical store
+    # minus its slice is the image.
+    B0_STORE="$(diskutil info "${B0_VOL:-__none__}" 2>/dev/null | sed -n 's/^ *APFS Physical Store: *//p' | head -1)"
+    B0_STORE_DISK="${B0_STORE%s*}"
+    [ -n "$B0_DEV" ] || [ -z "$B0_STORE_DISK" ] || B0_DEV="/dev/$B0_STORE_DISK"
+    [ "$B0_DEV" = "/dev/" ] && B0_DEV=""
+    echo "B0 image whole disk: ${B0_DEV:-<none>}   volume: ${B0_VOL:-<none>}   store: ${B0_STORE:-<none>}   name: $B0_NAME"
+
+    # **Containment, asserted rather than assumed.** `$B0_DEV` comes from this run's own attach;
+    # `$B0_VOL` comes from a global name scan. They are resolved independently and a disagreement
+    # would be invisible — which is the last door on "B0 bound to a volume this run did not
+    # create", after the per-run name closed the obvious one. The physical store must sit on the
+    # disk we attached.
+    #
+    # It bites only when `$B0_DEV` came from the PLIST — that is the independent identity. On the
+    # path where `$B0_DEV` was derived from the physical store instead, the comparison is a value
+    # against itself and proves nothing; there is no second source to check it against, which is
+    # why the plist path is the one that matters. This also covers the residual PID-reuse case: `$$` wraps, and a genuinely
+    # stuck image plus a collision is the only way the name alone can lie.
+    if [ "${B0_ATTACH_RC:-0}" != 0 ]; then
+        echo "!!!! hdiutil attach failed (exit $B0_ATTACH_RC); B0 is NOT MEASURED rather than bound"
+        echo "!!!! to whatever the name scan happens to find."
+        B0_VOL=""
+        CELLS="$CELLS
+  B0. E1b replicated (sparse image): NOT MEASURED (hdiutil attach failed)"
+    elif [ -n "$B0_VOL" ] && [ -n "$B0_DEV" ] && [ "${B0_STORE_DISK:-}" != "${B0_DEV#/dev/}" ]; then
+        echo "!!!! CONTAINMENT FAILED: $B0_VOL sits on ${B0_STORE_DISK:-<unknown>}, not on the image"
+        echo "!!!! this run attached (${B0_DEV#/dev/}). That volume is not ours. B0 is NOT MEASURED."
+        echo "!! B0's volume did not resolve to this run's own image; the control did not run." >&3
+        B0_VOL=""
+        CELLS="$CELLS
+  B0. E1b replicated (sparse image): NOT MEASURED (containment check failed)"
+    fi
+
+    if [ -z "$B0_DEV" ] && [ -n "$B0_VOL" ]; then
+        echo "!!!! B0's volume resolved but its whole disk did NOT. The image cannot be detached"
+        echo "!!!! automatically, so its backing file will be KEPT rather than deleted under a"
+        echo "!!!! live device. Detach it by hand."
+        echo "!! B0's image could not be resolved for detach; it is still attached." >&3
+        echo "!!   detach it: hdiutil detach \$(diskutil info $B0_VOL | sed -n 's/.*Part of Whole: *//p')" >&3
+    fi
+
+    if [ -n "$B0_VOL" ]; then
+        # Through `cell`, so B0 gets mounted-elsewhere detection, a VERIFIED teardown and the
+        # DiskArbitration-bypass taint — all of which the hand-rolled first draft lacked, on the
+        # cell whose REFUSED the reading rule now turns into a finding about the OS.
+        cell "B0. E1b replicated, diskutil at the control dir (sparse image)" "$B0_VOL" "$PROBE" \
+            diskutil mount -mountPoint "$PROBE" "$B0_VOL" || { XCV_RUN_FAILED=1; exit 1; }
+    else
+        echo "!!!! could not resolve B0's volume; B0 is NOT MEASURED."
+        CELLS="$CELLS
+  B0. E1b replicated (sparse image): NOT MEASURED (volume did not resolve)"
+    fi
+    if [ -n "$B0_DEV" ]; then
+        xcv_run "detach B0's image" hdiutil detach "$B0_DEV"
+        [ "${XCV_LAST_EXIT:-1}" = 0 ] && B0_DEV=""
+    fi
+fi
+
+cell "B1. diskutil at the control dir (E1b's call verbatim)" "$XCV_DEV" "$PROBE" diskutil mount -mountPoint "$PROBE" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+cell "B2. diskutil at the control dir, WITH nobrowse" "$XCV_DEV" "$PROBE" diskutil mount nobrowse -mountPoint "$PROBE" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
 
 # The guard ran once, before the donor unmount and two mount cycles ago: both its `pgrep` and its
 # emptiness check have expired. And an ABSENT target makes `diskutil mount` fail for "no such
@@ -379,7 +720,38 @@ if [ ! -d "$TARGET" ]; then
 fi
 xcv_stage_guard_target "$TARGET" || { XCV_RUN_FAILED=1; exit 1; }
 
-cell "C. diskutil at the cache target" "$TARGET" diskutil mount nobrowse -mountPoint "$TARGET" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+# **`nobrowse` at the cache target unless B2 says it cannot be.** A browsable donor mounted over
+# a path `simdiskimaged` and CoreSimulatorService watch, with Spotlight free to index it, is a
+# manufactured shadow-data event on the operator's own volume — rule 6, and E1b's evidence shows
+# a browsable mount picking up `.fseventsd`. So: if B2 mounted, `nobrowse` is not the obstacle and
+# C uses it. Only if B2 refused while B1 mounted does C drop it, because then asking the question
+# with `nobrowse` would answer the wrong one.
+case "$CELL_RESULT_B2" in
+    mounted)
+        echo "## B2 mounted, so nobrowse is not the obstacle: cell C keeps it."
+        cell "C. diskutil at the cache target (nobrowse)" "$XCV_DEV" "$TARGET" \
+            diskutil mount nobrowse -mountPoint "$TARGET" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+        ;;
+    *)
+        echo "## B2 did not mount, so cell C drops nobrowse to ask the question with E1b's shape."
+        echo "## NOTE: the donor is BROWSABLE over a real cache path for the duration of this cell."
+        cell "C. diskutil at the cache target (browsable — see note)" "$XCV_DEV" "$TARGET" \
+            diskutil mount -mountPoint "$TARGET" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+        ;;
+esac
+
+# Last, deliberately: it already passed on 2026-09-21, and a `mount_apfs` mount torn down outside
+# DiskArbitration is a candidate cause of that run's cell-B failure. Nothing depends on it running
+# first. The guard on $PROBE has expired by now — four mount cycles — for the same reason the
+# target is re-guarded above, so it is re-checked here.
+xcv_stage_refuse_symlinked_path "$PROBE" || { XCV_RUN_FAILED=1; exit 1; }
+if mount | grep -q " on $(xcv_re_escape "$PROBE") "; then
+    echo "!!!! something is mounted at $PROBE after the diskutil cells; cell A would stack on it."
+    echo "!! something is still mounted at $PROBE. Cell A was not run." >&3
+    XCV_RUN_FAILED=1
+    exit 1
+fi
+cell "A. mount_apfs at the control dir" "$XCV_DEV" "$PROBE" mount_apfs -o nobrowse "$XCV_DEV" "$PROBE" || { XCV_RUN_FAILED=1; exit 1; }
 
 shadow_check
 matrix "complete"

@@ -653,3 +653,80 @@ absent target — and carries the command's exit status into every REFUSED line 
 it cannot distinguish: a malformed invocation and `Operation not permitted` both leave nothing
 mounted. Read the exit status before reading the cell.
 
+### E6c, first run, 2026-09-21: one cell settled, the rest voided by the harness
+
+Evidence: `evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+| | throwaway dir under `/Library/Developer` | `…/CoreSimulator/Cryptex/Caches` |
+|---|---|---|
+| `mount_apfs -o nobrowse` | A — **MOUNTED**, exit 0 | D — **REFUSED**, EPERM, exit 77 |
+| `diskutil mount nobrowse -mountPoint` | B — REFUSED, exit 1 | C — REFUSED, exit 1 |
+
+**A and D settle one thing, and it is not small.** Same mechanism, same invocation shape
+(`mount_apfs -o nobrowse /dev/disk9s1 <path>`), same privilege, same OS build, same donor device,
+two paths under `/Library/Developer`: `mount_apfs` mounted at `/Library/Developer/xcv-e6c-probe`
+and was refused with EPERM at the CoreSimulator cache path. **The refusal is specific to that
+path, or to some property of it, and not to `mount_apfs`.** It holds regardless of the diskutil
+column, because it depends on neither cell in it.
+
+Two qualifications, both checkable and both narrowing the claim:
+
+- **Two runs, about six hours apart**, not one session — D is E6b at `14:58:51Z`, A is E6c at
+  `20:53:23Z`. An earlier draft of this paragraph said "same session, minutes apart"; that was
+  wrong and is corrected rather than quietly dropped.
+- **The two directories differ in more than their names.** `$PROBE` is `root:wheel`, created by
+  the run; the target is `root:admin`, system-created, carrying a backup-exclude xattr. Neither
+  has the `restricted` flag and `rootless.conf` has no CoreSimulator entry, so the obvious SIP
+  explanation is ruled out — and the cause remains unidentified. "Specific to the path" is what
+  the evidence licenses; "because CoreSimulator paths are protected" is not, yet.
+
+**The diskutil column is VOID**, by the rule fixed above — B refused — and the cause is a defect
+in the experiment rather than a fact about macOS. Three candidates, all introduced by the script:
+
+1. **`nobrowse`.** E1b's proven call is `diskutil mount -mountPoint <dir> <dev>`, with no
+   `nobrowse`. It was added during review so that cells A and B would differ only in mechanism —
+   which traded one confound for a departure from the only call this project had seen work.
+2. **Cell order.** `mount_apfs` ran first. A mount torn down outside DiskArbitration is a
+   plausible way to leave DA unable to mount the same volume afterwards.
+3. **Teardown through `umount`, not `diskutil unmount`.** E1b used `diskutil unmount`; `cell`
+   used bare `umount`, which bypasses DiskArbitration. Plausible, and **unevidenced** — an
+   earlier draft called it the leading suspect on the strength of the failure message reading
+   `Volume  on disk9s1 failed to mount` with what looked like an emptied volume name. It is not
+   emptied: `diskutil`'s template for this path is literally `Volume on %@ failed to mount`, with
+   no name field at all (`strings /usr/sbin/diskutil`), and the evidence has one space, not two.
+   Cell C produced the identical message with no bare `umount` before it, so the message
+   discriminates nothing. Reading a fixed format string as a symptom is the error here.
+4. **The donor class.** E1b used a freshly created hdiutil sparse image; E6c uses the operator's
+   physical external drive. DA may decline `-mountPoint` for removable physical media.
+5. **The OS build.** E1b ran on 26.6.2 (25G83); E6c on 26.7 (25G229).
+
+Candidates 4 and 5 are not defects at all — either would be a *finding* — and the first re-run
+design could not distinguish them from a broken harness, because "B1 refused" was pre-labelled
+VOID. So the re-run adds **B0**: E1b replicated on its own throwaway sparse image, first, touching
+neither the donor nor the cache path. B0 refused ⇒ something changed since 26.6.2, which is a
+result. B0 mounted while B1 refused ⇒ it is the donor class, not the call.
+
+The other three are addressed directly: the diskutil cells go first; teardown goes through
+`diskutil unmount` and **records which mechanism won**, marking every later diskutil cell VOID if
+it ever fell back outside DA; and `nobrowse` becomes its own cell (B2) beside E1b's verbatim call
+(B1). Cell C keeps `nobrowse` unless B2 proves it is the obstacle — a browsable donor over a real
+cache path is a manufactured shadow-data event, which is rule 6 and not worth trading for tidiness.
+
+A note on "we reused the proven extraction", because that inference is what made the first B0
+look safe. E1b resolves its image's device with a plist filter on `e.get("content")`, falling back
+to a `diskutil list` name match. Checked against live `hdiutil info -plist` on 2026-09-21: every
+`system-entities` entry carries exactly `content-hint` and `dev-entry`, and `content` is `None`
+for all of them. **E1b's plist path has never produced anything**; E1b passed through its
+fallback, every time. B0's first draft copied the plist expression and inherited a silent no-op,
+which would have left its image attached while cleanup deleted the backing file. Both are
+corrected to `content-hint`, and B0's volume now carries a per-run name so a leftover image from
+a failed detach cannot be matched by the next run and reported as a refusal.
+
+Since `diskutil`'s other template is `Volume on %@ failed to mount: "%@"` and the run got the bare
+form, DA returned no detail string at all — so each diskutil cell now also captures
+`log show --predicate 'process == "diskarbitrationd"'`, which is the only place a reason exists.
+
+Recorded rather than quietly re-run because the void is the interesting part: the reading rule
+fixed before the run is what stopped a REFUSED cell C — obtained through a broken control — from
+being read as "the path is protected" and closing H14.
+

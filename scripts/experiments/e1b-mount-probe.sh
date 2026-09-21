@@ -24,7 +24,13 @@ trap cleanup EXIT
   echo "# Experiment: E1 mount half (as root)"; echo "# Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion)) · $(uname -m) · $(xcodebuild -version 2>/dev/null | tr '\n' ' ')"
   echo "\$ hdiutil create -size 2g -fs APFS -type SPARSE $img"; hdiutil create -quiet -size 2g -fs APFS -type SPARSE -volname XCVPROBE "$img" -ov; echo "[exit=$?]"
-  dev=$(hdiutil attach -nomount -plist "$img" | plutil -extract system-entities json -o - - 2>/dev/null | python3 -c 'import json,sys; print([e["dev-entry"] for e in json.load(sys.stdin) if e.get("content")=="41504653-0000-11AA-AA11-00306543ECAC"][0])' 2>/dev/null)
+  # `content-hint`, not `content`. Verified against live `hdiutil info -plist` on 2026-09-21:
+  # every `system-entities` entry carries exactly `['content-hint', 'dev-entry']`, and `content`
+  # is `None` for all of them — so this line has ALWAYS produced nothing and E1b has always
+  # succeeded through the `diskutil list` fallback on the next line. Recorded rather than quietly
+  # corrected, because E6c reused this expression on the strength of E1b having passed, and
+  # "we reused the proven extraction" was true only of the half that was never running.
+  dev=$(hdiutil attach -nomount -plist "$img" | plutil -extract system-entities json -o - - 2>/dev/null | python3 -c 'import json,sys; print([e["dev-entry"] for e in json.load(sys.stdin) if (e.get("content-hint") or e.get("content"))=="41504653-0000-11AA-AA11-00306543ECAC"][0])' 2>/dev/null)
   [ -n "$dev" ] || dev=$(diskutil list | awk '/APFS Volume XCVPROBE/{print "/dev/"$NF}' | head -1)
   echo "scratch APFS volume device: ${dev:-NOT FOUND}"; [ -n "$dev" ] || { echo "!! could not attach the scratch image; aborting before touching /Library/Developer"; exit 1; }
   if [ -d "$probe" ]; then echo "(removing leftover probe dir from an earlier run)"; rm -f "$probe/hello"; rmdir "$probe"; fi
