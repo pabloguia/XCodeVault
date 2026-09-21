@@ -83,9 +83,11 @@
 # Recover by hand: `mount | grep CoreSimulator`, then `umount -f` the device, then inspect the
 # donor's root before trusting it.
 #
-# **Known test gap.** Nothing exercises the cleanup or interrupt paths — they need a real donor and
-# root. `ExperimentScriptSafetyTests` checks only that this file sources `common.sh` and uses the
-# header and redactor. Stated rather than left for the next reviewer to find.
+# **Testing.** `scripts/experiments/test-e6c-dryrun.sh` runs this script unmodified against
+# recording stubs (`XCV_DRYRUN=1`), which reaches the cleanup, teardown, abort and interrupt
+# paths — the ones that need root and a real donor, and that four review rounds filled with
+# defects while nothing tested them. What it still does NOT cover is listed in that file's
+# header; read it before assuming a green run means more than it does.
 set -u
 cd "$(dirname "${BASH_SOURCE[0]}")"
 . ./common.sh
@@ -98,10 +100,54 @@ TARGET="$(xcv_e6b_target "$TARGET_NAME")" || {
     exit 2
 }
 [ -n "$MP" ] || { echo "!! usage: sudo $0 /Volumes/DONOR [dyld|cryptex]"; exit 2; }
-[ "$(id -u)" = 0 ] || { echo "!! must run under sudo (mount_apfs/umount)"; exit 2; }
-[ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; redaction cannot be verified. Use \`sudo\`, not \`sudo -i\`."; exit 2; }
+
+# **Dry run — the harness for the paths nothing else can reach.**
+#
+# Four review rounds put six defects in this script, and every one of them was in the cleanup,
+# teardown or abort paths: `rm -rf /` on a failed `mktemp`, a detach that never ran, a cleanup
+# that reported STILL ATTACHED about a device it had just removed, a dead attach-failure branch.
+# Those paths need root and a real donor to reach, so nothing tested them and the header said so.
+# This is what closes that: `XCV_DRYRUN=1` puts a directory of recording stubs ahead of PATH, so
+# `diskutil`, `hdiutil`, `mount`, `umount` and `mount_apfs` return scripted statuses and log their
+# calls instead of touching a device.
+#
+# **It refuses to run as root, and that inversion is the point.** A dry run is the one mode where
+# a command that slips past the stubs would act for real, so the mode that skips the privilege
+# check must be the mode that cannot have privileges. A real run and a dry run can therefore
+# never be confused for one another: each refuses the other's conditions.
+if [ "${XCV_DRYRUN:-0}" = 1 ]; then
+    [ "$(id -u)" != 0 ] || { echo "!! XCV_DRYRUN must NOT run as root: a command the stubs do not cover would act for real."; exit 2; }
+    [ -n "${XCV_STUB_BIN:-}" ] && [ -d "$XCV_STUB_BIN" ] || { echo "!! XCV_DRYRUN needs XCV_STUB_BIN pointing at a stub directory."; exit 2; }
+    # A DISTINCT variable, because `common.sh` assigns `XCV_EVIDENCE_DIR` unconditionally and
+    # would discard anything the caller exported — the first draft of the dry-run harness passed
+    # `XCV_EVIDENCE_DIR`, saw it overwritten, and was correctly refused by the guard below for
+    # trying to write to the real evidence directory. The guard working on its author is the
+    # reason it is written this way round: refuse first, then accept an explicit scratch path.
+    [ -n "${XCV_DRYRUN_EVIDENCE_DIR:-}" ] && [ -d "$XCV_DRYRUN_EVIDENCE_DIR" ] \
+        || { echo "!! XCV_DRYRUN needs XCV_DRYRUN_EVIDENCE_DIR pointing at a scratch directory."; exit 2; }
+    # RESOLVED before the comparison. A literal prefix match is defeated by `/./`, by `..`, and
+    # by a symlink — `$XCV_ROOT/./docs/research/evidence` walked straight past the first version
+    # of this guard. That is the same class of hole `xcv_stage_refuse_symlinked_path` exists for,
+    # one function away from it.
+    XCV_DRYRUN_EVIDENCE_DIR="$(cd "$XCV_DRYRUN_EVIDENCE_DIR" && pwd -P)" || exit 2
+    case "$XCV_DRYRUN_EVIDENCE_DIR/" in
+        "$(cd "$XCV_ROOT" && pwd -P)"/docs/*) echo "!! XCV_DRYRUN refuses to write to the real evidence directory."; exit 2 ;;
+    esac
+    XCV_EVIDENCE_DIR="$XCV_DRYRUN_EVIDENCE_DIR"
+    PATH="$XCV_STUB_BIN:$PATH"
+    SUDO_USER="${SUDO_USER:-dryrun}"
+    echo "## XCV_DRYRUN: stubs at $XCV_STUB_BIN, evidence to $XCV_EVIDENCE_DIR. NOTHING IS MOUNTED."
+else
+    [ "$(id -u)" = 0 ] || { echo "!! must run under sudo (mount_apfs/umount)"; exit 2; }
+    [ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; redaction cannot be verified. Use \`sudo\`, not \`sudo -i\`."; exit 2; }
+fi
 
 out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-$(xcv_env_slug).txt"
+# `-DRYRUN` in the NAME, because the two banners above go to the terminal, before the report is
+# opened, and never reach the file. A dry run's output is otherwise indistinguishable from real
+# evidence: same filename pattern, same `xcv_header`, a full matrix — all of it fabricated from
+# stub answers. There are already `-superseded-` files sitting untracked in that directory.
+[ "${XCV_DRYRUN:-0}" = 1 ] && out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-DRYRUN-$(xcv_env_slug).txt"
 
 # A throwaway directory, deliberately NOT under CoreSimulator: it is the control that separates
 # "this path" from "this mechanism". `/Library/Developer` because that is where E1b mounted.
@@ -113,6 +159,36 @@ D_MEASURED_AT=/Library/Developer/CoreSimulator/Cryptex/Caches
 
 PROBE=/Library/Developer/xcv-e6c-probe
 PROBE_CREATED=0
+
+# In a dry run the control directory moves to scratch, because creating it is a REAL `mkdir` that
+# a non-root process cannot do under `/Library/Developer` — and a dry run is defined as one that
+# cannot be root. Only `$PROBE` moves: it is a path this script owns and invents. `$TARGET` stays
+# exactly where the allowlist puts it, because that allowlist is a safety property and a test
+# mode that relaxes it would be testing something else.
+if [ "${XCV_DRYRUN:-0}" = 1 ]; then
+    PROBE="$XCV_EVIDENCE_DIR/dryrun-probe"
+    # The cache target moves too, and the reason is worth stating because it looks like the
+    # allowlist being relaxed and is not. Three reads of `$TARGET` cannot be stubbed — `[ -d ]`
+    # and `[ -e ]` are builtins, `ls -A` and `cd`/`pwd -P` are real — so a dry run against the
+    # live path answers differently depending on whether that directory happens to exist and be
+    # empty on the machine running it. Measured: absent, 2 checks fail; non-empty, 16 fail and 5
+    # of the survivors pass VACUOUSLY because no scenario reaches a cell. As a CI gate on two
+    # runners that is worse than no gate.
+    #
+    # What is NOT relaxed: `xcv_e6b_target` still resolves the real allowlisted path, and
+    # `test-e6c-dryrun.sh` asserts that separately — so the allowlist is still pinned here as
+    # well as by `ExperimentScriptSafetyTests`. A dry run measures nothing about the real path;
+    # it exercises the script's reactions.
+    TARGET="$XCV_EVIDENCE_DIR/dryrun-target"
+    mkdir -p "$TARGET"
+    # `D_MEASURED_AT` moves with it, or the harness exercises only the arm that never ships: in a
+    # real `cryptex` run the two ARE the same path, so leaving it behind made every dry run take
+    # `matrix`'s "D NOT MEASURED at this target" branch and left the shipping branch — and the
+    # A-vs-D reading rule — deletable without a failure.
+    D_MEASURED_AT="$TARGET"
+    echo "## XCV_DRYRUN: control dir -> $PROBE, cache target -> $TARGET (the real ones need root)."
+    echo "## XCV_DRYRUN: the allowlist is UNCHANGED; xcv_e6b_target still returns the real path."
+fi
 
 # Declared here, not beside `cell`: `matrix` reads it, and `cleanup` calls `matrix` on abort
 # paths that can be reached long before the first cell runs. Under `set -u` that would be an
@@ -158,7 +234,11 @@ cleanup() {
     # device — which is exactly what the sibling variant B sets out to create — is then beyond
     # Ctrl-C and `kill -TERM`. SIGQUIT (Ctrl-\\) and `kill -9` still work.
     trap '' INT TERM HUP
-    # Re-entrancy guard, as `xcv_stage_cleanup` has: the INT trap is still armed while the EXIT
+    # Re-entrancy guard, as `xcv_stage_cleanup` has. Belt-and-braces GIVEN the ignore above, and
+    # measured as such: deleting this line alone changes nothing, because the ignored disposition
+    # already stops a second signal from re-entering. Deleting the ignore alone IS caught, and so
+    # is deleting both. Kept because it is the defence that survives someone removing the ignore
+    # for an unrelated reason — the INT trap is still armed while the EXIT
     # trap is publishing, so a second Ctrl-C would rotate twice, publish twice, and `rm -f` the
     # report out from under the outer invocation.
     [ "$E6C_CLEANED" = 1 ] && return 0
@@ -365,6 +445,15 @@ trap 'XCV_RUN_FAILED=1; trap - EXIT; cleanup; exit 130' INT TERM HUP
 
 exec >>"$REPORT" 2>&1
 xcv_header "E6c — mount mechanism × path, after E6b's mount_apfs returned EPERM"
+# Into the REPORT, after the redirect: the startup banners went to the terminal and the artifact
+# carried no trace of being fabricated.
+if [ "${XCV_DRYRUN:-0}" = 1 ]; then
+    echo "################################################################################"
+    echo "## THIS IS A DRY RUN. Every diskutil/hdiutil/mount/umount answer below came from"
+    echo "## recording stubs. NOTHING WAS MOUNTED and NOTHING HERE MEASURES THIS MACHINE."
+    echo "## Do not read it as evidence and do not commit it."
+    echo "################################################################################"
+fi
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
 echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Owners: *//p' | head -1)"
 echo "cache target: $TARGET"

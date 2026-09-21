@@ -33,6 +33,7 @@ GATES=(
     "helper-invariants:bash scripts/helper-invariants.sh"
     "public-surface:bash scripts/public-surface.sh"
     "redaction:bash scripts/experiments/test-common.sh"
+    "e6c-dryrun:bash scripts/experiments/test-e6c-dryrun.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
     "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl report --json"
 )
@@ -52,7 +53,7 @@ fast=0
 # would make this script's central claim false for one step while this very guard reported
 # everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=12
+expected_steps=13
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2

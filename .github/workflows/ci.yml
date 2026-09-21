@@ -93,6 +93,12 @@ jobs:
         # These guard xcv_redact, which every evidence file below is filtered through before it is
         # uploaded as a public artifact.
         run: bash scripts/experiments/test-common.sh
+
+      - name: Experiment harness (E6c dry run)
+        # The cleanup, teardown and abort paths of `e6c-mount-mechanism.sh`, which need root and
+        # a real donor and so had no test while four review rounds found six defects in them.
+        # Runs against recording stubs; mounts nothing.
+        run: bash scripts/experiments/test-e6c-dryrun.sh
       - name: Lint (swift-format)
         # A lint that cannot fail is a lint that will eventually not run. Both arms of the old
         # `||` were green, so a missing formatter and real findings were indistinguishable from

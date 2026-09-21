@@ -1,0 +1,647 @@
+#!/bin/bash
+# Exercises E6c's cleanup, teardown and abort paths — the ones that need root and a real donor,
+# and that therefore had no test while four review rounds found six defects in them.
+#
+# How. A directory of recording stubs goes ahead of PATH; `diskutil`, `hdiutil`, `mount`,
+# `umount` and `mount_apfs` log their arguments and return a status the scenario chose. The real
+# script runs unmodified against them, so what is tested is the script, not a paraphrase of it.
+#
+# What this can and cannot see. It reaches every branch that depends on a command's STATUS or
+# OUTPUT — the abort paths, the NOT MEASURED branches, the containment assert, cleanup's detach
+# and its conditional delete. It cannot tell you what the real `diskutil` would have returned.
+# That is the division of labour: this file pins the harness's reactions, and the experiment
+# itself measures the system.
+#
+# **It already happened.** Before the evidence-directory guard and the `-DRYRUN` filename
+# existed, dry runs written while building this harness landed in `docs/research/evidence/`
+# under the canonical name, rotating the real E6c evidence to `-superseded-` and taking its
+# place. Five fabricated matrices, one of them sitting where a reader would take it for the
+# operator's run. Nothing was lost only because `xcv_rotate_out` exists — the control added
+# after a 2026-09-15 overwrite is what saved this one. Both the guard and the filename marker
+# are asserted below, because they were added and left unasserted, which is how they would have
+# been removed just as quietly.
+#
+# **What this does NOT cover**, stated here so a green run is not read as more than it is:
+#
+#   - `shadow_check`'s payload. No scenario answers `diskutil info <donor-uuid>` with a mount
+#     point, so every run takes the "the donor did not come back" branch and the DONOR ROOT
+#     CHANGED path — safety rule 6's actual content — has never executed here.
+#   - The `hdiutil attach -plist` stub emits JSON; the real one emits an XML plist. That is why
+#     `plutil -convert json` exists in the script, and removing that stage would not be caught.
+#   - The mount-table model is coarse: an unmount truncates the whole table, so a cleanup that
+#     unmounts the wrong path, or only one of two, is invisible.
+#   - `cleanup`'s own `$PROBE`/`$TARGET` unmount loop is UNREACHED. `cleanup-with-work` leaves a
+#     mount standing, but at `/Volumes/elsewhere`, and the loop knows only those two paths by
+#     construction. The state it exists for is a cell that mounts where asked and whose teardown
+#     then refuses. I attempted that scenario and withdrew it: with `rc.diskutil.unmount` and
+#     `rc.umount` both failing, the mount table verifiably still held the probe line at teardown
+#     time (traced from inside the stub) and `cell` nevertheless reported the unmount as taken.
+#     I could not account for that by reading, and a scenario whose name claims more than it
+#     demonstrates is worse than a stated gap. Whoever picks this up: start by instrumenting
+#     `cell`'s post-teardown `mount | grep` rather than the stub.
+#   - The root refusal is pinned by expression and ordering, not by behaviour, and the reason is
+#     the guard's own correctness — see the check itself.
+#   - The re-entrancy guard inside `cleanup` is redundant given the signal ignore beside it;
+#     deleting it alone changes nothing here, and the script says so where it is defined.
+#
+# Run: bash scripts/experiments/test-e6c-dryrun.sh
+set -u
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+fails=0
+run=0
+check() {  # check <name> <expected> <actual>
+    run=$((run + 1))
+    if [ "$2" = "$3" ]; then
+        printf 'ok   %s\n' "$1"
+    else
+        printf 'FAIL %s\n       expected: [%s]\n       actual:   [%s]\n' "$1" "$2" "$3"
+        # The run's own last lines, because a boolean `no` says nothing about WHERE it stopped.
+        # Three iterations of this harness were spent hand-rebuilding a scenario to find out.
+        if [ -s "$WORK/last-out" ]; then
+            printf '       --- last lines of %s ---\n' "${SCENARIO:-?}"
+            tail -4 "$WORK/last-out" | sed 's/^/       | /'
+        fi
+        fails=$((fails + 1))
+    fi
+}
+contains() { case "$2" in *"$1"*) echo yes ;; *) echo no ;; esac; }
+
+SCENARIO=""
+# An account name that cannot occur in the script's own output. The first draft used `dryrun`,
+# which is a substring of the banner and of `dryrun-probe`, so the account-name leak gate refused
+# to publish every scenario — correctly. The harness tripping the guard it exists to exercise is
+# the guard working; picking a colliding name was the mistake.
+FAKE_USER=zqxjkvuser
+# PHYSICALLY resolved, for the reason `test-common.sh` documents: `mktemp -d` returns
+# `/var/folders/...` and `/var` is a symlink to `/private/var`, so the symlink guard on the
+# control directory refuses — correctly — and no scenario reaches a cell. The guard catching
+# its own test harness is a point in the guard's favour.
+WORK="$(cd "$(mktemp -d)" && pwd -P)"
+trap 'rm -rf "$WORK"' EXIT
+
+# stub <name> — a recording shim. Each call appends its argv to $WORK/calls, then looks for its
+# output and its exit status in the most specific file that exists:
+#
+#   out.<name>.<sub>.<lastarg>   rc.<name>.<sub>.<lastarg>     most specific
+#   out.<name>.<sub>             rc.<name>.<sub>
+#   out.<name>                   rc.<name>                     least specific
+#
+# Keyed on the last argument as well as the subcommand because a single answer per command is not
+# a faithful stand-in: the first draft returned one `diskutil info` for every argument, so the
+# donor and `/` reported the same whole disk and the boot-disk guard refused the run. The harness
+# catching that is the harness working — an unrealistic stub is exactly the thing that makes a
+# passing test meaningless.
+# **No backticks inside the heredoc below.** Its delimiter is unquoted, so `$WORK` and `$name`
+# expand at creation time — which is what makes the stub self-contained — and backticks are
+# command substitution in exactly the same way. A comment written here with `mount` in backticks
+# ran the real `mount` and embedded its output into the stub, which then tried to execute a mount
+# table as shell. Text turning out to be executable, one more time.
+#
+# BEHAVIOUR, not just answers: `$WORK/script.<name>` is sourced first, with the stub's argv, and
+# may rewrite the other stubs' answers. Static output cannot model state, and the script under
+# test verifies state — it re-checks the mount table after an unmount, so a mount table that
+# never changes makes every unmount "not take".
+mkstub() {
+    local name="$1"
+    cat > "$WORK/bin/$name" <<STUB
+#!/bin/bash
+echo "$name \$*" >> "$WORK/calls"
+[ -f "$WORK/script.$name" ] && . "$WORK/script.$name"
+sub="\${1:-}"
+case "\$sub" in -*) sub="" ;; esac
+last="\${!#}"
+key="\$(printf '%s' "\$last" | tr -c 'A-Za-z0-9' '_')"
+for f in "$WORK/out.$name.\$sub.\$key" "$WORK/out.$name.\$sub" "$WORK/out.$name"; do
+    [ -f "\$f" ] && { cat "\$f"; break; }
+done
+for f in "$WORK/rc.$name.\$sub.\$key" "$WORK/rc.$name.\$sub" "$WORK/rc.$name"; do
+    [ -f "\$f" ] && exit "\$(cat "\$f")"
+done
+exit 0
+STUB
+    chmod +x "$WORK/bin/$name"
+}
+
+# scenario <name> — a clean slate: fresh stub dir, fresh evidence dir, fresh call log.
+scenario() {
+    rm -rf "$WORK/bin" "$WORK/ev"; mkdir -p "$WORK/bin" "$WORK/ev"
+    # `script.*` too. Leaving them behind let one scenario's behaviour survive into the next:
+    # a `script.umount` defined three scenarios earlier was still truncating the mount table,
+    # so a cell whose teardown was supposed to FAIL reported success and the scenario tested
+    # nothing. Cross-scenario contamination is how a suite comes to lie.
+    rm -f "$WORK"/calls "$WORK"/rc.* "$WORK"/out.* "$WORK"/script.* "$WORK"/int1 "$WORK"/int2 "$WORK"/interrupted
+    : > "$WORK/calls"
+    for c in diskutil hdiutil mount umount mount_apfs stat log pgrep id; do mkstub "$c"; done
+    SCENARIO="$1"; : > "$WORK/last-out"
+}
+
+# e6c — run the real script against the current scenario. Captures everything.
+e6c() {
+    XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$WORK/ev" SUDO_USER="$FAKE_USER" \
+        bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" cryptex 2>&1
+}
+# A FILE, not a variable: every call site is `out="$(run_e6c)"`, so an assignment inside would
+# happen in the subshell and never reach `check`. That is the same shape as the defects this
+# harness exists to catch, found in the harness itself within the hour.
+run_e6c() {
+    # The script's status, not `tee`'s. `e6c | tee` reports the pipeline's last command, so an
+    # interrupted run came back 0 and the exit-130 check could never fail.
+    e6c > "$WORK/last-out" 2>&1
+    local rc=$?
+    cat "$WORK/last-out"
+    return "$rc"
+}
+calls() { cat "$WORK/calls" 2>/dev/null; }
+# The published evidence. Most of the script's narration goes into the report via
+# `exec >>"$REPORT" 2>&1`; only fd 3 reaches the terminal. A check that greps the terminal for a
+# line the script writes to its report will fail for the wrong reason — which is how the first
+# B0 scenario looked broken when it was working.
+evidence() { cat "$WORK"/ev/*.txt 2>/dev/null; }
+
+# ---- the mode's own guards, which are what keep a dry run from ever being a real one -----------
+out="$(XCV_DRYRUN=1 XCV_STUB_BIN=/nonexistent XCV_DRYRUN_EVIDENCE_DIR=/tmp bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1)"
+check "a dry run without a stub directory is refused" "yes" "$(contains "needs XCV_STUB_BIN" "$out")"
+
+scenario guards
+out="$(XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$(cd ../.. && pwd)/docs/research/evidence" \
+    bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1)"
+check "a dry run refuses to write to the real evidence directory" "yes" \
+    "$(contains "refuses to write to the real evidence" "$out")"
+
+# The inversion: the mode that skips the privilege check must be the mode that cannot have it.
+#
+# **This one cannot be behavioural, and the reason is the guard's own correctness.** `id -u` runs
+# BEFORE `PATH` is prefixed with the stubs, deliberately: if it ran after, then
+# `sudo XCV_DRYRUN=1 XCV_STUB_BIN=/evil …` would meet a stubbed `id` that lies, skip the root
+# refusal, and proceed as root with an attacker's directory ahead of PATH. So a stub cannot reach
+# it, and testing it for real needs root, which is the thing it forbids.
+#
+# What replaces a behavioural check is a source check pinned to the EXPRESSION and to the
+# ORDERING, not to the message. The first version grepped for the refusal's text, so inverting
+# the condition while leaving the message intact kept the suite green — an assertion that a
+# string exists in a file.
+# **Behaviourally, after all** — through a channel a PATH stub cannot use. `export -f id` puts
+# `BASH_FUNC_id%%` in the environment and the child bash imports it; a function beats PATH
+# lookup, so it reaches `id -u` even though that call deliberately runs BEFORE the stubs are
+# prefixed. It does not reopen the hole that ordering closes: `sudo` under `env_reset` strips
+# `BASH_FUNC_*` — the post-Shellshock hardening — and bash refuses to import functions across a
+# privilege change, so `sudo XCV_DRYRUN=1 XCV_STUB_BIN=/evil` still cannot supply a lying `id`.
+#
+# The source pins below stay as the second and third lines of defence, and they are not
+# sufficient alone: removing just the `exit 2` from the guard's body keeps the expression, the
+# ordering and the message, and proceeds anyway. The status and the absence of the startup
+# banner are what catch that.
+rootout="$(bash -c 'id() { echo 0; }; export -f id
+    XCV_DRYRUN=1 XCV_STUB_BIN="$1" XCV_DRYRUN_EVIDENCE_DIR="$2" \
+        bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1; echo "rc=$?"' _ "$WORK/bin" "$WORK/ev")"
+check "a dry run that believes it is root refuses" "yes" "$(contains "must NOT run as root" "$rootout")"
+check "and STOPS, rather than printing and proceeding" "yes" "$(contains "rc=2" "$rootout")"
+check "and never reaches the stubs" "no" "$(contains "NOTHING IS MOUNTED" "$rootout")"
+
+check "the root refusal is a real refusal, not just a message" "1" \
+    "$(grep -cF '[ "$(id -u)" != 0 ] || {' ./e6c-mount-mechanism.sh)"
+idline=$(grep -nF '[ "$(id -u)" != 0 ] || {' ./e6c-mount-mechanism.sh | head -1 | cut -d: -f1)
+pathline=$(grep -nF 'PATH="$XCV_STUB_BIN:$PATH"' ./e6c-mount-mechanism.sh | head -1 | cut -d: -f1)
+check "and it runs before the stubs reach PATH" "yes" \
+    "$([ -n "$idline" ] && [ -n "$pathline" ] && [ "$idline" -lt "$pathline" ] && echo yes || echo no)"
+
+# ---- the allowlist, which the dry-run target redirect must not touch --------------------------
+# The script's own comment says this is asserted here. It was not — the property held only
+# through `ExperimentScriptSafetyTests`, and a claim naming a control that does not exist sits
+# exactly where a future reader looks before widening the redirect.
+check "xcv_e6b_target still returns the real cryptex path" "/Library/Developer/CoreSimulator/Cryptex/Caches" \
+    "$( . ./common.sh >/dev/null 2>&1; xcv_e6b_target cryptex )"
+# The redirect exists once and is indented, i.e. inside a block — a top-level `TARGET=` would
+# move the cache target in a REAL run. Counting dry-run guards would not say this: there are
+# three of them.
+check "the target redirect exists exactly once" "1" \
+    "$(grep -cF 'TARGET="$XCV_EVIDENCE_DIR/dryrun-target"' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and is inside a block, not at top level" "0" \
+    "$(grep -cE '^TARGET="\$XCV_EVIDENCE_DIR/dryrun-target"' ./e6c-mount-mechanism.sh | tr -d ' ')"
+
+# ---- the donor cannot be resolved: nothing may be mounted, nothing published --------------------
+# donor_ok — the stub answers that let a run reach the cells: the donor is an external APFS
+# volume on its own physical disk, the target is an empty directory, no Xcode is running.
+donor_ok() {
+    printf '/dev/disk9s1 on /Volumes/DRYDONOR (apfs, local)\n' > "$WORK/out.mount"
+    printf '   Device Node:               /dev/disk9s1\n   File System Personality:   APFS\n   Volume UUID:               AAAA-BBBB-CCCC\n   Part of Whole:             disk9\n   Mounted:                   Yes\n' \
+        > "$WORK/out.diskutil.info._Volumes_DRYDONOR"
+    printf '   Part of Whole:             disk9\n' > "$WORK/out.diskutil.info._dev_disk9s1"
+    # `/` on a DIFFERENT physical disk, or the boot-disk guard refuses — correctly — and the run
+    # never reaches a cell.
+    printf '   Part of Whole:             disk1\n' > "$WORK/out.diskutil.info__"
+    echo 1 > "$WORK/rc.pgrep"
+    # State: an unmount empties the mount table, so the script's own "did it take" check passes.
+    # Without this the donor reads as still mounted and every run aborts before the first cell.
+    cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in unmount|unmountDisk) : > "$WORK_DIR/out.mount" ;; esac
+SCR
+    cat > "$WORK/script.umount" <<'SCR'
+: > "$WORK_DIR/out.mount"
+SCR
+    sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil" "$WORK/script.umount"
+}
+
+scenario no-donor
+# A non-zero `mount` makes the donor read as "not a mount point", so resolution refuses.
+# The comment is on its own line: `ExperimentScriptSafetyTests` forbids a backtick anywhere on
+# an `echo` line, and while a trailing `#` comment is not command substitution, the check is
+# deliberately line-based and conservative. Moving the comment is free; loosening the check to
+# accommodate one line of mine is not the trade to make.
+echo 1 > "$WORK/rc.mount"
+out="$(run_e6c)"
+check "an unresolvable donor stops before any mount" "no" "$(contains "mount_apfs" "$(calls)")"
+check "and publishes nothing" "0" "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
+
+# ---- hdiutil create fails: B0 is NOT MEASURED, and no attach is attempted ----------------------
+scenario b0-create-fails
+donor_ok
+echo 1 > "$WORK/rc.hdiutil.create"
+out="$(run_e6c)"
+check "a failed hdiutil create says so on the terminal" "yes" \
+    "$(contains "B0's image could not be created" "$out")"
+check "and records NOT MEASURED in the published matrix" "yes" \
+    "$(contains "NOT MEASURED (hdiutil create failed)" "$(evidence)")"
+check "and never attaches" "no" "$(contains "hdiutil attach" "$(calls)")"
+check "and still publishes evidence" "1" "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
+# The two markers that stop a fabricated artifact from reading as real evidence. Both were
+# added and neither was asserted — deleting either was silent, which is the same shape as the
+# root-refusal grep.
+check "the published file says it is fabricated" "yes" "$(contains "THIS IS A DRY RUN" "$(evidence)")"
+# The SHIPPING matrix arm. With the cache target redirected to scratch, `$TARGET` stopped
+# equalling `$D_MEASURED_AT` and every dry run took the "D NOT MEASURED at this target" branch —
+# so the arm that actually executes in a real cryptex run, and the A-vs-D reading rule with it,
+# were deletable without a failure. Moving `D_MEASURED_AT` with the target is faithful, since in
+# a real cryptex run the two are the same path; these two checks are what make that hold.
+check "the matrix reports D as measured, not as absent" "yes" \
+    "$(contains "REFUSED (measured 2026-09-21, EPERM" "$(evidence)")"
+check "and the A-vs-D reading rule is printed" "yes" \
+    "$(contains "A MOUNTED, D REFUSED" "$(evidence)")"
+check "and its filename does too" "yes" "$(contains "DRYRUN" "$(ls -1 "$WORK/ev")")"
+
+# attached <store-disk> [volume-disk] — the stub answers that make an image attach and resolve.
+#
+# The volume NAME is derived from the recorded `hdiutil create` call, not hardcoded: the script
+# builds it from its own `$$`, which is not the harness's. Writing `XCVB0-$$` here produced a
+# name that never matched, so `B0_VOL` came back empty and every B0 scenario read as "volume did
+# not resolve" instead of reaching the branch under test.
+attached() {
+    local store="$1" vol="${2:-disk21s1}"
+    cat > "$WORK/script.hdiutil" <<'SCR'
+case "${1:-}" in
+    attach)
+        printf '{"system-entities":[{"content-hint":"GUID_partition_scheme","dev-entry":"/dev/disk20"}]}\n' \
+            > "$WORK_DIR/out.hdiutil.attach"
+        ;;
+    create)
+        # The name the script chose, read back out of its own call, so `diskutil list` can answer
+        # with a line the script's `awk` will match.
+        n="$(grep -o -- '-volname [^ ]*' "$WORK_DIR/calls" | tail -1 | cut -d' ' -f2)"
+        printf '   1:   APFS Volume %s   500.0 KB   %s\n' "$n" "VOL_DISK" > "$WORK_DIR/out.diskutil.list"
+        ;;
+esac
+SCR
+    sed -i '' -e "s|\$WORK_DIR|$WORK|g" -e "s|VOL_DISK|$vol|g" "$WORK/script.hdiutil"
+    printf '   APFS Physical Store:       %s\n' "$store" > "$WORK/out.diskutil.info._dev_$vol"
+}
+
+# ---- the containment assert: a volume this run did not create must not be measured ------------
+scenario b0-containment
+donor_ok
+# The image attached as disk20; the name-matched volume's physical store is disk30. The two are
+# resolved independently, which is the only reason a disagreement is visible at all.
+attached disk30s1 disk31s1
+out="$(run_e6c)"
+check "a volume on another disk fails containment" "yes" \
+    "$(contains "CONTAINMENT FAILED" "$(evidence)")"
+check "and is recorded as NOT MEASURED, not as a refusal" "yes" \
+    "$(contains "NOT MEASURED (containment check failed)" "$(evidence)")"
+check "and the operator is told on the terminal" "yes" \
+    "$(contains "did not resolve to this run's own image" "$out")"
+# The banner is not the behaviour: deleting the `B0_VOL=""` that a containment failure sets
+# leaves both strings printing and then mounts the foreign volume anyway, which is the defect.
+#
+# Both words on one line, because the donor's own cells call `diskutil mount -mountPoint`
+# legitimately and a bare match on that can never fail; and the foreign volume IS read —
+# `diskutil info /dev/disk31s1` is how its physical store is resolved, which is the check
+# working. What must never appear is a MOUNT of it.
+#
+# No `|| echo 0`: `grep -c` prints `0` AND exits 1 when it finds nothing, so the fallback fired
+# on the passing case and produced "0\n0". Same family as the `| tail -40 || echo` in the script
+# that a reviewer caught earlier today — a pipeline's status is not what it looks like.
+foreign_mounts="$(grep -c 'mount.*disk31s1' "$WORK/calls" 2>/dev/null)"
+check "and the foreign volume is never mounted" "0" "${foreign_mounts:-0}"
+
+# ---- cleanup after an abort: the donor must come back, and nothing may stay mounted ------------
+scenario cleanup-on-abort
+donor_ok
+echo 1 > "$WORK/rc.mount_apfs"        # every mount_apfs refuses
+echo 1 > "$WORK/rc.diskutil.mount"    # and so does every diskutil mount
+out="$(run_e6c)"
+check "an all-refused run still publishes a matrix" "yes" "$(contains "matrix" "$(evidence)")"
+check "and hands the donor back by UUID" "yes" \
+    "$(contains "diskutil mount AAAA-BBBB-CCCC" "$(calls)")"
+# An all-refused run is a COMPLETE run — every cell answered. What must not pass silently is
+# cell C, whose control refused: the matrix has to say so, because that block is what gets
+# pasted into HYPOTHESES.md.
+check "and marks cell C void because its control refused" "yes" \
+    "$(contains "CELL C IS VOID" "$(evidence)")"
+
+# mounts_succeed — a mount ADDS to the mount table and an unmount removes from it. Without this
+# every cell reads REFUSED, because the script verifies a mount by grepping the table for
+# `<dev> on <dest>` and a static table never contains it. This is the smallest amount of state
+# that makes a cell's success path reachable at all.
+mounts_succeed() {
+    cat > "$WORK/script.mount_apfs" <<'SCR'
+d=""; t=""
+for a in "$@"; do case "$a" in /dev/*) d="$a" ;; /*) t="$a" ;; esac; done
+[ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local, nobrowse)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
+SCR
+    cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    mount)
+        d=""; t=""
+        for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; done
+        prev=""
+        for a in "$@"; do [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
+        ;;
+    unmount|unmountDisk) : > "$WORK_DIR/out.mount" ;;
+esac
+SCR
+    sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.mount_apfs" "$WORK/script.diskutil"
+}
+
+# ---- the DiskArbitration bypass taint -----------------------------------------------------------
+scenario da-bypass
+donor_ok
+attached disk20s1
+mounts_succeed
+# DA declines every unmount, so every teardown falls back outside it. The `umount` stub clears
+# the table, so the fallback genuinely works and the run continues — which is the case that
+# matters: a tainted run that LOOKS clean.
+cat > "$WORK/script.umount" <<'SCR'
+: > "$WORK_DIR/out.mount"
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.umount"
+echo 1 > "$WORK/rc.diskutil.unmount"   # DA declines every unmount; teardown falls back outside it
+out="$(run_e6c)"
+check "a teardown outside DiskArbitration is recorded" "yes" \
+    "$(contains "teardown: umount-f" "$(evidence)")"
+
+# The taint marks REFUSED cells only, which is right: a cell that MOUNTED after a bypassed
+# teardown is not misleading, and a cell that refused might be refusing because of the bypass.
+# So the case to construct is a refusal DOWNSTREAM of one — here, C refuses at the cache path
+# while the control cells mounted at the probe.
+scenario da-bypass-then-refusal
+donor_ok
+attached disk20s1
+mounts_succeed
+cat > "$WORK/script.umount" <<'SCR'
+: > "$WORK_DIR/out.mount"
+SCR
+# Mount everywhere EXCEPT the cache target, so C is the one refusal and it sits after two
+# bypassed teardowns. Keyed on `dryrun-target`, because in a dry run the cache target is a
+# scratch path — see the script's own comment for why it has to be.
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    mount)
+        d=""; t=""; prev=""
+        for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        case "$t" in *dryrun-target*) ;; *) [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount" ;; esac
+        ;;
+    unmount|unmountDisk) : > "$WORK_DIR/out.mount" ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.umount" "$WORK/script.diskutil"
+echo 1 > "$WORK/rc.diskutil.unmount"
+out="$(run_e6c)"
+check "a refusal after a bypassed teardown is marked VOID" "yes" \
+    "$(contains "VOID: an earlier teardown bypassed DiskArbitration" "$(evidence)")"
+check "and the cell that refused is cell C" "yes" \
+    "$(contains "C. diskutil at the cache target" "$(evidence)")"
+
+# ---- a leftover image from an earlier run must be unmatchable -----------------------------------
+# The hazard the per-run volume name closes: a previous run that failed to detach leaves an
+# `XCVB0` behind whose backing file is gone. A bare name match would select it, its mount would
+# fail, and `cell` would record B0 REFUSED — which the reading rule turns into "E1b's call no
+# longer works on this OS build". A harness artifact promoted to a finding about macOS, through
+# the control added to prevent exactly that. Mutation-checked: removing `-$$` from the volume
+# name makes this scenario fail.
+scenario b0-stale-leftover
+donor_ok
+mounts_succeed
+cat > "$WORK/script.hdiutil" <<'SCR'
+case "${1:-}" in
+    attach)
+        printf '{"system-entities":[{"content-hint":"GUID_partition_scheme","dev-entry":"/dev/disk20"}]}\n' \
+            > "$WORK_DIR/out.hdiutil.attach"
+        ;;
+    create)
+        n="$(grep -o -- '-volname [^ ]*' "$WORK_DIR/calls" | tail -1 | cut -d' ' -f2)"
+        # A STALE bare XCVB0 first, on a disk this run never attached, then ours.
+        { printf '   1:   APFS Volume XCVB0   500.0 KB   disk99s1\n'
+          printf '   2:   APFS Volume %s   500.0 KB   disk21s1\n' "$n"; } > "$WORK_DIR/out.diskutil.list"
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.hdiutil"
+printf '   APFS Physical Store:       disk20s1\n' > "$WORK/out.diskutil.info._dev_disk21s1"
+printf '   APFS Physical Store:       disk98s1\n' > "$WORK/out.diskutil.info._dev_disk99s1"
+out="$(run_e6c)"
+check "the stale leftover is not selected" "no" "$(contains "volume: /dev/disk99s1" "$(evidence)")"
+check "this run's own volume is" "yes" "$(contains "volume: /dev/disk21s1" "$(evidence)")"
+check "and B0 is measured rather than falsely refused" "no" \
+    "$(contains "B0. E1b replicated, diskutil at the control dir (sparse image): REFUSED" "$(evidence)")"
+
+# ---- a failed attach must not bind to a name-matched volume ------------------------------------
+# The other door on the same safety property as the containment assert: `hdiutil attach` fails,
+# but the name scan still finds a volume. Only the attach-rc branch's `B0_VOL=""` stops it.
+scenario b0-attach-fails
+donor_ok
+echo 1 > "$WORK/rc.hdiutil.attach"
+cat > "$WORK/script.hdiutil" <<'SCR'
+case "${1:-}" in
+    create)
+        n="$(grep -o -- '-volname [^ ]*' "$WORK_DIR/calls" | tail -1 | cut -d' ' -f2)"
+        printf '   1:   APFS Volume %s   500.0 KB   disk21s1\n' "$n" > "$WORK_DIR/out.diskutil.list"
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.hdiutil"
+printf '   APFS Physical Store:       disk20s1\n' > "$WORK/out.diskutil.info._dev_disk21s1"
+out="$(run_e6c)"
+check "a failed attach is NOT MEASURED, not bound by name" "yes" \
+    "$(contains "NOT MEASURED (hdiutil attach failed)" "$(evidence)")"
+attach_mounts="$(grep -c 'mount.*disk21s1' "$WORK/calls" 2>/dev/null)"
+check "and that volume is never mounted" "0" "${attach_mounts:-0}"
+
+# ---- a run that ABORTS mid-matrix still publishes what it had ---------------------------------
+# Found by mutation, not by design: deleting `matrix "INCOMPLETE …"` from `cleanup` killed no
+# check, because every scenario above either completes or stops before a cell. An all-refused
+# run is COMPLETE — every cell answered — so it exercises `matrix "complete"`, not the abort
+# path. This is the abort path: the donor's unmount does not take, so the run stops after the
+# header with `XCV_RUN_FAILED=1`.
+scenario abort-midway
+donor_ok
+cat > "$WORK/script.diskutil" <<'SCR'
+: SCR
+SCR
+: > "$WORK/script.diskutil"
+out="$(run_e6c)"
+check "an aborted run publishes a FAILED file" "yes" \
+    "$(contains "FAILED" "$(ls -1 "$WORK/ev" 2>/dev/null)")"
+check "and its matrix is stamped INCOMPLETE, not complete" "yes" \
+    "$(contains "matrix (INCOMPLETE" "$(evidence)")"
+check "and it says the unmount did not take" "yes" \
+    "$(contains "UNMOUNT DID NOT TAKE" "$out")"
+
+# ---- the interrupt path, which had no coverage at all ------------------------------------------
+# Three of the six historical defects live here: a second Ctrl-C re-entering cleanup, publishing
+# twice, and `rm -f`-ing the report out from under the outer invocation. Nothing sent a signal
+# until now, so all three would ship green.
+#
+# The signal is delivered by a stub: `diskutil unmount` kills its own process group's leader —
+# the script — which puts the interrupt at a realistic moment, after staging and inside a
+# teardown, rather than at an arbitrary sleep.
+scenario interrupt-midway
+donor_ok
+mounts_succeed
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    unmount|unmountDisk)
+        : > "$WORK_DIR/out.mount"
+        # Interrupt the script that invoked us, once.
+        if [ ! -f "$WORK_DIR/interrupted" ]; then : > "$WORK_DIR/interrupted"; kill -INT "$PPID" 2>/dev/null; fi
+        ;;
+    mount)
+        d=""; t=""; prev=""
+        for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil"
+rc=0; out="$(run_e6c)" || rc=$?
+check "an interrupted run exits 130" "130" "$rc"
+# COUNTED, not matched. `shadow_check` remounts the donor too, so a single occurrence proves
+# nothing about cleanup's: deleting cleanup's remount entirely still leaves one in the log.
+# Cleanup's comes first, then shadow_check's.
+remounts="$(grep -c 'diskutil mount AAAA-BBBB-CCCC' "$WORK/calls" 2>/dev/null)"
+check "and both cleanup and shadow_check hand the donor back" "2" "${remounts:-0}"
+check "and publishes exactly one file, not two" "1" \
+    "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
+check "and does not claim its log could not be kept" "no" \
+    "$(contains "could NOT be redacted" "$out")"
+
+# ---- a SECOND interrupt, arriving while cleanup is already running -----------------------------
+# The re-entrancy guard and the `trap ''` at the top of cleanup exist only for this, and one
+# signal cannot reach either: deleting both left the suite green. Delivered deterministically
+# rather than by racing — the stub fires the second INT from inside a command that only cleanup
+# calls, the donor remount, so it lands in the middle of cleanup by construction.
+scenario interrupt-then-term
+donor_ok
+mounts_succeed
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    unmount|unmountDisk)
+        : > "$WORK_DIR/out.mount"
+        if [ ! -f "$WORK_DIR/int1" ]; then : > "$WORK_DIR/int1"; kill -INT "$PPID" 2>/dev/null; fi
+        ;;
+    mount)
+        # The donor remount by UUID is cleanup's; the second signal goes here.
+        case "${2:-}" in
+            AAAA-BBBB-CCCC)
+                # TERM, not a second INT: bash holds a signal whose own handler is running, so
+                # a second INT queues rather than re-entering. A DIFFERENT signal is not held,
+                # and that is the case the re-entrancy guard and the `trap ''` exist for.
+                if [ ! -f "$WORK_DIR/int2" ]; then : > "$WORK_DIR/int2"; kill -TERM "$PPID" 2>/dev/null; fi
+                ;;
+            *)
+                d=""; t=""; prev=""
+                for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+                [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
+                ;;
+        esac
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil"
+rc=0; out="$(run_e6c)" || rc=$?
+check "an INT then a TERM still exits 130" "130" "$rc"
+# ZERO, not one: `there is no run log to write` is what the evidence writer prints when it is
+# called a SECOND time, the report already gone. Its absence is the guard working. An earlier
+# draft asserted 1, which is the symptom, not the cure.
+# The COUNTED detector is the real one. A string-absence check is hostage to the wording in
+# `mount-staging.sh` — reword the message and it is green forever — so the string is grepped out
+# of that file rather than duplicated here, the way the `id -u` expression is pinned.
+reentry_msg="$(grep -oF '!! there is no run log to write.' ../experiments/mount-staging.sh | head -1)"
+check "the re-entry symptom string still exists to look for" "yes" \
+    "$([ -n "$reentry_msg" ] && echo yes || echo no)"
+reentries="$(grep -cF "$reentry_msg" "$WORK/last-out" 2>/dev/null)"
+check "and cleanup does not run twice" "0" "${reentries:-0}"
+check "and publishes exactly one file" "1" \
+    "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
+check "and never says its log could not be kept" "no" \
+    "$(contains "could NOT be redacted" "$out")"
+# Counted, because deleting BOTH defences lets cleanup run start to finish a second time and
+# every string-based symptom still looks normal. The teardown work is what doubles.
+term_remounts="$(grep -c 'diskutil mount AAAA-BBBB-CCCC' "$WORK/calls" 2>/dev/null)"
+check "and does not repeat cleanup's teardown work" "yes" \
+    "$([ "${term_remounts:-0}" -le 2 ] && echo yes || echo no)"
+
+# ---- cleanup with work to do: something still mounted, and B0 still attached --------------------
+# The unmount loop and the B0 detach were unREACHED, not merely unasserted: no scenario left
+# anything mounted or `$B0_DEV` set at the moment cleanup ran. This is the abort those blocks
+# were written for — B0's cell returns 1 because the mount lands somewhere other than asked.
+scenario cleanup-with-work
+donor_ok
+attached disk20s1
+cat > "$WORK/script.hdiutil" <<'SCR'
+case "${1:-}" in
+    attach)
+        printf '{"system-entities":[{"content-hint":"GUID_partition_scheme","dev-entry":"/dev/disk20"}]}\n' \
+            > "$WORK_DIR/out.hdiutil.attach"
+        ;;
+    create)
+        n="$(grep -o -- '-volname [^ ]*' "$WORK_DIR/calls" | tail -1 | cut -d' ' -f2)"
+        printf '   1:   APFS Volume %s   500.0 KB   disk21s1\n' "$n" > "$WORK_DIR/out.diskutil.list"
+        ;;
+esac
+SCR
+# The mount lands at /Volumes/elsewhere instead of the probe — DiskArbitration's documented
+# fallback — and every unmount refuses, so cleanup inherits both a live mount and a live image.
+# The DONOR's unmount must succeed — the script verifies it and aborts otherwise, before any
+# cell. Only the cell teardowns refuse. The two are told apart by their argument: the donor is
+# unmounted by device, a cell by path.
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    unmount|unmountDisk)
+        case "${2:-}" in /dev/*) : > "$WORK_DIR/out.mount" ;; esac
+        ;;
+    mount) printf '/dev/disk21s1 on /Volumes/elsewhere (apfs, local)\n' >> "$WORK_DIR/out.mount" ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.hdiutil" "$WORK/script.diskutil"
+printf '   APFS Physical Store:       disk20s1\n' > "$WORK/out.diskutil.info._dev_disk21s1"
+# Every unmount refuses EXCEPT the donor's, which the script verifies and aborts on. The stub's
+# own specificity does this: `rc.<cmd>.<sub>.<last-arg>` beats `rc.<cmd>.<sub>`.
+echo 1 > "$WORK/rc.diskutil.unmount"
+echo 0 > "$WORK/rc.diskutil.unmount._dev_disk9s1"
+echo 1 > "$WORK/rc.umount"
+# And the detach refuses too, so cleanup must keep the image file rather than delete it under a
+# live device — the branch that replaced an unconditional `rm -rf`.
+echo 1 > "$WORK/rc.hdiutil.detach"
+out="$(run_e6c)"
+# `MOUNTED ELSEWHERE` is the report's wording; the terminal gets "mounted somewhere other than".
+check "a mount that lands elsewhere is not recorded as a refusal" "yes" \
+    "$(contains "MOUNTED ELSEWHERE" "$(evidence)")"
+check "and the operator is told on the terminal" "yes" \
+    "$(contains "mounted somewhere other than" "$out")"
+check "cleanup tries to detach B0's image" "yes" "$(contains "hdiutil detach" "$(calls)")"
+check "and when that fails, keeps the file instead of deleting it under a live device" "yes" \
+    "$(contains "STILL ATTACHED" "$out")"
+
+printf '\n%d checks, %d failures\n' "$run" "$fails"
+[ "$fails" -eq 0 ]
