@@ -55,6 +55,8 @@ xcv_stage_resolve_donor() {
     XCV_FS="$(diskutil info "$mp" 2>/dev/null | sed -n 's/^ *File System Personality: *//p' | head -1)"
     XCV_DONOR_UUID="$(xcv_volume_uuid "$mp")"
     XCV_DONOR_DISK="$(xcv_whole_disk "$mp")"
+    XCV_DONOR_MP="$mp"
+    XCV_DONOR_LABEL="${mp##*/}"
 
     [ -n "$XCV_DEV" ] || { echo "!! could not resolve a device node for $mp" >&3; return 1; }
     # Required, not optional: `diskutil info ""` exits 1, so an empty UUID makes a later
@@ -72,7 +74,26 @@ xcv_stage_resolve_donor() {
     boot="$(xcv_whole_disk /)"
     [ -n "$boot" ] && [ "$XCV_DONOR_DISK" = "$boot" ] \
         && { echo "!! $mp is on $XCV_DONOR_DISK, the same physical disk as /. Refusing." >&3; return 1; }
+
+    # Last moment the donor is guaranteed mounted. Arm the redactor here rather than leaving it to
+    # each caller: a caller that forgets publishes the donor's UUID, and there is no later point
+    # at which the omission is visible.
+    xcv_stage_arm_redaction
     return 0
+}
+
+# xcv_stage_arm_redaction
+#
+# Hand `xcv_redact` the donor's identity from values held here, so a transcript filtered AFTER the
+# donor is gone is still redacted. Called at the end of donor resolution, which is the last moment
+# the donor is guaranteed mounted; `xcv_redact`'s own detection loop cannot see it after that.
+# Without this, every E6b report named the donor's label and UUID in the clear, in a file bound for
+# a tracked directory — the success paths as much as the failure paths, because staging unmounts
+# the donor from /Volumes before it mounts it over the target.
+xcv_stage_arm_redaction() {
+    XCV_REDACT_ALSO_LABEL="$XCV_DONOR_LABEL"
+    XCV_REDACT_ALSO_UUID="$XCV_DONOR_UUID"
+    export XCV_REDACT_ALSO_LABEL XCV_REDACT_ALSO_UUID
 }
 
 # xcv_stage_guard_target <target>
@@ -124,7 +145,8 @@ xcv_stage_mount() {
     # from an aborted run while `mount_apfs` had in fact failed.
     if ! mount | grep -q "^$(xcv_re_escape "$XCV_DEV") on $(xcv_re_escape "$target") "; then
         echo "!!!! MOUNT DID NOT TAKE: $XCV_DEV is not mounted at $target. Nothing below was run."
-        echo "!! MOUNT DID NOT TAKE — $XCV_DEV is not mounted at $target. Nothing was recorded." >&3
+        echo "!! MOUNT DID NOT TAKE — $XCV_DEV is not mounted at $target. The experiment recorded nothing;" >&3
+        echo "!! the run log is kept so the reason is not lost with it — see the path printed on exit." >&3
         return 1
     fi
     return 0
@@ -191,4 +213,98 @@ xcv_stage_probe() {
     else
         echo "  absent"
     fi
+}
+
+# xcv_stage_write_evidence <report> <out>
+#
+# The one way either variant turns a run log into a file in `docs/research/evidence/`. Redacts,
+# verifies, and only then puts anything at the tracked path. Diagnostics go to fd 3; returns
+# non-zero if nothing was written, and in that case `$out` is exactly as it was before the call.
+#
+# **Why a helper and not two copies.** This is the fourth shape that existed twice in these
+# scripts and was fixed once — see the header. It is also where every historical redaction defect
+# landed, so it has to be one place: `[ -s ]` cannot see a redactor that ran successfully and
+# produced unredacted output, which is what every one of those defects looked like. The
+# account-name check below is load-bearing; `test-common.sh` sources this file and pins it.
+#
+# **Verify in a temp file, then move.** Every earlier version rotated first and wrote straight to
+# `$out`, so the shell created the file the moment the redirection opened — before `xcv_redact`
+# had written a byte — and the previous good evidence was already renamed `-superseded-`. A
+# failing run left a partial and possibly UN-REDACTED file at the canonical path, with the good
+# evidence only reachable under a different name; the three `rm -f`s that patched that were
+# themselves the thing that differed between the two variants. Redacting into a `mktemp` and
+# moving it into place after the checks retires the whole class: no partial or unredacted byte
+# ever exists at the tracked path, and a failed check rotates nothing, so the previous evidence
+# stays under its own name. One window survives and is named rather than glossed: if rotation
+# succeeds and the `mv` then fails, the previous evidence is reachable only as `-superseded-`.
+# Nothing partial is published even then, which is the property that mattered.
+xcv_stage_write_evidence() {
+    local report="$1" out="$2" tmp leaks rc=1
+
+    # Defence in depth, and said accurately: this used to be the thing that made a re-entrant
+    # `cleanup` safe, back when rotation happened first. It no longer is — nothing is rotated or
+    # created until every check has passed, so an empty report is refused by the `-s "$tmp"` check
+    # below whether this line is here or not, and deleting it kills no test. It stays because it
+    # names the condition, and because a caller reading a refusal wants "there is no run log", not
+    # "the redactor produced nothing".
+    [ -s "$report" ] || { echo "!! there is no run log to write." >&3; return 1; }
+
+    # Not `${SUDO_USER:-}`: `grep -cF ""` matches every line, so an unset account name would
+    # delete the evidence and report "the account name is in the output" — fail-closed, but naming
+    # the wrong cause. Both variants refuse an empty SUDO_USER at startup; this is library code and
+    # says so itself rather than relying on that.
+    [ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; redaction cannot be verified. NO evidence was written." >&3; return 1; }
+
+    tmp="$(mktemp -t xcv-evidence)" || { echo "!! could not create a temp file; NO evidence was written." >&3; return 1; }
+
+    while :; do
+        # `2>&3`: on a failure path the caller has not yet restored the terminal, so fd 2 is still
+        # the report this function is reading — sed's own stderr would append into its input, and
+        # the reason for a failure would land in a file the caller then deletes.
+        xcv_redact < "$report" > "$tmp" 2>&3 || { echo "!! redaction failed; NO evidence was written." >&3; break; }
+        [ -s "$tmp" ] || { echo "!! the redactor produced nothing; NO evidence was written." >&3; break; }
+
+        # `$SUDO_USER`, not `$USER`: this runs under sudo, so `$USER` is root and the check would
+        # pass on a file full of the operator's name. `grep -c` on an unreadable file leaves this
+        # empty and `[ "" -gt 0 ]` fails, so the default makes that fatal rather than reassuring.
+        # It counts LINES, not occurrences.
+        leaks=$(grep -cF "$SUDO_USER" "$tmp")
+        if [ "${leaks:-1}" -gt 0 ]; then
+            echo "!! REDACTION FAILED: the account name is in the output ($leaks line(s)); NO evidence was written." >&3
+            break
+        fi
+
+        # Only now is there anything worth keeping, so only now is the previous evidence renamed.
+        # `2>&3` for the same reason as above: `xcv_rotate_out` reports refusals on fd 2.
+        # Symmetric with the account-name gate above, and for the leak this whole change exists to
+        # close. `xcv_redact` has a rule for the donor (`XCV_REDACT_ALSO_UUID`) and the wiring is
+        # pinned by two source checks — but wiring checks police the call, not the outcome. A UUID
+        # is a fixed string that never legitimately appears in evidence, so it can be gated the
+        # same way the account name is.
+        if [ -n "${XCV_DONOR_UUID:-}" ] && grep -qF "$XCV_DONOR_UUID" "$tmp"; then
+            echo "!! REDACTION FAILED: the donor volume UUID is in the output; NO evidence was written." >&3
+            break
+        fi
+
+        xcv_rotate_out "$out" 2>&3 || break
+        # `mv`, never `cp`, and measured rather than assumed: forced onto a full volume on
+        # 2026-09-21, `cp` failed and left 8 MB of a truncated file at the destination — the
+        # previous content destroyed by the open — while `mv` failed and left the destination
+        # unlinked. On macOS `mv` uses fastcopy and unlinks the destination on a write error, so
+        # the tracked path keeps nothing rather than something partial. Same-filesystem, `mv` is
+        # an atomic rename(2) and `cp` is not. `test-common.sh` pins the call shape.
+        mv "$tmp" "$out" || { echo "!! could not move the redacted evidence into place; NO evidence was written." >&3; break; }
+
+        # Root wrote it; the operator has to be able to delete or amend it without sudo. Same as
+        # `e1b-mount-probe.sh`. Best-effort: a file that exists is worth more than one refused over
+        # its owner.
+        chown "${SUDO_UID:-0}:${SUDO_GID:-0}" "$out" 2>/dev/null
+        echo "wrote $out" >&3
+        echo "redaction: ok" >&3
+        rc=0
+        break
+    done
+
+    rm -f "$tmp"
+    return "$rc"
 }

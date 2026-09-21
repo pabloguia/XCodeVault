@@ -171,3 +171,44 @@ too. The pair is governed by one sentence — *`forget` declines anything `abort
 and, since pass five, by one function. That termination bound has since been re-broken twice by
 later changes and caught both times by the tests that pin it, most recently under issue #25; see
 `MountAnswerTests.testAbortRefusesTheDeletionWhenTheMountQuestionCannotBeAnswered`.
+
+## An inversion is not a deletion, and recording one as the other overstates coverage
+
+On 2026-09-21, reviewing a new guard in `xcv_stage_write_evidence`:
+
+```bash
+[ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; ..." >&3; return 1; }
+```
+
+The mutation applied was `[ -n ... ] ||` → `false ||`, and the suite went to five failures. That
+was recorded as "the guard is pinned by five checks." A reviewer re-ran the mutation the guard
+actually invites — **deleting the line** — and got **zero** failures.
+
+The two are not the same experiment. `false ||` makes the function *always* refuse, so it breaks
+the five checks on the success path; it measures whether the success path is covered, which was
+never in question. Deleting the line asks the only question that matters — does anything notice
+when the guard is gone — and the answer was no, because without it `grep -cF ""` matches every
+line and the write is refused anyway. Identical return code, identical absence of a file; the only
+observable difference is the *reason* printed on fd 3, and no check read fd 3 on that path.
+
+Two rules follow.
+
+**Mutate by deletion first.** A guard's failure mode is that it is removed or never reached, not
+that it fires unconditionally. Substituting an always-fail condition inverts the polarity of the
+experiment and reliably produces a high, meaningless kill count — the more central the guard, the
+more success-path checks it breaks, and the more convincing the wrong number looks.
+
+**When two branches agree on their observable outcome, the assertion has to reach the thing that
+differs.** Here that is the message, so the check now captures fd 3 and asserts the cause. A guard
+whose whole value is message accuracy cannot be pinned by a return code.
+
+This is the fifth measurement error in this file's history and the first of this species; the
+other four were miscounting failures, running against a stale build, filtering on a file name
+instead of a class name, and a contaminated gold copy. The pattern across all five is the same:
+the number was produced by a procedure nobody re-derived, and it flattered the change.
+
+A second claim in the same round failed the same way for a different reason. `mv "$tmp" "$out"`
+was changed to `cp` and judged "behaviourally equivalent" from reading the code. Measured against
+a deliberately filled volume, `cp` failed and left 8 MB of a truncated file at the destination —
+destroying what was there — while `mv` failed and left the destination unlinked. The judgement was
+reasoning where an eight-line experiment was available.

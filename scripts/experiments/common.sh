@@ -150,8 +150,9 @@ xcv_identity() {
 # volume that was attached during the experiment but unplugged before the transcript is filtered
 # is not detected, and a stale mention of a volume that is no longer attached passes through
 # untouched. So this fails closed for mounted volumes and open for everything else. Filter the
-# transcript while the volume is still attached; for an experiment that ends by ejecting it, that
-# means redacting before the eject, not after.
+# transcript while the volume is still attached — or, when the experiment IS the unmount and that
+# is impossible, name the volume from values held before it went away: XCV_REDACT_ALSO_LABEL and
+# XCV_REDACT_ALSO_UUID at the end of this function. `mount-staging.sh` sets both.
 #
 # Two escape hatches, both whitespace-separated lists of single tokens:
 #   XCV_REDACT_KEEP   volume labels to leave alone. Needed when a label is also an ordinary word —
@@ -159,7 +160,7 @@ xcv_identity() {
 #                     or when the label is deliberately part of the finding.
 #   XCV_PRIVATE_DIRS  folder basenames to redact as <private-dir>.
 xcv_redact() {
-    local u h esc vol label uuid lesc lb rb k ident
+    local u h esc vol label uuid lesc lb rb k ident kept
     ident=$(xcv_identity)
     u=${ident%%$'\n'*}
     h=${ident#*$'\n'}
@@ -230,6 +231,34 @@ xcv_redact() {
 
         args+=(-e "s#/Volumes/$lesc#/Volumes/<vault>#g" -e "s#$lb$lesc$rb#<vault>#g")
     done
+
+    # The way out of the limit of detection stated at the top of this function.
+    #
+    # The loop above can only see what is mounted. An experiment that ends by unmounting its donor
+    # — which is what E6b IS — filters its transcript at the one moment the donor cannot be
+    # detected, so the donor's label and UUID pass through in the clear. Both E6b variants did
+    # exactly that, and `docs/research/evidence/` is tracked.
+    #
+    # The staging library resolves the donor BEFORE it unmounts it and sets these from what it
+    # held. Same two rule shapes as a detected volume, so there is one rule vocabulary and not two;
+    # the only difference is where the label and UUID came from. KEEP is honoured for the label, as
+    # in the loop, and deliberately not for the UUID, for the reason given there.
+    if [ -n "${XCV_REDACT_ALSO_UUID:-}" ]; then
+        args+=(-e "s#$(xcv_re_escape "$XCV_REDACT_ALSO_UUID")#<vault-uuid>#g")
+    fi
+    if [ -n "${XCV_REDACT_ALSO_LABEL:-}" ]; then
+        label="$XCV_REDACT_ALSO_LABEL"
+        kept=0
+        if [ ${#keeps[@]} -gt 0 ]; then
+            for k in "${keeps[@]}"; do [ "$k" = "$label" ] && kept=1; done
+        fi
+        if [ "$kept" = 0 ]; then
+            lesc=$(xcv_re_escape "$label")
+            case "$label" in [[:alnum:]_]*) lb='[[:<:]]' ;; *) lb='' ;; esac
+            case "$label" in *[[:alnum:]_]) rb='[[:>:]]' ;; *) rb='' ;; esac
+            args+=(-e "s#/Volumes/$lesc#/Volumes/<vault>#g" -e "s#$lb$lesc$rb#<vault>#g")
+        fi
+    fi
 
     for label in ${priv[@]+"${priv[@]}"}; do
         [ -n "$label" ] || continue

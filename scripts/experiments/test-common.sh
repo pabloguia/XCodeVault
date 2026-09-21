@@ -146,6 +146,42 @@ check "XCV_PRIVATE_DIRS redacts folder names" \
 check "XCV_PRIVATE_DIRS respects word boundaries" \
     "parallelsism" "$(XCV_PRIVATE_DIRS="parallels" redact "parallelsism")"
 
+# ---- a donor that is GONE by the time the transcript is filtered -----------------------------------
+# The limit of detection made concrete. `E6BDONOR` is deliberately absent from the fixture volumes
+# directory, which is exactly the state an E6b run is in when it writes its evidence: staging
+# unmounted the donor from /Volumes before mounting it over the target, so the detection loop
+# cannot see it. Both variants filtered there and published the donor's label and UUID in the
+# clear — the success paths as much as the failure paths.
+check "an unmounted donor is NOT detected, which is why the held values exist" \
+    "/Volumes/E6BDONOR 8B2F1A44-0000-4000-8000-000000000001" \
+    "$(redact "/Volumes/E6BDONOR 8B2F1A44-0000-4000-8000-000000000001")"
+
+check "XCV_REDACT_ALSO_LABEL redacts an unmounted donor in path form" \
+    "/Volumes/<vault>" "$(XCV_REDACT_ALSO_LABEL="E6BDONOR" redact "/Volumes/E6BDONOR")"
+
+check "XCV_REDACT_ALSO_LABEL redacts an unmounted donor standing alone" \
+    "donor <vault> is gone" "$(XCV_REDACT_ALSO_LABEL="E6BDONOR" redact "donor E6BDONOR is gone")"
+
+check "XCV_REDACT_ALSO_LABEL does not eat a longer word containing it" \
+    "E6BDONORS" "$(XCV_REDACT_ALSO_LABEL="E6BDONOR" redact "E6BDONORS")"
+
+check "XCV_REDACT_ALSO_UUID redacts an unmounted donor's UUID" \
+    "UUID <vault-uuid>" \
+    "$(XCV_REDACT_ALSO_UUID="8B2F1A44-0000-4000-8000-000000000001" redact "UUID 8B2F1A44-0000-4000-8000-000000000001")"
+
+check "regex metacharacters in a held label are escaped, not interpreted" \
+    "E6BxDONOR" "$(XCV_REDACT_ALSO_LABEL="E6B.DONOR" redact "E6BxDONOR")"
+
+# Same asymmetry as the detected case, and for the same reason: KEEP exists because a label can be
+# an ordinary English word, and a UUID never is.
+check "XCV_REDACT_KEEP opts a held label out" \
+    "E6BDONOR" "$(XCV_REDACT_KEEP="E6BDONOR" XCV_REDACT_ALSO_LABEL="E6BDONOR" redact "E6BDONOR")"
+
+check "XCV_REDACT_KEEP does not opt the held UUID out" \
+    "<vault-uuid>" \
+    "$(XCV_REDACT_KEEP="E6BDONOR" XCV_REDACT_ALSO_LABEL="E6BDONOR" XCV_REDACT_ALSO_UUID="8B2F1A44-0000-4000-8000-000000000001" \
+        redact "8B2F1A44-0000-4000-8000-000000000001")"
+
 # ---- xcv_re_escape ------------------------------------------------------------------------------------
 check "xcv_re_escape escapes a dot" '\.' "$(xcv_re_escape '.')"
 check "xcv_re_escape leaves a plain word alone" 'plain' "$(xcv_re_escape 'plain')"
@@ -285,6 +321,134 @@ for s in $redirecting; do
     check "$s restores after it redirects" "yes" \
         "$([ -n "$redirect_line" ] && [ -n "$restore_line" ] && [ "$restore_line" -gt "$redirect_line" ] && echo yes || echo no)"
 done
+
+# `mv`, not `cp`. Measured on 2026-09-21 against a deliberately full volume: `cp` failed and left
+# 8 MB of a truncated file at the destination, destroying what was there; `mv` failed and left the
+# destination unlinked. The difference only shows under ENOSPC or a cross-device fault, which is
+# not worth a rig — so the call shape is pinned instead, the way the two wiring checks below are.
+check "the redacted evidence is moved into place, not copied" "1" \
+    "$(grep -cE '^ *mv "\$tmp" "\$out"' mount-staging.sh)"
+
+# ---- the two calls that stand between the donor's identity and a tracked directory --------------
+#
+# Source checks, not behaviour checks, and deliberately so: both of these are calls that cannot be
+# reached without root and a real donor volume, which is the same constraint that left the
+# unmounted-donor leak undetected in the first place. The redaction tests above prove the RULE
+# works on a literal; these prove the rule is still wired up.
+#
+# `xcv_stage_arm_redaction` is what hands `xcv_redact` the donor's label and UUID from values held
+# before the donor was unmounted. Drop the call and every E6b report names the donor in the clear,
+# in a file bound for `docs/research/evidence/`, with every other check still green.
+arm_def=$(grep -cE '^xcv_stage_arm_redaction\(\)' mount-staging.sh)
+arm_call=$(awk '/^xcv_stage_resolve_donor\(\) \{/,/^\}/' mount-staging.sh | grep -cE '^ *xcv_stage_arm_redaction$')
+check "mount-staging.sh defines xcv_stage_arm_redaction" "1" "$arm_def"
+check "xcv_stage_resolve_donor arms the redactor before it returns" "1" "$arm_call"
+
+# And every evidence file goes through the one writer that rotates, redacts, checks for the account
+# name, and deletes on doubt. A variant that redacts straight into the evidence directory has
+# skipped the leak gate; that duplication is how the `rm` on the redact-failure branch came to
+# exist in one variant and not the other.
+for s in ./e6b-mount-stub-reappearance.sh ./e6b-physical-disconnect.sh; do
+    check "$s writes evidence through xcv_stage_write_evidence" "1" \
+        "$(grep -cE '^xcv_stage_write_evidence "\$REPORT" "\$out"' "$s")"
+    check "$s does not redact straight into the evidence directory" "0" \
+        "$(grep -cE '^ *xcv_redact .*> *"\$(out|diag)"' "$s")"
+done
+
+# ---- every script at least parses ----------------------------------------------------------------
+# `mount-staging.sh` was outside every gate: no gate sourced it, ran it, or syntax-checked it, so a
+# deleted leak check in the single evidence writer left the suite green. This is the floor; the
+# behavioural checks below are the rest.
+for s in ./*.sh; do
+    check "$s parses" "0" "$(bash -n "$s" 2>/dev/null; echo $?)"
+done
+
+# ---- xcv_stage_write_evidence: the one path to a tracked directory ---------------------------------
+#
+# Behaviour, not source shape. Every historical redaction defect looked like a redactor that ran
+# successfully and produced unredacted output, which is exactly what `[ -s ]` cannot see and only
+# the account-name gate catches — so the gate has to be exercised, not grepped for.
+#
+# `common.sh` is already sourced with the fixture identity above; sourcing the staging library on
+# top of it gives the real writer over a fake redactor-input, with `$out` in a temp directory.
+. ./mount-staging.sh
+
+EV=$(mktemp -d)
+SUDO_USER="$T_USER"
+w_out="$EV/evidence.txt"
+w_report=$(mktemp)
+
+# A clean report: no account name, no home, nothing to redact.
+printf 'a clean line\nanother clean line\n' > "$w_report"
+w_msgs=$(xcv_stage_write_evidence "$w_report" "$w_out" 3>&1 >/dev/null 2>/dev/null)
+check "a clean report is written" "0" "$([ -f "$w_out" ] && echo 0 || echo 1)"
+check "a clean report is written verbatim" "a clean line
+another clean line" "$(cat "$w_out" 2>/dev/null)"
+w_said=no; case "$w_msgs" in *"redaction: ok"*) w_said=yes ;; esac
+check "and the writer says so on fd 3" "yes" "$w_said"
+
+# A report the redactor handles: the home is rewritten, so the account name never reaches the gate.
+printf 'built in %s/x\n' "$T_HOME" > "$w_report"
+xcv_stage_write_evidence "$w_report" "$w_out" 3>/dev/null >/dev/null 2>/dev/null
+check "the home is redacted on the way out" "built in ~/x" "$(cat "$w_out" 2>/dev/null)"
+
+# The gate itself. `xcv_redact` word-boundaries the account name, so to reach the gate the leak has
+# to be a form it does not rewrite — here, part of a longer token, which is exactly the shape the
+# "short account name does not eat the words containing it" rule deliberately leaves alone.
+prev=$(cat "$w_out")
+before=$(ls -1 "$EV" | wc -l | tr -d ' ')
+printf 'user %sops signed in\n' "$T_USER" > "$w_report"
+w_rc=0; xcv_stage_write_evidence "$w_report" "$w_out" 3>/dev/null >/dev/null 2>/dev/null || w_rc=$?
+check "a leaked account name is refused" "1" "$w_rc"
+check "and the leaking file is NOT at the canonical path" "$prev" "$(cat "$w_out" 2>/dev/null)"
+# The point of redact-into-a-temp-then-move: a refused write rotates nothing, so the previous
+# evidence is still at its own name rather than surviving only as `-superseded-`.
+check "and nothing was rotated out from under the previous evidence" "$before" \
+    "$(ls -1 "$EV" | wc -l | tr -d ' ')"
+
+# Refusals that must happen before anything is touched.
+: > "$w_report"
+w_rc=0; xcv_stage_write_evidence "$w_report" "$w_out" 3>/dev/null >/dev/null 2>/dev/null || w_rc=$?
+check "an empty run log is refused" "1" "$w_rc"
+printf 'x\n' > "$w_report"
+check "a missing run log is refused" "1" \
+    "$(xcv_stage_write_evidence "$EV/no-such-report" "$EV/never.txt" 3>/dev/null >/dev/null 2>/dev/null; echo $?)"
+check "a refused write leaves no file behind" "0" "$([ -e "$EV/never.txt" ] && echo 1 || echo 0)"
+
+# The rc is the same on both sides of this guard's deletion — without it, `grep -cF ""` matches
+# every line and the write is refused anyway. So an rc assertion here would pass whether the guard
+# exists or not; deleting it was measured as surviving a 100-check run. The REASON on fd 3 is the
+# only observable difference, and message accuracy is the whole point of the guard: "the account
+# name is in the output (1 line(s))" names the wrong cause.
+w_msgs=$(SUDO_USER="" xcv_stage_write_evidence "$w_report" "$EV/nouser.txt" 3>&1 >/dev/null 2>/dev/null)
+w_rc=0; SUDO_USER="" xcv_stage_write_evidence "$w_report" "$EV/nouser.txt" 3>/dev/null >/dev/null 2>/dev/null || w_rc=$?
+w_why=no; case "$w_msgs" in *"SUDO_USER is empty"*) w_why=yes ;; esac
+check "an empty SUDO_USER is refused" "1" "$w_rc"
+check "and refused BY NAME, not reported as an account-name leak" "yes" "$w_why"
+check "and it wrote nothing" "0" "$([ -e "$EV/nouser.txt" ] && echo 1 || echo 0)"
+
+# The donor gate, symmetric with the account-name gate. Reached by defeating the redactor rather
+# than the gate: with the redactor unarmed the UUID passes through, and the gate is what stops it.
+unset XCV_REDACT_ALSO_LABEL XCV_REDACT_ALSO_UUID
+XCV_DONOR_UUID=8B2F1A44-0000-4000-8000-000000000001
+printf 'donor UUID %s\n' "$XCV_DONOR_UUID" > "$w_report"
+w_rc=0; xcv_stage_write_evidence "$w_report" "$EV/leakuuid.txt" 3>/dev/null >/dev/null 2>/dev/null || w_rc=$?
+check "an unredacted donor UUID is refused even when the redactor missed it" "1" "$w_rc"
+check "and it wrote nothing" "0" "$([ -e "$EV/leakuuid.txt" ] && echo 1 || echo 0)"
+unset XCV_DONOR_UUID
+
+# The donor identity, end to end through the real writer with the donor UNMOUNTED — the state an
+# E6b run is actually in when it writes. `E6BDONOR` is absent from the fixture volumes directory.
+XCV_DONOR_LABEL=E6BDONOR
+XCV_DONOR_UUID=8B2F1A44-0000-4000-8000-000000000001
+xcv_stage_arm_redaction
+printf 'donor /Volumes/E6BDONOR UUID 8B2F1A44-0000-4000-8000-000000000001\n' > "$w_report"
+xcv_stage_write_evidence "$w_report" "$EV/donor.txt" 3>/dev/null >/dev/null 2>/dev/null
+check "an unmounted donor is redacted by the real writer" \
+    "donor /Volumes/<vault> UUID <vault-uuid>" "$(cat "$EV/donor.txt" 2>/dev/null)"
+unset XCV_REDACT_ALSO_LABEL XCV_REDACT_ALSO_UUID
+
+rm -rf "$EV"; rm -f "$w_report"
 
 printf '\n%d checks, %d failures\n' "$run" "$fails"
 [ "$fails" -eq 0 ]
