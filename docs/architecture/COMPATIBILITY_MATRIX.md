@@ -971,9 +971,11 @@ the list in the entry above.
 
 ### E6c — mounting over a CoreSimulator cache path — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
 
-Three runs, 2026-09-21 and 2026-09-22, as root, against **disk-image** volumes.
+Four runs, 2026-09-21 and 2026-09-22, as root, against **both volume classes**: the operator's
+physical external donor (`/dev/disk9s1` — cells A, B1, B2, B3) and an `hdiutil` sparse image
+(cells B0, E0, E, E0b).
 Evidence: `research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`
-plus its two `-superseded-` predecessors and
+plus its three `-superseded-` predecessors and
 `e6b-mount-stub-cryptex-FAILED-macos26.7-25G229-xcode26.5-x86_64.txt`.
 
 **Only one path was ever tested: `/Library/Developer/CoreSimulator/Cryptex/Caches`.**
@@ -991,25 +993,40 @@ level up and is refused at the cache path. Measured on the target and all negati
 `rootless.conf` entry for `/Library/Developer`. SIP enabled, normally. `drwxr-xr-x root:admin`.
 The cause is unidentified and is the same unexplained shape as E4b's `images.plist` refusal.
 
-**The `diskutil` row is weaker than it looks, and the evidence says so.** Both probe-path
-refusals captured their own `diskarbitrationd` failure (`status code 0x0000004D`); both
-cache-path attempts captured **none** — their log windows hold only earlier cells' events. The
-refusal is therefore not shown to have been a mount refusal at all; it may be a client-side
-rejection before the request reaches `diskarbitrationd`. Mount history and mount depth *are*
+**The `diskutil` row is weaker than it looks, and the evidence says so — reproduced 2026-09-22.**
+Both probe-path refusals captured their own `diskarbitrationd` failure (`status code
+0x0000004D`); both cache-path attempts added **nothing of their own** — their log
+windows hold only earlier cells' events. The refusal is therefore not shown to have been a mount refusal at all; it may be
+a client-side rejection before the request reaches `diskarbitrationd`. The fourth run reproduces
+this: C's `diskarbitrationd` block is **byte-identical to B2's** (as in runs 2 and 3), both its
+`0x4D` lines predate C, and nothing from C's own attempt appears. C's verdict is void, so the
+claim rests on **E** — runs 3 and 4 — and the property is *attribution*, not naming: E's window
+holds 35 records naming its own device, and nothing in it postdates E0's teardown. Cause: `log show --last 60s`
+runs after the cell with no start sentinel, so a refused cell replays its predecessors — **no
+per-cell log claim in any E6c file is safe without diffing the block against its predecessor's.** Mount history and mount depth *are*
 excluded for that volume: it mounted at the probe immediately before the refused attempt and
 again immediately after.
+
+**Three things the series has and never stated.** The kernel takes the donor at the control
+directory where DiskArbitration will not — cell A mounted `/dev/disk9s1` there in the same session
+that refused B1 and B2, which narrows — but does not foreclose — reading `0x0000004D` as
+`mount_apfs`'s exit status passing through: direct invocation accepts the donor there, while DA's
+internal mount is a different invocation, and the resulting flags differ. `noowners` is excluded as the donor-versus-image differentiator: the donor mounts
+`noowners` and so does B0's accepted image. And DA does not refuse the donor everywhere — see the
+next paragraph, which is the same fact stated as a puzzle.
 
 **Side observation.** `diskutil mount` with **no** `-mountPoint` mounted the donor at
 DiskArbitration's own choice of location, while every `-mountPoint` attempt with that volume was
 refused — including at the throwaway directory, where a different image of the identical device
 class succeeded. Unexplained, non-blocking, recorded so it is not rediscovered.
 
-**A `mkdir` inside the hierarchy failed under `sudo` (2026-09-22, one observation, errno not
-captured).** The run-created in-hierarchy control below could not be built:
+**A `mkdir` inside the hierarchy is refused for root (2026-09-22, two runs, errno
+captured on the second).** The run-created in-hierarchy control below could not be built:
 `mkdir -p /Library/Developer/CoreSimulator/xcv-e6c-hprobe` failed under `sudo` and E6c's own guard
-stopped the run. The script at the time discarded its report on that exit, so what survives is
-"it failed" and not the errno; E6c now records the error text as cell H0 and continues, so the
-next machine produces the artifact this one lost. Four `mkdir` probes run **as a non-root user**
+stopped the run. The script at the time discarded its report on that exit, so that run left "it
+failed" and not the errno; E6c now records the error text as cell H0 and continues, and the next
+run captured it: **`Operation not permitted`** (the run records `strerror`, so `EPERM` is an
+inference, safe on Darwin). Four `mkdir` probes run **as a non-root user**
 separate two levels: `/Library/Developer/` gives `EACCES` and yields to `sudo` (the
 out-of-hierarchy probe mounts in every run), while `/Library/Developer/CoreSimulator/`,
 `…/Caches/` and `…/Cryptex/` each give `EPERM`; the probes recorded errno only, not mode or
@@ -1025,12 +1042,15 @@ substitution may not be waved through. Issue #29 stays open.
 
 - Not measured: `…/CoreSimulator/Caches/dyld`, by either mechanism — H14's path and the issue
   #24 guard's path; whether `$TARGET` was empty at the time of the attempts (the probe is
-  guarded and recorded, the target is not); a *mount* at a matched control directory inside
+  guarded and recorded, the target is not — **closed 2026-09-22: `entries: 0` at run start,
+  `links=2` at cell time, which excludes child directories and not regular files**); a *mount* at a matched control directory inside
   `/Library/Developer/CoreSimulator/` — the run-created form (cells H1/H2) cannot be built here,
   but the question is still open against a **pre-existing** empty directory in the hierarchy
   other than the target (using `Cryptex/Caches` would collapse H1 into D), and that cell is not
-  written; root's errno for the refused `mkdir`; which
-  mechanism returns it, and whether it refuses every write in the hierarchy or only directory
+  written; which mechanism returns the `mkdir` refusal, and whether it refuses every write in the hierarchy or only directory
   creation; the DiskArbitration API called directly rather than through
-  `diskutil`; **physical external media — every volume in the series was a disk image**; Apple
-  Silicon; any macOS other than 26.7 (25G229).
+  `diskutil`; Apple Silicon; any macOS other than 26.7 (25G229). **Physical external media is
+  *not* an open gap here** — the earlier text said every volume in the series was a disk image and
+  that was wrong: A, B1, B2 and B3 all ran against the operator's physical external donor, which
+  the script's own comments say plainly. What remains untested on physical media is a physical
+  yank.

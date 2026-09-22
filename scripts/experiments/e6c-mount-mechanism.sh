@@ -639,6 +639,16 @@ fi
 # then unmounts so the next cell starts clean. Records PASS/FAIL into the matrix summary.
 cell() {
     local label="$1" dev="$2" dest="$3"; shift 3
+    # **Captured BEFORE the command, and this is not a detail.** The log window used to be
+    # `log show --last 60s` taken after the cell, which cannot attribute anything to the cell: a
+    # refused cell simply replays its predecessors' events. Cell C's block came out byte-identical
+    # to B2's on 2026-09-21 and again on 2026-09-22, and two readings were built on those inherited
+    # lines and retracted. `date` has one-second granularity, so an event in the same second as the
+    # cell's start can still be inherited — the window is bounded, not exact. `%z` is carried
+    # because a naked local timestamp inside a DST fall-back hour is ambiguous, and resolving it
+    # to the earlier occurrence would silently widen the window by an hour while the header still
+    # claimed one second. `log show` accepts the offset form.
+    local cell_log_start; cell_log_start="$(date '+%Y-%m-%d %H:%M:%S%z')"
     echo
     echo "==================== $label ===================="
     xcv_run "$label" "$@"
@@ -748,16 +758,57 @@ cell() {
         # names every volume it touched — including ones NOT mounted at redaction time, which
         # `xcv_redact` cannot see by its own stated limit, in a tracked and published file.
         if [ "$is_da" = 1 ]; then
-            echo "## diskarbitrationd, last 60s, filtered to this run's disks (see ADR-0005: an"
-            echo "## unfiltered dump would name volumes the redactor cannot detect)"
+            echo "## diskarbitrationd since $cell_log_start (this cell's own start), filtered to"
+            echo "## this run's disks (see ADR-0005: an unfiltered dump would name volumes the"
+            echo "## redactor cannot detect). Three limits, and two of them fabricate ABSENCE,"
+            echo "## which is the direction a negative claim here would want:"
+            echo "##   - one-second granularity: an event in the same second as the start can be"
+            echo "##     inherited from the previous cell (widens; safe direction);"
+            echo "##   - a backward clock step between capture and read puts the bound in the"
+            echo "##     future and drops this cell's own events;"
+            echo "##   - a record emitted just before the read may not be in the store yet."
+            echo "## And the window bounds event TIMESTAMPS, not causality: an asynchronously"
+            echo "## emitted record from the previous cell's teardown lands here. Pair records to"
+            echo "## their solicitation id to be sure; a start sentinel cannot fix that one."
             # Captured first, then reported. `cmd | grep | tail || echo` takes the pipeline's
             # status from `tail`, which is 0 on empty input — so the fallback text never printed
             # and "nothing matched" looked identical to "the capture never ran".
-            local da_log
-            da_log="$(log show --last 60s --style compact --predicate 'process == "diskarbitrationd"' 2>/dev/null \
-                | grep -E "$(xcv_re_escape "${XCV_DONOR_DISK:-__none__}")|$(xcv_re_escape "${dev#/dev/}")" \
-                | tail -40)"
-            if [ -n "$da_log" ]; then printf '%s\n' "$da_log"; else echo "   (no matching diskarbitrationd lines)"; fi
+            # **`log show`'s own status, before any filtering.** `--start` used to be the literal
+            # `--last 60s`, which could not be malformed; it is now computed, so `log show` can
+            # exit 64 on a bad or empty value. With stderr discarded and the status taken from
+            # `tail`, that produced "(no matching diskarbitrationd lines)" — byte-identical to a
+            # genuinely empty window, and *that* line is the entire evidence for "the cache path
+            # produces no DiskArbitration transaction". A silent failure here manufactures the
+            # claim. So: capture with its own rc, and say so when it fails.
+            local da_log da_raw da_rc=0
+            [ -n "$cell_log_start" ] || echo "!!!! cell_log_start is empty; the window is not bounded."
+            da_raw="$(log show --start "$cell_log_start" --style compact --predicate 'process == "diskarbitrationd"' 2>&1)" || da_rc=$?
+            if [ "$da_rc" != 0 ]; then
+                # `grep -m1 '^log:'` before `head -1`: `log show` writes its stdout header first,
+                # so `head -1` returns the invariant `Timestamp Ty Process[PID:TID]` line and
+                # drops the actual diagnostic whenever the command failed *after* producing
+                # output. Bounded, because a diagnostic can quote a path and it is the one thing
+                # here that bypasses the disk filter.
+                local da_why
+                da_why="$(printf '%s\n' "$da_raw" | grep -m1 '^log:' || printf '%s' "$da_raw" | head -1)"
+                echo "   !! log show FAILED, rc=$da_rc: $(printf '%s' "$da_why" | cut -c1-200)"
+                echo "   !! This is NOT an empty window. Do not read absence from this cell."
+                da_log=""
+            else
+                da_log="$(printf '%s\n' "$da_raw" \
+                    | grep -E "$(xcv_re_escape "${XCV_DONOR_DISK:-__none__}")|$(xcv_re_escape "${dev#/dev/}")" \
+                    | tail -40)"
+                # **The unfiltered count, and it is the only in-band detector for two of the three
+                # limits above.** A backward clock step puts the bound in the future, and that
+                # returns rc=0 with a header-only output — rendering as the most reassuring line in
+                # the file for the one case that fabricates absence. `log show` always emits its
+                # header, so `raw lines: 1` means DA logged nothing at all in the window (clock
+                # step, or store lag) while `raw lines: 400` with nothing filtered means DA was
+                # busy and none of it was ours. Only the second licenses a negative.
+                echo "   raw lines in window: $(printf '%s\n' "$da_raw" | wc -l | tr -d ' ') (unfiltered; 1 = header only, DA logged nothing)"
+                if [ -z "$da_log" ]; then echo "   (no matching diskarbitrationd lines; log show rc=0)"; fi
+            fi
+            if [ -n "$da_log" ]; then printf '%s\n' "$da_log"; fi
             echo
         fi
     fi

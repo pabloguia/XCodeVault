@@ -877,6 +877,111 @@ And E0b is the image's *fourth* attempt, one deeper than E rather than at E's ex
 inference against a monotone-in-depth rule survives a fortiori, but the sentence claimed
 precision it did not have.
 
+### E6c, fourth run, 2026-09-22: the errno arrives, and the third run's weakest claim gets stronger
+
+Evidence: `docs/research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`
+(three `-superseded-` predecessors sit beside it). The matrix reproduces exactly — B0, E0, E0b, B3
+and A MOUNTED; E, B1, B2 and C REFUSED; C VOID again because B1 refused; same cell order, same
+donor state.
+
+**H0, with an artifact this time.** `mkdir -p /Library/Developer/CoreSimulator/xcv-e6c-hprobe`
+under `sudo` was refused, **reported as `Operation not permitted`** (the run records `strerror`,
+not the numeral; `EPERM` is the safe inference on Darwin and is an inference). That is the
+measurement the aborting run destroyed and the one its write-up asserted without having: root —
+the header records `Runner: root (uid 0)` — at the top level of the hierarchy, macOS 26.7, one
+machine. The `Caches/` and `Cryptex/` rows in the table above are still non-root, and this is
+still a result about creating a directory, not about mounting one.
+
+**The target was empty at run start.** `cache target: /Library/Developer/CoreSimulator/Cryptex/Caches
+(entries: 0)`, recorded by the run rather than inferred from a different day, so a non-empty mount
+point — the textbook DiskArbitration refusal, and the obvious explanation for diskutil's bare
+failure template — is excluded. Partially at cell time: the re-checks before E and before C report
+`links=2`, which excludes child *directories* and not regular files.
+
+**Cell E's cache-path refusal leaves no record of its own, and that reproduces.** I first read this run as falsifying the third run's version of the claim, because C's log
+block carries two `unable to mount … (status code 0x0000004D)` lines. It does not. **C's
+`diskarbitrationd` block is byte-identical to B2's**, and both `0x4D` lines are timestamped before
+C ran — `10:24:42.109` is B1's own failure and `10:24:44.276` is B2's, both at the *control
+directory*. Nothing after `44.276` appears in C's window at all. The harness explains it:
+`log show --last 60s` runs *after* the cell with no start sentinel, so every refused cell replays
+its predecessors. The third run shows the same shape, its C block byte-identical to its B2 block.
+
+So the honest statement is the third run's, upgraded rather than retracted:
+
+- **Control-directory cells produce a DA solicitation and a `0x0000004D` failure** (B1, B2).
+- **Cell E's cache-path attempt adds no record to its own window.** Note the property carefully:
+  it is *attribution*, not naming. E's window holds 35 records naming `disk11s1` — including the
+  dissent discussed below — and the finding is that **nothing appears after E0's teardown at
+  `10:24:37.478`**, so every line present is attributable to B0, E0 or attach time. E is what the
+  claim rests on, because E has a working control in the same run. C is *consistent* with it and is
+  **void**: reading C is the mistake recorded below. Reproduced for E in runs 3 and 4 (both
+  2026-09-22); C's own-window emptiness reproduces in runs 2, 3 and 4 (2026-09-21 and 2026-09-22 —
+  run 1 predates the per-cell capture entirely and has no `diskarbitrationd` block at all, its
+  cells being A, B and C with no B1/B2 split). The refusal is not shown to be a mount refusal; it may be a client-side rejection
+  before the request reaches `diskarbitrationd`.
+
+**Cell E contributed nothing to its own window either.** It holds two complete
+`mounted disk … success` / `unmounted disk … success` cycles for E's device, and there are exactly
+two prior successful cells on that device — B0 and E0. The cycles are theirs. E left no trace, and
+the absence is the finding.
+
+**The one line in E's window that looks like an answer.** `dispatched response, kind = disk mount
+approval, disk = /dev/disk11s1, dissented, status = 0xF8DA000A` — `kDAReturnNotReady`, per
+`DADissenter.h` in the installed SDK. It is not E's refusal, and the reason matters, because my
+first reason was wrong. Not "it precedes E's solicitation by 600 ms": the solicitation 600 ms
+later is *B0's*, and E has no solicitation for anything to precede. The reason is the timestamps: the dissent at `35.294`
+precedes even B0's own cycle, let alone E's, and it sits 5 ms after
+`diskimages-helper … kind = disk claim` / `claimed disk … success`, where an attach-time
+auto-mount approval belongs. It reproduces at that same position in the third run, 4 ms after its
+own claim. Two runs, attach-time, before any cell.
+
+**What C's VOID does and does not permit.** A log record is an observation and a verdict is an
+inference, so in principle a void cell's log can still be read. That distinction did not apply
+here and reaching for it is how the mistake above happened: the records imported into C were B1's
+and B2's — the control-directory failures whose refusal is precisely what voided C. The run's own
+pre-registered rule says it plainly: *"this DONOR is what diskutil will not take. Not a statement
+about the cache path. Do not read C."*
+
+**Three things in this run's evidence worth more than the headline.**
+
+1. **The kernel takes the donor at the control directory where DiskArbitration will not.**
+   `mount_apfs -o nobrowse /dev/disk9s1 /Library/Developer/xcv-e6c-probe` MOUNTED (cell A) at the
+   same directory, on the same donor, in the same session where `diskutil mount -mountPoint` was
+   refused twice (B1, B2). A clean mechanism split. It also narrows one tempting
+   reading: `mount_apfs` invoked *directly* accepts the donor at that directory, so `0x0000004D`
+   is not an unconditional property of that donor-plus-directory. It does not foreclose the code
+   originating inside DA's own mount — a different invocation in a different context, and the
+   resulting flags differ (`local, journaled, nobrowse` for A against `local, nodev, nosuid,
+   journaled, noowners` for the DA mounts).
+2. **`noowners` is excluded as the donor-versus-image differentiator.** The donor reports
+   `owners on donor: Disabled` and mounts `noowners` — but B0's accepted image mounts `noowners`
+   too. The control is in the file and was never stated.
+3. **DiskArbitration does not refuse the donor "everywhere".** B3 — `diskutil mount` with no
+   `-mountPoint` — MOUNTED the donor at DA's own choice of location. DA declines that volume at
+   *any mount point we choose*, which is a narrower and stranger claim.
+
+**The pre-registered rule that fired and was not honoured, for the second time.** `E REFUSED, E0
+AND E0b BOTH MOUNTED` is written in the legend as closing H14. It fired again. It is again not
+honoured, for the reason recorded at the third run: every cell used `Cryptex/Caches` and H14 is
+about `Caches/dyld`. Noted here so the next reader does not re-trip it.
+
+**The harness defect this exposes, and the fix, which landed with this write-up.** A rolling
+`log show --last 60s` taken after the cell cannot attribute anything to the cell. Two readings have
+now died on it. `cell()` now captures a wall-clock timestamp *before* the command and passes
+`log show --start`; a `logger` sentinel would be more precise still, but `log show --start` takes
+only a wall-clock string, so "monotonic" was never available through this interface. Three limits
+survive and are printed in every report — one-second granularity (widens the window, the safe
+direction), a backward clock step (drops the cell's own events), and the store's own lag. And the
+bound is on event timestamps rather than causality, so an asynchronously emitted record from the
+previous cell's teardown still lands here; only pairing records to their solicitation `id` fixes
+that, and a sentinel would not.
+
+**Read the fourth run's blocks with that in mind: they predate the fix.** Their own headers say
+`## diskarbitrationd, last 60s`. Every log claim in this section rests on the unattributable form,
+which is why C's identity with B2's had to be established by diffing the blocks rather than by
+trusting either. **No per-cell log claim in any E6c evidence file written before this change is
+safe without that diff.**
+
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
@@ -931,7 +1036,9 @@ What remains, in order:
    not test.
 
 3. Record `$TARGET`'s entry count, and guard it as the probe is guarded.
-4. Why diskutil produces no DiskArbitration record at the cache path — a direct
+4. Why diskutil produces no DiskArbitration record at the cache path — **reproduced**: for E in
+   runs 3 and 4 (both 2026-09-22), and for C, whose verdict is void, in runs 2 through 4. So it is
+   not an artefact of one run. A direct
    `DADiskMountWithArguments` would say whether the API refuses or diskutil does.
 5. The physical-yank variant, which H14 insists on and which none of this touches.
 

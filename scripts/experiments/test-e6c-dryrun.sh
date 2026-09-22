@@ -352,6 +352,14 @@ echo 1 > "$WORK/rc.mount_apfs"        # every mount_apfs refuses
 echo 1 > "$WORK/rc.diskutil.mount"    # and so does every diskutil mount
 out="$(run_e6c)"
 check "an all-refused run still publishes a matrix" "yes" "$(contains "matrix" "$(evidence)")"
+# The capture actually runs here, and with the bounded window. This is the behavioural half of
+# the source checks below: a refused cell reaches the DA-capture branch, so `log`'s argv proves
+# what was asked for rather than what the source says.
+check "a refused cell asks log show for a bounded window" "yes" \
+    "$(grep -qE 'log show --start 20[0-9][0-9]-' "$WORK/calls" && echo yes || echo no)"
+check "and never asks for a rolling one" "no" \
+    "$(grep -q 'log show.*--last' "$WORK/calls" && echo yes || echo no)"
+
 check "and hands the donor back by UUID" "yes" \
     "$(contains "diskutil mount AAAA-BBBB-CCCC" "$(calls)")"
 # An all-refused run is a COMPLETE run — every cell answered. What must not pass silently is
@@ -359,6 +367,46 @@ check "and hands the donor back by UUID" "yes" \
 # pasted into HYPOTHESES.md.
 check "and marks cell C void because its control refused" "yes" \
     "$(contains "CELL C IS VOID" "$(evidence)")"
+# The other side of the fail-vs-empty distinction, behaviourally. Here the `log` stub exits 0
+# with no output, so the rc=0-empty line is actually produced; asserting it means both sides are
+# verified by a run rather than one side by a run and the other by a grep of the source.
+check "an empty window that succeeded says so" "yes" \
+    "$(contains "log show rc=0" "$(evidence)")"
+# The unfiltered count is the only in-band detector for a clock step or store lag, both of which
+# return rc=0 with a header-only window. Deleting it survived every other check.
+check "and reports the unfiltered line count beside it" "yes" \
+    "$(contains "raw lines in window:" "$(evidence)")"
+
+# ---- a capture that FAILS must not read as an empty window --------------------------------------
+# The whole point of the change: `(no matching diskarbitrationd lines)` is the evidence for "the
+# cache path produces no DiskArbitration transaction", so a `log show` that merely broke must not
+# produce that line. A source-text check cannot see this — it greps the failure message, which a
+# mutant leaves in place while making the branch unreachable. That mutant survived until this
+# scenario existed. **Placed after `cleanup-on-abort` finishes, not inside it**: the first version
+# was spliced in before that scenario's last two checks, and `scenario()` wipes `calls` and the
+# evidence dir — so the donor-hand-back and C-void assertions silently began measuring this run
+# instead, and passed, because neither depends on `rc.log`.
+scenario log-show-fails
+donor_ok
+echo 1 > "$WORK/rc.mount_apfs"
+echo 1 > "$WORK/rc.diskutil.mount"
+echo 64 > "$WORK/rc.log"              # log show exits 64 on a malformed --start
+# Two lines, in this order, because that is what `log show` really does: it writes its stdout
+# header BEFORE any diagnostic, so on a failure that produced output `head -1` returns the header
+# and silently drops the reason. With a one-line stub, `head -1` and `grep -m1 '^log:'` are
+# indistinguishable and the mutant reverting to `head -1` survives — which it did.
+printf 'Timestamp               Ty Process[PID:TID]\nlog: Failed conversion of '"''"' using format %s\n' "'%Y-%m-%d'" > "$WORK/out.log"
+out="$(run_e6c)"
+check "a failed log show is reported as a failure" "yes" \
+    "$(contains "log show FAILED, rc=64" "$(evidence)")"
+check "and is NOT reported as an empty window" "no" \
+    "$(contains "no matching diskarbitrationd lines" "$(evidence)")"
+check "and the reader is told not to read absence from it" "yes" \
+    "$(contains "Do not read absence from this cell" "$(evidence)")"
+check "and the reason is carried" "yes" \
+    "$(contains "Failed conversion" "$(evidence)")"
+check "and it is the reason, not log's own stdout header" "no" \
+    "$(grep -q 'log show FAILED, rc=64: Timestamp' <<<"$(evidence)" && echo yes || echo no)"
 
 # mounts_succeed — a mount ADDS to the mount table and an unmount removes from it. Without this
 # every cell reads REFUSED, because the script verifies a mount by grepping the table for
@@ -875,6 +923,32 @@ out="$(run_e6c)"
 check "a probe dirtied after its guard is not mounted over" "no" \
     "$(grep -q 'mount_apfs -o nobrowse /dev/disk9s1 .*dryrun-hprobe-parent/hprobe' "$WORK/calls" && echo yes || echo no)"
 check "and the operator is told why" "yes" "$(contains "no longer empty" "$out")"
+
+# The rolling-window defect. `log show --last 60s` after the cell makes a refused cell replay its
+# predecessors: C's block came out byte-identical to B2's in three runs, and two readings were
+# built on the inherited lines and retracted. Pinned at the source AND behaviourally — an earlier
+# version of this comment claimed the stub could not catch it, which was wrong: `log` is stubbed
+# and every stub records its argv, so `cleanup-on-abort` (where every mount refuses) drives the
+# refused branch and the capture with it.
+check "the DA window is bounded by the cell's own start" "1" \
+    "$(grep -c 'log show --start "\$cell_log_start"' ./e6c-mount-mechanism.sh | tr -d ' ')"
+# Comment lines excluded on purpose: the comment explaining the defect names `log show --last`,
+# and the first version of this check matched its own documentation.
+# `--last` ANYWHERE on a `log show` line, not the adjacency `log show --last`: appending
+# `--last 60s` after `--start` restores the defect and the adjacency grep cannot see it.
+check "and no log show carries --last at all" "0" \
+    "$(grep -vE '^[[:space:]]*#' ./e6c-mount-mechanism.sh | grep 'log show' | grep -c -- '--last' | tr -d ' ')"
+# The format too: `date '+%Y-%m-%d'` is also accepted by `log show` and restores a 24-hour window.
+check "the timestamp carries time and offset, not just the date" "1" \
+    "$(grep -c "date '+%Y-%m-%d %H:%M:%S%z'" ./e6c-mount-mechanism.sh | tr -d ' ')"
+# The failure this whole change is about: a capture that fails must not read as an empty window,
+# because an empty window IS the evidence for "the cache path produces no DA transaction".
+check "a failed log show is distinguished from an empty window" "1" \
+    "$(grep -c 'log show FAILED, rc=' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and the empty case says the capture succeeded" "1" \
+    "$(grep -c 'no matching diskarbitrationd lines; log show rc=0' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "the start is captured before the command runs, not after" "yes" \
+    "$(awk '/cell_log_start=/{c=NR} /xcv_run "\$label"/{r=NR} END{print (c>0 && r>0 && c<r) ? "yes" : "no"}' ./e6c-mount-mechanism.sh)"
 
 printf '\n%d checks, %d failures\n' "$run" "$fails"
 [ "$fails" -eq 0 ]

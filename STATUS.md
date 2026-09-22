@@ -252,7 +252,28 @@ is done. The post-publication issue backlog replaced it._
    a shadow `CoreSimulator` on a machine without Xcode — rule 7, attempted twice now), and the
    symlink/mounted/empty revalidation immediately before H1, since the startup guard has expired
    five mount cycles earlier. Deleting that revalidation survived mutation until a scenario
-   existed that dirties the probe in between; 94 checks now.
+   existed that dirties the probe in between.
+
+   **The fourth run, later on 2026-09-22, produced the errno — and my first reading of it was
+   wrong in the way this whole series keeps being wrong.** `mkdir -p` under `sudo` inside the
+   hierarchy is refused, reported as **`Operation not permitted`**: the artifact the aborting run
+   destroyed, now cell H0. The target was measured empty by the run itself (`entries: 0` at run
+   start; `links=2` at cell time, which excludes child directories and not regular files), which
+   excludes the textbook DiskArbitration refusal. Then I read cell C's log block as falsifying
+   the third run's "neither cache-path cell captured a `diskarbitrationd` record" — it carries
+   two `0x0000004D` lines. **C's block is byte-identical to B2's**, both lines predate C, and the
+   cause is the harness: `log show --last 60s` runs after the cell with no start sentinel, so a
+   refused cell replays its predecessors. The third run's sentence was correct and the fourth run
+   reproduces it; I retracted a true sentence using the artifact that confirms it. Two readings
+   have now died on that rolling window, and **the fix landed with this write-up**: each cell's
+   window is `log show --start` from a timestamp captured before the command, with the capture's
+   own exit status reported so a failed capture can no longer read as an empty one — an empty
+   window being exactly the evidence for "the cache path produces no DA transaction". The fourth
+   run's blocks predate that fix, so no per-cell log claim in any E6c file written before it is
+   safe without diffing the block against its predecessor's. 107 checks now, and the mutant that
+   forced the last of them was one of my own new checks failing to die: a source-text grep for the
+   failure message survives a mutant that leaves the message in place and only makes its branch
+   unreachable.
 
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
