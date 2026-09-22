@@ -880,9 +880,19 @@ precision it did not have.
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
-1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path.
+1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **Attempted
+   2026-09-22 and refused by the harness's own guard**: the path holds 7.1 GB (one entry,
+   `25G229`, the current build's cache), and mounting over a non-empty directory would hide it.
+   That refusal is correct and it is also a finding about testability — H14's own path cannot be
+   probed by mounting while the cache is populated, which is its normal state. Reaching it needs
+   the cache cleared first, at the cost of a rebuild on this machine's shared simulators, and
+   that is the operator's call rather than an experiment's. Note what it does *not* mean: the
+   product's own relocation flow would empty the path before mounting, so the scenario is not
+   unreachable in principle — only untestable without paying that cost. `Cryptex/Caches` was
+   chosen originally for exactly this reason: it was empty.
 2. A matched control *inside* the hierarchy: a run-created, empty directory under
-   `/Library/Developer/CoreSimulator/`. The current probe differs from the target in ownership,
+   `/Library/Developer/CoreSimulator/`. **This is now cells H1/H2 and needs no cache cleared** —
+   it runs under the `cryptex` target and is the next thing to measure. The current probe differs from the target in ownership,
    creator, depth, an xattr and emptiness as well as location; this is the one cheap cell that
    separates "this directory" from "this hierarchy".
 3. Record `$TARGET`'s entry count, and guard it as the probe is guarded.
