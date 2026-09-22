@@ -227,7 +227,11 @@ donor_ok() {
     printf '/dev/disk9s1 on /Volumes/DRYDONOR (apfs, local)\n' > "$WORK/out.mount"
     printf '   Device Node:               /dev/disk9s1\n   File System Personality:   APFS\n   Volume UUID:               AAAA-BBBB-CCCC\n   Part of Whole:             disk9\n   Mounted:                   Yes\n' \
         > "$WORK/out.diskutil.info._Volumes_DRYDONOR"
-    printf '   Part of Whole:             disk9\n' > "$WORK/out.diskutil.info._dev_disk9s1"
+    # Keyed on the DEVICE, because the script now asks `diskutil info /dev/disk9s1` for the
+    # device class rather than `diskutil info /Volumes/...` — which returned nothing on a real
+    # run, since the donor is unmounted by then, while this stub answered a mount path forever.
+    printf '   Part of Whole:             disk9\n   Protocol:                  Disk Image\n   Device Location:           External\n   Removable Media:           Fixed\n   Owners:                    Disabled\n   Virtual:                   Yes\n' \
+        > "$WORK/out.diskutil.info._dev_disk9s1"
     # `/` on a DIFFERENT physical disk, or the boot-disk guard refuses — correctly — and the run
     # never reaches a cell.
     printf '   Part of Whole:             disk1\n' > "$WORK/out.diskutil.info__"
@@ -264,6 +268,10 @@ check "a failed hdiutil create says so on the terminal" "yes" \
 check "and records NOT MEASURED in the published matrix" "yes" \
     "$(contains "NOT MEASURED (hdiutil create failed)" "$(evidence)")"
 check "and never attaches" "no" "$(contains "hdiutil attach" "$(calls)")"
+# E's row must appear even here — an arm two levels above the recorder in an earlier version,
+# which produced a matrix stamped `complete` with no E row at all.
+check "and E is still recorded in the matrix" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: NOT MEASURED" "$(evidence)")"
 check "and still publishes evidence" "1" "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
 # The two markers that stop a fabricated artifact from reading as real evidence. Both were
 # added and neither was asserted — deleting either was silent, which is the same shape as the
@@ -365,6 +373,11 @@ case "${1:-}" in
         for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; done
         prev=""
         for a in "$@"; do [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        # No `-mountPoint` is B3: DA picks the location, so the table gets /Volumes/<name>.
+        # Without this, B3 never mounts in any scenario and its ANYWHERE handling — the branch
+        # that stops "DA chose the place" from reading as MOUNTED ELSEWHERE — is never
+        # exercised. It was a surviving mutant until this line existed.
+        [ -n "$d" ] && [ -z "$t" ] && t="/Volumes/DRYDONOR"
         [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
         ;;
     unmount|unmountDisk) : > "$WORK_DIR/out.mount" ;;
@@ -454,6 +467,154 @@ check "the stale leftover is not selected" "no" "$(contains "volume: /dev/disk99
 check "this run's own volume is" "yes" "$(contains "volume: /dev/disk21s1" "$(evidence)")"
 check "and B0 is measured rather than falsely refused" "no" \
     "$(contains "B0. E1b replicated, diskutil at the control dir (sparse image): REFUSED" "$(evidence)")"
+
+# ---- cell E runs only behind its control ------------------------------------------------------
+# E is the decisive cell after the 2026-09-21 run, and it means nothing without B0: it asks
+# whether DA reaches the cache path using the one volume DA has agreed to mount.
+scenario cell-e-with-control
+donor_ok
+attached disk20s1
+mounts_succeed
+out="$(run_e6c)"
+# The matrix ROW, not the `====` section header: the header prints as soon as `cell` is called,
+# so it passes even if the row is never emitted, and the row is what travels into HYPOTHESES.md.
+check "E runs and lands in the matrix when its controls hold" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: MOUNTED" "$(evidence)")"
+# Two listings per cell: one the instant the mount lands, one immediately before teardown. The
+# second is the only record of what the window produced, and for cell E it is the only one that
+# survives at all — its volume is detached and its backing file deleted.
+check "each cell records the volume root after its window" "yes" \
+    "$(contains "root after the window" "$(evidence)")"
+# B3 — the plain mount, which the run was already performing in cleanup without recording it.
+check "B3 asks DA for its own choice of location" "yes" \
+    "$(contains "B3. diskutil with NO -mountPoint" "$(evidence)")"
+check "and does so without a mount point" "yes" \
+    "$(grep -qE 'diskutil mount /dev/disk9s1$' "$WORK/calls" && echo yes || echo no)"
+# MOUNTED, not "MOUNTED ELSEWHERE": DA choosing the location is B3's entire point, and the cell
+# has to read that as success rather than as the stray-mount failure it otherwise looks like.
+# Two assertions, because `MOUNTED ELSEWHERE, not at ANYWHERE` CONTAINS `: MOUNTED` — the
+# substring check passed on the mutant that broke exactly this behaviour. Positive and negative
+# together are what pin it.
+check "and a DA-chosen location reads as MOUNTED" "yes" \
+    "$(contains "B3. diskutil with NO -mountPoint (the donor, DA's own choice of location): MOUNTED" "$(evidence)")"
+check "and NOT as a stray mount" "no" \
+    "$(contains "B3. diskutil with NO -mountPoint (the donor, DA's own choice of location): MOUNTED ELSEWHERE" "$(evidence)")"
+# E0b — the depth control. Deleting the device-class loop and the E0b cell were both surviving
+# mutants before these.
+check "E0b runs after E, at E's own mount depth" "yes" \
+    "$(contains "E0b. diskutil at the control dir a THIRD time (depth control for E): MOUNTED" "$(evidence)")"
+check "the donor's device class is recorded, not blank" "yes" \
+    "$(grep -qE '^-- /dev/disk9s1: .*Protocol=' "$WORK"/ev/*.txt && echo yes || echo no)"
+check "and E0, its history control, ran first" "yes" \
+    "$(contains "E0. diskutil at the control dir AGAIN, same image (history control): MOUNTED" "$(evidence)")"
+check "and uses B0's image, not the donor" "yes" \
+    "$(grep -q 'diskutil mount -mountPoint .*dryrun-target /dev/disk21s1' "$WORK/calls" && echo yes || echo no)"
+
+scenario cell-e-without-control
+donor_ok
+# No `attached`: B0 cannot resolve a volume, so it is NOT MEASURED and E has no control.
+out="$(run_e6c)"
+check "E does not run when B0 did not mount" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: NOT MEASURED (no control)" "$(evidence)")"
+# There is deliberately no "and the donor was not substituted for B0's image" check here: cell C
+# legitimately runs `diskutil mount -mountPoint <target> <donor>`, so E-with-the-donor and C are
+# indistinguishable by call shape, and a check that cannot tell them apart would pass either way.
+# The NOT MEASURED line above is the property; this is the limit of what the call log can say.
+check "and the rest of the matrix still runs" "yes" \
+    "$(contains "C. diskutil at the cache target" "$(evidence)")"
+
+# B0 resolves but DA REFUSES it — which is exactly what the 2026-09-21 run saw with the donor
+# (status 0x4D). This is the case that makes E's control guard load-bearing: the volume exists,
+# so the enclosing branch is entered, and only `CELL_RESULT_B0 = mounted` stops E from asking
+# the decisive question with a volume DA has just declined.
+scenario cell-e-control-refused
+donor_ok
+attached disk20s1
+mounts_succeed
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    unmount|unmountDisk) case "${2:-}" in /dev/*) : > "$WORK_DIR/out.mount" ;; esac ;;
+    mount)
+        d=""; t=""; prev=""
+        for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        # B0's volume is declined; the donor's cells behave normally.
+        case "$d" in
+            /dev/disk21s1) ;;
+            *) [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount" ;;
+        esac
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil"
+out="$(run_e6c)"
+check "B0 refused is recorded as a refusal, not as unmeasured" "yes" \
+    "$(contains "B0. E1b replicated, diskutil at the control dir (sparse image): REFUSED" "$(evidence)")"
+check "and E is NOT MEASURED for want of a control" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: NOT MEASURED (no control)" "$(evidence)")"
+check "and E0 did not run either" "no" \
+    "$(contains "E0. diskutil at the control dir AGAIN" "$(evidence)")"
+e_attempts="$(grep -c 'diskutil mount -mountPoint .*dryrun-target /dev/disk21s1' "$WORK/calls" 2>/dev/null)"
+check "and E never asks its question with a declined volume" "0" "${e_attempts:-0}"
+
+# ---- E0 refuses: the history case, which is what E0 exists to detect --------------------------
+# B0's image mounts the FIRST time and is declined the SECOND. That is the shape the 2026-09-21
+# run's B1 refusal is suspected to have, and if it is real then E's question cannot be asked
+# with this volume — so E must not run. Without this scenario, "E no longer requires E0" was a
+# surviving mutation: in every other scenario B0 mounting implies E0 mounting.
+scenario e0-refuses-second-mount
+donor_ok
+attached disk20s1
+mounts_succeed
+cat > "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    # Every unmount clears the table, by device OR by path: a cell tears down by PATH, and an
+    # unmount that does not take makes the cell abort before the next one runs.
+    unmount|unmountDisk) : > "$WORK_DIR/out.mount" ;;
+    mount)
+        d=""; t=""; prev=""
+        for a in "$@"; do case "$a" in /dev/*) d="$a" ;; esac; [ "$prev" = "-mountPoint" ] && t="$a"; prev="$a"; done
+        # B0's volume: accepted once, declined thereafter.
+        if [ "$d" = /dev/disk21s1 ]; then
+            if [ -f "$WORK_DIR/b0-mounted-once" ]; then exit 0; fi
+            : > "$WORK_DIR/b0-mounted-once"
+        fi
+        [ -n "$d" ] && [ -n "$t" ] && printf '%s on %s (apfs, local)\n' "$d" "$t" >> "$WORK_DIR/out.mount"
+        ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil"
+out="$(run_e6c)"
+check "B0 mounted but E0 refused is recorded as such" "yes" \
+    "$(contains "E0. diskutil at the control dir AGAIN, same image (history control): REFUSED" "$(evidence)")"
+# The reason changed, and deliberately: "no control" and "E0 refused: mount history" are
+# different findings, and printing the first beside a row reading `B0 …: MOUNTED` was a
+# self-contradictory matrix.
+check "and E does not run on a volume DA has started declining" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: NOT MEASURED (E0 refused: mount history)" "$(evidence)")"
+e0_target="$(grep -c 'diskutil mount -mountPoint .*dryrun-target /dev/disk21s1' "$WORK/calls" 2>/dev/null)"
+check "and never reaches the cache target with it" "0" "${e0_target:-0}"
+check "and the matrix says the refusal follows mount history" "yes" \
+    "$(contains "E0 REFUSED: DiskArbitration declined a volume it had just accepted" "$(evidence)")"
+
+# ---- the target guard, re-run immediately before E, is the one with no test -------------------
+# Deleting that guard left all 59 checks green: the safety-critical re-check before mounting over
+# a real CoreSimulator path was the untested one. Injected by making B0's own mount drop a file
+# into the target, so the emptiness check refuses on the next look.
+scenario cell-e-target-guard-refused
+donor_ok
+attached disk20s1
+mounts_succeed
+cat >> "$WORK/script.diskutil" <<'SCR'
+case "${1:-}" in
+    mount) [ -d "$WORK_DIR/ev/dryrun-target" ] && : > "$WORK_DIR/ev/dryrun-target/intruder" ;;
+esac
+SCR
+sed -i '' "s|\$WORK_DIR|$WORK|g" "$WORK/script.diskutil"
+out="$(run_e6c)"
+check "a target that stopped being empty refuses E" "yes" \
+    "$(contains "E. diskutil at the cache target, with B0's own image: NOT MEASURED (target guard refused)" "$(evidence)")"
+guard_mounts="$(grep -c 'diskutil mount -mountPoint .*dryrun-target /dev/disk21s1' "$WORK/calls" 2>/dev/null)"
+check "and nothing was mounted over it" "0" "${guard_mounts:-0}"
 
 # ---- a failed attach must not bind to a name-matched volume ------------------------------------
 # The other door on the same safety property as the containment assert: `hdiutil attach` fails,

@@ -730,3 +730,94 @@ Recorded rather than quietly re-run because the void is the interesting part: th
 fixed before the run is what stopped a REFUSED cell C — obtained through a broken control — from
 being read as "the path is protected" and closing H14.
 
+### E6c, second run, 2026-09-21: the question splits in two, and neither half is the one asked
+
+Evidence: `evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+| cell | mechanism | volume | destination | result |
+|---|---|---|---|---|
+| A | `mount_apfs` | donor | probe | **MOUNTED** |
+| D | `mount_apfs` | donor | cache path | REFUSED, EPERM (prior run) |
+| B0 | `diskutil mount -mountPoint` | fresh image | probe | **MOUNTED** |
+| B1 | `diskutil mount -mountPoint` | donor | probe | REFUSED, exit 1 |
+| B2 | `diskutil … nobrowse` | donor | probe | REFUSED, exit 1 |
+| C | `diskutil mount -mountPoint` | donor | cache path | **VOID** — its control, B1, refused |
+
+**Two refusals, and they are not the same refusal.**
+
+- **`mount_apfs` is refused by the PATH.** A and D are the same mechanism, the same volume, the
+  same privilege: it mounts at `/Library/Developer/xcv-e6c-probe` and returns EPERM at
+  `…/CoreSimulator/Cryptex/Caches`.
+- **DiskArbitration is refused for this volume WHEN A CUSTOM MOUNT POINT IS REQUESTED.** B0 and
+  B1 are the same mechanism and the same destination: a freshly created sparse image mounts, the
+  donor does not.
+
+  An earlier draft of this line read "refused by the VOLUME", and **the same evidence file
+  falsifies that** — a fourth DA data point nobody counted. After B1, B2 and C had all refused,
+  `shadow_check` ran a PLAIN `diskutil mount "$XCV_DONOR_UUID"`, with no `-mountPoint`, and it
+  succeeded: line 154's "donor root listing unchanged" branch is reachable only when the donor
+  came back, and no "came back at X, not Y" note printed, so it came back where it started. DA
+  takes that volume. What it declines is that volume at a mount point of our choosing.
+
+  This also narrows the mount-history candidate below: the donor had a prior mount in this same
+  session and DA accepted it anyway, so only the conjunction "custom mount point AND prior
+  mount" survives. The run was performing the decisive measurement in its cleanup and not
+  recording it as one; cell B3 now records it. The reason is in the
+  log this run was taught to capture — `diskarbitrationd`: `unable to mount /dev/disk9s1
+  (status code 0x0000004D)`.
+
+  On that status code, carefully, because an earlier draft of this paragraph decoded it and the
+  decoding was invention: 0x4D is 77, which is also the number `mount_apfs` exited with at the
+  cache path. 77 is `EX_NOPERM` in `sysexits.h` and `ENOLCK` in `errno.h`, and DiskArbitration's
+  status codes are documented as neither. **It is an unexplained numeric coincidence across two
+  namespaces, recorded for the next run and carrying no weight in the argument below** — if
+  anything it cuts against it, since a shared code is weak evidence that two refusals are the
+  same, in a section arguing they differ.
+
+So C is void by the rule, and correctly: the only volume DiskArbitration has agreed to mount is
+B0's, and B0 never went near the cache path. **Nothing yet says whether DiskArbitration can
+reach it.** What distinguishes the donor from B0's image is **not yet established**, and an
+earlier draft of this paragraph ruled out one candidate on a premise that is in neither the
+evidence nor the script: it asserted both were APFS sparse images, while the script's own header
+frames the donor as the operator's physical external drive and names media class a live
+candidate. The evidence records `owners on donor: Disabled` and nothing about B0's. Two
+candidates remain:
+
+- **mount history, in conjunction with a custom mount point** — the donor was mounted under
+  `/Volumes` and unmounted by this run; B0's image was attached `-nomount` and had never been
+  mounted anywhere. Bare history is already ruled out by the cleanup remount above;
+- **media class** — whether DA declines `-mountPoint` for the kind of device the donor is.
+
+The next run records `Protocol`, `Device Location`, `Removable Media`, `Owners` and `Virtual`
+for both volumes, so the next reading of B1 rests on something. And cell E0 below settles the
+first candidate directly.
+
+**Cells E0 and E are the decisive ones and are now in the script.** E is B0's own image — the
+volume DA has just accepted — at the real cache target. But B0 cannot be its only control:
+**running B0 is what destroys E's freshness.** By the time E runs, that image has itself been
+mounted and unmounted in this session, which is precisely the property the mount-history
+candidate attributes B1's refusal to, so an `E REFUSED` would be confounded between "the path
+refuses DA" and "DA refuses a volume with a prior mount". E0 — the same image, at the same
+probe, a second time — separates them:
+
+- **E0 REFUSED** → a second `-mountPoint` mount of the same volume is refused. E is **not run**
+  (not void — void means it ran and its control failed). This makes mount history a live
+  explanation for B1; it does not establish one, because B1 is a different volume of a different
+  media class.
+- **E0 AND E0b MOUNTED, E REFUSED** → history is ruled out *at E's own mount depth*, and both
+  mechanisms refuse the cache path using a volume each has accepted elsewhere. The strongest
+  form of (a) available here; H14 closes as unreachable by this route.
+
+  **E0 alone is not enough, and that is the second time this experiment's control was one step
+  short.** E0 is the image's second mount; E is its third attempt. Any refusal rule monotone in
+  mount depth — the obvious shape for cached or leaked DA state, which is exactly what the
+  history candidate posits — yields `E0 MOUNTED, E REFUSED` with the path playing no part at
+  all. **E0b** repeats the probe mount *after* E, so it attempts at precisely E's depth.
+- **E MOUNTED** → the cache path IS reachable by mounting, at root, via DiskArbitration — **for
+  a disk-image volume**. H14 is producible that way. It is not yet a product claim: E6b exists
+  to test relocation to *external* storage, and B1's refusal would remain unexplained.
+
+E0 deliberately runs after B0 and not before. Reordered, B0 would be the second mount, and a
+history refusal would print as "E1b's call no longer works on this OS build" — a false finding
+about macOS, which is the error this whole experiment exists to avoid.
+
