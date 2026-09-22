@@ -968,3 +968,50 @@ the list in the entry above.
     assumed, and it is the shape of an experiment somebody with root can run in a minute.
   - Not measured: Apple Silicon, HFS+, or a volume that has never had `enableOwnership` run on it
     by this machine's owner.
+
+### E6c — mounting over a CoreSimulator cache path — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+Three runs, 2026-09-21 and 2026-09-22, as root, against **disk-image** volumes.
+Evidence: `research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`
+plus its two `-superseded-` predecessors and
+`e6b-mount-stub-cryptex-FAILED-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+**Only one path was ever tested: `/Library/Developer/CoreSimulator/Cryptex/Caches`.**
+
+| destination | `mount_apfs -o nobrowse` | `diskutil mount -mountPoint` |
+|---|---|---|
+| `/Library/Developer/xcv-e6c-probe` (throwaway, created and verified empty by the run) | **MOUNTED** | **MOUNTED** with a fresh image (3×); **REFUSED** with the donor (2×) |
+| `/Library/Developer/CoreSimulator/Cryptex/Caches` | **REFUSED**, `Operation not permitted`, exit 77 | **REFUSED**, exit 1, **and no `diskarbitrationd` record** |
+
+**Status: observed, one configuration, one path.**
+
+**The `mount_apfs` row is the firm result.** The same volume mounts at a throwaway directory one
+level up and is refused at the cache path. Measured on the target and all negative: no BSD flag
+(`ls -lO`), no ACL, no `com.apple.rootless` xattr — only a Time Machine exclusion — and no
+`rootless.conf` entry for `/Library/Developer`. SIP enabled, normally. `drwxr-xr-x root:admin`.
+The cause is unidentified and is the same unexplained shape as E4b's `images.plist` refusal.
+
+**The `diskutil` row is weaker than it looks, and the evidence says so.** Both probe-path
+refusals captured their own `diskarbitrationd` failure (`status code 0x0000004D`); both
+cache-path attempts captured **none** — their log windows hold only earlier cells' events. The
+refusal is therefore not shown to have been a mount refusal at all; it may be a client-side
+rejection before the request reaches `diskarbitrationd`. Mount history and mount depth *are*
+excluded for that volume: it mounted at the probe immediately before the refused attempt and
+again immediately after.
+
+**Side observation.** `diskutil mount` with **no** `-mountPoint` mounted the donor at
+DiskArbitration's own choice of location, while every `-mountPoint` attempt with that volume was
+refused — including at the throwaway directory, where a different image of the identical device
+class succeeded. Unexplained, non-blocking, recorded so it is not rediscovered.
+
+**Consequence.** E6c is closed for this path. **H14 is not**: its own path is
+`…/CoreSimulator/Caches/dyld`, which no run has attempted, and `common.sh` records why that
+substitution may not be waved through. Issue #29 stays open.
+
+- Not measured: `…/CoreSimulator/Caches/dyld`, by either mechanism — H14's path and the issue
+  #24 guard's path; whether `$TARGET` was empty at the time of the attempts (the probe is
+  guarded and recorded, the target is not); a matched control directory *inside*
+  `/Library/Developer/CoreSimulator/`, which is the one cell that would separate "this
+  directory" from "this hierarchy"; the DiskArbitration API called directly rather than through
+  `diskutil`; **physical external media — every volume in the series was a disk image**; Apple
+  Silicon; any macOS other than 26.7 (25G229).

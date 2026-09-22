@@ -158,6 +158,16 @@ out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-$(xcv_env_slug).txt"
 D_MEASURED_AT=/Library/Developer/CoreSimulator/Cryptex/Caches
 
 PROBE=/Library/Developer/xcv-e6c-probe
+
+# **The in-hierarchy control.** `$PROBE` differs from the cache target in more than location:
+# root:wheel vs root:admin, created by this run vs created by the system, depth 3 vs depth 6, a
+# backup-exclude xattr on one and not the other, and guaranteed-empty vs unmeasured. So a
+# refusal at the target and a success at `$PROBE` cannot distinguish "this directory has some
+# property" from "this hierarchy is protected". `$HPROBE` is a run-created empty directory
+# INSIDE `/Library/Developer/CoreSimulator/`, which holds location constant and varies only the
+# things `$PROBE` already varies — the one cheap cell that separates the two.
+HPROBE=/Library/Developer/CoreSimulator/xcv-e6c-hprobe
+HPROBE_CREATED=0
 PROBE_CREATED=0
 
 # In a dry run the control directory moves to scratch, because creating it is a REAL `mkdir` that
@@ -181,6 +191,7 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
     # it exercises the script's reactions.
     TARGET="$XCV_EVIDENCE_DIR/dryrun-target"
     mkdir -p "$TARGET"
+    HPROBE="$XCV_EVIDENCE_DIR/dryrun-hprobe"
     # `D_MEASURED_AT` moves with it, or the harness exercises only the arm that never ships: in a
     # real `cryptex` run the two ARE the same path, so leaving it behind made every dry run take
     # `matrix`'s "D NOT MEASURED at this target" branch and left the shipping branch — and the
@@ -206,6 +217,8 @@ CELL_RESULT_E=unmeasured
 CELL_RESULT_E0=unmeasured
 CELL_RESULT_E0b=unmeasured
 CELL_RESULT_B3=unmeasured
+CELL_RESULT_H1=unmeasured
+CELL_RESULT_H2=unmeasured
 CELL_RESULT_A=unmeasured
 XCV_LAST_TEARDOWN=""
 DA_BYPASSED=0
@@ -250,7 +263,7 @@ cleanup() {
     local discard=1
     # Order matters: unmount everything this script could have mounted BEFORE handing the donor
     # back, or the remount races a mount that is still standing.
-    for m in "$PROBE" "$TARGET"; do
+    for m in "$PROBE" "$HPROBE" "$TARGET"; do
         # Whatever is mounted there, ours or B0's. DiskArbitration first for the same reason the
         # cells use it — a teardown that goes around DA is what may have voided the first run —
         # then `-f`, because a plain `umount` can block with no timeout and this is a trap.
@@ -290,6 +303,7 @@ cleanup() {
         fi
     fi
     [ "$PROBE_CREATED" = 1 ] && rmdir "$PROBE" 2>/dev/null
+    [ "$HPROBE_CREATED" = 1 ] && rmdir "$HPROBE" 2>/dev/null
     if [ "$XCV_STAGE_DONOR_UNMOUNTED" = 1 ]; then
         diskutil info "$XCV_DONOR_UUID" 2>/dev/null | grep -q "Mounted: *Yes" \
             || diskutil mount "$XCV_DONOR_UUID" >/dev/null 2>&1 \
@@ -400,6 +414,11 @@ matrix() {
     echo "                           by either mechanism. H14 closes as sized-but-unproducible."
     echo "                           NOT 'by any privilege': Apple's own daemons mount these paths"
     echo "                           (F16/E4b), and two root cells do not license that claim."
+    echo "  H1 MOUNTED, D REFUSED => the CoreSimulator HIERARCHY is not what refuses; something"
+    echo "                           about the cache path itself is. Without H1 the A-vs-D"
+    echo "                           contrast cannot tell those apart."
+    echo "  H1 REFUSED            => /Library/Developer/CoreSimulator/ refuses mounting"
+    echo "                           generally — a larger finding than 'this cache directory'."
     echo "  A REFUSED             => the session lost the ability to mount ANYWHERE before the"
     echo "                           trailing control ran. C is uninterpretable and so is the"
     echo "                           A-vs-D comparison. The whole run is void."
@@ -484,7 +503,13 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
 fi
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
 echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Owners: *//p' | head -1)"
-echo "cache target: $TARGET"
+# The target's CONTENTS, recorded and guarded the way the probe's are. The 2026-09-22 run
+# recorded only `stat`, so "the mount point was not empty" — a textbook DiskArbitration refusal
+# that produces exactly diskutil's bare failure template — could not be ruled out for the one
+# column that mattered. The probe has had both a guard and a record since the first draft; the
+# target had neither.
+TARGET_ENTRIES="$(ls -A "$TARGET" 2>/dev/null | wc -l | tr -d ' ')"
+echo "cache target: $TARGET (entries: ${TARGET_ENTRIES:-?})"
 echo "control dir:  $PROBE"
 echo
 
@@ -500,6 +525,7 @@ echo
 # for this literal one: both cells would misreport, the matrix would be false, and cleanup would
 # not unmount.
 xcv_stage_refuse_symlinked_path "$PROBE" || exit 1
+xcv_stage_refuse_symlinked_path "$HPROBE" || exit 1
 if [ -e "$PROBE" ]; then
     [ -d "$PROBE" ] || { echo "!! $PROBE exists and is not a directory. Refusing." >&3; exit 1; }
     mount | grep -q " on $(xcv_re_escape "$PROBE") " \
@@ -509,6 +535,19 @@ if [ -e "$PROBE" ]; then
 else
     mkdir -p "$PROBE" || { echo "!! could not create $PROBE" >&3; exit 1; }
     PROBE_CREATED=1
+fi
+
+# The in-hierarchy control gets the same treatment as `$PROBE`: refuse anything already there,
+# create it otherwise, and remove it only if this run created it.
+if [ -e "$HPROBE" ]; then
+    [ -d "$HPROBE" ] || { echo "!! $HPROBE exists and is not a directory. Refusing." >&3; exit 1; }
+    mount | grep -q " on $(xcv_re_escape "$HPROBE") " \
+        && { echo "!! something is already mounted at $HPROBE — an earlier run did not clean up. Refusing." >&3; exit 1; }
+    [ -z "$(ls -A "$HPROBE" 2>/dev/null)" ] \
+        || { echo "!! $HPROBE is not empty. Refusing to mount over it." >&3; exit 1; }
+else
+    mkdir -p "$HPROBE" || { echo "!! could not create $HPROBE" >&3; exit 1; }
+    HPROBE_CREATED=1
 fi
 
 # H2: what is on the donor before any of this. While the donor sits over a CoreSimulator cache
@@ -1015,6 +1054,26 @@ if mount | grep -q " on $(xcv_re_escape "$PROBE") "; then
     exit 1
 fi
 cell "A. mount_apfs at the control dir" "$XCV_DEV" "$PROBE" mount_apfs -o nobrowse "$XCV_DEV" "$PROBE" || { XCV_RUN_FAILED=1; exit 1; }
+
+# **H1/H2 — the in-hierarchy control, and the cells that make the A-vs-D contrast mean what it
+# is read to mean.** A mounts at `/Library/Developer/xcv-e6c-probe` and D was refused at
+# `…/CoreSimulator/Cryptex/Caches`; those two differ in ownership, creator, depth, an xattr and
+# emptiness as well as location, so the contrast cannot say whether it is the directory or the
+# hierarchy. `$HPROBE` is run-created and empty like `$PROBE`, but inside
+# `/Library/Developer/CoreSimulator/`.
+#
+#   H1 MOUNTED  => the hierarchy is not what refuses; something about the cache path itself is.
+#   H1 REFUSED  => `/Library/Developer/CoreSimulator/` refuses mounting generally, which is a
+#                  larger and more useful finding than "this one cache directory does".
+if [ -d "$HPROBE" ]; then
+    cell "H1. mount_apfs at a run-created dir INSIDE CoreSimulator" "$XCV_DEV" "$HPROBE" \
+        mount_apfs -o nobrowse "$XCV_DEV" "$HPROBE" || { XCV_RUN_FAILED=1; exit 1; }
+    cell "H2. diskutil at that same in-hierarchy dir" "$XCV_DEV" "$HPROBE" \
+        diskutil mount -mountPoint "$HPROBE" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
+else
+    CELLS="$CELLS
+  H1/H2. in-hierarchy control: NOT MEASURED (directory unavailable)"
+fi
 
 shadow_check
 matrix "complete"

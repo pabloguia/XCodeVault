@@ -566,7 +566,7 @@ regardless of whether it works.
 platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
 26.x update; the check is cheap (build Apple's sample, `mount -F`).
 
-## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(new, 2026-09-19, unverified)*
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c settled the mechanism question at `Cryptex/Caches` on 2026-09-22 and did NOT close this — see the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
 disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a
@@ -813,11 +813,83 @@ probe, a second time — separates them:
   mount depth — the obvious shape for cached or leaked DA state, which is exactly what the
   history candidate posits — yields `E0 MOUNTED, E REFUSED` with the path playing no part at
   all. **E0b** repeats the probe mount *after* E, so it attempts at precisely E's depth.
-- **E MOUNTED** → the cache path IS reachable by mounting, at root, via DiskArbitration — **for
-  a disk-image volume**. H14 is producible that way. It is not yet a product claim: E6b exists
-  to test relocation to *external* storage, and B1's refusal would remain unexplained.
 
-E0 deliberately runs after B0 and not before. Reordered, B0 would be the second mount, and a
-history refusal would print as "E1b's call no longer works on this OS build" — a false finding
-about macOS, which is the error this whole experiment exists to avoid.
+### E6c, third run, 2026-09-22: a real result at one path, and a closure I wrote and retracted
 
+Evidence: `evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`, with the
+two earlier runs kept beside it as `-superseded-20260921T203611` and `-superseded-20260921T211656`.
+
+| cell | mechanism | volume | destination | result |
+|---|---|---|---|---|
+| A | `mount_apfs` | donor | probe | MOUNTED |
+| D | `mount_apfs` | donor | cache path | REFUSED (EPERM, exit 77 — 2026-09-21) |
+| B0 | `diskutil -mountPoint` | fresh image | probe | MOUNTED |
+| E0 | `diskutil -mountPoint` | same image, 2nd mount | probe | MOUNTED |
+| E | `diskutil -mountPoint` | same image | cache path | REFUSED (exit 1) |
+| E0b | `diskutil -mountPoint` | same image, after E | probe | MOUNTED |
+| B1 | `diskutil -mountPoint` | donor | probe | REFUSED |
+| B2 | `diskutil … nobrowse` | donor | probe | REFUSED |
+| B3 | `diskutil`, **no** `-mountPoint` | donor | DA's own choice | MOUNTED |
+| C | `diskutil -mountPoint` | donor | cache path | REFUSED (void: control B1) |
+
+**What is established.**
+
+- **`mount_apfs` is refused at `/Library/Developer/CoreSimulator/Cryptex/Caches` and not at a
+  throwaway directory one level up.** A and D are the same mechanism and the same volume. This
+  is the firm result of the whole series.
+- **Neither mount history nor mount depth explains the diskutil column.** E0 mounted the image
+  immediately before E and E0b immediately after, both at the probe. That pair does what it was
+  built to do.
+- **DiskArbitration accepts the donor** — B3 mounted it with no `-mountPoint`. What it declines
+  is that volume at a mount point of our choosing, and the device-class line shows donor and
+  image are the same class (`Protocol=Disk Image, Device Location=External, Removable Media=
+  Removable, Owners=Disabled`), so media class does not explain B1 either. B1 stays unexplained
+  and no longer blocks anything.
+
+**What I wrote and then had to take back.** I closed H14 on this run. Two reasons that was
+wrong, both found in review:
+
+1. **The decisive cell's refusal is invisible to the instrument added to explain it.** Cells B1
+   and B2 each captured their own `diskarbitrationd` failure with `status code 0x0000004D`.
+   Cells **E and C captured none** — their log blocks contain only the earlier cells' events
+   replayed by the 60-second window. Not truncation (`tail` keeps the newest lines), not the
+   filter (E's own device appears in that same block for B0 and E0). The straightforward
+   reading is that E's request never reached `diskarbitrationd` — rejected client-side by
+   diskutil or the framework. So "both mechanisms refuse that path" is **not supported**:
+   `mount_apfs` is refused by the kernel with EPERM; `diskutil` exits 1 with no evidence a mount
+   was attempted at all. That is precisely the invalidation condition fixed above — "a cell that
+   reports REFUSED for a reason other than the mount being refused would invalidate the matrix".
+2. **Every cell used `Cryptex/Caches`; H14 is about `Caches/dyld`.** `common.sh` says the
+   substitution is not free, in as many words, and the reason bites here: `Cryptex/` is where
+   `simdiskimaged` attaches signed runtime cryptexes, so a protection specific to that subsystem
+   is the most plausible unexamined cause — and it would not generalise to an ordinary
+   root-owned regenerable cache. **`dyld` has never been attempted, by either mechanism.**
+
+A third gap, smaller but in the same direction: **the target's emptiness was never recorded in
+this run.** The script enforces and records it for the probe and not for the target; the only
+measurement is from a different run a day earlier. A non-empty mount point is a textbook
+DiskArbitration refusal and would produce exactly diskutil's bare failure template.
+
+**Two overstatements corrected in place.** "Using a volume each has just accepted elsewhere" is
+true of diskutil and false of `mount_apfs`: D is 2026-09-21T14:58:51Z and A is
+2026-09-22T09:05:44Z — about eighteen hours and a different session apart, and A came after D.
+And E0b is the image's *fourth* attempt, one deeper than E rather than at E's exact depth; the
+inference against a monotone-in-depth rule survives a fortiori, but the sentence claimed
+precision it did not have.
+
+**Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
+What remains, in order:
+
+1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path.
+2. A matched control *inside* the hierarchy: a run-created, empty directory under
+   `/Library/Developer/CoreSimulator/`. The current probe differs from the target in ownership,
+   creator, depth, an xattr and emptiness as well as location; this is the one cheap cell that
+   separates "this directory" from "this hierarchy".
+3. Record `$TARGET`'s entry count, and guard it as the probe is guarded.
+4. Why diskutil produces no DiskArbitration record at the cache path — a direct
+   `DADiskMountWithArguments` would say whether the API refuses or diskutil does.
+5. The physical-yank variant, which H14 insists on and which none of this touches.
+
+The guard added by issue #24 should stay. Note the reason precisely, because the tempting one is
+wrong: it is not that the state cannot exist — `simdiskimaged` mounts under that hierarchy in
+normal operation — but that *we* cannot manufacture it with the mechanisms a product may use.

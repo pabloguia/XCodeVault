@@ -486,6 +486,22 @@ check "E runs and lands in the matrix when its controls hold" "yes" \
 check "each cell records the volume root after its window" "yes" \
     "$(contains "root after the window" "$(evidence)")"
 # B3 — the plain mount, which the run was already performing in cleanup without recording it.
+# H1/H2 — the in-hierarchy control. Without them the A-vs-D contrast cannot distinguish "this
+# directory" from "this hierarchy", which is one of the two reasons the 2026-09-22 closure was
+# retracted.
+check "H1 mounts inside the CoreSimulator hierarchy" "yes" \
+    "$(contains "H1. mount_apfs at a run-created dir INSIDE CoreSimulator: MOUNTED" "$(evidence)")"
+check "and it is a DIFFERENT directory from the probe" "yes" \
+    "$(grep -q 'mount_apfs -o nobrowse /dev/disk9s1 .*dryrun-hprobe' "$WORK/calls" && echo yes || echo no)"
+# The real path, by source: in a dry run `$HPROBE` is redirected to scratch like `$PROBE`, so
+# the property that makes it a control — being INSIDE the CoreSimulator hierarchy — cannot be
+# exercised. Same limit as the allowlist check above, and the same remedy.
+check "the in-hierarchy probe really is in the hierarchy" "1" \
+    "$(grep -cF 'HPROBE=/Library/Developer/CoreSimulator/xcv-e6c-hprobe' ./e6c-mount-mechanism.sh)"
+check "and cleanup removes it only if this run created it" "1" \
+    "$(grep -cF '[ "$HPROBE_CREATED" = 1 ] && rmdir "$HPROBE"' ./e6c-mount-mechanism.sh)"
+check "the target's entry count is recorded, not just its stat" "yes" \
+    "$(grep -qE 'cache target: .* \(entries: [0-9]+\)' "$WORK"/ev/*.txt && echo yes || echo no)"
 check "B3 asks DA for its own choice of location" "yes" \
     "$(contains "B3. diskutil with NO -mountPoint" "$(evidence)")"
 check "and does so without a mount point" "yes" \

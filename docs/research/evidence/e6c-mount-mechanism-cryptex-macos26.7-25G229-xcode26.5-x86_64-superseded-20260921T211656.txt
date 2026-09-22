@@ -1,0 +1,192 @@
+# Experiment: E6c — mount mechanism × path, after E6b's mount_apfs returned EPERM
+# Date: 2026-09-22T00:16:46Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+donor: /Volumes/<vault> (/dev/disk9s1, APFS, whole disk disk9, UUID <vault-uuid>)
+owners on donor: Disabled
+cache target: /Library/Developer/CoreSimulator/Cryptex/Caches
+control dir:  /Library/Developer/xcv-e6c-probe
+
+## unmount donor from its mount point
+$ diskutil unmount /dev/disk9s1
+Volume <vault> on disk9s1 unmounted
+[exit=0]
+
+
+==================== B0. E1b replicated, on a throwaway image ====================
+## create a 512 MB APFS sparse image
+$ hdiutil create -size 512m -fs APFS -volname XCVB0-4566 -type SPARSE /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/tmp.plxAOBqk8N/e6c-b0
+created: /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/tmp.plxAOBqk8N/e6c-b0.sparseimage
+[exit=0]
+
+B0 image whole disk: /dev/disk10   volume: /dev/disk11s1   store: disk10s1   name: XCVB0-4566
+
+==================== B0. E1b replicated, diskutil at the control dir (sparse image) ====================
+## B0. E1b replicated, diskutil at the control dir (sparse image)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk11s1
+Volume XCVB0-4566 on /dev/disk11s1 mounted
+[exit=0]
+
+   mounts of /dev/disk11s1 now: /dev/disk11s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk11s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume XCVB0-4566 on disk11s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+## detach B0's image
+$ hdiutil detach /dev/disk10
+"disk10" ejected.
+[exit=0]
+
+
+==================== B1. diskutil at the control dir (E1b's call verbatim) ====================
+## B1. diskutil at the control dir (E1b's call verbatim)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume on disk9s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk9s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/xcv-e6c-probe; exit=1)
+## diskarbitrationd, last 60s, filtered to this run's disks (see ADR-0005: an
+## unfiltered dump would name volumes the redactor cannot detect)
+2026-09-21 21:16:47.406 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk unmount, disk = /dev/disk9s1, options = 0x00000000.
+2026-09-21 21:16:47.602 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:47.748 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, success.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk9s1, options = 0x00000002.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, ongoing.
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk9s1
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, success.
+2026-09-21 21:16:49.985 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:50.002 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, failure.
+2026-09-21 21:16:50.002 E  diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk9s1 (status code 0x0000004D).
+
+
+==================== B2. diskutil at the control dir, WITH nobrowse ====================
+## B2. diskutil at the control dir, WITH nobrowse
+$ diskutil mount nobrowse -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume on disk9s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk9s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/xcv-e6c-probe; exit=1)
+## diskarbitrationd, last 60s, filtered to this run's disks (see ADR-0005: an
+## unfiltered dump would name volumes the redactor cannot detect)
+2026-09-21 21:16:47.406 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk unmount, disk = /dev/disk9s1, options = 0x00000000.
+2026-09-21 21:16:47.602 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:47.748 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, success.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk9s1, options = 0x00000002.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, ongoing.
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk9s1
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, success.
+2026-09-21 21:16:49.985 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:50.002 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, failure.
+2026-09-21 21:16:50.002 E  diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk9s1 (status code 0x0000004D).
+2026-09-21 21:16:53.455 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk9s1, options = 0x00000002.
+2026-09-21 21:16:53.455 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, ongoing.
+2026-09-21 21:16:53.489 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk9s1
+2026-09-21 21:16:53.489 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, success.
+2026-09-21 21:16:53.490 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:53.506 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, failure.
+2026-09-21 21:16:53.506 E  diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk9s1 (status code 0x0000004D).
+
+
+## re-checking the cache target immediately before cell C
+## stat /Library/Developer/CoreSimulator/Cryptex/Caches
+$ stat -f type=%HT mode=%Sp owner=%Su:%Sg links=%l /Library/Developer/CoreSimulator/Cryptex/Caches
+type=Directory mode=drwxr-xr-x owner=root:admin links=2
+[exit=0]
+
+## B2 did not mount, so cell C drops nobrowse to ask the question with E1b's shape.
+## NOTE: the donor is BROWSABLE over a real cache path for the duration of this cell.
+
+==================== C. diskutil at the cache target (browsable — see note) ====================
+## C. diskutil at the cache target (browsable — see note)
+$ diskutil mount -mountPoint /Library/Developer/CoreSimulator/Cryptex/Caches /dev/disk9s1
+Volume on disk9s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk9s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/CoreSimulator/Cryptex/Caches; exit=1)
+## diskarbitrationd, last 60s, filtered to this run's disks (see ADR-0005: an
+## unfiltered dump would name volumes the redactor cannot detect)
+2026-09-21 21:16:47.406 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk unmount, disk = /dev/disk9s1, options = 0x00000000.
+2026-09-21 21:16:47.602 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:47.748 Df diskarbitrationd[142:b86de2] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk9s1, success.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk9s1, options = 0x00000002.
+2026-09-21 21:16:49.953 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, ongoing.
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk9s1
+2026-09-21 21:16:49.984 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, success.
+2026-09-21 21:16:49.985 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:50.002 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, failure.
+2026-09-21 21:16:50.002 E  diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk9s1 (status code 0x0000004D).
+2026-09-21 21:16:53.455 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [352]:27427 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk9s1, options = 0x00000002.
+2026-09-21 21:16:53.455 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, ongoing.
+2026-09-21 21:16:53.489 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk9s1
+2026-09-21 21:16:53.489 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk9s1, with apfs, success.
+2026-09-21 21:16:53.490 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, ongoing.
+2026-09-21 21:16:53.506 Df diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk9s1, failure.
+2026-09-21 21:16:53.506 E  diskarbitrationd[142:b90f92] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk9s1 (status code 0x0000004D).
+
+
+==================== A. mount_apfs at the control dir ====================
+## A. mount_apfs at the control dir
+$ mount_apfs -o nobrowse /dev/disk9s1 /Library/Developer/xcv-e6c-probe
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/xcv-e6c-probe (apfs, local, journaled, nobrowse)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk9s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume <vault> on disk9s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== shadow data on the donor ====================
+donor root listing unchanged, top-level names only (.fseventsd)
+
+==================== matrix (complete) ====================
+  D. mount_apfs at /Library/Developer/CoreSimulator/Cryptex/Caches: REFUSED (measured 2026-09-21, EPERM; not repeated here)
+  B0. E1b replicated, diskutil at the control dir (sparse image): MOUNTED
+  B1. diskutil at the control dir (E1b's call verbatim): REFUSED (exit 1)
+  B2. diskutil at the control dir, WITH nobrowse: REFUSED (exit 1)
+  C. diskutil at the cache target (browsable — see note): REFUSED (exit 1)
+  A. mount_apfs at the control dir: MOUNTED
+
+  !! CELL C IS VOID: its control (B1) refused. Do not read C's line above.
+
+Reading (fixed in HYPOTHESES.md H14 before the run, deliberately):
+  any VOID marker above => a teardown bypassed DiskArbitration before that cell. Its
+                           REFUSED is the fallback talking, not macOS. Do not read it.
+  B0 REFUSED            => E1b's own call, on E1b's own kind of volume, no longer works.
+                           A RESULT about this OS build, not a harness fault. Stop here.
+  B0 MOUNTED, B1 REFUSED=> the call works; this DONOR is what diskutil will not take.
+                           Not a statement about the cache path. Do not read C.
+  B0 NOT MEASURED       => B1 REFUSED cannot be attributed to the call, the donor or the
+                           OS build. Fix B0 and re-run before reading anything below it.
+  B1 MOUNTED, B2 REFUSED=> `nobrowse` is what diskutil refuses, not the path. That alone
+                           explains the 2026-09-21 void and is worth recording.
+  C MOUNTED             => the mechanism was the problem. E6b re-runs on DiskArbitration
+                           and H14 stays open.
+  C REFUSED, B1 MOUNTED => the CoreSimulator path is unreachable by this route, at root,
+                           by either mechanism. H14 closes as sized-but-unproducible.
+                           NOT 'by any privilege': Apple's own daemons mount these paths
+                           (F16/E4b), and two root cells do not license that claim.
+  A REFUSED             => the session lost the ability to mount ANYWHERE before the
+                           trailing control ran. C is uninterpretable and so is the
+                           A-vs-D comparison. The whole run is void.
+  A NOT MEASURED        => the run stopped before the trailing control, so nothing
+                           establishes the session could still mount at the end. Read
+                           no cell below B0.
+  C NOT MEASURED        => the cache-path cell did not run; the matrix answers nothing
+                           about the question it was built for.
+  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than
+                           to mount_apfs.
