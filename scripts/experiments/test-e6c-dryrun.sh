@@ -133,6 +133,10 @@ scenario() {
     rm -f "$WORK"/calls "$WORK"/rc.* "$WORK"/out.* "$WORK"/script.* "$WORK"/int1 "$WORK"/int2 "$WORK"/interrupted
     : > "$WORK/calls"
     for c in diskutil hdiutil mount umount mount_apfs stat log pgrep id; do mkstub "$c"; done
+    # The in-hierarchy probe's PARENT. The script uses `mkdir` without `-p`, so whether this
+    # exists is the whole difference between H1/H2 running and the H0 refusal branch — which is
+    # how `hprobe-refused` below reaches that branch with no test-only switch in the script.
+    mkdir -p "$WORK/ev/dryrun-hprobe-parent"
     SCENARIO="$1"; : > "$WORK/last-out"
 }
 
@@ -492,7 +496,7 @@ check "each cell records the volume root after its window" "yes" \
 check "H1 mounts inside the CoreSimulator hierarchy" "yes" \
     "$(contains "H1. mount_apfs at a run-created dir INSIDE CoreSimulator: MOUNTED" "$(evidence)")"
 check "and it is a DIFFERENT directory from the probe" "yes" \
-    "$(grep -q 'mount_apfs -o nobrowse /dev/disk9s1 .*dryrun-hprobe' "$WORK/calls" && echo yes || echo no)"
+    "$(grep -q 'mount_apfs -o nobrowse /dev/disk9s1 .*dryrun-hprobe-parent/hprobe' "$WORK/calls" && echo yes || echo no)"
 # The real path, by source: in a dry run `$HPROBE` is redirected to scratch like `$PROBE`, so
 # the property that makes it a control — being INSIDE the CoreSimulator hierarchy — cannot be
 # exercised. Same limit as the allowlist check above, and the same remedy.
@@ -819,6 +823,58 @@ check "and the operator is told on the terminal" "yes" \
 check "cleanup tries to detach B0's image" "yes" "$(contains "hdiutil detach" "$(calls)")"
 check "and when that fails, keeps the file instead of deleting it under a live device" "yes" \
     "$(contains "STILL ATTACHED" "$out")"
+
+# The H0 branch: the in-hierarchy probe cannot be created. **The errno here is `ENOENT`** — the
+# parent is missing — and NOT the real case's refusal, whatever that turns out to be. This pins
+# the plumbing (the branch runs, the run continues, the text reaches the evidence); it reproduces
+# nothing about the hierarchy. Before 2026-09-22 the script aborted
+# the whole run here, so this branch — and the H1/H2 `else` — were unreachable and untested while
+# the operator's real sudo run was walking straight into them.
+scenario hprobe-refused
+donor_ok
+attached disk20s1
+mounts_succeed
+rmdir "$WORK/ev/dryrun-hprobe-parent"
+out="$(run_e6c)"; rc=$?
+check "a probe that cannot be created does not abort the run" "0" "$rc"
+check "and the other cells still run" "yes" "$(contains "mount_apfs -o nobrowse /dev/disk9s1" "$(calls)")"
+check "the refusal is recorded as a cell, not swallowed" "yes" "$(contains "H0." "$(evidence)")"
+check "H0 is labelled as being about mkdir and not about mounting" "yes" \
+    "$(contains "mkdir (not mount)" "$(evidence)")"
+check "the errno text is carried into the evidence" "yes" \
+    "$(contains "No such file or directory" "$(evidence)")"
+check "H1/H2 are skipped rather than reported" "yes" "$(contains "H1/H2. in-hierarchy control: NOT MEASURED" "$(evidence)")"
+check "and nothing was mounted at the probe that does not exist" "no" \
+    "$(contains "dryrun-hprobe-parent/hprobe" "$(calls)")"
+check "the legend explains H0 only when H0 happened" "yes" "$(contains "H0 REFUSED" "$(evidence)")"
+check "and warns that H0 does not explain D" "yes" "$(contains "does not explain D" "$(evidence)")"
+check "the operator is told on the terminal, not only in the report" "yes" \
+    "$(contains "recorded as H0" "$out")"
+# The legend must not appear on runs where the probe WAS created: one machine's mkdir result
+# stated as though every report had measured it is the defect this gate exists to stop.
+scenario hprobe-created
+donor_ok
+attached disk20s1
+mounts_succeed
+out="$(run_e6c)"
+check "the H0 legend is absent when the probe was created" "no" "$(contains "H0 REFUSED" "$(evidence)")"
+check "and H1 ran instead" "yes" "$(contains "H1. mount_apfs" "$(evidence)")"
+
+# The probe passes its guard at startup and is mounted at five cells later. This dirties it in
+# between — cell A's `mount_apfs` drops a file into it — so the revalidation immediately before
+# H1 is the only thing standing between the run and a mount that hides someone's data. Deleting
+# that revalidation survived mutation until this scenario existed.
+scenario hprobe-dirtied
+donor_ok
+attached disk20s1
+mounts_succeed
+cat >> "$WORK/script.mount_apfs" <<SCR
+case "\${!#}" in *dryrun-probe) : > "$WORK/ev/dryrun-hprobe-parent/hprobe/intruder" ;; esac
+SCR
+out="$(run_e6c)"
+check "a probe dirtied after its guard is not mounted over" "no" \
+    "$(grep -q 'mount_apfs -o nobrowse /dev/disk9s1 .*dryrun-hprobe-parent/hprobe' "$WORK/calls" && echo yes || echo no)"
+check "and the operator is told why" "yes" "$(contains "no longer empty" "$out")"
 
 printf '\n%d checks, %d failures\n' "$run" "$fails"
 [ "$fails" -eq 0 ]

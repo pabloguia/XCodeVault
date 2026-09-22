@@ -232,6 +232,28 @@ is done. The post-publication issue backlog replaced it._
    matrices in `docs/research/evidence/` under the canonical name; nothing was lost only because
    `xcv_rotate_out` exists. What it still does not cover is listed in its own header.
 
+   **2026-09-22: the in-hierarchy control cannot be built here, and the finding is smaller than
+   my first write-up of it.** The `sudo` run stopped at E6c's own guard, unable to
+   `mkdir -p /Library/Developer/CoreSimulator/xcv-e6c-hprobe`. I wrote that up as "the hierarchy
+   refuses directory creation to root with EPERM" and a review took both halves apart. **The
+   errno was never captured**: the old code wrote `mkdir`'s stderr into `$REPORT`, then `exit 1`
+   without setting `XCV_RUN_FAILED`, so cleanup deleted the report — what survived is "it
+   failed". The EACCES-at-`/Library/Developer`/EPERM-inside contrast is real and was measured as
+   `pirado`, not root. **And a refused `mkdir` is not a refused mount**: cell D was declined at a
+   directory that already existed, so this does not explain D, and the open question is
+   unchanged — run H1/H2 against a *pre-existing* empty directory in the hierarchy. That cell is
+   not written. Same species as the retraction two commits earlier, caught the same way.
+
+   The harness now records the error text as cell H0 and continues instead of aborting, which is
+   the point: the machine that hits this next produces the artifact this one destroyed. Six
+   changes came out of the review, and the three that were not documentation are the ones worth
+   naming — a single `mkdir` (a second attempt to capture stderr can succeed and write
+   `REFUSED ()` for an operation that worked), `mkdir` rather than `mkdir -p` (which would create
+   a shadow `CoreSimulator` on a machine without Xcode — rule 7, attempted twice now), and the
+   symlink/mounted/empty revalidation immediately before H1, since the startup guard has expired
+   five mount cycles earlier. Deleting that revalidation survived mutation until a scenario
+   existed that dirties the probe in between; 94 checks now.
+
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
    body's own "Done when" anticipated this ("partial credit is possible and probably wise"), but

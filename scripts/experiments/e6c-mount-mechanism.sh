@@ -168,6 +168,7 @@ PROBE=/Library/Developer/xcv-e6c-probe
 # things `$PROBE` already varies — the one cheap cell that separates the two.
 HPROBE=/Library/Developer/CoreSimulator/xcv-e6c-hprobe
 HPROBE_CREATED=0
+H0_RECORDED=0
 PROBE_CREATED=0
 
 # In a dry run the control directory moves to scratch, because creating it is a REAL `mkdir` that
@@ -191,7 +192,11 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
     # it exercises the script's reactions.
     TARGET="$XCV_EVIDENCE_DIR/dryrun-target"
     mkdir -p "$TARGET"
-    HPROBE="$XCV_EVIDENCE_DIR/dryrun-hprobe"
+    # One level down, and the parent is deliberately NOT created here. `mkdir` (no `-p`) then
+    # succeeds or fails purely on whether the caller made the parent — which is how the test
+    # harness reaches the H0 branch without a test-only environment variable, and how the real
+    # script behaves on a machine whose hierarchy refuses.
+    HPROBE="$XCV_EVIDENCE_DIR/dryrun-hprobe-parent/hprobe"
     # `D_MEASURED_AT` moves with it, or the harness exercises only the arm that never ships: in a
     # real `cryptex` run the two ARE the same path, so leaving it behind made every dry run take
     # `matrix`'s "D NOT MEASURED at this target" branch and left the shipping branch — and the
@@ -414,6 +419,18 @@ matrix() {
     echo "                           by either mechanism. H14 closes as sized-but-unproducible."
     echo "                           NOT 'by any privilege': Apple's own daemons mount these paths"
     echo "                           (F16/E4b), and two root cells do not license that claim."
+    # Printed only when H0 actually happened on THIS machine. Left unconditional it would state
+    # one Intel machine's 26.7 result as though every report had measured it.
+    if [ "${H0_RECORDED:-0}" = 1 ]; then
+        echo "  H0 REFUSED            => this hierarchy refuses DIRECTORY CREATION at this privilege,"
+        echo "                           before any mount is attempted. Read it narrowly: it is a"
+        echo "                           result about mkdir, NOT about mounting. D was refused at a"
+        echo "                           directory that already existed, so H0 does not explain D."
+        echo "                           It blocks the run-created control only; the same question"
+        echo "                           is still open against a PRE-EXISTING empty directory in"
+        echo "                           the hierarchy. The errno above is the measurement — record"
+        echo "                           it, and do not carry another machine's errno to it."
+    fi
     echo "  H1 MOUNTED, D REFUSED => the CoreSimulator HIERARCHY is not what refuses; something"
     echo "                           about the cache path itself is. Without H1 the A-vs-D"
     echo "                           contrast cannot tell those apart."
@@ -546,8 +563,38 @@ if [ -e "$HPROBE" ]; then
     [ -z "$(ls -A "$HPROBE" 2>/dev/null)" ] \
         || { echo "!! $HPROBE is not empty. Refusing to mount over it." >&3; exit 1; }
 else
-    mkdir -p "$HPROBE" || { echo "!! could not create $HPROBE" >&3; exit 1; }
-    HPROBE_CREATED=1
+    # **A failure here is a MEASUREMENT, not a fatal error**, and the first version aborted the
+    # whole run on it — losing, with the report it deleted, the one thing worth having: the
+    # errno. On 2026-09-22 `mkdir` inside `/Library/Developer/CoreSimulator/` failed under
+    # `sudo` and all that survived was "it failed". Record the error text and continue.
+    #
+    # `mkdir`, not `mkdir -p`, and one attempt only:
+    #   - `-p` would create a missing `/Library/Developer/CoreSimulator` on a machine that has
+    #     no Xcode, and cleanup removes only the leaf — a script-created shadow directory in the
+    #     live hierarchy, which is the class rule 7 exists for. The parent must pre-exist for
+    #     the cell to mean anything anyway.
+    #   - a second attempt to capture stderr can succeed where the first failed, and would then
+    #     write `REFUSED ()` into the evidence for an operation that worked, with `$HPROBE` left
+    #     behind unowned and H1/H2 mounting over it past the checks above.
+    if mkdir_err="$(mkdir "$HPROBE" 2>&1)"; then
+        HPROBE_CREATED=1
+    else
+        # `-L` as well as `-e`: `[ -e ]` is false on a DANGLING symlink, which `mkdir` still
+        # rejects with `File exists` — that would record a hierarchy refusal that is not one.
+        # This line has no test and cannot get one: reaching it needs `mkdir` to fail with the
+        # path present, which is a race, and `mkdir` is not stubbed in the dry-run harness.
+        { [ -e "$HPROBE" ] || [ -L "$HPROBE" ]; } && { echo "!! $HPROBE appeared after a failed mkdir — this run does not own it. Refusing." >&3; exit 1; }
+        echo "!!!! could not create $HPROBE: ${mkdir_err:-no error text}"
+        echo "!!!! That is itself a result: the in-hierarchy control cannot be created at this"
+        echo "!!!! privilege. It is a result about DIRECTORY CREATION and not about mounting —"
+        echo "!!!! cell D was refused at a directory that already existed, so this does not"
+        echo "!!!! explain D. H1/H2 could still be run against a PRE-EXISTING empty directory"
+        echo "!!!! inside the hierarchy; that cell is not written."
+        echo "!! $HPROBE could not be created — recorded as H0; the run continues." >&3
+        H0_RECORDED=1
+        CELLS="$CELLS
+  H0. mkdir (not mount) inside /Library/Developer/CoreSimulator/: REFUSED — ${mkdir_err:-no error text}"
+    fi
 fi
 
 # H2: what is on the donor before any of this. While the donor sits over a CoreSimulator cache
@@ -1065,14 +1112,38 @@ cell "A. mount_apfs at the control dir" "$XCV_DEV" "$PROBE" mount_apfs -o nobrow
 #   H1 MOUNTED  => the hierarchy is not what refuses; something about the cache path itself is.
 #   H1 REFUSED  => `/Library/Developer/CoreSimulator/` refuses mounting generally, which is a
 #                  larger and more useful finding than "this one cache directory does".
+#
+# On 2026-09-22 the guard tripped before the cell could run: `mkdir` under
+# `/Library/Developer/CoreSimulator/` failed under `sudo`, so the run-created form of this
+# control could not be built. That is recorded as H0, and it settles LESS than it looks like.
+# H0 is about creating a directory; D was refused at a directory that already existed, so H0
+# does not explain D, and "the hierarchy refuses mounts" remains untested. The cell that would
+# test it is H1/H2 against a PRE-EXISTING empty directory in the hierarchy, and it is not
+# written. These two stay here for a machine where the mkdir succeeds.
 if [ -d "$HPROBE" ]; then
+    # The guard at the top of the run has expired here exactly as $PROBE's has — five mount
+    # cycles have gone by — so re-check the same three things before mounting: not a symlink,
+    # nothing mounted there, still empty.
+    xcv_stage_refuse_symlinked_path "$HPROBE" || { XCV_RUN_FAILED=1; exit 1; }
+    if mount | grep -q " on $(xcv_re_escape "$HPROBE") "; then
+        echo "!!!! something is mounted at $HPROBE; H1 would stack on it."
+        echo "!! something is mounted at $HPROBE. H1/H2 were not run." >&3
+        XCV_RUN_FAILED=1
+        exit 1
+    fi
+    if [ -n "$(ls -A "$HPROBE" 2>/dev/null)" ]; then
+        echo "!!!! $HPROBE is not empty; mounting over it would hide its contents."
+        echo "!! $HPROBE is no longer empty. H1/H2 were not run." >&3
+        XCV_RUN_FAILED=1
+        exit 1
+    fi
     cell "H1. mount_apfs at a run-created dir INSIDE CoreSimulator" "$XCV_DEV" "$HPROBE" \
         mount_apfs -o nobrowse "$XCV_DEV" "$HPROBE" || { XCV_RUN_FAILED=1; exit 1; }
     cell "H2. diskutil at that same in-hierarchy dir" "$XCV_DEV" "$HPROBE" \
         diskutil mount -mountPoint "$HPROBE" "$XCV_DEV" || { XCV_RUN_FAILED=1; exit 1; }
 else
     CELLS="$CELLS
-  H1/H2. in-hierarchy control: NOT MEASURED (directory unavailable)"
+  H1/H2. in-hierarchy control: NOT MEASURED (no probe directory; see H0 above if present)"
 fi
 
 shadow_check

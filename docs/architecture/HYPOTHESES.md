@@ -566,7 +566,7 @@ regardless of whether it works.
 platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
 26.x update; the check is cheap (build Apple's sample, `mount -F`).
 
-## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c settled the mechanism question at `Cryptex/Caches` on 2026-09-22 and did NOT close this — see the end)*
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c settled the mechanism question at `Cryptex/Caches` on 2026-09-22 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
 disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a
@@ -890,11 +890,46 @@ What remains, in order:
    product's own relocation flow would empty the path before mounting, so the scenario is not
    unreachable in principle — only untestable without paying that cost. `Cryptex/Caches` was
    chosen originally for exactly this reason: it was empty.
-2. A matched control *inside* the hierarchy: a run-created, empty directory under
-   `/Library/Developer/CoreSimulator/`. **This is now cells H1/H2 and needs no cache cleared** —
-   it runs under the `cryptex` target and is the next thing to measure. The current probe differs from the target in ownership,
-   creator, depth, an xattr and emptiness as well as location; this is the one cheap cell that
-   separates "this directory" from "this hierarchy".
+2. A matched control *inside* the hierarchy — **narrowed on 2026-09-22, not answered.** Cells
+   H1/H2 were to mount at a run-created empty directory under
+   `/Library/Developer/CoreSimulator/`, separating "this directory refuses" from "this hierarchy
+   refuses". **The run-created form of that control cannot be built on this machine**: the
+   operator's `sudo` run of E6c stopped at its own guard, unable to
+   `mkdir -p /Library/Developer/CoreSimulator/xcv-e6c-hprobe` (the `-p` matters: it is why a
+   missing parent cannot be the explanation).
+
+   **What that observation is, exactly.** It is one `sudo` run, on one machine, macOS 26.7 — and
+   **its errno was not captured.** The pre-change script wrote `mkdir`'s stderr into `$REPORT`
+   and then `exit 1` without setting `XCV_RUN_FAILED`, so cleanup deleted the report; the only
+   surviving output is `!! could not create …` on the terminal. That establishes *failure* and
+   not *`EPERM`*. E6c now records the error text as cell **H0** and continues the run, so the
+   next machine to meet this produces the artifact this one destroyed.
+
+   Separately, four `mkdir` probes **run as `pirado`, not root**:
+
+   | path | errno (non-root) |
+   |---|---|
+   | `/Library/Developer/` | `EACCES` — Permission denied |
+   | `/Library/Developer/CoreSimulator/` | `EPERM` — Operation not permitted |
+   | `/Library/Developer/CoreSimulator/Caches/` | `EPERM` |
+   | `/Library/Developer/CoreSimulator/Cryptex/` | `EPERM` |
+
+   `/Library/Developer/` refuses a non-root user the way any `root:wheel drwxr-xr-x` directory
+   does, and yields to `sudo` — which is why the out-of-hierarchy probe has mounted in every run.
+   Everything below `/Library/Developer/CoreSimulator/` refuses with `EPERM`. (The table records
+   errno and nothing else — no mode or owner column, so it cannot say the permissions match.) That contrast is real and it is a non-root
+   measurement; it does not carry to root by itself, and the root run that would have joined the
+   two is the one whose errno was lost.
+
+   **And it is a result about `mkdir`, not about mounting.** Cell D was refused at
+   `…/Cryptex/Caches`, a directory that already existed — no `mkdir` was involved, so H0 does not
+   explain D even if the two share an errno class. The question this item was opened for is
+   therefore still open, and cheap **if a pre-existing empty directory other than `$TARGET` can be
+   found** inside `/Library/Developer/CoreSimulator/` — run H1/H2 against that. Using
+   `Cryptex/Caches`, the only one this series has established as empty, collapses H1 into D. That cell is not written. Directory creation and
+   mounting being refused by the same mechanism is a hypothesis the observation suggests and does
+   not test.
+
 3. Record `$TARGET`'s entry count, and guard it as the probe is guarded.
 4. Why diskutil produces no DiskArbitration record at the cache path — a direct
    `DADiskMountWithArguments` would say whether the API refuses or diskutil does.

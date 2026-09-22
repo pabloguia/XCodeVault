@@ -1004,14 +1004,33 @@ DiskArbitration's own choice of location, while every `-mountPoint` attempt with
 refused — including at the throwaway directory, where a different image of the identical device
 class succeeded. Unexplained, non-blocking, recorded so it is not rediscovered.
 
+**A `mkdir` inside the hierarchy failed under `sudo` (2026-09-22, one observation, errno not
+captured).** The run-created in-hierarchy control below could not be built:
+`mkdir -p /Library/Developer/CoreSimulator/xcv-e6c-hprobe` failed under `sudo` and E6c's own guard
+stopped the run. The script at the time discarded its report on that exit, so what survives is
+"it failed" and not the errno; E6c now records the error text as cell H0 and continues, so the
+next machine produces the artifact this one lost. Four `mkdir` probes run **as a non-root user**
+separate two levels: `/Library/Developer/` gives `EACCES` and yields to `sudo` (the
+out-of-hierarchy probe mounts in every run), while `/Library/Developer/CoreSimulator/`,
+`…/Caches/` and `…/Cryptex/` each give `EPERM`; the probes recorded errno only, not mode or
+owner. Read it
+narrowly on two counts. The non-root contrast does not carry to root on its own, and the root
+observation that would join them is the one without an errno. And this is a refusal to *create a
+directory*: cell D was refused at a directory that already existed, so it does not explain D. The
+mechanism is unidentified.
+
 **Consequence.** E6c is closed for this path. **H14 is not**: its own path is
 `…/CoreSimulator/Caches/dyld`, which no run has attempted, and `common.sh` records why that
 substitution may not be waved through. Issue #29 stays open.
 
 - Not measured: `…/CoreSimulator/Caches/dyld`, by either mechanism — H14's path and the issue
   #24 guard's path; whether `$TARGET` was empty at the time of the attempts (the probe is
-  guarded and recorded, the target is not); a matched control directory *inside*
-  `/Library/Developer/CoreSimulator/`, which is the one cell that would separate "this
-  directory" from "this hierarchy"; the DiskArbitration API called directly rather than through
+  guarded and recorded, the target is not); a *mount* at a matched control directory inside
+  `/Library/Developer/CoreSimulator/` — the run-created form (cells H1/H2) cannot be built here,
+  but the question is still open against a **pre-existing** empty directory in the hierarchy
+  other than the target (using `Cryptex/Caches` would collapse H1 into D), and that cell is not
+  written; root's errno for the refused `mkdir`; which
+  mechanism returns it, and whether it refuses every write in the hierarchy or only directory
+  creation; the DiskArbitration API called directly rather than through
   `diskutil`; **physical external media — every volume in the series was a disk image**; Apple
   Silicon; any macOS other than 26.7 (25G229).
