@@ -408,6 +408,92 @@ check "and the reason is carried" "yes" \
 check "and it is the reason, not log's own stdout header" "no" \
     "$(grep -q 'log show FAILED, rc=64: Timestamp' <<<"$(evidence)" && echo yes || echo no)"
 
+# ---- a guard refusal must not force-unmount a stranger's filesystem -----------------------------
+# The EXIT trap is armed BEFORE the pre-flight guards, and those guards refuse the run precisely
+# when something is already mounted at one of the three paths. Cleanup then force-unmounted that
+# filesystem on the way out — possibly this product's own vault, which `mount-staging.sh` names as
+# the wrong outcome. Cleanup asks the anchored question instead — is one of THIS RUN's two devices
+# mounted here — so a stranger's filesystem is reported and left alone at all three paths and on
+# every abort path, including the target guard that runs AGAIN after the cells have really mounted
+# things. An earlier `XCV_GUARDS_PASSED` flag could not cover that last case and was deleted.
+scenario guard-refusal-leaves-foreign-mount-alone
+donor_ok
+# Something is already mounted at the control directory. The guard must refuse, and cleanup must
+# keep its hands off it.
+# The directory has to EXIST for this to be a real scenario: the script's mount check lives inside
+# its `[ -e "$PROBE" ]` branch, so a mount table naming a path that does not exist never reaches
+# the guard at all. My first version omitted the mkdir and the rc check passed anyway, for the
+# wrong reason — the run was dying earlier.
+mkdir -p "$WORK/ev/dryrun-probe"
+# Appended, not written: `donor_ok` has already put the donor in this table and overwriting it
+# makes the run die at "not a mount point" before it ever reaches the guard.
+printf '/dev/disk77s1 on %s (apfs, local)\n' "$WORK/ev/dryrun-probe" >> "$WORK/out.mount"
+out="$(run_e6c)"; rc=$?
+check "the run refuses when the control dir is already mounted" "1" "$rc"
+check "and does NOT unmount it" "no" \
+    "$(grep -qE '(diskutil unmount|umount) .*dryrun-probe' "$WORK/calls" && echo yes || echo no)"
+# **Path-anchored, and that matters twice over.** `contains "already mounted"` matched TWO
+# different guards — `xcv_stage_guard_target`'s capital-S "Something is already mounted", which
+# exits BEFORE the trap is armed and where cleanup never runs at all, and the probe guard's
+# lower-case one. And the left-it-alone line is emitted per path, so an unanchored match passed on
+# any of the three. Without the path in both, the scenario could pass having exercised neither the
+# guard it is named for nor cleanup.
+check "and it is the probe guard that refused, not the target guard" "yes" \
+    "$(contains "something is already mounted at $WORK/ev/dryrun-probe" "$out")"
+check "and cleanup names that path as one it left alone" "yes" \
+    "$(contains "$WORK/ev/dryrun-probe is mounted by /dev/disk77s1, which is neither" "$out")"
+
+# Same shape at the in-hierarchy probe, whose guard is a separate block.
+scenario guard-refusal-at-hprobe
+donor_ok
+mkdir -p "$WORK/ev/dryrun-hprobe-parent/hprobe"
+printf '/dev/disk88s1 on %s (apfs, local)\n' "$WORK/ev/dryrun-hprobe-parent/hprobe" >> "$WORK/out.mount"
+out="$(run_e6c)"; rc=$?
+check "a foreign mount at the in-hierarchy probe refuses the run" "1" "$rc"
+check "and cleanup leaves it alone by name" "yes" \
+    "$(contains "dryrun-hprobe-parent/hprobe is mounted by /dev/disk88s1, which is neither" "$out")"
+check "and never unmounts it" "no" \
+    "$(grep -qE '(diskutil unmount|umount) .*dryrun-hprobe-parent/hprobe' "$WORK/calls" && echo yes || echo no)"
+
+# **The positive control for the anchor.** Everything above asserts cleanup does NOT unmount; all
+# of it would pass if the loop unmounted nothing ever. Here the volume standing at the probe is
+# OUR donor, so cleanup must tear it down — which is also the case an over-tight anchor breaks,
+# leaving our own mount over a live path while the donor is remounted elsewhere.
+scenario guard-refusal-with-our-own-volume
+donor_ok
+mkdir -p "$WORK/ev/dryrun-probe"
+printf '/dev/disk9s1 on %s (apfs, local)\n' "$WORK/ev/dryrun-probe" >> "$WORK/out.mount"
+out="$(run_e6c)"
+check "a leftover mount of OUR OWN donor is torn down" "yes" \
+    "$(grep -qE '(diskutil unmount|umount) .*dryrun-probe' "$WORK/calls" && echo yes || echo no)"
+check "and is not reported as a stranger's" "no" \
+    "$(contains "dryrun-probe is mounted by" "$out")"
+
+# **B0's volume is the SECOND device that can be ours, and it has NO behavioural coverage.** An
+# over-tight anchor — dropping `$B0_VOL` from the owner set — leaks a mount of ours over a live path
+# while the donor is handed back elsewhere, the double-mount direction of rule 6. Only the text check
+# below kills that mutant, and a text check cannot see reachability: it passes if `$B0_VOL` never
+# resolves to a device node, and it fails on a reformat.
+#
+# Three routes tried and measured, so the next person does not re-walk them:
+#
+#   1. Inject `/dev/disk21s1` into the mount table from the `hdiutil create` stub. Does nothing —
+#      that stub writes `out.diskutil.list`, and the table is only ever written by
+#      `script.diskutil`'s `mount` arm. The scenario passed anyway, for reason 2.
+#   2. Assert an unmount call in `$WORK/calls`. Cannot discriminate: the CELLS unmount the probe
+#      too, so the grep passes whether cleanup ran or not.
+#   3. Let the real flow mount B0's volume, then fail the probe's teardown (keyed `rc.diskutil.
+#      unmount.<probe>` plus `rc.umount`) with a `script.diskutil` whose `unmount` arm spares the
+#      probe, so B0's mount is still standing in cleanup and `COULD NOT UNMOUNT <path> (<device>)`
+#      — a string only cleanup prints — names the device. This is the right shape and it did not
+#      land: B0's cell runs and `disk21s1` reaches the call log, but the mount table ends EMPTY and
+#      the run completes, so the teardown never failed. Unfinished, not disproven; the remaining
+#      suspect is the `grep -v` in that unmount arm emptying the table when its target is absent.
+#
+# The `$TARGET` arm has no coverage either, and route 3 on cell E would give both at once.
+check "both of this run's own devices are in cleanup's owner set (TEXT check — see above)" "1" \
+    "$(grep -c 'for d in "\$XCV_DEV" "\$B0_VOL"; do' ./e6c-mount-mechanism.sh | tr -d ' ')"
+
 # mounts_succeed — a mount ADDS to the mount table and an unmount removes from it. Without this
 # every cell reads REFUSED, because the script verifies a mount by grepping the table for
 # `<dev> on <dest>` and a static table never contains it. This is the smallest amount of state
@@ -939,6 +1025,21 @@ check "the DA window is bounded by the cell's own start" "1" \
 check "and no log show carries --last at all" "0" \
     "$(grep -vE '^[[:space:]]*#' ./e6c-mount-mechanism.sh | grep 'log show' | grep -c -- '--last' | tr -d ' ')"
 # The format too: `date '+%Y-%m-%d'` is also accepted by `log show` and restores a 24-hour window.
+# **The SIP-policy block, and why these are TEXT checks.** The defect was `grep | sed || echo`: the
+# `||` binds to the pipeline, whose status is `sed`'s, and `sed` exits 0 on empty input, so the
+# fallback never fired and a machine with no match got a silent blank — indistinguishable from "this
+# check did not run". It is unreachable behaviourally from here: this machine's `rootless.conf` DOES
+# match, so both the correct and the defective form print the same thing, and the dry run reads the
+# real file. So: pin the shape. Capture into a variable first, and keep the three outcomes distinct.
+check "the rootless capture is not bound to a pipeline's exit status" "1" \
+    "$(grep -c 'xcv_rootless_hits="$(grep -i developer' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and an unreadable file is not reported as an absence" "1" \
+    "$(grep -c 'NOT CHECKED, which is not the same as no entry' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and a real absence is RECORDED rather than left blank" "1" \
+    "$(grep -c 'absence RECORDED, file was readable' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and no sed-then-fallback pipeline survives in that block" "0" \
+    "$(grep -vE '^[[:space:]]*#' ./e6c-mount-mechanism.sh | grep -c "rootless.conf 2>/dev/null | sed" | tr -d ' ')"
+
 check "the timestamp carries time and offset, not just the date" "1" \
     "$(grep -c "date '+%Y-%m-%d %H:%M:%S%z'" ./e6c-mount-mechanism.sh | tr -d ' ')"
 # The failure this whole change is about: a capture that fails must not read as an empty window,

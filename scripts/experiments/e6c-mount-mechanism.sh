@@ -66,7 +66,10 @@
 # Usage: sudo scripts/experiments/e6c-mount-mechanism.sh /Volumes/DONOR [dyld|cryptex]
 #
 # Nothing is written to either target. Every cell unmounts before the next one starts, and the
-# EXIT trap unmounts anything still mounted and gives the donor back.
+# EXIT trap unmounts what THIS RUN mounted — matched by device, not by "is anything mounted
+# here" — and gives the donor back. The trap is armed before the pre-flight guards, and those
+# guards refuse the run exactly when something is already mounted at one of the three paths, so
+# the unanchored form tore down a stranger's filesystem on the way out.
 #
 # **Why this does not use `xcv_stage_mount`/`xcv_stage_cleanup`**, given that `mount-staging.sh`
 # exists to stop exactly this fork. Two reasons, both structural: this script mounts at TWO
@@ -268,13 +271,42 @@ cleanup() {
     local discard=1
     # Order matters: unmount everything this script could have mounted BEFORE handing the donor
     # back, or the remount races a mount that is still standing.
+    # **Unmount only what THIS RUN mounted, identified by device.** The loop used to ask
+    # `mount | grep " on $m "` — is anything mounted here — and force-unmount whatever answered.
+    # That is the wrong question in a trap armed before the pre-flight guards, because those
+    # guards refuse the run exactly when something is already mounted at one of these paths:
+    # cleanup then tore down a stranger's filesystem, possibly this product's own vault, which
+    # `mount-staging.sh:146-148` spells out as the outcome to avoid.
+    #
+    # A `XCV_GUARDS_PASSED` flag was the first fix and it was not enough. `$TARGET`'s
+    # already-mounted guard is `xcv_stage_guard_target`, which runs BEFORE the trap is armed and
+    # again AFTER the cells have really mounted things — and at that second call the flag must be
+    # 1, so the flag cannot protect the one path that is a real CoreSimulator cache. Anchoring to
+    # the device answers "is OUR volume mounted here", which is the question, at all three paths
+    # and on every abort path. It is the predicate `cell` already uses to verify its own mounts.
+    #
+    # Only two devices can be ours: the operator's donor and B0's throwaway image volume. Both are
+    # empty until this run resolves them, so before the guards there is nothing to match and
+    # nothing of ours can be missed.
     for m in "$PROBE" "$HPROBE" "$TARGET"; do
-        # Whatever is mounted there, ours or B0's. DiskArbitration first for the same reason the
-        # cells use it — a teardown that goes around DA is what may have voided the first run —
-        # then `-f`, because a plain `umount` can block with no timeout and this is a trap.
-        if mount | grep -q " on $(xcv_re_escape "$m") "; then
+        local owner="" d
+        for d in "$XCV_DEV" "$B0_VOL"; do
+            [ -n "$d" ] || continue
+            mount | grep -q "^$(xcv_re_escape "$d") on $(xcv_re_escape "$m") " && { owner="$d"; break; }
+        done
+        if [ -n "$owner" ]; then
+            # DiskArbitration first for the same reason the cells use it — a teardown that goes
+            # around DA is what may have voided the first run — then `-f`, because a plain
+            # `umount` can block with no timeout and this is a trap.
             diskutil unmount "$m" >/dev/null 2>&1 || umount -f "$m" >/dev/null 2>&1 || umount "$m" >/dev/null 2>&1 \
-                || echo "!! COULD NOT UNMOUNT $m. Unmount it before doing anything else: sudo umount -f $m" >&3
+                || echo "!! COULD NOT UNMOUNT $m ($owner). Unmount it before doing anything else: sudo umount -f $m" >&3
+        elif mount | grep -q " on $(xcv_re_escape "$m") "; then
+            # Name the device that IS there rather than claiming authorship. Anchoring by device
+            # node makes device identity a dependency the unanchored form did not have: a donor
+            # yanked and re-plugged onto a different node is our own mount, and "this run did NOT
+            # mount it" would be false about it. The behaviour is right either way — report, never
+            # act — but the operator has to be able to tell the two cases apart.
+            echo "!! $m is mounted by $(mount | grep " on $(xcv_re_escape "$m") " | awk '{print $1}' | head -1), which is neither this run's donor (${XCV_DEV:-none}) nor its image (${B0_VOL:-none}) — leaving it alone." >&3
         fi
     done
     # B0's throwaway image, if the run died between attach and detach. Removing it cannot touch
@@ -527,6 +559,31 @@ echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Own
 # target had neither.
 TARGET_ENTRIES="$(ls -A "$TARGET" 2>/dev/null | wc -l | tr -d ' ')"
 echo "cache target: $TARGET (entries: ${TARGET_ENTRIES:-?})"
+# **Flags and SIP path policy, read-only, and they settle something the mounting cells cannot.**
+# "The hierarchy refuses" has to mean some OS-level policy attaches to it. The `stat -f` the cells
+# take has no flags field, so four runs recorded none; `ls -lO` has one, and `rootless.conf` says
+# whether SIP protects the path at all — the two checks E1 and E13b already record. No `restricted`
+# flag on any ancestor and no `/Library/Developer` entry excludes SIP path policy as the mechanism
+# for both the mount refusals and H0's `mkdir` refusal, without mounting anything.
+echo "## flags on the target and its ancestors (a 'restricted' flag here would be SIP path policy):"
+# Derived from `$TARGET`, not hardcoded: on a dry run `$TARGET` is scratch, and two literal real
+# paths would put this machine's own flags into an artifact whose banner says nothing here measures
+# it.
+ls -ldO "$(dirname "$(dirname "$TARGET")")" "$(dirname "$TARGET")" "$TARGET" 2>&1 | sed 's/^/   /'
+echo "## SIP path policy naming Developer:"
+# **Captured before it is reported, and the three cases kept apart.** `grep | sed || echo` binds
+# the `||` to the pipeline, whose status is `sed`'s, and `sed` exits 0 on empty input — so the
+# fallback never printed, and a machine with no match left a silent blank, indistinguishable from
+# "this check did not run". That is the distinction `shadow_check` refuses to blur, and the same
+# class as the `xcv_run always returns 0` trap recorded further down. Measured, not reasoned about.
+xcv_rootless_hits="$(grep -i developer /System/Library/Sandbox/rootless.conf 2>/dev/null || true)"
+if [ ! -r /System/Library/Sandbox/rootless.conf ]; then
+    echo "   (rootless.conf is not readable — NOT CHECKED, which is not the same as no entry)"
+elif [ -n "$xcv_rootless_hits" ]; then
+    printf '%s\n' "$xcv_rootless_hits" | sed 's/^/   /'
+else
+    echo "   (no rootless.conf entry matching developer — absence RECORDED, file was readable)"
+fi
 echo "control dir:  $PROBE"
 echo
 
@@ -550,8 +607,13 @@ if [ -e "$PROBE" ]; then
     [ -z "$(ls -A "$PROBE" 2>/dev/null)" ] \
         || { echo "!! $PROBE is not empty. Refusing to mount over it." >&3; exit 1; }
 else
-    mkdir -p "$PROBE" || { echo "!! could not create $PROBE" >&3; exit 1; }
+    # **Flag BEFORE the call, not after** — the pattern the donor block uses further down. A signal
+    # in the window between `mkdir` and the assignment left a run-created directory in the live
+    # hierarchy with the flag at 0, so cleanup's `rmdir` skipped it: the shadow directory rule 7
+    # exists for. Setting it first is strictly safer here, because this branch is only reached when
+    # `$PROBE` did NOT exist, so an `rmdir` of it can never remove someone else's directory.
     PROBE_CREATED=1
+    mkdir -p "$PROBE" || { PROBE_CREATED=0; echo "!! could not create $PROBE" >&3; exit 1; }
 fi
 
 # The in-hierarchy control gets the same treatment as `$PROBE`: refuse anything already there,
@@ -576,9 +638,13 @@ else
     #   - a second attempt to capture stderr can succeed where the first failed, and would then
     #     write `REFUSED ()` into the evidence for an operation that worked, with `$HPROBE` left
     #     behind unowned and H1/H2 mounting over it past the checks above.
+    # Flag first, for the same reason as `$PROBE` above: an interrupt between the `mkdir` and the
+    # assignment would otherwise orphan a directory inside `/Library/Developer/CoreSimulator/`.
+    HPROBE_CREATED=1
     if mkdir_err="$(mkdir "$HPROBE" 2>&1)"; then
-        HPROBE_CREATED=1
+        :
     else
+        HPROBE_CREATED=0
         # `-L` as well as `-e`: `[ -e ]` is false on a DANGLING symlink, which `mkdir` still
         # rejects with `File exists` — that would record a hierarchy refusal that is not one.
         # This line has no test and cannot get one: reaching it needs `mkdir` to fail with the

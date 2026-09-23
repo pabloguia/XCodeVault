@@ -585,6 +585,44 @@ while IFS= read -r f; do
             "only $XPC_CLIENT_ALLOWLIST may do that; add it there in the same diff that writes the client, so the peer validation is reviewed"
 done < <(find Sources -name '*.swift' -type f 2>/dev/null | sort)
 
+# **The experiment allowlist mirrors `HelperCleanupTarget`, and that mirror is load-bearing.**
+# `common.sh`'s `xcv_e6b_target` states in as many words that its closed set is the same two paths
+# the privileged cleanup verb allows, "so the experiment cannot stage over anything the product
+# would not itself treat as regenerable". On 2026-09-22 that invariant was the stated reason for
+# DECLINING to add a third in-hierarchy mount target — an argument that refuses a measurement to
+# preserve an invariant should rest on one that is enforced, and nothing enforced it.
+check_experiment_mirror() {
+    local proto=Sources/XCodeVaultHelperProtocol/HelperProtocol.swift
+    local common=scripts/experiments/common.sh
+    [ -f "$proto" ] && [ -f "$common" ] || { violation "$proto / $common" "one of the mirrored files is missing"; return 0; }
+    # The helper's paths, from its own `case` returns; the experiment's, from its allowlist function.
+    # **`[^"]+`, not a character class.** The first version used `[A-Za-z/]+`, which has no `_`,
+    # digit, `-` or `.` — so a third target named `Caches/dyld_sim` was invisible on the helper
+    # side, both sets stayed equal, and this invariant reported ok on the exact divergence it
+    # exists to catch. Measured, not reasoned about. Both sides are scoped to their own
+    # declaration so this pins the two enums rather than "any quoted path in the file".
+    local helper_paths experiment_paths helper_arms
+    helper_paths=$(sed -n '/enum HelperCleanupTarget/,/^}/p' "$proto" \
+        | grep -oE '"/Library/Developer/[^"]+"' | tr -d '"' | sort -u)
+    experiment_paths=$(sed -n '/^xcv_e6b_target()/,/^}/p' "$common" \
+        | grep -oE "'/Library/Developer/[^']+'" | tr -d "'" | sort -u)
+    # The arm count as well as the paths: a target whose path this extraction cannot see at all
+    # would otherwise be silently absent from both sides rather than reported.
+    helper_arms=$(sed -n '/enum HelperCleanupTarget/,/^}/p' "$proto" | grep -cE '^\s*case \.[A-Za-z]')
+    if [ -n "$helper_arms" ] && [ "$helper_arms" -gt 0 ] \
+        && [ "$helper_arms" != "$(printf '%s\n' "$helper_paths" | grep -c .)" ]; then
+        violation "$proto" "HelperCleanupTarget has $helper_arms path arms but $(printf '%s\n' "$helper_paths" | grep -c .) extractable paths — one is invisible to the mirror check"
+    fi
+    [ -n "$helper_paths" ] || { violation "$proto" "no HelperCleanupTarget paths found — the mirror check cannot see its own subject"; return 0; }
+    [ -n "$experiment_paths" ] || { violation "$common" "no xcv_e6b_target paths found — the mirror check cannot see its own subject"; return 0; }
+    if [ "$helper_paths" != "$experiment_paths" ]; then
+        violation "$common vs $proto" \
+            "xcv_e6b_target no longer mirrors HelperCleanupTarget: [$(printf '%s' "$experiment_paths" | tr '\n' ' ')] vs [$(printf '%s' "$helper_paths" | tr '\n' ' ')]"
+    fi
+    return 0
+}
+check_experiment_mirror
+
 if [ "$fails" -eq 0 ]; then
     echo "helper invariants: ok"
 else

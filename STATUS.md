@@ -275,6 +275,23 @@ is done. The post-publication issue backlog replaced it._
    failure message survives a mutant that leaves the message in place and only makes its branch
    unreachable.
 
+   **The in-hierarchy control turns out to be blocked by the allowlist, not by the hierarchy.**
+   Looking for a pre-existing empty directory inside `/Library/Developer/CoreSimulator/` found
+   seven, all with the target's own mode and owner — so the cell that separates "this directory
+   refuses" from "this hierarchy refuses" is constructible. It stays unwritten on purpose. Two of
+   the seven are `Volumes/iOS_23F77` and `Volumes/watchOS_23T570`, which `simctl runtime list`
+   identifies as the mount points of the two installed runtimes (14.8 GB, both Ready) — mounting a
+   donor there is rule 6's shadow-data failure aimed at what the test rigs need. The other five are
+   CoreSimulator image-staging directories, and `xcv_e6b_target`'s closed set mirrors
+   `HelperCleanupTarget`'s two regenerable caches exactly so an experiment cannot mount over a path
+   the product would never clean. Widening it to answer one question would dissolve the invariant
+   it exists for.
+
+   **So two open items collapse into one.** `Caches/dyld` is inside the hierarchy, inside the
+   allowlist, and is H14's own path: clearing that cache answers H14's path *and* the
+   hierarchy-versus-directory question in one run, with no allowlist change. The cost is unchanged
+   — a rebuild on shared simulators, which is the operator's call — but it now buys twice as much.
+
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
    body's own "Done when" anticipated this ("partial credit is possible and probably wise"), but

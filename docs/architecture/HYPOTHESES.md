@@ -994,7 +994,11 @@ What remains, in order:
    that is the operator's call rather than an experiment's. Note what it does *not* mean: the
    product's own relocation flow would empty the path before mounting, so the scenario is not
    unreachable in principle — only untestable without paying that cost. `Cryptex/Caches` was
-   chosen originally for exactly this reason: it was empty.
+   chosen originally for exactly this reason: it was empty. **Re-priced 2026-09-22:** clearing it
+   also supplies the in-hierarchy control of item 2, because `Caches/dyld` is the only empty-able
+   directory inside the hierarchy that the mount allowlist permits. Two answers for one clearing —
+   **with the two limits item 2 states**: the contrast still needs a valid `cryptex` run, and a
+   daemon-owned cache is a weaker control than the neutral directory the cell wanted.
 2. A matched control *inside* the hierarchy — **narrowed on 2026-09-22, not answered.** Cells
    H1/H2 were to mount at a run-created empty directory under
    `/Library/Developer/CoreSimulator/`, separating "this directory refuses" from "this hierarchy
@@ -1035,7 +1039,71 @@ What remains, in order:
    mounting being refused by the same mechanism is a hypothesis the observation suggests and does
    not test.
 
-3. Record `$TARGET`'s entry count, and guard it as the probe is guarded.
+   **2026-09-22, later: the blocker is not the directory, it is the allowlist — and that collapses
+   this item into item 1.** I went looking for a pre-existing empty directory in the hierarchy.
+   Seven exist. Five are `drwxr-xr-x root:admin`, the same mode and owner as the target; the last
+   two only appeared that way, and why is the point of the correction below:
+
+   | path | what it is |
+   |---|---|
+   | `Cryptex/Caches` | the target itself (item already measured) |
+   | `Cryptex/Images/bundle`, `Cryptex/Images/Inbox`, `Cryptex/Images/mnt` | CoreSimulator cryptex image staging |
+   | `Images/Inbox`, `Images/mnt` | CoreSimulator image staging |
+   | `Volumes/iOS_23F77`, `Volumes/watchOS_23T570` | **not candidates at all — live runtime mount points; see below** |
+
+   So the cell is constructible and I am still not writing it, for a reason that is worth more than
+   the cell. **And the last two rows are a measurement error worth keeping visible.** I enumerated
+   them as empty and `root:admin`, like the others. Re-checked hours later they hold one entry each
+   and read `root:wheel`, because by then they were mounted:
+
+   ```
+   /dev/disk5s1 on /Library/Developer/CoreSimulator/Volumes/iOS_23F77      (apfs, sealed, read-only, nobrowse)
+   /dev/disk7s1 on /Library/Developer/CoreSimulator/Volumes/watchOS_23T570 (apfs, sealed, read-only, nobrowse)
+   ```
+
+   Both readings were correct when taken; runtime cryptexes mount on demand. `simctl runtime list -j`
+   settles the identity authoritatively rather than by a build-number coincidence — its `mountPath`
+   for `SimRuntime.iOS-26-5` (23F77) and `SimRuntime.watchOS-26-5` (23T570), both *Ready*, is
+   exactly those two paths. **So inside this hierarchy "empty" is the signature of an *unmounted*
+   runtime mount point, and emptiness can never be the candidate test.** The refusal is harder than
+   rule 6's shadow data, too: a donor there would stack a filesystem over a Ready runtime the test
+   rigs need, and a cleanup force-unmount would then tear down Apple's own mount. And the other five fail a narrower test:
+   **`xcv_e6b_target`'s closed set mirrors `HelperCleanupTarget`** — `coreSimulatorDyldCache` and
+   `cryptexCaches`, two regenerable caches — precisely so an experiment cannot stage a mount over
+   anything the product would not itself clean. None of the five is such a path. Adding one would
+   dissolve the invariant the allowlist exists for, to answer a question that has a compliant route.
+
+   **The only compliant route is `Caches/dyld`, which is item 1** — inside the hierarchy, inside
+   the allowlist, and H14's own path. It is worth more than one answer, and less than I first wrote:
+
+   - **The contrast needs a second valid cell, which does not yet exist.** The other in-hierarchy
+     result is `Cryptex/Caches`, whose diskutil verdict is **VOID** in runs 2 through 4 and whose
+     `mount_apfs` cell D is not measured at the other target. A dyld run gives one in-hierarchy
+     result, not a pair. The missing half is a valid `cryptex` run on the fixed harness — cheap,
+     since cryptex needs no clearing, but not nothing.
+   - **`Caches/dyld` is a weaker control than the cell it stands in for.** H1/H2 wanted a
+     run-created *neutral* directory, so that location was the only variable. Both cache paths are
+     CoreSimulator daemon-owned, and `common.sh` warns in as many words that behaviour here "can
+     depend on which daemon owns the path". A refusal at both is equally consistent with "the
+     hierarchy refuses" and with "daemon-owned CoreSimulator cache paths refuse". The substitution
+     narrows what the cell can conclude; it does not preserve the question.
+
+   So clearing the cache still buys more than it looked like — H14's own path plus one half of the
+   hierarchy contrast — at the same cost, which remains the operator's call.
+
+   **A narrowing that cost nothing and was available the whole time.** "The hierarchy refuses"
+   has to mean some OS-level policy attaches to it. Four runs recorded `stat -f`, which has no
+   flags field. `ls -lO` does: **no ancestor carries `restricted`** — `/Library/Developer`,
+   `CoreSimulator`, `Cryptex` and `Caches` all show `-`, with only an xattr on `Caches` — and
+   `rootless.conf` names `/System/Developer`, not `/Library/Developer`. **SIP path policy is
+   therefore excluded as the mechanism for the mount refusals and for H0's `mkdir` refusal alike.**
+   E1 and E13b already recorded these two checks; E6c did not, and now does, in its header so an
+   aborted run still carries them.
+
+3. ~~Record `$TARGET`'s entry count, and guard it as the probe is guarded.~~ **Done**: the count is
+   in the header (`entries: 0` on 2026-09-22) and the flags/rootless checks above sit beside it.
+   What remains at this number is the narrower question those checks opened — **which mechanism does
+   return the refusals, now that SIP path policy is excluded.**
 4. Why diskutil produces no DiskArbitration record at the cache path — **reproduced**: for E in
    runs 3 and 4 (both 2026-09-22), and for C, whose verdict is void, in runs 2 through 4. So it is
    not an artefact of one run. A direct
