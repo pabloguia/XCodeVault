@@ -566,6 +566,59 @@ regardless of whether it works.
 platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
 26.x update; the check is cheap (build Apple's sample, `mount -F`).
 
+## H15 — the refusals in `/Library/Developer/CoreSimulator/` are TCC, not SIP *(2026-09-22, one machine, untested hypothesis with a cheap decisive test)*
+
+**What happened.** Asked to clear the dyld cache so H14's own path could finally be measured,
+`sudo rm -rf /Library/Developer/CoreSimulator/Caches/dyld/25G229` was refused — **every entry,
+`Operation not permitted`, as root.** Nothing was deleted; the path still holds 7.1 GB. So H14's
+path is not blocked by the cost of a rebuild, as recorded for two weeks. It is blocked by the same
+refusal the experiment exists to explain.
+
+**Three operations, one signature, and it is not the SIP marker.** Root is refused inside
+`/Library/Developer/CoreSimulator/` by `mkdir` (H0, 2026-09-22), by `rm` (today) and by
+`mount_apfs` (cell D at `Cryptex/Caches`) — all `EPERM`. And every classic marker is absent:
+
+| checked | result |
+|---|---|
+| `restricted` flag on the dyld tree, its parents, and a 766 MB file inside | none — `flags=-` throughout |
+| `com.apple.rootless` xattr | none; only a Time Machine `backup_excludeItem` on `Caches` and `dyld` |
+| `/System/Library/Sandbox/rootless.conf` | names `/System/Developer`, not `/Library/Developer` |
+| file mode | plain `-rw-r--r-- root:admin` |
+
+**The instrument is proven, which is what makes the absence mean something.** A positive control
+was run because "no flag found" is worthless from a check that cannot show flags:
+`/System/Library/CoreServices` reports `flags=restricted` and `/usr/bin/sudo` reports
+`flags=restricted,compressed` on this same OS with the same command. SIP is enabled. So the flag
+would have shown if it were there.
+
+**The hypothesis.** TCC — the privacy/consent layer — fits every observation that SIP path policy
+does not: it returns `EPERM`, it marks no file, and it applies to root. And the shell these
+measurements ran from **demonstrably lacks Full Disk Access**: reading
+`/Library/Application Support/com.apple.TCC/TCC.db` fails with the *identical* error.
+
+**The test, which is cheap and decisive.** Grant Full Disk Access to the terminal (System Settings
+› Privacy & Security), or run from a process that already has it, and retry one `mkdir` and one
+`rm` inside the hierarchy.
+- Refusals disappear ⇒ the mechanism is TCC, and "the hierarchy refuses" was never about the
+  hierarchy at all — it was about the caller.
+- Refusals persist ⇒ TCC is out too, and the mechanism is something neither SIP flags, rootless.conf
+  nor TCC accounts for, which is a much stranger finding and worth a bug report to Apple.
+
+This is a **grant the operator makes**, not something an experiment should arrange, and it is
+unrelated to SIP: nothing here asks for SIP to be weakened, which rule 1 forbids unconditionally.
+
+**Why this matters beyond the experiment.** `xcodevaultctl clean` lists
+`CoreSimulator system dyld caches` as `[root — helper needed]`, deferring it to the privileged
+helper. If the gate is TCC rather than ownership, **root is not the missing ingredient and the
+helper may not be either** — a launchd daemon's TCC posture is different from a Terminal child's,
+and unverified in both directions. The feasibility of the product's own cleanup verb for its largest
+root-owned category is therefore an open question, not a shipping detail. Nothing in the catalog
+should claim that category is executable until this is measured.
+
+**H0 is restated by this.** It was written as a result about *directory creation*. With `rm` refused
+the same way, it is a result about **root writes in this hierarchy**, of which `mkdir` was the first
+instance measured and the mount refusals may be the third.
+
 ## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c settled the mechanism question at `Cryptex/Caches` on 2026-09-22 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
@@ -991,7 +1044,11 @@ safe without that diff.**
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
-1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **Attempted
+1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **Re-blocked
+   2026-09-22, and not by cost: `sudo rm -rf` on that cache is refused, `Operation not permitted`,
+   as root. See H15 above — the path cannot be emptied at all from a shell without Full Disk
+   Access, so everything below about the price of a rebuild is moot until H15's test is run.**
+   Previously: **attempted
    2026-09-22 and refused by the harness's own guard**: the path holds 7.1 GB (one entry,
    `25G229`, the current build's cache), and mounting over a non-empty directory would hide it.
    That refusal is correct and it is also a finding about testability — H14's own path cannot be

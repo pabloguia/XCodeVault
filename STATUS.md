@@ -292,6 +292,24 @@ is done. The post-publication issue backlog replaced it._
    hierarchy-versus-directory question in one run, with no allowlist change. The cost is unchanged
    — a rebuild on shared simulators, which is the operator's call — but it now buys twice as much.
 
+   **2026-09-22, late: clearing the dyld cache is REFUSED, and that is a bigger finding than the
+   run it was meant to unblock.** `sudo rm -rf` on `Caches/dyld/25G229` returned
+   `Operation not permitted` for every entry, as root; nothing was deleted. So H14's own path was
+   never blocked by the cost of a rebuild — it is blocked by the same refusal E6c exists to explain.
+   Root is now refused three different operations inside `/Library/Developer/CoreSimulator/` —
+   `mkdir`, `rm`, `mount_apfs` — all `EPERM`, while no `restricted` flag, no `com.apple.rootless`
+   xattr and no `rootless.conf` entry exists, and a positive control proves the flag would have
+   shown (`/System/Library/CoreServices` reports `restricted` on this same OS with the same command).
+   **New hypothesis H15: it is TCC, not SIP** — TCC returns `EPERM`, marks no file and applies to
+   root, and the shell these measurements ran from demonstrably lacks Full Disk Access because
+   `TCC.db` fails with the identical error. The test is one grant and two commands, and it is the
+   operator's to make.
+
+   **Product consequence, recorded before anyone ships against it.** `clean` lists
+   `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
+   the missing ingredient and the privileged helper may not be either. The feasibility of the
+   cleanup verb for the largest root-owned category is an open question now, not a detail.
+
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
    body's own "Done when" anticipated this ("partial credit is possible and probably wise"), but
