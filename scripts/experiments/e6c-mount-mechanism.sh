@@ -49,8 +49,12 @@
 #      template for that path is literally `Volume on %@ failed to mount`, with no name field
 #      (`strings /usr/sbin/diskutil`), and cell C produced the same message with no bare `umount`
 #      before it. Reading a fixed format string as a symptom is the error.
-#   4. The donor class. E1b used a fresh hdiutil sparse image; this uses a physical external
-#      drive, which DA may decline for `-mountPoint`.
+#   4. The donor class. E1b used a fresh hdiutil sparse image, and this was WRITTEN for a physical
+#      external drive, which DA may decline for `-mountPoint`. **It has never run against one.**
+#      Every device-class row the series recorded says `Protocol=Disk Image`, for the donor as well
+#      as for B0's image. On 2026-09-22 this comment was read as a record of what ran and used to
+#      "correct" COMPATIBILITY_MATRIX.md in the wrong direction; the matrix now carries the
+#      retraction. A comment states intent. The device-class row states what happened.
 #   5. The OS build. E1b ran on 26.6.2 (25G83), this on 26.7 (25G229).
 #
 # 4 and 5 are not defects, and the first design could not tell them from a broken harness because
@@ -893,7 +897,8 @@ cell() {
 # proven call; splitting it answers both questions instead of trading one confound for another.
 # **B0, the control the first run did not have.** "B1 is E1b's call verbatim" is verbatim in argv
 # only: E1b ran on macOS 26.6.2 (25G83) against a freshly created hdiutil sparse image, and this
-# runs on 26.7 (25G229) against the operator's physical external donor. Either difference could be
+# runs on 26.7 (25G229) against a donor the operator supplies — intended to be physical external
+# media, and in every recorded run a disk image instead (see item 4 above). Either difference could be
 # the whole story — DA on 26.7 refusing `-mountPoint` outside /Volumes, or refusing it for
 # removable physical media — and either would be a FINDING, not a harness defect, while the
 # reading rule would have filed it as "broken". So E1b is replicated first, on its own throwaway

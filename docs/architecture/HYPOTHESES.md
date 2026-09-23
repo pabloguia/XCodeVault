@@ -696,8 +696,13 @@ in the experiment rather than a fact about macOS. Three candidates, all introduc
    no name field at all (`strings /usr/sbin/diskutil`), and the evidence has one space, not two.
    Cell C produced the identical message with no bare `umount` before it, so the message
    discriminates nothing. Reading a fixed format string as a symptom is the error here.
-4. **The donor class.** E1b used a freshly created hdiutil sparse image; E6c uses the operator's
-   physical external drive. DA may decline `-mountPoint` for removable physical media.
+4. ~~**The donor class.**~~ **Not a difference at all — corrected 2026-09-22.** This read "E1b used
+   a freshly created hdiutil sparse image; E6c uses the operator's physical external drive", and DA
+   declining `-mountPoint` for removable physical media was a live suspect on the strength of it.
+   Every device-class row E6c recorded says `Protocol=Disk Image`, for the donor (`/dev/disk9s1`) as
+   well as for B0's image — so **both experiments used disk images** and this axis never varied. The
+   sentence came from the script's comment, which states what the experiment was written for. The
+   donor was a sparse image that no longer exists on the machine.
 5. **The OS build.** E1b ran on 26.6.2 (25G83); E6c on 26.7 (25G229).
 
 Candidates 4 and 5 are not defects at all — either would be a *finding* — and the first re-run
@@ -779,7 +784,8 @@ B0's, and B0 never went near the cache path. **Nothing yet says whether DiskArbi
 reach it.** What distinguishes the donor from B0's image is **not yet established**, and an
 earlier draft of this paragraph ruled out one candidate on a premise that is in neither the
 evidence nor the script: it asserted both were APFS sparse images, while the script's own header
-frames the donor as the operator's physical external drive and names media class a live
+frames the donor as the operator's physical external drive — which the recorded device-class rows
+contradict, see the correction at item 4 above — and names media class a live
 candidate. The evidence records `owners on donor: Disabled` and nothing about B0's. Two
 candidates remain:
 

@@ -971,9 +971,9 @@ the list in the entry above.
 
 ### E6c — mounting over a CoreSimulator cache path — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
 
-Four runs, 2026-09-21 and 2026-09-22, as root, against **both volume classes**: the operator's
-physical external donor (`/dev/disk9s1` — cells A, B1, B2, B3) and an `hdiutil` sparse image
-(cells B0, E0, E, E0b).
+Four runs, 2026-09-21 and 2026-09-22, as root, against **disk-image volumes only**. Every recorded
+device-class row in the series says `Protocol=Disk Image`, for the donor (`/dev/disk9s1`) as well as
+for B0's own image (`/dev/disk11s1`); no row says anything else.
 Evidence: `research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`
 plus its three `-superseded-` predecessors and
 `e6b-mount-stub-cryptex-FAILED-macos26.7-25G229-xcode26.5-x86_64.txt`.
@@ -1049,8 +1049,10 @@ substitution may not be waved through. Issue #29 stays open.
   other than the target (using `Cryptex/Caches` would collapse H1 into D), and that cell is not
   written; which mechanism returns the `mkdir` refusal, and whether it refuses every write in the hierarchy or only directory
   creation; the DiskArbitration API called directly rather than through
-  `diskutil`; Apple Silicon; any macOS other than 26.7 (25G229). **Physical external media is
-  *not* an open gap here** — the earlier text said every volume in the series was a disk image and
-  that was wrong: A, B1, B2 and B3 all ran against the operator's physical external donor, which
-  the script's own comments say plainly. What remains untested on physical media is a physical
-  yank.
+  `diskutil`; Apple Silicon; any macOS other than 26.7 (25G229); **physical external media — every
+  volume in the series was a disk image.** *(On 2026-09-22 I replaced that last clause with "A, B1,
+  B2 and B3 ran against the operator's physical external donor", on the strength of the script's own
+  comments, and then restored it. The comments say "physical external"; they describe intent. The
+  device-class rows the runs actually recorded say `Protocol=Disk Image` for `/dev/disk9s1` in both
+  runs that captured them, and the donor was a sparse image that no longer exists. Prose over the
+  measured row, the third time in this series — the original sentence was right.)*
