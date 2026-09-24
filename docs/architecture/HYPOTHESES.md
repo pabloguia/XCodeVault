@@ -655,7 +655,84 @@ should claim that category is executable until this is measured.
 the same way, it is a result about **root writes in this hierarchy**, of which `mkdir` was the first
 instance measured and the mount refusals may be the third.
 
-## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c settled the mechanism question at `Cryptex/Caches` on 2026-09-22 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
+### E6c, fifth run, 2026-09-24, WITH Full Disk Access: the series' central finding is retracted
+
+Evidence: `docs/research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`.
+Same cells and the same `cryptex` target, with the same kind of donor (a sparse image,
+`/dev/disk3s1`) — and the first run from a terminal holding Full Disk Access. **Not the same
+script**: three commits landed between runs 4 and 5, confined to `cell()`'s log window, `cleanup`'s
+ownership test and the header's flags block. Cell E's own code is untouched across them, which is
+what makes the before/after on E admissible. Two cells that had never once succeeded now do:
+
+| cell | runs 1–4 (no FDA) | run 5 (FDA) |
+|---|---|---|
+| **E** — `diskutil` at the cache target, B0's image | REFUSED in runs 3–4; **the cell did not exist in runs 1–2** | **MOUNTED** |
+| **H1** — `mount_apfs` at a run-created dir *inside* `CoreSimulator` | could not even be built (`mkdir` refused) | **MOUNTED** |
+
+**So "the cache path refuses mounting" is retracted — for a volume DiskArbitration accepts — and
+"the hierarchy refuses" is retracted outright.** E mounts at `Cryptex/Caches`; H1 mounts inside
+`/Library/Developer/CoreSimulator/`. Note the scope carefully, because the unscoped version is the
+same over-read in the opposite direction: **run 5 contains no admissible measurement of the DONOR at
+the cache path.** Cell C is the donor there and it is marked `CELL C IS VOID: its control (B1)
+refused`. So the product-relevant question — can an *external* volume be mounted at a CoreSimulator
+cache path — is untouched by this run.
+
+**What survives, and it is the finding the series kept walking past.** Every `0x0000004D` in this
+run is on `/dev/disk3s1` — the donor — and nothing else:
+
+- **B1, B2, H2, C: REFUSED**, all `unable to mount /dev/disk3s1 (status code 0x0000004D)`. The
+  paths differ (control dir, control dir with `nobrowse`, a neutral in-hierarchy dir, the cache
+  target); the volume does not.
+- **B3: MOUNTED** — the same donor, same `diskutil`, with **no** `-mountPoint`, at DiskArbitration's
+  own choice of location.
+- **B0, E0, E, E0b: MOUNTED** — a *different* volume (B0's freshly created sparse image), at the
+  control dir and at the cache target alike.
+- **A, H1: MOUNTED** — `mount_apfs`. *(An earlier draft said these produced no `diskarbitrationd`
+  record. The harness never asked: the capture sits inside `cell`'s REFUSED branch and is gated on
+  the label containing "diskutil", so both gates exclude a mounted `mount_apfs` cell, and the
+  evidence file has exactly four capture blocks — B1, B2, C, H2. That absence was manufactured by
+  not querying, and explaining it with "mount_apfs bypasses DiskArbitration" is a mechanism this run
+  does not measure.)*
+
+Read together: **DiskArbitration declines this donor volume at any mount point we choose, accepts it
+at the one it chooses, and accepts a volume it has not previously mounted anywhere we ask.** Path,
+depth and hierarchy are all excluded. That is a claim about a volume's state, not about a location.
+
+**And the per-cell log attribution is trustworthy for the first time.** This is the first run with
+the bounded window: each refused cell carries its own `diskarbitrationd` records with distinct
+counts (B1 7, B2 16, C 7, H2 13) over windows of 9 to 19 raw lines, instead of four blocks that
+were byte-identical because a rolling 60-second window replayed each cell's predecessors.
+
+**The one thing this run does NOT answer, and why.** Cell **D** — `mount_apfs` at the cache target —
+**was never run by the script**. For four runs the matrix printed `REFUSED (measured 2026-09-21,
+EPERM; not repeated here)`: a hardcoded historical value. It is now a real cell, because that value
+came from a terminal *without* Full Disk Access while every other cell in this run came from one
+*with* it, and printing them in the same matrix is exactly the cross-context comparison the reading
+rules exist to forbid. **Until D is measured in-context, whether anything at all refuses
+`mount_apfs` is unknown** — and with A and H1 both mounting, the honest prior is that it does not.
+
+**A candidate for the donor asymmetry — and the first version of it is falsified by rows in this
+same run.** I wrote that DiskArbitration "declines to re-place a volume it has already placed".
+B0's image is placed at the probe by cell B0 and then re-placed three more times at mount points we
+chose — E0 at the probe, E at the cache target, E0b at the probe again — all MOUNTED. Prior
+placement plainly does not disqualify a volume.
+
+What the evidence actually distinguishes is the *kind* of prior placement. B3's line is the one I
+had not read: `diskutil mount /dev/disk3s1` put the donor back at `/Volumes/<vault>` **`mounted by
+<user>`**. So B3 is not "DA's free choice of location" — DA restored the volume to its own default
+location — and the donor's standing mount is attributed to a **non-root user session**, which
+B0's root-created, never-user-mounted image has never had. The refined candidate: *DiskArbitration
+refuses a caller-chosen mount point for a volume whose standing placement is a user-session mount at
+its default location.* Both volumes are `Owners=Disabled`, both `Protocol=Disk Image`, both
+`External`/`Removable`, so those are excluded as discriminators.
+
+Two tests, and the cheaper one is better. Re-mounting the donor **as root** at its default location
+and repeating B1 isolates the user-vs-root axis with no detach. Attaching with `-nomount` and
+repeating B1 is decisive *against* prior placement but confounds the two axes, and it costs the
+operator's own image a detach and breaks the harness's donor contract — `DONOR_BEFORE` is captured
+from the donor's mount point, so `shadow_check` would report NOT MADE for the whole run.
+
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c's 2026-09-22 answer at `Cryptex/Caches` was RETRACTED on 2026-09-24 — it measured the caller's TCC posture, see H15 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
 disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a

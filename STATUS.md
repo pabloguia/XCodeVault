@@ -316,6 +316,29 @@ is done. The post-publication issue backlog replaced it._
    and not the process this project's tooling runs in, which is the asymmetry that produced the
    wrong wording in the first place.
 
+   **2026-09-24, fifth run, with the grant: the series' central finding is retracted.** Cell E —
+   `diskutil` at the cache target — **MOUNTED**, having been REFUSED in all four previous runs. Cell
+   H1 — `mount_apfs` at a neutral directory *inside* `CoreSimulator` — **MOUNTED**, having never
+   been constructible before because `mkdir` was refused. So neither "the cache path refuses
+   mounting" nor "the hierarchy refuses" was ever about macOS.
+
+   What survives is the finding the series kept walking past, and it is about a **volume**: every
+   `0x0000004D` in this run is on the donor, in four cells across **three** paths (B1 and B2 are both
+   the probe, differing only in `nobrowse`), while the same `diskutil`
+   mounts the donor where DA itself chooses (B3) and mounts a never-before-mounted sparse image
+   anywhere asked, cache target included. Path, depth and hierarchy are excluded. *(An earlier draft
+   added "`mount_apfs` produced no DA record at all" — the harness never asked: the capture is inside
+   `cell`'s REFUSED branch and gated on the label containing "diskutil". That absence was
+   manufactured.)* And the retraction is scoped: cell C — the donor at the cache path — is VOID in
+   run 5, so an external volume at a cache path remains unmeasured. Also: this is the first run whose per-cell log attribution is trustworthy
+   — bounded windows, distinct record counts per refused cell, instead of four byte-identical blocks.
+
+   **And cell D was never actually run.** For four runs the matrix printed a hardcoded 2026-09-21
+   value for `mount_apfs` at the cache target. That value came from a non-FDA terminal while every
+   other cell now comes from an FDA one, so it is the cross-context contrast the reading rules
+   forbid. D is a real cell as of this change; until it is measured in-context, whether anything
+   refuses `mount_apfs` at all is unknown, and with A and H1 both mounting the honest prior is no.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

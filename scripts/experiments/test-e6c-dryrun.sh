@@ -286,8 +286,18 @@ check "the published file says it is fabricated" "yes" "$(contains "THIS IS A DR
 # so the arm that actually executes in a real cryptex run, and the A-vs-D reading rule with it,
 # were deletable without a failure. Moving `D_MEASURED_AT` with the target is faithful, since in
 # a real cryptex run the two are the same path; these two checks are what make that hold.
-check "the matrix reports D as measured, not as absent" "yes" \
+#
+# **D is a RUN CELL as of 2026-09-24, not a carried-over value.** It used to be printed as
+# "REFUSED (measured 2026-09-21, EPERM; not repeated here)", and this check asserted that string —
+# so it would have gone on passing while the matrix reported a number measured in a different TCC
+# context from every other cell in it. What has to be pinned now is that D is measured HERE and
+# that the old value is labelled as the cross-context one it was.
+check "D is a measured cell, not a carried-over value" "yes" \
+    "$(contains "D. mount_apfs at the cache target:" "$(evidence)")"
+check "and no run still prints the 2026-09-21 value as D's result" "no" \
     "$(contains "REFUSED (measured 2026-09-21, EPERM" "$(evidence)")"
+check "and the older value is flagged as measured without Full Disk Access" "yes" \
+    "$(contains "measured WITHOUT" "$(evidence)")"
 check "and the A-vs-D reading rule is printed" "yes" \
     "$(contains "A MOUNTED, D REFUSED" "$(evidence)")"
 check "and its filename does too" "yes" "$(contains "DRYRUN" "$(ls -1 "$WORK/ev")")"
@@ -407,6 +417,59 @@ check "and the reason is carried" "yes" \
     "$(contains "Failed conversion" "$(evidence)")"
 check "and it is the reason, not log's own stdout header" "no" \
     "$(grep -q 'log show FAILED, rc=64: Timestamp' <<<"$(evidence)" && echo yes || echo no)"
+
+# ---- cell D, the only genuinely new mount: the cases that would forge its value -----------------
+# D is `mount_apfs` at the cache target, and the reading rule loads its REFUSED with "the only
+# combination that isolates the cache directory". Two states would produce a REFUSED that means
+# nothing: an ABSENT target (mount_apfs fails ENOENT) and a non-empty one. Cell C has aborted on
+# both for four runs; D did not until now.
+# **D's vanished-target abort is a SOURCE check, and here is what it cost to find that out.** The
+# abort matters: the guard's emptiness test is `[ -e ] && [ -n "$(ls -A)" ]`, so an absent directory
+# passes it, `mount_apfs` then fails ENOENT, and `cell` would record `D: REFUSED` — the value the
+# reading rule loads with "the only combination that isolates the cache directory". Cell C has had
+# this abort for four runs; D did not.
+#
+# Two behavioural routes tried and measured. Removing the target up front aborts at cell C's own
+# existence check and never reaches D's. Hooking `script.diskutil`'s unmount to `rmdir` the target
+# — which models H14's own phenomenon rather than inventing one — never fires: measured,
+# `diskutil unmount` is called on that path **zero** times in that scenario, so no cell tears down
+# there and the hook has nothing to run on. Why E and C do not unmount the target under
+# `mounts_succeed` is unexplained, and a scenario whose mechanism I cannot account for is worse than
+# a stated gap.
+# **Pin the CONDITION, not the message.** The first version grepped for the abort's own text, and
+# the mutant that replaces `if [ ! -d "$TARGET" ]` with `if false` leaves that text in the file while
+# making the branch unreachable — it survived. Third time that shape has defeated a source check
+# here; a grep for a string cannot see whether anything reaches it.
+# Two of them: cell C's, which has existed for four runs, and cell D's, added 2026-09-24. Deleting
+# either takes this to 1.
+check "both cache-target cells abort on a vanished target, by condition not by message" "2" \
+    "$(grep -vE '^[[:space:]]*#' ./e6c-mount-mechanism.sh | grep -cF 'if [ ! -d "$TARGET" ]; then' | tr -d ' ')"
+check "and the abort says it will not forge the measurement" "1" \
+    "$(grep -c 'vanished before cell D' ./e6c-mount-mechanism.sh | tr -d ' ')"
+check "and says why it will not create it" "1" \
+    "$(grep -c 'D. mount_apfs at the cache target: NOT MEASURED' ./e6c-mount-mechanism.sh | tr -d ' ')"
+
+scenario cell-d-measures-when-it-mounts
+donor_ok
+attached disk20s1
+mounts_succeed
+# A deterministic `mount_apfs` stub. `mounts_succeed`'s version picks its target by scanning for the
+# first `/*` argument, and measured, it did not put D's line in the table — D came out
+# `REFUSED (exit 0)`, i.e. the command succeeded and `cell` found nothing mounted. Keyed on the LAST
+# argument, which is what `mount_apfs` actually takes as the mount point.
+cat > "$WORK/script.mount_apfs" <<SCR
+t="\${!#}"
+d=""
+for a in "\$@"; do case "\$a" in /dev/*) [ -z "\$d" ] && d="\$a" ;; esac; done
+[ -n "\$d" ] && [ -n "\$t" ] && printf '%s on %s (apfs, local, nobrowse)\n' "\$d" "\$t" >> "$WORK/out.mount"
+SCR
+out="$(run_e6c)"
+check "D is recorded as MOUNTED when the mount takes" "yes" \
+    "$(contains "D. mount_apfs at the cache target: MOUNTED" "$(evidence)")"
+check "and D's own stat is recorded before it runs" "yes" \
+    "$(contains "stat $WORK/ev/dryrun-target before cell D" "$(evidence)")"
+check "and the A/H1/D rule is printed, not the bare A-vs-D one" "yes" \
+    "$(contains "A, H1 AND D MOUNTED" "$(evidence)")"
 
 # ---- a guard refusal must not force-unmount a stranger's filesystem -----------------------------
 # The EXIT trap is armed BEFORE the pre-flight guards, and those guards refuse the run precisely

@@ -971,6 +971,21 @@ the list in the entry above.
 
 ### E6c — mounting over a CoreSimulator cache path — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
 
+> **RETRACTED 2026-09-24. Read this box before anything below it.** Every "REFUSED at the cache
+> path" in this entry was measured from a terminal **without Full Disk Access**. With the grant, the
+> fifth run mounts at that path (`diskutil`, cell E) and mounts inside the hierarchy at a neutral
+> directory (`mount_apfs`, cell H1) — both of which had never once succeeded. The mechanism was the
+> caller's TCC posture, not the path and not the hierarchy (H15 in `HYPOTHESES.md`).
+>
+> What survives is narrower and about a **volume**: DiskArbitration declines the donor at any mount
+> point we choose, accepts it where it chooses (cell B3), and accepts a never-before-mounted sparse
+> image anywhere asked — including the cache target. Cell D (`mount_apfs` at the cache target) is
+> **still unmeasured in-context**: it was a hardcoded 2026-09-21 value for four runs and is a real
+> cell only from 2026-09-24.
+>
+> The rest of this entry is kept as written, because the retraction is the record.
+
+
 Four runs, 2026-09-21 and 2026-09-22, as root, against **disk-image volumes only**. Every recorded
 device-class row in the series says `Protocol=Disk Image`, for the donor (`/dev/disk9s1`) as well as
 for B0's own image (`/dev/disk11s1`); no row says anything else.
@@ -983,12 +998,18 @@ plus its three `-superseded-` predecessors and
 | destination | `mount_apfs -o nobrowse` | `diskutil mount -mountPoint` |
 |---|---|---|
 | `/Library/Developer/xcv-e6c-probe` (throwaway, created and verified empty by the run) | **MOUNTED** | **MOUNTED** with a fresh image (3×); **REFUSED** with the donor (2×) |
-| `/Library/Developer/CoreSimulator/Cryptex/Caches` | **REFUSED**, `Operation not permitted`, exit 77 | **REFUSED**, exit 1, **and no `diskarbitrationd` record** |
+| `/Library/Developer/CoreSimulator/Cryptex/Caches` | ~~**REFUSED**, exit 77~~ — **RETRACTED**: a carried-over 2026-09-21 value, not a cell, taken without Full Disk Access | ~~**REFUSED**, and no `diskarbitrationd` record~~ — **RETRACTED**: cell E **MOUNTED** here 2026-09-24; the missing-record half was the rolling-window artefact fixed in `5a204b1` |
 
-**Status: observed, one configuration, one path.**
+**Status: RETRACTED 2026-09-24 — see the box at the top of this entry.** What was "observed, one
+configuration, one path" was the calling process's TCC posture. The surviving result is about a
+volume, and the donor at the cache path is unmeasured (cell C is VOID in run 5).
 
-**The `mount_apfs` row is the firm result.** The same volume mounts at a throwaway directory one
-level up and is refused at the cache path. Measured on the target and all negative: no BSD flag
+**~~The `mount_apfs` row is the firm result.~~ It was never measured at all.** Cell D — `mount_apfs`
+at the cache path — was a hardcoded 2026-09-21 value for four runs and became a real cell only on
+2026-09-24; the "firm result" was a constant, and one from a terminal without Full Disk Access at
+that. Run 5 has `mount_apfs` MOUNTING at a throwaway directory one level up (A) *and* at a neutral
+directory inside the hierarchy (H1). The sentence below is kept for the record and describes the
+retracted reading: the same volume mounts one level up and is refused at the cache path. Measured on the target and all negative: no BSD flag
 (`ls -lO`), no ACL, no `com.apple.rootless` xattr — only a Time Machine exclusion — and no
 `rootless.conf` entry for `/Library/Developer`. SIP enabled, normally. `drwxr-xr-x root:admin`.
 The cause is unidentified and is the same unexplained shape as E4b's `images.plist` refusal.
@@ -1009,9 +1030,10 @@ again immediately after.
 
 **Three things the series has and never stated.** The kernel takes the donor at the control
 directory where DiskArbitration will not — cell A mounted `/dev/disk9s1` there in the same session
-that refused B1 and B2, which narrows — but does not foreclose — reading `0x0000004D` as
-`mount_apfs`'s exit status passing through: direct invocation accepts the donor there, while DA's
-internal mount is a different invocation, and the resulting flags differ. `noowners` is excluded as the donor-versus-image differentiator: the donor mounts
+that refused B1 and B2, which narrows reading `0x0000004D` as `mount_apfs`'s exit
+status passing through — and run 5 **forecloses** it: cell A is `mount_apfs` succeeding at the probe
+in the very run where B1, `diskutil` at that identical path, returned `0x0000004D`. Two different
+outcomes at one path in one run cannot both be one mechanism's exit status. `noowners` is excluded as the donor-versus-image differentiator: the donor mounts
 `noowners` and so does B0's accepted image. And DA does not refuse the donor everywhere — see the
 next paragraph, which is the same fact stated as a puzzle.
 

@@ -383,7 +383,12 @@ matrix() {
     echo
     echo "==================== matrix ($1) ===================="
     if [ "$TARGET" = "$D_MEASURED_AT" ]; then
-        echo "  D. mount_apfs at $D_MEASURED_AT: REFUSED (measured 2026-09-21, EPERM; not repeated here)$CELLS"
+        # D is a real cell as of 2026-09-24 and reports through $CELLS like every other one. This
+        # branch no longer prints a value; it only says where the historical one came from, because
+        # a reader comparing this matrix against an older evidence file needs to know the older D
+        # was measured without Full Disk Access.
+        echo "  (D was a carried-over 2026-09-21 value in runs before 2026-09-24, measured WITHOUT"
+        echo "   Full Disk Access; it is a measured cell below.)$CELLS"
     else
         echo "  D. mount_apfs at $TARGET: NOT MEASURED. The 2026-09-21 EPERM was at"
         echo "     $D_MEASURED_AT, a different path, so the 'unreachable by either"
@@ -426,6 +431,10 @@ matrix() {
     esac
     echo
     echo "Reading (fixed in HYPOTHESES.md H14 before the run, deliberately):"
+    echo "  ** EVERY RULE IN THIS BLOCK compares cells from ONE run. A value carried over from an"
+    echo "     earlier run is NOT admissible: Full Disk Access changed these outcomes on 2026-09-24"
+    echo "     (H15), so two cells measured in different TCC contexts cannot be contrasted. That is"
+    echo "     why D is a run cell now rather than a 2026-09-21 constant. **"
     echo "  any VOID marker above => a teardown bypassed DiskArbitration before that cell. Its"
     echo "                           REFUSED is the fallback talking, not macOS. Do not read it."
     echo "  B0 REFUSED            => E1b's own call, on E1b's own kind of volume, no longer works."
@@ -482,7 +491,17 @@ matrix() {
     echo "                           about the question it was built for."
     if [ "$TARGET" = "$D_MEASURED_AT" ]; then
         echo "  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than"
-        echo "                           to mount_apfs."
+        echo "                           to mount_apfs. **Read A, H1 and D together, not A and D**:"
+        echo "                           H1 is mount_apfs at a NEUTRAL directory inside the"
+        echo "                           hierarchy, so it separates 'this directory' from 'this"
+        echo "                           hierarchy' in a way A cannot. A+H1 MOUNTED with D REFUSED"
+        echo "                           is the only combination that isolates the cache directory."
+        echo "  H1 NOT MEASURED       => the A/H1/D rules below cannot be applied: without the neutral"
+        echo "                           in-hierarchy cell, A-vs-D cannot separate 'this directory'"
+        echo "                           from 'this hierarchy'. Read D alone, and no further."
+        echo "  A, H1 AND D MOUNTED   => nothing here refuses mount_apfs. Every REFUSED left in the"
+        echo "                           matrix belongs to diskutil, and the question is about"
+        echo "                           DiskArbitration and the VOLUME, not about the path."
     else
         echo "  (the A-vs-D rule is omitted: D was not measured at this target.)"
     fi
@@ -1211,9 +1230,12 @@ case "$CELL_RESULT_B2" in
         ;;
 esac
 
-# Last, deliberately: it already passed on 2026-09-21, and a `mount_apfs` mount torn down outside
-# DiskArbitration is a candidate cause of that run's cell-B failure. Nothing depends on it running
-# first. The guard on $PROBE has expired by now — four mount cycles — for the same reason the
+# **A is no longer last, and the reason it used to be still applies to what follows it.** A
+# `mount_apfs` mount torn down outside DiskArbitration is a candidate cause of the 2026-09-21 cell-B
+# failure, which is why A was placed after every diskutil cell. H2 is a diskutil cell and now runs
+# AFTER A, so it carries exactly that exposure — recorded rather than reordered, because H1 and H2
+# must share one probe directory and H1 is the mount_apfs half. And the new A/H1/D rule means
+# something does depend on A: it is the out-of-hierarchy leg of the three-way contrast. The guard on $PROBE has expired by now — four mount cycles — for the same reason the
 # target is re-guarded above, so it is re-checked here.
 xcv_stage_refuse_symlinked_path "$PROBE" || { XCV_RUN_FAILED=1; exit 1; }
 if mount | grep -q " on $(xcv_re_escape "$PROBE") "; then
@@ -1267,6 +1289,39 @@ else
     CELLS="$CELLS
   H1/H2. in-hierarchy control: NOT MEASURED (no probe directory; see H0 above if present)"
 fi
+
+# **D — measured, at last.** For four runs this was a HARDCODED value: the matrix printed
+# "REFUSED (measured 2026-09-21, EPERM; not repeated here)" and no `mount_apfs` ever touched the
+# cache target. That was defensible while nothing had changed. It stopped being defensible on
+# 2026-09-24, when H15 showed the refusals were the caller's TCC posture: the carried-over value
+# came from a terminal WITHOUT Full Disk Access and every other cell in the matrix now comes from
+# one WITH it, so printing them side by side is the cross-context comparison the reading rules
+# exist to forbid. A cell whose value predates the variable under test is not a control.
+#
+# Placed after A and H1 — same mechanism, increasing specificity: control dir, then a neutral
+# directory inside the hierarchy, then the cache path itself. If A and H1 mount and D refuses, the
+# refusal is a property of THIS DIRECTORY, measured in one context for the first time.
+xcv_stage_guard_target "$TARGET" || { XCV_RUN_FAILED=1; exit 1; }
+# **The guard passes an ABSENT target** — its emptiness test is `[ -e ] && [ -n "$(ls -A)" ]`, so a
+# vanished directory satisfies it. `mount_apfs` would then fail ENOENT and `cell` would record
+# `D: REFUSED`, which the reading rule below loads with "the only combination that isolates the
+# cache directory". Cell C aborts on exactly this eleven hundred lines up and refuses to create the
+# directory, because creating it would forge the measurement. D gets the same abort: between C and
+# D this target is mounted over twice and unmounted twice, in a hierarchy whose stub
+# disappear/reappear behaviour is the subject of H14 — "it existed before C" is not "it exists now".
+if [ ! -d "$TARGET" ]; then
+    echo "!!!! $TARGET does not exist, so mount_apfs would fail ENOENT and cell D would read as"
+    echo "!!!! REFUSED. Not creating it: that would forge the measurement."
+    echo "!! $TARGET vanished before cell D. D was NOT run." >&3
+    CELLS="$CELLS
+  D. mount_apfs at the cache target: NOT MEASURED (the target did not exist when D was reached)"
+    XCV_RUN_FAILED=1
+    matrix "INCOMPLETE"
+    exit 1
+fi
+xcv_run "stat $TARGET before cell D" stat -f 'type=%HT mode=%Sp owner=%Su:%Sg links=%l' "$TARGET"
+cell "D. mount_apfs at the cache target" "$XCV_DEV" "$TARGET" \
+    mount_apfs -o nobrowse "$XCV_DEV" "$TARGET" || { XCV_RUN_FAILED=1; exit 1; }
 
 shadow_check
 matrix "complete"
