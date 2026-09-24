@@ -655,6 +655,64 @@ should claim that category is executable until this is measured.
 the same way, it is a result about **root writes in this hierarchy**, of which `mkdir` was the first
 instance measured and the mount refusals may be the third.
 
+### E6c, sixth run, 2026-09-24: cell D is measured, and the premise of the whole series dissolves
+
+Evidence: `docs/research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`
+(run 5 is preserved beside it as `…-superseded-20260924T140326.txt`, carrying its hand-added banner).
+First run in which cell D is a measurement rather than a 2026-09-21 constant.
+
+**`D. mount_apfs at the cache target: MOUNTED.`**
+
+```
+$ mount_apfs -o nobrowse /dev/disk3s1 /Library/Developer/CoreSimulator/Cryptex/Caches
+[exit=0]
+   mounts of /dev/disk3s1 now: /dev/disk3s1 on /Library/Developer/CoreSimulator/Cryptex/Caches (apfs, local, journaled, nobrowse)
+-> MOUNTED
+   root of the mounted volume: .fseventsd
+   root after the window:      .fseventsd
+   teardown: diskutil            ← through DiskArbitration, so no bypass taint
+```
+
+`shadow_check`: *donor root listing unchanged*. The mount landed, nothing was written to the donor
+while it sat over a live cache path, and the teardown went through DA rather than around it.
+
+**The pre-registered rule fires: A, H1 AND D MOUNTED ⇒ nothing here refuses `mount_apfs`.** All three
+in one run, one TCC context: the control directory outside the hierarchy (A), a neutral directory
+inside it (H1), and the cache target itself (D). The 2026-09-21 `EPERM` at that path was the caller's
+Full Disk Access posture and nothing else.
+
+**What is left of E6c, stated as narrowly as the evidence allows.** All four `0x0000004D` failures in
+this run are on `/dev/disk3s1` — the donor — and there are no other failures of any kind:
+
+| mechanism | volume | where | result |
+|---|---|---|---|
+| `mount_apfs` | donor | control dir (A), neutral in-hierarchy dir (H1), **cache target (D)** | **MOUNTED, all three** |
+| `diskutil` | B0's fresh image | control dir ×3 (B0, E0, E0b), **cache target (E)** | **MOUNTED, all four** |
+| `diskutil` | donor | any mount point we name (B1, B2, H2, C) | **REFUSED, `0x0000004D`** |
+| `diskutil` | donor | no `-mountPoint` — DA restores its default location (B3) | **MOUNTED** |
+
+So **path, depth, hierarchy and mechanism are all excluded.** The one thing that refuses anything is
+DiskArbitration, for this donor, at a mount point of the caller's choosing. Every "the CoreSimulator
+cache path is protected" reading in this document and in `COMPATIBILITY_MATRIX.md` was that, plus a
+caller without Full Disk Access.
+
+**And D is the first admissible measurement of the donor at the cache path in the entire series.**
+Cell C — `diskutil`, donor, same path — is VOID again because B1 refused, and was VOID in runs 2
+through 5 as well, so it has never once been readable. D answers the question C could not, for the
+other mechanism, and the answer is **yes**: an external volume can be mounted at a CoreSimulator
+cache path on this configuration.
+
+**Scope, because this is one run.** One machine, macOS 26.7 (25G229), Intel, Full Disk Access granted,
+and a donor that is a **sparse disk image** — not physical removable media, which the whole series has
+still never used. `Caches/dyld` is still untouched. And H14's own question is untouched: what this
+changes is that it is now **testable** rather than blocked, because mounting at the path works.
+
+**What this does NOT reopen.** ADR-0004 demoted canonical mount on two grounds, neither of which is
+touched here: E1 found nothing under `/Library/Developer/CoreSimulator` worth mounting over (the
+runtime bytes live in `/System/Library/AssetsV2/…`), and E2 found the `xctest` external-volume
+restriction follows the *device*, not the path. A mount that is permitted is not a mount that is
+useful. The ADR stands on its own reasoning.
+
 ### E6c, fifth run, 2026-09-24, WITH Full Disk Access: the series' central finding is retracted
 
 Evidence: `docs/research/evidence/e6c-mount-mechanism-cryptex-macos26.7-25G229-xcode26.5-x86_64.txt`.

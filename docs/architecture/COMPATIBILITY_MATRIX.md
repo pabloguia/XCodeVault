@@ -983,6 +983,19 @@ the list in the entry above.
 > **still unmeasured in-context**: it was a hardcoded 2026-09-21 value for four runs and is a real
 > cell only from 2026-09-24.
 >
+> **Completed 2026-09-24 by a sixth run, with cell D measured for the first time: `D. mount_apfs at
+> the cache target: MOUNTED`.** With A (control dir) and H1 (neutral in-hierarchy dir) also mounting,
+> nothing in this hierarchy refuses `mount_apfs` anywhere tried. The only refusal left in the matrix
+> is DiskArbitration declining **this donor** at a mount point the caller names — four cells, four
+> `0x0000004D`, one device — while it mounts the same donor at its own default location (B3) and
+> mounts a fresh sparse image everywhere asked including the cache target (E). Path, depth, hierarchy
+> and mechanism are all excluded.
+>
+> D is also the **first admissible measurement of the donor at the cache path** in the series: cell C
+> has been VOID in every run that had it. So the question the product has — can an external volume be
+> mounted at a CoreSimulator cache path — now has a positive answer for `mount_apfs`, on one machine,
+> with a sparse-image donor, with Full Disk Access.
+>
 > The rest of this entry is kept as written, because the retraction is the record.
 
 
@@ -998,7 +1011,7 @@ plus its three `-superseded-` predecessors and
 | destination | `mount_apfs -o nobrowse` | `diskutil mount -mountPoint` |
 |---|---|---|
 | `/Library/Developer/xcv-e6c-probe` (throwaway, created and verified empty by the run) | **MOUNTED** | **MOUNTED** with a fresh image (3×); **REFUSED** with the donor (2×) |
-| `/Library/Developer/CoreSimulator/Cryptex/Caches` | ~~**REFUSED**, exit 77~~ — **RETRACTED**: a carried-over 2026-09-21 value, not a cell, taken without Full Disk Access | ~~**REFUSED**, and no `diskarbitrationd` record~~ — **RETRACTED**: cell E **MOUNTED** here 2026-09-24; the missing-record half was the rolling-window artefact fixed in `5a204b1` |
+| `/Library/Developer/CoreSimulator/Cryptex/Caches` | **MOUNTED** (cell D, 2026-09-24, measured). ~~REFUSED, exit 77~~ was a carried-over 2026-09-21 value, not a cell, taken without Full Disk Access | ~~**REFUSED**, and no `diskarbitrationd` record~~ — **RETRACTED**: cell E **MOUNTED** here 2026-09-24; the missing-record half was the rolling-window artefact fixed in `5a204b1` |
 
 **Status: RETRACTED 2026-09-24 — see the box at the top of this entry.** What was "observed, one
 configuration, one path" was the calling process's TCC posture. The surviving result is about a

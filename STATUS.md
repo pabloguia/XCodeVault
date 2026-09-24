@@ -339,6 +339,24 @@ is done. The post-publication issue backlog replaced it._
    forbid. D is a real cell as of this change; until it is measured in-context, whether anything
    refuses `mount_apfs` at all is unknown, and with A and H1 both mounting the honest prior is no.
 
+   **Sixth run, same day, cell D measured: `MOUNTED`.** With A and H1 also mounting, **nothing in
+   that hierarchy refuses `mount_apfs` anywhere tried, the cache target included.** The mount landed
+   and was verified, the donor's root was unchanged before and after the window, and the teardown went
+   through DiskArbitration. The only refusal left anywhere in the matrix is DA declining *this donor*
+   at a caller-named mount point — four cells, four `0x0000004D`, one device — while mounting the same
+   donor at its own default location and mounting a fresh sparse image everywhere asked. **The
+   premise of the whole E6c series is dissolved**: path, depth, hierarchy and mechanism are excluded.
+
+   D is also the first admissible measurement of the donor at the cache path in the series, because
+   cell C has been VOID in every run that had it. So the product's own question — can an external
+   volume be mounted at a CoreSimulator cache path — has a positive answer for `mount_apfs` on this
+   configuration. **It does not reopen ADR-0004**, which demoted canonical mount because there is
+   nothing under that path worth mounting over (E1) and because the `xctest` restriction follows the
+   device rather than the path (E2). A permitted mount is not a useful one.
+
+   Still untouched: physical removable media (every volume in six runs was a disk image), `Caches/dyld`,
+   and H14's own stub-reappearance question — which is now *testable* rather than blocked.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the
