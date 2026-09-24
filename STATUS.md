@@ -305,6 +305,17 @@ is done. The post-publication issue backlog replaced it._
    `TCC.db` fails with the identical error. The test is one grant and two commands, and it is the
    operator's to make.
 
+   **2026-09-24: H15 is CONFIRMED for `mkdir`.** With Full Disk Access granted to the terminal,
+   `sudo mkdir` inside `/Library/Developer/CoreSimulator/` succeeds — the same command that was
+   refused minutes earlier without it. **H0's wording is retracted: the refusal was a property of
+   the caller, not of the hierarchy.** `rm` and `mount_apfs` are NOT re-tested, and the mount
+   refusal is what the entire E6c series rests on, so the next thing to run is E6c at `cryptex`
+   (empty, no clearing needed) with the reading fixed in advance — D mounting retracts "the cache
+   path refuses mounting" across the series; D still refusing gives the discrimination the series
+   never had. **And record which context measured what:** the grant reaches the operator's terminal
+   and not the process this project's tooling runs in, which is the asymmetry that produced the
+   wrong wording in the first place.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

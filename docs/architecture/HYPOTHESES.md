@@ -566,7 +566,43 @@ regardless of whether it works.
 platform reliability and an entitlement".** Do not schedule it against v1. Re-check on each macOS
 26.x update; the check is cheap (build Apple's sample, `mount -F`).
 
-## H15 — the refusals in `/Library/Developer/CoreSimulator/` are TCC, not SIP *(2026-09-22, one machine, untested hypothesis with a cheap decisive test)*
+## H15 — the refusals in `/Library/Developer/CoreSimulator/` are TCC, not SIP *(2026-09-22; **CONFIRMED for `mkdir` on 2026-09-24**, one machine)*
+
+**CONFIRMED, for the operation tested.** With Full Disk Access granted to the terminal:
+
+```
+sudo mkdir /Library/Developer/CoreSimulator/xcv-tcc-test   →  succeeds
+```
+
+The same command, from the same account, on the same machine, minutes earlier and without the
+grant, returned `Operation not permitted`. **So the refusal was never a property of the hierarchy.
+It was a property of the caller.** H0 as written — "this hierarchy refuses directory creation at
+this privilege" — is retracted: the privilege was not the variable, the TCC posture of the calling
+process was.
+
+**What is confirmed and what is not.** `mkdir` is confirmed. **`rm` and `mount_apfs` are not
+re-tested**, and the mount refusal is the one the whole E6c series rests on. Do not assume it
+follows: an assumption of exactly this shape is what produced H0's wrong wording, and the whole
+point of the positive control below was that "it looks like the same signature" is not a
+measurement. The cheap decisive re-test is **E6c at `cryptex`** — that target is empty (0 entries),
+needs no cache cleared, and cell D is `mount_apfs` at exactly the path recorded REFUSED with EPERM
+on 2026-09-21 from a terminal that did not have the grant.
+
+Pre-registered reading, fixed before the run:
+- **D MOUNTS** ⇒ the mount refusal was TCC too, and "the cache path refuses mounting" is retracted
+  across the series. Every cell that refused has to be re-read as "the caller lacked Full Disk
+  Access", and E6c's conclusions are about the harness's own context, not about macOS.
+- **D still REFUSED** ⇒ the mount refusal is **not** TCC, and the series gains a real
+  discrimination it never had: `mkdir` gated by TCC, mounting gated by something else.
+
+**An asymmetry that has to be recorded, because it caused this.** The grant went to the operator's
+terminal application. It does **not** reach the process this project's own tooling runs in — a
+read of `TCC.db` from there still fails with `Operation not permitted` after the grant. So a
+measurement taken by the agent and a command run by the operator are **not interchangeable**, and
+for four runs they were treated as though they were. Any future "root cannot do X here" claim must
+record which of the two contexts produced it.
+
+
 
 **What happened.** Asked to clear the dyld cache so H14's own path could finally be measured,
 `sudo rm -rf /Library/Developer/CoreSimulator/Caches/dyld/25G229` was refused — **every entry,
@@ -1159,7 +1195,11 @@ What remains, in order:
    flags field. `ls -lO` does: **no ancestor carries `restricted`** — `/Library/Developer`,
    `CoreSimulator`, `Cryptex` and `Caches` all show `-`, with only an xattr on `Caches` — and
    `rootless.conf` names `/System/Developer`, not `/Library/Developer`. **SIP path policy is
-   therefore excluded as the mechanism for the mount refusals and for H0's `mkdir` refusal alike.**
+   therefore excluded as the mechanism for the mount refusals and for H0's `mkdir` refusal alike**
+   — and on 2026-09-24 that exclusion was vindicated rather than merely asserted: the `mkdir`
+   refusal turned out to be TCC (H15), which is precisely a mechanism that returns `EPERM` while
+   marking no file. The flags check was looking for the right thing in the right way and correctly
+   found nothing.
    E1 and E13b already recorded these two checks; E6c did not, and now does, in its header so an
    aborted run still carries them.
 
