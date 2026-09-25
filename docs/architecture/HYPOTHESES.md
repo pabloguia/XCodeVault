@@ -1215,10 +1215,14 @@ safe without that diff.**
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
-1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **Re-blocked
-   2026-09-22, and not by cost: `sudo rm -rf` on that cache is refused, `Operation not permitted`,
-   as root. See H15 above — the path cannot be emptied at all from a shell without Full Disk
-   Access, so everything below about the price of a rebuild is moot until H15's test is run.**
+1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **UNBLOCKED
+   2026-09-24, and this is now the top item.** The sequence was: refused by the harness's own guard
+   for holding 7.1 GB; then `sudo rm -rf` on it refused outright with `Operation not permitted` as
+   root, which looked like a wall; then H15 showed that wall was the caller's Full Disk Access
+   posture, and with the grant `mkdir` inside the hierarchy works. **The clearing has not been
+   retried since the grant** — that is the one cheap thing standing between this item and a
+   measurement. If it clears, E6c at the `dyld` target measures H14's own path for the first time in
+   the series, and issue #29's premise becomes testable rather than inferred.
    Previously: **attempted
    2026-09-22 and refused by the harness's own guard**: the path holds 7.1 GB (one entry,
    `25G229`, the current build's cache), and mounting over a non-empty directory would hide it.
@@ -1233,7 +1237,13 @@ What remains, in order:
    directory inside the hierarchy that the mount allowlist permits. Two answers for one clearing —
    **with the two limits item 2 states**: the contrast still needs a valid `cryptex` run, and a
    daemon-owned cache is a weaker control than the neutral directory the cell wanted.
-2. A matched control *inside* the hierarchy — **narrowed on 2026-09-22, not answered.** Cells
+2. ~~A matched control *inside* the hierarchy~~ — **ANSWERED 2026-09-24 by cell H1, which MOUNTED.**
+   `mount_apfs` at a run-created neutral directory inside `/Library/Developer/CoreSimulator/`
+   succeeds, so the hierarchy refuses nothing; and cell D mounting at the cache target means the
+   directory refuses nothing either. Everything below is the record of how this item was reasoned
+   about while the answer was hidden behind a TCC grant, including two claims it rests on that H15
+   retracted — read it as history, not as open work. Original text: **narrowed on 2026-09-22, not
+   answered.** Cells
    H1/H2 were to mount at a run-created empty directory under
    `/Library/Developer/CoreSimulator/`, separating "this directory refuses" from "this hierarchy
    refuses". **The run-created form of that control cannot be built on this machine**: the
@@ -1342,11 +1352,19 @@ What remains, in order:
    in the header (`entries: 0` on 2026-09-22) and the flags/rootless checks above sit beside it.
    What remains at this number is the narrower question those checks opened — **which mechanism does
    return the refusals, now that SIP path policy is excluded.**
-4. Why diskutil produces no DiskArbitration record at the cache path — **reproduced**: for E in
-   runs 3 and 4 (both 2026-09-22), and for C, whose verdict is void, in runs 2 through 4. So it is
-   not an artefact of one run. A direct
-   `DADiskMountWithArguments` would say whether the API refuses or diskutil does.
-5. The physical-yank variant, which H14 insists on and which none of this touches.
+4. ~~Why diskutil produces no DiskArbitration record at the cache path~~ — **DISSOLVED 2026-09-24:
+   there is no refusal there to explain.** Cell E MOUNTS at the cache path with Full Disk Access, so
+   the question was about a refusal that only existed for a caller without the grant. What remains
+   of it, restated: **why DiskArbitration refuses the donor at any mount point the caller names**
+   (B1, B2, H2, C — four cells, four `0x0000004D`, one device) while accepting that same donor at its
+   own default location and accepting a fresh sparse image everywhere asked. A direct
+   `DADiskMountWithArguments` would still say whether the API refuses or `diskutil` does, and the
+   cheaper first cut is the one H15's evidence suggests: re-mount the donor **as root** at its
+   default location and repeat B1, which isolates the user-session-mount axis with no detach.
+5. **The physical-yank variant, which H14 insists on and which none of this touches** — and with it
+   the larger gap: **every volume in all six runs was a disk image.** Physical removable media has
+   never been used, so nothing in this hypothesis speaks to it, and DiskArbitration's treatment of
+   removable media is exactly the kind of thing that could differ.
 
 The guard added by issue #24 should stay. Note the reason precisely, because the tempting one is
 wrong: it is not that the state cannot exist — `simdiskimaged` mounts under that hierarchy in
