@@ -394,7 +394,8 @@ ln -s "$GT/real/inner" "$GT/real/sym"
 check "the target guard is actually loaded" "function" "$(type -t xcv_stage_guard_target)"
 guard() { xcv_stage_guard_target "$1" >/dev/null 2>&1 3>/dev/null && echo allowed || echo refused; }
 # The one environment-dependent check in this file: the guard also runs `pgrep -qx
-# "xcodebuild|Xcode|Simulator"`, so this fails with Xcode open. It fails loudly rather than
+# "xcodebuild|Xcode|Simulator"` and `pgrep -qx launchd_sim`, so this fails with Xcode open or any
+# simulator device booted. It fails loudly rather than
 # vacuously, which is the safe direction, but it is the reason a red run here may not be a code
 # change. This machine runs test rigs on its simulators, so it will happen.
 check "an ordinary directory passes the target guard" "allowed" "$(guard "$GT/real/inner")"

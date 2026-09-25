@@ -17,8 +17,10 @@
 #       `diskutil mount -mountPoint`, not `mount_apfs`. So E6b has never used the mechanism this
 #       project actually proved.
 #
-# Six cells. D is a prior measurement and is not repeated; B0 is the control that separates a
-# broken harness from a real change in the environment.
+# Six cells as first written — the table below is that design, kept as history. Since 2026-09-24 D is
+# a cell measured on every run at whichever target was named, and the run also has B2/B3, E0/E/E0b
+# and H1/H2; `matrix` prints the real list. B0 is the control that separates a broken harness from a
+# real change in the environment.
 #
 #                      | throwaway dir under /Library/Developer   | real CoreSimulator cache path
 #   -------------------+------------------------------------------+-----------------------------
@@ -158,11 +160,6 @@ out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-$(xcv_env_slug).txt"
 
 # A throwaway directory, deliberately NOT under CoreSimulator: it is the control that separates
 # "this path" from "this mechanism". `/Library/Developer` because that is where E1b mounted.
-# The path cell D was actually measured at, on 2026-09-21. Named rather than assumed: this script
-# takes a target argument, and printing "D: REFUSED" under a `dyld` run would assert a measurement
-# at a path where none was made — then the "by either mechanism" reading would rest on a cell from
-# a different path. `common.sh`'s target allowlist exists to stop exactly that confusion.
-D_MEASURED_AT=/Library/Developer/CoreSimulator/Cryptex/Caches
 
 PROBE=/Library/Developer/xcv-e6c-probe
 
@@ -204,11 +201,6 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
     # harness reaches the H0 branch without a test-only environment variable, and how the real
     # script behaves on a machine whose hierarchy refuses.
     HPROBE="$XCV_EVIDENCE_DIR/dryrun-hprobe-parent/hprobe"
-    # `D_MEASURED_AT` moves with it, or the harness exercises only the arm that never ships: in a
-    # real `cryptex` run the two ARE the same path, so leaving it behind made every dry run take
-    # `matrix`'s "D NOT MEASURED at this target" branch and left the shipping branch — and the
-    # A-vs-D reading rule — deletable without a failure.
-    D_MEASURED_AT="$TARGET"
     echo "## XCV_DRYRUN: control dir -> $PROBE, cache target -> $TARGET (the real ones need root)."
     echo "## XCV_DRYRUN: the allowlist is UNCHANGED; xcv_e6b_target still returns the real path."
 fi
@@ -382,18 +374,26 @@ cleanup() {
 matrix() {
     echo
     echo "==================== matrix ($1) ===================="
-    if [ "$TARGET" = "$D_MEASURED_AT" ]; then
-        # D is a real cell as of 2026-09-24 and reports through $CELLS like every other one. This
-        # branch no longer prints a value; it only says where the historical one came from, because
-        # a reader comparing this matrix against an older evidence file needs to know the older D
-        # was measured without Full Disk Access.
-        echo "  (D was a carried-over 2026-09-21 value in runs before 2026-09-24, measured WITHOUT"
-        echo "   Full Disk Access; it is a measured cell below.)$CELLS"
-    else
-        echo "  D. mount_apfs at $TARGET: NOT MEASURED. The 2026-09-21 EPERM was at"
-        echo "     $D_MEASURED_AT, a different path, so the 'unreachable by either"
-        echo "     mechanism' reading below does NOT apply to this run.$CELLS"
-    fi
+    # D is a real cell as of 2026-09-24, measured at `$TARGET` on every run that reaches it, and it
+    # reports through $CELLS like every other one. What varies by target is only the history note.
+    #
+    # **Keyed on the target's NAME, not on a path comparison.** Until 2026-09-25 this compared
+    # `$TARGET` with a `D_MEASURED_AT` hardcoded to the cryptex path — a leftover from when D was a
+    # carried-over constant. A `dyld` run would have printed "D. mount_apfs at …/dyld: NOT MEASURED"
+    # directly above the D line it had just measured, and dropped the A/H1/D reading rules: the
+    # instrument contradicting its own row. The dry run could not see it, because it moved
+    # `D_MEASURED_AT` with the redirected target, so the arm a real dyld run takes never executed.
+    # The name survives the dry-run redirect; a path comparison does not.
+    case "$TARGET_NAME" in
+        cryptex)
+            echo "  (D was a carried-over 2026-09-21 value in runs before 2026-09-24, measured WITHOUT"
+            echo "   Full Disk Access; it is a measured cell below.)$CELLS" ;;
+        *)
+            # A DATE, not "never before this run": the second run at this target would have
+            # published that sentence false, the same leftover-constant shape as D_MEASURED_AT.
+            echo "  (No run before 2026-09-25 measured D at this target. The 2026-09-21 EPERM and run"
+            echo "   6's MOUNTED were at Cryptex/Caches; no earlier run's D is a baseline for this one.)$CELLS" ;;
+    esac
     echo
     case "$CELL_RESULT_B1" in
         refused) echo "  !! CELL C IS VOID: its control (B1) refused. Do not read C's line above." ;;
@@ -452,16 +452,20 @@ matrix() {
     echo "                           FOR A DISK-IMAGE VOLUME. H14 is producible that way. It is"
     echo "                           not yet a product claim: E6b relocates to EXTERNAL storage,"
     echo "                           and B1 (the donor's own refusal) is still unexplained."
-    echo "  E REFUSED, E0 AND     => history is ruled out AT E'S OWN MOUNT DEPTH, and both"
-    echo "  E0b BOTH MOUNTED         mechanisms refuse the cache path with a volume each has"
-    echo "                           accepted elsewhere. Strongest (a) available here: H14"
-    echo "                           closes as unreachable. E0 alone is NOT enough — a rule"
-    echo "                           monotone in mount depth gives the same pattern with the"
-    echo "                           path playing no part, which is what E0b measures."
+    echo "  E REFUSED, E0 AND     => history is ruled out AT E'S OWN MOUNT DEPTH: DiskArbitration"
+    echo "  E0b BOTH MOUNTED         refuses the cache path for a volume it accepts elsewhere."
+    echo "                           E0 alone is NOT enough — a rule monotone in mount depth gives"
+    echo "                           the same pattern with the path playing no part (E0b)."
+    echo "                           H14 closes as unreachable ONLY IF D ALSO REFUSED with A and"
+    echo "                           H1 MOUNTED — this rule predates D being a run cell, and"
+    echo "                           'unreachable' is a claim about both mechanisms. With D"
+    echo "                           MOUNTED it is a DA-only refusal and H14 stays producible."
     echo "  C MOUNTED             => the mechanism was the problem. E6b re-runs on DiskArbitration"
     echo "                           and H14 stays open."
-    echo "  C REFUSED, B1 MOUNTED => the CoreSimulator path is unreachable by this route, at root,"
-    echo "                           by either mechanism. H14 closes as sized-but-unproducible."
+    echo "  C REFUSED, B1 MOUNTED => DiskArbitration refuses this donor at the cache path and not"
+    echo "                           at the control dir. 'Unreachable by either mechanism' — and"
+    echo "                           H14 closing as sized-but-unproducible — needs D REFUSED too,"
+    echo "                           with A and H1 MOUNTED. With D MOUNTED, H14 stays producible."
     echo "                           NOT 'by any privilege': Apple's own daemons mount these paths"
     echo "                           (F16/E4b), and two root cells do not license that claim."
     # Printed only when H0 actually happened on THIS machine. Left unconditional it would state
@@ -489,22 +493,19 @@ matrix() {
     echo "                           no cell below B0."
     echo "  C NOT MEASURED        => the cache-path cell did not run; the matrix answers nothing"
     echo "                           about the question it was built for."
-    if [ "$TARGET" = "$D_MEASURED_AT" ]; then
-        echo "  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than"
-        echo "                           to mount_apfs. **Read A, H1 and D together, not A and D**:"
-        echo "                           H1 is mount_apfs at a NEUTRAL directory inside the"
-        echo "                           hierarchy, so it separates 'this directory' from 'this"
-        echo "                           hierarchy' in a way A cannot. A+H1 MOUNTED with D REFUSED"
-        echo "                           is the only combination that isolates the cache directory."
-        echo "  H1 NOT MEASURED       => the A/H1/D rules below cannot be applied: without the neutral"
-        echo "                           in-hierarchy cell, A-vs-D cannot separate 'this directory'"
-        echo "                           from 'this hierarchy'. Read D alone, and no further."
-        echo "  A, H1 AND D MOUNTED   => nothing here refuses mount_apfs. Every REFUSED left in the"
-        echo "                           matrix belongs to diskutil, and the question is about"
-        echo "                           DiskArbitration and the VOLUME, not about the path."
-    else
-        echo "  (the A-vs-D rule is omitted: D was not measured at this target.)"
-    fi
+    # Unconditional: D is measured at `$TARGET` whatever the target is.
+    echo "  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than"
+    echo "                           to mount_apfs. **Read A, H1 and D together, not A and D**:"
+    echo "                           H1 is mount_apfs at a NEUTRAL directory inside the"
+    echo "                           hierarchy, so it separates 'this directory' from 'this"
+    echo "                           hierarchy' in a way A cannot. A+H1 MOUNTED with D REFUSED"
+    echo "                           is the only combination that isolates the cache directory."
+    echo "  H1 NOT MEASURED       => the A/H1/D rules below cannot be applied: without the neutral"
+    echo "                           in-hierarchy cell, A-vs-D cannot separate 'this directory'"
+    echo "                           from 'this hierarchy'. Read D alone, and no further."
+    echo "  A, H1 AND D MOUNTED   => nothing here refuses mount_apfs. Every REFUSED left in the"
+    echo "                           matrix belongs to diskutil, and the question is about"
+    echo "                           DiskArbitration and the VOLUME, not about the path."
 }
 
 # H2, the other half, as a function because the abort paths need it too. Anything a daemon wrote
@@ -575,6 +576,26 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
 fi
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
 echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Owners: *//p' | head -1)"
+# **Who placed the donor, measured before the run touches it.** The one candidate left for the
+# donor's `0x0000004D` is that DiskArbitration declines a caller-chosen mount point for a volume
+# whose standing placement is a user-session mount. Through run 6 that attribution was read off
+# B3's line — AFTER the run had unmounted and re-mounted the donor — so the state the candidate is
+# about was never recorded. This is the donor's own mount line, taken while it is still standing.
+echo "donor standing mount (before any cell): $(mount | grep "^$(xcv_re_escape "$XCV_DEV") on " | head -1)"
+# **The run's TCC context, measured rather than narrated.** Full Disk Access changed these cells'
+# outcomes (H15), and the reading rules forbid contrasting cells from different TCC contexts — but
+# through run 6 the context was known only from the operator's account of a grant. This is H15's own
+# indicator: whether THIS process can open `TCC.db`. `: <` opens the file and reads nothing. It is an
+# indicator of Full Disk Access reaching this process, not a query of TCC itself. Skipped on a dry
+# run, for the reason the flags block below gives: a builtin redirect cannot be stubbed, so it would
+# put this machine's real posture into an artifact whose banner says nothing here measures it.
+if [ "${XCV_DRYRUN:-0}" = 1 ]; then
+    echo "TCC indicator: NOT PROBED (dry run)"
+elif xcv_tcc_err="$( { : < "/Library/Application Support/com.apple.TCC/TCC.db"; } 2>&1 )"; then
+    echo "TCC indicator: TCC.db opened by this process — Full Disk Access reaches it"
+else
+    echo "TCC indicator: TCC.db NOT opened by this process (${xcv_tcc_err##*: }) — Full Disk Access does not reach it"
+fi
 # The target's CONTENTS, recorded and guarded the way the probe's are. The 2026-09-22 run
 # recorded only `stat`, so "the mount point was not empty" — a textbook DiskArbitration refusal
 # that produces exactly diskutil's bare failure template — could not be ruled out for the one

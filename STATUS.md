@@ -357,6 +357,17 @@ is done. The post-publication issue backlog replaced it._
    Still untouched: physical removable media (every volume in six runs was a disk image), `Caches/dyld`,
    and H14's own stub-reappearance question — which is now *testable* rather than blocked.
 
+   **2026-09-25: the `dyld` run is prepared, and its reading is committed before it runs** (H14, "E6c,
+   seventh run, at `Caches/dyld`"). Getting there found that the harness would have misreported it:
+   `matrix` printed "D … NOT MEASURED" above a measured D at any non-cryptex target and dropped the
+   A/H1/D rules, and no dry run had ever taken that arm. The evidence header now records the run's TCC
+   indicator and the donor's standing mount — both were prose through run 6. The shared target guard
+   refuses a booted simulator (`launchd_sim`), which a headless `simctl boot` slipped past. And the
+   dry-run suite never exercised account-name redaction at all: `id` is stubbed, so the redactor's
+   identity was empty. The donor image from runs 5–6 is gone (a reboot cleared `/tmp`); the run uses a
+   recreated one. Known flake: "an interrupted run exits 130" failed in all seven parallel mutant
+   runs under load and passed in every serial run — timing-sensitive, not yet fixed.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

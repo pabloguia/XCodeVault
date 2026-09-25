@@ -1231,7 +1231,10 @@ safe without that diff.**
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
-1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **UNBLOCKED
+1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **CLEARED
+   2026-09-25 (H15's `rm`), and the reading of the run is fixed below, in "E6c, seventh run, at
+   `Caches/dyld` — the reading, fixed BEFORE the run", committed before the operator ran it.** The
+   rest of this item is how it got here. **UNBLOCKED
    2026-09-24, and this is now the top item.** The sequence was: refused by the harness's own guard
    for holding 7.1 GB; then `sudo rm -rf` on it refused outright with `Operation not permitted` as
    root, which looked like a wall; then H15 showed that wall was the caller's Full Disk Access
@@ -1385,3 +1388,121 @@ What remains, in order:
 The guard added by issue #24 should stay. Note the reason precisely, because the tempting one is
 wrong: it is not that the state cannot exist — `simdiskimaged` mounts under that hierarchy in
 normal operation — but that *we* cannot manufacture it with the mechanisms a product may use.
+
+### E6c, seventh run, at `Caches/dyld` — the reading, fixed BEFORE the run *(written 2026-09-25; run pending)*
+
+**This subsection is committed before the operator runs anything, and that ordering is the point.**
+This series has retracted three conclusions that were written after their evidence was in hand. A
+reading written first cannot be fitted to the result. If the run produces a pattern this text does
+not cover, the honest record is "not pre-registered", not a rule invented on the spot.
+
+**What this run is.** The first E6c run at H14's own path,
+`/Library/Developer/CoreSimulator/Caches/dyld` — the path issue #29 is about and none of the six
+earlier runs measured. State verified 2026-09-25, read-only, from the agent's context:
+`drwxr-xr-x root:admin`, no flags, **0 entries, the directory itself intact** (emptied by H15's
+`rm`, which is the state the guard requires: empty, not absent); nothing booted; no `xcodebuild`.
+
+**The donor is a new volume, and that is a variable, not a detail.** Runs 5 and 6 used
+`/tmp/e6b-donor.sparseimage`; a reboot cleared `/tmp` and the image is gone. It is recreated the
+same way — a sparse APFS image, attached by the operator's user session, not by root — but it is a
+new device with a new UUID and no mount history. So this run differs from run 6 in **target, donor
+and, as far as any evidence file can show, TCC context**. That is three reasons, each sufficient,
+that no cell here is contrasted with any earlier run.
+
+**Two instrument corrections, made before the run.** Both are pinned by
+`scripts/experiments/test-e6c-dryrun.sh` (scenario `cell-d-at-dyld`) and each pinning check was
+killed by a mutant verified to have applied.
+
+1. **`matrix` would have contradicted its own row at this target.** It chose D's arm by comparing
+   `$TARGET` with a `D_MEASURED_AT` hardcoded to `Cryptex/Caches` — left over from when D was a
+   carried-over constant. At `dyld` it would have printed `D. mount_apfs at …/dyld: NOT MEASURED`
+   directly above the D line it had just measured, and **omitted the A/H1/D rules**, which are this
+   run's main reading. No dry run could see it: every scenario ran `cryptex`, and the dry run moved
+   `D_MEASURED_AT` with its redirected target. `matrix` now keys on the target's *name*. The same
+   change corrects two legend rules written before D was a run cell: "E REFUSED with E0/E0b
+   MOUNTED" and "C REFUSED with B1 MOUNTED" each claimed H14 "closes as unreachable", which is a
+   claim about both mechanisms and needs D refused too.
+2. **Two header lines, measured instead of narrated.** `donor standing mount (before any cell)`
+   records who placed the donor *before* the run touches it — through run 6 that was read off B3's
+   line, after the run had unmounted and re-mounted the donor, so the state the user-session
+   candidate is about was never recorded. `TCC indicator` records whether *this* process can open
+   `TCC.db` (H15's own indicator; opens the file, reads nothing). Through run 6 the "with Full Disk
+   Access" context was known only from the operator's account of a grant — prose, not measurement.
+
+**Admissibility, checked before any cell is read, in this order.**
+
+- **The TCC indicator line decides the context.** `NOT opened` ⇒ a non-FDA run. It is a valid run
+  of that context, but every `REFUSED` in it may be H15's refusal and it answers nothing about the
+  path; re-run from the granted terminal. If the operator believed the grant was present, that
+  mismatch is itself a finding about which process the grant reaches — record it. The rules below
+  assume `opened`.
+- **A REFUSED or A NOT MEASURED ⇒ void.** B0 REFUSED ⇒ an OS-build result; stop. Any VOID marker
+  from a teardown that bypassed DiskArbitration ⇒ cells after it are not read.
+- **A REFUSED cell whose exit status or text is not `EPERM` / `0x0000004D`** — `ENOENT`, `EBUSY`,
+  anything else — is **not** a "the path refuses" reading, for any cell. That cell measured that
+  cause.
+- **`shadow_check` reporting DONOR ROOT CHANGED** ⇒ something wrote onto the donor while it sat
+  over a live CoreSimulator path. At `dyld` the first suspect is a cache rebuild: the target is empty
+  *because* the cache was cleared, and CoreSimulator rebuilds it when a runtime boots. That is a
+  rule-6 hazard observed directly and it is reported on its own; it is not a mount-permission result
+  and it does not change how the cells read.
+
+**The cells.** "Mounted" means the cell's own verified line, not the command's exit status.
+
+- **D** — `mount_apfs`, donor, `Caches/dyld`. The cell this run exists for.
+  - **A, H1 and D MOUNTED** ⇒ H14's own path accepts a volume mounted by root, with Full Disk
+    Access, via `mount_apfs`, on this configuration. Issue #29's premise — that a volume can sit at
+    `Caches/dyld` so that its disappearance can be watched — holds for this mechanism. **It says
+    nothing about whether a stub reappears afterwards:** E6c tears down cleanly and never asks. The
+    next step is E6b at `dyld` on the mechanism that mounted.
+  - **A and H1 MOUNTED, D REFUSED with `EPERM`** ⇒ the first directory-specific refusal this series
+    has measured inside one context: `Caches/dyld` refuses `mount_apfs` where a neutral directory in
+    the same hierarchy accepts it. "Directory-specific" is narrower than it sounds: D also differs
+    from H1 in who created the directory, in the `backup_excludeItem` xattr, and in any mounts E
+    and C made over it earlier in the same run, so any of those is a candidate, not only the path. **Not** "dyld differs from cryptex" — that contrast is cross-run
+    and inadmissible, and the harness has no same-run cryptex cell to supply it. H15's claim that
+    TCC accounts for "the entire refusal signature" is then false for mounting at this path, and H15
+    is reopened for it. Whether H14 is producible here then rests on E.
+  - **H1 REFUSED, A MOUNTED** ⇒ with the TCC indicator `opened`, the hierarchy refuses `mount_apfs`
+    in this run's own evidence. H15 is reopened for mounting; D is read no further than "refused
+    alongside a refusing hierarchy".
+  - **H1 NOT MEASURED because H0 fired** ⇒ with the indicator `opened`, `mkdir` inside the hierarchy
+    was refused to a caller with the grant, which contradicts H15's `mkdir` confirmation. Record H0's
+    errno; read D alone, and no further.
+- **H1** — `mount_apfs` at a run-created neutral directory inside the hierarchy: read with D, above.
+- **A** — `mount_apfs` at the control directory: validity only.
+- **E** — `diskutil`, B0's fresh image, `Caches/dyld`; read only with **B0, E0 and E0b MOUNTED**.
+  - **E MOUNTED** ⇒ DiskArbitration mounts a disk image at H14's own path. With D MOUNTED, both
+    mechanisms reach `Caches/dyld`.
+  - **E REFUSED** ⇒ DiskArbitration refuses this path for a volume it accepts at the control
+    directory before and after (E0, E0b). H14 **closes as unreachable only if D also REFUSED**, with
+    A and H1 MOUNTED. With D MOUNTED it is a DiskArbitration-only policy at this path: H14 stays
+    producible via `mount_apfs`, and the product question becomes which mechanism a helper may use.
+  - **E0 REFUSED** ⇒ E was not run; nothing about E.
+- **C** — `diskutil`, donor, `Caches/dyld`. **VOID whenever B1 refused**, which has been true in
+  every run that had both. Expected VOID; not read in that case. If B1 MOUNTS, C is readable: C
+  MOUNTED ⇒ DiskArbitration takes the donor at `dyld`; C REFUSED ⇒ it refuses the donor at `dyld`
+  while taking it at the control directory — a within-run path contrast for DiskArbitration.
+- **B1 / B2 / B3** — the donor asymmetry, on a donor with no mount history. Read with the
+  `donor standing mount` line, not with B3's post-run line.
+  - **B1 REFUSED and B3 MOUNTED, within this run** ⇒ DiskArbitration refuses this donor at a named
+    mount point and accepts it at its default location. If the standing line attributes the donor
+    to the user, that is **consistent with** the user-session candidate and not evidence for it over
+    its rivals — isolating it is item 4 (re-mount as root, repeat B1). If the standing line carries
+    no user attribution, the candidate is **falsified** for this donor.
+  - **B1 MOUNTED, within this run** ⇒ if the standing line attributes the donor to the user, the
+    user-session candidate is **falsified** for this donor. **Why runs 5–6 refused is not answered
+    here**: the donor, the boot session and the TCC context all differ from them, and this run
+    cannot single out any one of the three. C becomes readable.
+  - **B3 REFUSED** ⇒ DiskArbitration refuses the donor even at its own default location. Then no
+    refusal of the donor at a named mount point (B1, B2, C, H2) is about mount points at all.
+  - **B2**: B1 and B2 both REFUSED says nothing about `nobrowse`. B1 MOUNTED with B2 REFUSED ⇒
+    `nobrowse` is DiskArbitration's objection. B1 REFUSED with B2 MOUNTED is not pre-registered.
+  - **H2** — `diskutil`, donor, the in-hierarchy directory: tracks B1. Refused alongside a refused
+    B1, it adds nothing.
+
+**What this run cannot answer however it comes out.** ADR-0004 — demoted on E1 (nothing under that
+path worth mounting over) and E2 (the `xctest` restriction follows the device); a permitted mount is
+not a useful one. Physical removable media — the donor is a disk image, as in all six earlier runs.
+The physical-yank variant. And the privileged helper's own TCC posture: the indicator measures the
+operator's `sudo` child, and a launchd daemon's posture is not that.

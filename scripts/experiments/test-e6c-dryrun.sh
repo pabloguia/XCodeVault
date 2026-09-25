@@ -41,6 +41,9 @@
 #     `cell`'s post-teardown `mount | grep` rather than the stub.
 #   - The root refusal is pinned by expression and ordering, not by behaviour, and the reason is
 #     the guard's own correctness — see the check itself.
+#   - Account-name redaction, everywhere but `cell-d-at-dyld`. `id` is stubbed, so the redactor's
+#     identity is empty and its account-name rule is a no-op unless a scenario answers `id -un`;
+#     only that scenario does. A leak gate passing elsewhere says nothing about the rule.
 #   - The re-entrancy guard inside `cleanup` is redundant given the signal ignore beside it;
 #     deleting it alone changes nothing here, and the script says so where it is defined.
 #
@@ -141,9 +144,11 @@ scenario() {
 }
 
 # e6c — run the real script against the current scenario. Captures everything.
+# `E6C_TARGET` picks the allowlisted target NAME. Every scenario ran `cryptex` until 2026-09-25, so
+# the arm a real `dyld` run takes in `matrix` had never executed — and it was wrong.
 e6c() {
     XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$WORK/ev" SUDO_USER="$FAKE_USER" \
-        bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" cryptex 2>&1
+        bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" "${E6C_TARGET:-cryptex}" 2>&1
 }
 # A FILE, not a variable: every call site is `out="$(run_e6c)"`, so an assignment inside would
 # happen in the subshell and never reach `check`. That is the same shape as the defects this
@@ -281,11 +286,10 @@ check "and still publishes evidence" "1" "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null |
 # added and neither was asserted — deleting either was silent, which is the same shape as the
 # root-refusal grep.
 check "the published file says it is fabricated" "yes" "$(contains "THIS IS A DRY RUN" "$(evidence)")"
-# The SHIPPING matrix arm. With the cache target redirected to scratch, `$TARGET` stopped
-# equalling `$D_MEASURED_AT` and every dry run took the "D NOT MEASURED at this target" branch —
-# so the arm that actually executes in a real cryptex run, and the A-vs-D reading rule with it,
-# were deletable without a failure. Moving `D_MEASURED_AT` with the target is faithful, since in
-# a real cryptex run the two are the same path; these two checks are what make that hold.
+# The SHIPPING matrix arm for `cryptex`. The arm used to be chosen by comparing `$TARGET` with a
+# hardcoded `D_MEASURED_AT`, which the dry run had to move with the redirected target — and moving it
+# hid the arm a real `dyld` run took. `matrix` now keys on the target NAME, which the redirect does
+# not touch; `cell-d-at-dyld` below pins the other arm.
 #
 # **D is a RUN CELL as of 2026-09-24, not a carried-over value.** It used to be printed as
 # "REFUSED (measured 2026-09-21, EPERM; not repeated here)", and this check asserted that string —
@@ -470,6 +474,69 @@ check "and D's own stat is recorded before it runs" "yes" \
     "$(contains "stat $WORK/ev/dryrun-target before cell D" "$(evidence)")"
 check "and the A/H1/D rule is printed, not the bare A-vs-D one" "yes" \
     "$(contains "A, H1 AND D MOUNTED" "$(evidence)")"
+
+# ---- the same full run at the `dyld` target: the arm no dry run had ever taken ------------------
+# H14's own path. Until 2026-09-25 `matrix` decided D's arm by comparing `$TARGET` with a
+# `D_MEASURED_AT` hardcoded to the cryptex path, so a real dyld run would have printed
+# "D. mount_apfs at …/dyld: NOT MEASURED" above the D line it had just measured, and dropped the
+# A/H1/D rules. No scenario ran dyld, so nothing could see it. Same stubs as the scenario above.
+scenario cell-d-at-dyld
+donor_ok
+# The donor's standing line carries a user attribution, as the real one does: the new header line
+# prints it, so the redaction of `mounted by <account>` has to be exercised, not assumed.
+#
+# **The redactor's identity has to be supplied, and the first two drafts of this scenario got it
+# wrong.** `id` is one of the stubs, and a dry run is never root, so `xcv_identity` takes the
+# non-root branch and asks the STUB for `id -un` — which answers nothing. The account-name rule
+# then degenerates to an empty word, a no-op, **in every dry-run scenario**, while the publish gate
+# hunts for `SUDO_USER`. Measured: with `$FAKE_USER` in the line the gate refused to publish; with
+# the real `id -un` the name went out unredacted and the gate passed it. Answering `id -un` with the
+# same account as `SUDO_USER` is the shape of a real run, where both identities are `SUDO_USER`.
+echo "$FAKE_USER" > "$WORK/out.id.._un"
+DRY_ACCOUNT="$FAKE_USER"
+printf '/dev/disk9s1 on /Volumes/DRYDONOR (apfs, local, nodev, nosuid, journaled, noowners, mounted by %s)\n' "$DRY_ACCOUNT" > "$WORK/out.mount"
+attached disk20s1
+mounts_succeed
+cat > "$WORK/script.mount_apfs" <<SCR
+t="\${!#}"
+d=""
+for a in "\$@"; do case "\$a" in /dev/*) [ -z "\$d" ] && d="\$a" ;; esac; done
+[ -n "\$d" ] && [ -n "\$t" ] && printf '%s on %s (apfs, local, nobrowse)\n' "\$d" "\$t" >> "$WORK/out.mount"
+SCR
+out="$(E6C_TARGET=dyld run_e6c)"
+check "a dyld run publishes under the dyld name" "yes" "$(contains "e6c-mount-mechanism-dyld-DRYRUN" "$(ls -1 "$WORK/ev")")"
+check "a dyld run records D as MOUNTED when the mount takes" "yes" \
+    "$(contains "D. mount_apfs at the cache target: MOUNTED" "$(evidence)")"
+# The CONDITION, observed through its output: the dyld arm's note is printed and the cryptex arm's
+# is not. Swapping the arms, or keying them on anything the redirect changes, flips both.
+check "and says D has no earlier baseline at this target" "yes" \
+    "$(contains "no earlier run's D is a baseline for this one" "$(evidence)")"
+check "and does not print the cryptex-only history as though it applied" "no" \
+    "$(contains "measured WITHOUT" "$(evidence)")"
+check "and never calls its own measured D NOT MEASURED" "0" \
+    "$(evidence | grep -c 'D\. mount_apfs at .*: NOT MEASURED' | tr -d ' ')"
+check "and prints the A/H1/D rules" "yes" "$(contains "A, H1 AND D MOUNTED" "$(evidence)")"
+# The two header records added the same day: who placed the donor, measured before any cell, and
+# the TCC indicator — which a dry run must NOT probe, since a builtin redirect cannot be stubbed.
+check "the donor's standing mount is recorded before any cell" "yes" \
+    "$(contains "donor standing mount (before any cell): /dev/disk9s1 on " "$(evidence)")"
+check "and a dry run records that TCC was not probed" "yes" \
+    "$(contains "TCC indicator: NOT PROBED (dry run)" "$(evidence)")"
+check "the standing line's account name is redacted, and the run still publishes" "yes|no" \
+    "$(contains "mounted by <user>" "$(evidence)")|$(contains "mounted by $DRY_ACCOUNT" "$(evidence)")"
+
+# ---- a booted simulator refuses the run, however it was booted --------------------------------
+# `simctl boot` from a headless rig starts neither Simulator.app nor xcodebuild, so the older check
+# passed it. At `dyld` a runtime boot rebuilds the cleared cache under the mount. Keyed on the
+# argument, so it is THIS pgrep that answers "running" and not the older one.
+scenario booted-simulator-refuses
+donor_ok
+echo 0 > "$WORK/rc.pgrep..launchd_sim"
+out="$(E6C_TARGET=dyld run_e6c)"
+check "a booted simulator device refuses the run" "yes" "$(contains "A simulator device is booted" "$out")"
+check "and nothing is mounted by either mechanism" "no|no" \
+    "$(contains "mount_apfs" "$(calls)")|$(contains "diskutil mount" "$(calls)")"
+check "and the refusal came from asking for launchd_sim" "yes" "$(contains "pgrep -qx launchd_sim" "$(calls)")"
 
 # ---- a guard refusal must not force-unmount a stranger's filesystem -----------------------------
 # The EXIT trap is armed BEFORE the pre-flight guards, and those guards refuse the run precisely

@@ -161,6 +161,22 @@ xcv_stage_guard_target() {
         echo "   used by test rigs, so check whose it is before stopping anything." >&3
         return 1
     fi
+    # **A booted simulator, however it was booted.** The check above misses a device a rig boots
+    # headless with `simctl boot` — no Simulator.app, no xcodebuild. At `Caches/dyld` that matters: a
+    # cleared cache is rebuilt there when a runtime boots, onto whatever is mounted over it, and a
+    # busy volume sends teardown to `umount -f`, which can take down the rig's running device. Not
+    # `xcrun simctl`: under sudo it lists root's device set, not the operator's. `pgrep` sees every
+    # user's processes.
+    #
+    # **What the name rests on, and what it does not.** `sbin/launchd_sim` exists in both runtimes
+    # installed here (iOS 26.5, watchOS 26.5), measured 2026-09-25 with `find`. That a booted device
+    # runs a process by that name is NOT measured on this machine — that would mean booting a shared
+    # simulator. If the name is wrong this never fires, which is the behaviour without it.
+    if pgrep -qx launchd_sim; then
+        echo "!! A simulator device is booted (a launchd_sim process is running). A rig may be using it," >&3
+        echo "   and a runtime boot rebuilds the dyld cache under the mount. Check whose it is first." >&3
+        return 1
+    fi
     return 0
 }
 
