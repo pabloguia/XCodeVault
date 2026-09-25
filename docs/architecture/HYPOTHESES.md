@@ -580,7 +580,23 @@ It was a property of the caller.** H0 as written — "this hierarchy refuses dir
 this privilege" — is retracted: the privilege was not the variable, the TCC posture of the calling
 process was.
 
-**What is confirmed and what is not.** `mkdir` is confirmed. **`rm` and `mount_apfs` are not
+**CONFIRMED for all three operations, as of 2026-09-25.** `mkdir` on 2026-09-24; `mount_apfs` by
+cells D and H1 in runs 5 and 6 the same day; and **`rm` on 2026-09-25** —
+`sudo rm -rf /Library/Developer/CoreSimulator/Caches/dyld/25G229` succeeded from the granted
+terminal, where days earlier it had refused every entry with `Operation not permitted`. The path is
+now `exists=yes entries=0 size=0B`: emptied, with the directory itself intact, which is the state
+the E6c guard requires (empty, not absent). So H15 accounts for the entire refusal signature —
+create, delete and mount alike — and nothing in this hierarchy needed explaining beyond the caller's
+Full Disk Access.
+
+**A consequence for the product, and it is the good direction.** `xcodevaultctl clean` lists
+`CoreSimulator system dyld caches` as `[root — helper needed]` and the open question was whether a
+privileged helper could execute it at all if the gate was TCC rather than ownership. The gate is
+demonstrably passable: a root process with Full Disk Access cleared 7.1 GB from that path. What is
+still unverified is a launchd daemon's TCC posture, which is not the same as a granted Terminal's —
+but "impossible" is now ruled out.
+
+*(Superseded text, kept because the retraction is the record.)* **`rm` and `mount_apfs` are not
 re-tested**, and the mount refusal is the one the whole E6c series rests on. Do not assume it
 follows: an assumption of exactly this shape is what produced H0's wrong wording, and the whole
 point of the positive control below was that "it looks like the same signature" is not a
