@@ -1545,3 +1545,93 @@ measured at H14's own path rather than inferred from a sibling one: **E6b can ru
 `mount_apfs` (what E6b's staging already uses) and with DiskArbitration both shown to reach it. The
 open items keep their order — item 4 (donor re-mounted as root, repeat B1), then physical removable
 media, then the physical yank — with E6b at `dyld` now runnable alongside them.
+
+### Item 4 — does who attached the donor decide DiskArbitration's `-mountPoint` answer? Design and reading, fixed BEFORE the run *(written 2026-09-25; run pending)*
+
+**Item 4 as written cannot isolate its axis, and run 7's measured lines show why.** It proposed
+re-mounting the donor as root at its default location and repeating B1. B3 already is that: the
+script runs as root (`Runner: root (uid 0)`), B3 is `diskutil mount /dev/disk7s1` with no
+`-mountPoint`, and the result is `… mounted by <user>`, in runs 6 and 7. So re-mounting through
+DiskArbitration does not move the attribution. **What those lines do not show is why.** Every
+`mounted by <user>` in the file is a mount at the *default location*, and every B0 line without it
+is a `-mountPoint` mount, so "DA attributes default-location mounts to the console user whoever
+calls" fits as well as "DA attributes by who attached". The design has to separate the two.
+
+**The variable that can be moved is the attach, and it is measured, not read off a mount line.**
+`hdiutil info -plist` records each image's `owner-uid`: 501 for the donor today, 0 for the
+simulator runtime images. B0's image is attached by root with `-nomount`.
+
+**Four cells on one image file, in one run, each differing from its neighbour in one variable** —
+`scripts/experiments/e6c-item4-attach-owner.sh`:
+
+| cell | attach | default-location mount before the cell | differs from the previous in |
+|---|---|---|---|
+| B1u | the donor as the operator attached it | yes | — |
+| B1c | the operator's session again, after a detach | yes | a fresh attach (new DA disk object, new nodes, clean history) **and the attach path** |
+| B1n | the operator's session, `-nomount` | no | the default-location mount |
+| B1r | root, `-nomount` — B0's own shape | no | who attached |
+
+Every cell is `diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe <volume>`: the control
+directory, never a CoreSimulator path. Each re-attach is verified before the next cell runs — the
+image gone from `hdiutil info` after the detach, then present exactly once with the `owner-uid`
+asked for, the volume's UUID unchanged, and mounted or not as the flag requires — and **any mismatch
+stops the run**, so a later cell cannot measure the previous condition under its own name. The user
+attaches use `launchctl asuser <uid> sudo -u <user>`, meant to attach inside the operator's session
+rather than merely under their uid. **That is intended, not measured**: it is a different attach path
+from the operator's own shell, which is why it is listed as a B1c confound and why B1c carries the
+check below. The image is identified by its path in `hdiutil info`, never by a volume name.
+
+**It has no stub harness, and that is a stated gap, not an oversight.** The four review rounds on
+E6c found their defects in exactly the paths only a stub harness reaches; this script's abort and
+restore paths have been read, not executed. They are short for that reason: every failure stops,
+nothing is force-unmounted, and the image is disposable. The manual runbook this replaces failed
+review on shell semantics a harness would have caught — pasted into zsh, an apostrophe in a comment
+swallowed three steps and the rest ran with an empty mount point — which is why it is a script now.
+
+**Admissibility, before any cell is read.**
+- `TCC indicator: … opened`. Otherwise stop; nothing below is read.
+- Each cell's `owner-uid` line must match the table (B1u, B1c, B1n: the operator's uid; B1r: 0). The
+  script stops on a mismatch; a cell that ran is therefore a cell whose attacher was verified.
+- A REFUSED cell is read as DiskArbitration's refusal only if its block shows
+  `status code 0x0000004D` naming that cell's device **and** `log show exit=0`. A failed `log show`,
+  or no line for the device, means the instrument did not see it; **any other code** is recorded
+  and not read against the candidate. In both cases the cell is recorded, not read.
+- "Mounted" means the cell's `mounts of … now:` line shows the probe, not the command's status.
+- `!! THE RUN STOPPED EARLY` ⇒ only the cells listed are read, and only pairwise as below.
+
+**The reading.** Each comparison is between neighbours in this run. Order is a confound in every
+one of them (each cell runs after the previous), and each mount writes `.fseventsd`, so the contents
+are nearly, not exactly, fixed.
+
+- **B1u REFUSED with `0x0000004D`** is the replication; any other code is not. **B1u MOUNTED** ⇒ the
+  refusal did not reproduce in this session
+  before anything was changed; record every cell, and no comparison below is read against the
+  candidate — the question becomes why B1 refused inside E6c and not here.
+- **B1c's own check, before any B1c contrast.** Its `standing mount:` line must match B1u's in its
+  options and in `mounted by <user>`, device node aside. If it does not, B1c is not a like-for-like
+  re-attach: the B1u → B1c contrast is not read, and the later contrasts use B1c, not B1u, as the
+  baseline.
+- **B1u → B1c** (a fresh attach through the script's attach path, same default mount):
+  - both REFUSED ⇒ a fresh attach alone changes nothing; the next two contrasts are clean of it.
+  - B1c MOUNTED ⇒ the detach/re-attach alone changes DiskArbitration's answer. Then B1n and B1r
+    contrast against B1c, not B1u, and "the donor's history" becomes a live explanation for B1u.
+- **B1c → B1n** (same session, no default-location mount before the cell):
+  - B1c REFUSED, B1n MOUNTED ⇒ **the default-location placement is what DA holds against a
+    caller-chosen mount point**, not the attacher. The user-session candidate is falsified in its
+    attach form; its placement form survives.
+  - both REFUSED ⇒ the default-location mount is not the variable.
+- **B1n → B1r** (both `-nomount`; only the attacher differs):
+  - B1n REFUSED, B1r MOUNTED ⇒ **a detach and re-attach by root, instead of by the operator's
+    session, changed DiskArbitration's answer** — the first discriminating support the candidate has
+    had, with the order confound above. It does not separate "the attaching uid" from "a user
+    session": both move together here.
+  - both REFUSED ⇒ the attacher is not the variable, and the candidate is falsified in both forms
+    for this image. What remains is **among** the things this run holds fixed: the image was
+    *created* by the operator where B0's is created by root, its size, its mount history across
+    runs.
+  - B1n MOUNTED ⇒ B1r is not a contrast; see B1c → B1n.
+- **Any pattern not listed here** is recorded and marked "not pre-registered", not read.
+
+**What this cannot answer.** Anything about CoreSimulator paths; physical removable media; the stub
+question; a launchd daemon's TCC posture; and why DiskArbitration makes the choice, only whether this
+variable moves it.

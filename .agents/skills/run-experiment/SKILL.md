@@ -19,7 +19,7 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
    | **scratch-only** | Creates its own `mktemp` set or `hdiutil` image and destroys only that. | `e1b`, `e2`, `e11`, `e12`, `e14b-control-internal`, `e18` |
    | **guarded, on a volume you name** | Writes to a real external volume the caller passes, behind `--i-understand` and a containment guard that refuses anything under `Library/Developer`, anything not under `/Volumes/<vol>/`, and any parent not on the volume's own device. Safe by construction, not by scratch. | `e14b-device-set-external`, `e14c` |
    | **root-required** | Needs `sudo`. If `sudo -n true` fails, write the exact commands into the evidence file as "pending — manual" and stop. | `e4b`, `e13` |
-   | **destructive** | Mutates the user's real environment. **Ask before running, every time.** | `e6`, `e8b`, `e8c`, `e9`, `e13b`, `e15` |
+   | **destructive** | Mutates the user's real environment. **Ask before running, every time.** | `e6`, `e6c-item4-attach-owner`, `e8b`, `e8c`, `e9`, `e13b`, `e15` |
 
    Why each destructive one is destructive, so the list can be checked rather than trusted:
 
@@ -34,6 +34,10 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
      (`IDECustomDerivedDataLocation`, `DVTSimulatorSetLocation`). Both restore on exit, but an
      interrupted run leaves the user's Xcode pointing somewhere else.
    - `e6` force-unmounts a mounted volume and removes an archive tree.
+   - `e6c-item4-attach-owner` detaches and re-attaches the disk image named on its command line three
+     times (as the operator and as root) and tries to leave it attached by the operator on every exit
+     path. It never force-unmounts. Its cells mount only at a control directory it creates; its user
+     re-attaches mount the image at its default location under `/Volumes`.
    - `e13b` runs as root under `/Library/Developer`. It is gated behind `--i-understand` and
      `--delete`, which is why it is last on this list rather than first — but it is still a root
      delete.
