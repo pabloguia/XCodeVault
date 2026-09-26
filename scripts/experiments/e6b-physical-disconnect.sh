@@ -113,6 +113,7 @@ exec >>"$REPORT" 2>&1
 
 xcv_header "E6b variant B: physical disconnect of a volume mounted at $TARGET"
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
+xcv_stage_tcc_indicator 0
 echo
 echo "Variant A (clean umount) is in e6b-mount-stub-reappearance.sh; both belong in HYPOTHESES.md"
 echo "before either is treated as the answer."

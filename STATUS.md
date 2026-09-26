@@ -385,6 +385,17 @@ is done. The post-publication issue backlog replaced it._
    apostrophe in a comment swallowed three steps — which is why it became a script. **Next: E6b at
    `dyld`, then physical removable media, then the yank.**
 
+   **2026-09-26: E6b at `dyld` was not run, because its premise was already measured.** The "stub"
+   is the pre-existing mount point: after run 7's clean DiskArbitration unmount of a disk image it
+   was there again, `root:admin 0755`, and the target guard (unmounted, empty) passed. So #24's defended state is reachable by construction, and
+   the "inferred, not observed" comments in `HelperMountHistory.swift` and
+   `CleanupSplitBrainTests.swift` now cite the evidence. What decides the damage — whether normal
+   use writes a fresh cache into that directory — is open: two boots of a rig's device, twelve and
+   seventeen minutes, wrote nothing to either cache (unplanned observations), while H11 already recorded an automatic
+   rebuild after the OS update and `simctl runtime dyld_shared_cache update` exists — so the rebuild
+   is real and its trigger is unknown. **Next: identify what rebuilds
+   `Caches/dyld` (research, read-only first); then physical removable media; then the yank.**
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

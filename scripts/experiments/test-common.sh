@@ -388,6 +388,17 @@ GT="$(cd "$FIX" && pwd -P)/guard"
 mkdir -p "$GT/real/inner"
 ln -s "$GT/real" "$GT/link"
 ln -s "$GT/real/inner" "$GT/real/sym"
+# The TCC indicator's skip is the CALLER's decision, passed as an argument. It read `XCV_DRYRUN` from
+# the environment at first, so a value exported for E6c's dry run and carried by `sudo -E` into a
+# real E6b or item-4 run would have printed "NOT PROBED (dry run)" into a live run's evidence.
+check "the TCC indicator is loaded" "function" "$(type -t xcv_stage_tcc_indicator)"
+# A prefix test, not a helper and not `case`: this file has no `contains` — the first draft called
+# one and failed on "command not found", which reads exactly like the property being false — and
+# bash 3.2 mis-parses a `case` pattern's `)` inside `$( )`.
+tcc_live="$(XCV_DRYRUN=1 xcv_stage_tcc_indicator 0)"
+check "a stray XCV_DRYRUN does not suppress the probe when the caller says live" "probed" \
+    "$(if [ "${tcc_live#TCC indicator: TCC.db }" != "$tcc_live" ]; then echo probed; else echo "not probed: $tcc_live"; fi)"
+check "the caller's dry-run flag does suppress it" "TCC indicator: NOT PROBED (dry run)" "$(xcv_stage_tcc_indicator 1)"
 # `type -t` first: a missing function returns non-zero, which would read as "refused" and make
 # every refusal check below pass for the wrong reason. This block sat above the `. ./mount-staging.sh`
 # on its first draft and did exactly that.

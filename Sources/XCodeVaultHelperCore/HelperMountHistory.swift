@@ -8,23 +8,33 @@ import XCodeVaultHelperProtocol
 /// Under the canonical-mount strategy a target such as
 /// `/Library/Developer/CoreSimulator/Caches/dyld` is a mount point — `HYPOTHESES.md` names that
 /// exact path — so while the volume is connected the verb correctly refuses. After a disconnect the
-/// local stub reappears: on a stock machine it is `root:admin 0755`, so the guarded walk passes, the
+/// local directory is there: on the one machine measured it is `root:admin 0755`, so the guarded walk passes, the
 /// mount query *truthfully* answers `.isNotMountPoint`, and the verb deletes the contents and
 /// reports `ok: true, "cleaned …"`. That is the local half of a split brain, presented to the user
 /// as a successful cache clean, and `NON_GOALS_AND_SAFETY.md` rule 6 requires shadow data to be
 /// **detected and reported**, never auto-resolved by deleting a copy.
 ///
-/// **The premise, and its evidence.** That the local stub *reappears* after the volume goes away
-/// is **inferred, not observed** — nothing in `docs/research/evidence/` records it, and the
-/// disconnect half of E6 still needs hands on the Mac. What is measured is the ownership and mode
-/// of those paths in their ordinary state (`COMPATIBILITY_MATRIX.md`, "755 root:admin
-/// /Library/Developer/CoreSimulator/Caches/dyld", one configuration), which is what makes the
-/// guarded walk pass.
+/// **The premise, and its evidence — observed 2026-09-25 local (run 2026-09-26T00:03Z), and
+/// "reappears" was the wrong word.** Nothing reappears: `Caches/dyld` is a pre-existing directory,
+/// a mount is placed over it, and when the volume goes away the directory underneath is there
+/// again. E6c's seventh run (`docs/research/evidence/e6c-mount-mechanism-dyld-*.txt`,
+/// HYPOTHESES.md H14) mounted at that path by both mechanisms and tore each down through
+/// DiskArbitration. After the `diskutil` cell (E, a throwaway sparse image) the re-check recorded a
+/// directory, `drwxr-xr-x root:admin`, and the harness's target guard — which requires the path to
+/// be unmounted and empty — passed before the next cell. Nothing was recorded at the target after
+/// the `mount_apfs` cell. One machine, a clean unmount of a disk image; the physical yank is still
+/// unmeasured. So on this machine the state is reachable by construction, because the target
+/// pre-exists; an "absent" path would need something to remove the mount point, and nothing
+/// observed does.
 ///
-/// The guard is right either way, and that is worth stating rather than leaving to be re-derived:
-/// if the stub does not reappear, the path is simply absent, the verb returns "nothing to do"
-/// before reaching any of this, and the issue was never reachable. The premise decides whether the
-/// *bug* exists, not whether the *fix* is correct.
+/// **Still open, and it is what decides the damage:** which event causes a fresh cache to be
+/// written into that local directory while the vault holds the other copy. That it does
+/// rebuild is recorded (H11: after an OS update, 4.4G and 2.7G back within the hour); the trigger
+/// is not. One boot by a rig, of unknown boot path, left the cleared cache empty for twelve minutes
+/// (an unplanned observation, H14), and `simctl` has an explicit `runtime dyld_shared_cache update`.
+/// The guard is right either way: it refuses a plain directory where a mount point used to be,
+/// whatever is in it, because the verb would otherwise report the local half of a split brain as a
+/// successful clean.
 ///
 /// The reviewer's diagnosis names the missing thing exactly: the verb "has no state that would let
 /// it distinguish 'a cache directory' from 'the stub of a volume that was mounted here five minutes

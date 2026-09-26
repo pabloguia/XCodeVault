@@ -129,7 +129,14 @@ issue exists because a premise was written down without being observed, and a ha
 observation is one more place for the same failure.
 
 Read probes 2 through 5. **The only outcome that makes issue #24's bug reachable is a directory
-present that is not a mount point.**
+present that is not a mount point** — and read that with the correction of 2026-09-26: when the
+target pre-exists, as both allowlisted caches do on the one machine measured, that outcome is
+predicted by mount semantics, because the mount point is there again after the unmount — and observed
+once, at `Caches/dyld`, after a clean DiskArbitration unmount of a disk image (E6c's seventh run,
+HYPOTHESES.md H14). The physical yank is not measured. What a run of this script can still add is
+a different teardown (bare `umount`, and in variant B a surprise removal) and whether anything is
+*written* into the directory afterwards — which the probes' `entries:` line shows, and which is what
+decides whether a split brain forms.
 
 ## Recording the result (mandatory, see `.claude/skills/run-experiment`)
 

@@ -301,7 +301,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         case .isNotMountPoint:
             // **The composition this issue is about.** Every check above passed, truthfully. If this
             // path was a mount point when last seen, a plain directory here now is the local half of
-            // a split brain — the stub macOS recreates after a disconnect — and deleting it is
+            // a split brain — the mount point left in place after a disconnect — and deleting it is
             // exactly what rule 6 forbids: shadow data auto-resolved by removing a copy.
             if case .observed(.wasMountPoint) = history {
                 return HelperResult(

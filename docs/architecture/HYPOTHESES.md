@@ -806,7 +806,7 @@ repeating B1 is decisive *against* prior placement but confounds the two axes, a
 operator's own image a detach and breaks the harness's donor contract — `DONOR_BEFORE` is captured
 from the donor's mount point, so `shadow_check` would report NOT MADE for the whole run.
 
-## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; **its own path, `Caches/dyld`, was measured mountable by both mechanisms on 2026-09-25 — the seventh E6c run, see the end — so E6b can now run there**; E6c's 2026-09-22 answer at `Cryptex/Caches` was RETRACTED on 2026-09-24 — it measured the caller's TCC posture, see H15 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(claimed 2026-09-19; **its own path, `Caches/dyld`, was measured mountable by both mechanisms on 2026-09-25 — the seventh E6c run — and the "stub" is the pre-existing mount point: OBSERVED for a clean unmount (run 7), UNVERIFIED for a physical disconnect; what stays open is which event writes into it afterwards. See the end**; E6c's 2026-09-22 answer at `Cryptex/Caches` was RETRACTED on 2026-09-24 — it measured the caller's TCC posture, see H15 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
 disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a
@@ -1445,7 +1445,8 @@ killed by a mutant verified to have applied.
   cause.
 - **`shadow_check` reporting DONOR ROOT CHANGED** ⇒ something wrote onto the donor while it sat
   over a live CoreSimulator path. At `dyld` the first suspect is a cache rebuild: the target is empty
-  *because* the cache was cleared, and CoreSimulator rebuilds it when a runtime boots. That is a
+  *because* the cache was cleared, and CoreSimulator rebuilds it — after an OS update, per H11; the
+  trigger is unidentified (see "2026-09-26" at the end of H14). That is a
   rule-6 hazard observed directly and it is reported on its own; it is not a mount-permission result
   and it does not change how the cells read.
 
@@ -1678,3 +1679,53 @@ does it say why DiskArbitration makes that choice. **For the product, it is a qu
 finding:** if a helper attaches an image as root, DiskArbitration would place it where asked — but the
 product's volumes are physical external drives, which nobody attaches, and removable media is still
 untested. That is now the next item, with the physical yank after it.
+
+### 2026-09-26: the "stub" is the mount point, and a booted device did not rebuild the cache
+
+**The premise H14 names was misframed, and run 7 already measured the corrected version.** A mount
+needs an existing directory, and both allowlisted caches exist on this machine (one configuration)
+— `Caches/dyld`'s birth time reads 2026-07-16 01:05 (`stat -f %SB`, taken read-only on 2026-09-25,
+not in any evidence file), and H15's `rm` emptied it rather than removing it. After a clean unmount the
+directory underneath is there again; nothing "reappears" and nothing "recreates" it. Run 7's own
+lines show it at `Caches/dyld`: after cell E mounted there and was torn down through
+DiskArbitration, the re-check before cell C reads `type=Directory mode=drwxr-xr-x owner=root:admin`,
+and the target guard passed again (nothing mounted, empty); after the run the operator's
+`ls -A … | wc -l` read `0` with the directory present. That is the state issue #24's guard defends —
+a plain directory where a mount point used to be — and it is **reachable by construction** whenever
+the target pre-exists. (The operator's `ls` is theirs, pasted into the conversation, not in the
+evidence file; the file records nothing at the target after cell D's teardown.) The "absent" branch the code comments offered as the alternative would need
+something to remove the mount point, and nothing observed does. Limits: one machine, a clean unmount
+of a disk image; the physical yank is still unmeasured.
+
+**So variant A of E6b at `dyld` would have fired its reading rule on a tautology** — its runbook
+called "directory present, not a mount point" the outcome that makes #24 reachable, and at a
+pre-existing target that outcome is predicted by mount semantics — observed once, after run 7's clean
+DiskArbitration unmount of a disk image. The runbook now says so. What the script can still
+add is a bare-`umount` teardown and later probes; it was not run.
+
+**What decides the damage is which event writes into that local directory afterwards** — rule 6's
+shadow data, the thing that makes a reported "cleaned" a split brain. That this cache is
+rebuilt without a recorded request is already recorded: H11, after the 26.7 update, 4.4G and 2.7G
+back within the hour. H11 put that down to "a slow first boot" without measuring it, which is the
+boot hypothesis this section finds unsupported. What is not recorded is the trigger. A `--boot` step was written to
+measure one candidate (boot one device the operator names, after the unmount) and **withdrawn
+before review**: its premise, that a runtime boot rebuilds the cache, was not supported by the
+first observation below (one uncontrolled boot; a second followed) — so not contradicted either, but not a basis to spend a
+rebuild on.
+
+**An unplanned observation, recorded as one and not read as a result.** On 2026-09-26 at 00:17 a
+device of the installed iOS 26.5 runtime was Booted — by one of the machine's own rigs
+(`xcodebuild` since 23:56, `launchd_sim` since 00:05) — and both caches were empty: the system
+`Caches/dyld` (mtime unchanged since the 19:19 `rm`) and the user-level
+`~/Library/Developer/CoreSimulator/Caches`. Twelve minutes booted, nothing written to either. Not
+pre-registered, not in a controlled context, and the rig's boot path is unknown — so it says only
+that *this* boot did not rebuild the cache within twelve minutes. A second boot by the same rig, of
+the same device — iPhone 17 Pro Max, iOS 26.5, per `simctl list devices booted` at 00:38 —
+(`launchd_sim` from 00:21, a new `xcodebuild` from 00:19) left both caches empty at 00:38 — seventeen
+minutes, mtime still 19:19 — under the same limits. `simctl` has an explicit
+`runtime dyld_shared_cache update (<runtime> || --all)`, and H11 recorded an automatic rebuild after
+an OS update, so the rebuild exists and its trigger is unidentified. That is the next research question for #24, ahead of any further E6b run.
+
+**Also observed then: the booted-simulator guard's positive control.** `pgrep -x launchd_sim` found
+the process while the device was booted (pid 59621). The name `xcv_stage_guard_target` checks for
+was until then inferred from the binary in the runtime; it is now observed, once.

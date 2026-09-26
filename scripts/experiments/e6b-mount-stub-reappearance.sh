@@ -114,6 +114,7 @@ exec >>"$REPORT" 2>&1
 
 xcv_header "E6b variant A: what is left at $TARGET after a clean unmount"
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
+xcv_stage_tcc_indicator 0
 echo
 echo "NOTE: this is the software variant. The physical-yank variant is the one issue #29 actually"
 echo "describes, and a clean umount may well behave differently — record both before treating"

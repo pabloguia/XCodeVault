@@ -181,11 +181,7 @@ stop() { echo "!!!! $1"; echo "!! $1" >&3; FAILED=1; exit 1; }
 
 exec >>"$REPORT" 2>&1
 xcv_header "E6c item 4 — does who attached the donor decide DiskArbitration's -mountPoint answer?"
-if xcv_tcc_err="$( { : < "/Library/Application Support/com.apple.TCC/TCC.db"; } 2>&1 )"; then
-    echo "TCC indicator: TCC.db opened by this process — Full Disk Access reaches it"
-else
-    echo "TCC indicator: TCC.db NOT opened by this process (${xcv_tcc_err##*: }) — Full Disk Access does not reach it"
-fi
+xcv_stage_tcc_indicator 0
 echo "image: $IMG"
 echo "donor: $IMG_MP ($IMG_VOL, whole disk $IMG_WHOLE, UUID $XCV_DONOR_UUID)"
 echo "control dir: $P"

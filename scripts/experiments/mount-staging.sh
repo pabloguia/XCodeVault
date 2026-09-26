@@ -163,7 +163,8 @@ xcv_stage_guard_target() {
     fi
     # **A booted simulator, however it was booted.** The check above misses a device a rig boots
     # headless with `simctl boot` — no Simulator.app, no xcodebuild. At `Caches/dyld` that matters: a
-    # cleared cache is rebuilt there when a runtime boots, onto whatever is mounted over it, and a
+    # cleared cache is rebuilt there at some point after an OS update (H11) — the trigger is not
+    # identified, and one twelve-minute boot did not do it (H14) — onto whatever is mounted, and a
     # busy volume sends teardown to `umount -f`, which can take down the rig's running device. Not
     # `xcrun simctl`: under sudo it lists root's device set, not the operator's. `pgrep` sees every
     # user's processes.
@@ -174,7 +175,7 @@ xcv_stage_guard_target() {
     # simulator. If the name is wrong this never fires, which is the behaviour without it.
     if pgrep -qx launchd_sim; then
         echo "!! A simulator device is booted (a launchd_sim process is running). A rig may be using it," >&3
-        echo "   and a runtime boot rebuilds the dyld cache under the mount. Check whose it is first." >&3
+        echo "   and CoreSimulator may rebuild the dyld cache under the mount. Check whose it is first." >&3
         return 1
     fi
     return 0
@@ -244,6 +245,31 @@ xcv_stage_cleanup() {
                 || diskutil mount "$XCV_DONOR_UUID" >/dev/null 2>&1 \
                 || echo "!! YOUR DONOR VOLUME IS STILL UNMOUNTED. Remount it: diskutil mount $XCV_DONOR_UUID" >&3
         fi
+    fi
+}
+
+# xcv_stage_tcc_indicator <dry-run: 0|1> — one line recording whether Full Disk Access reaches THIS
+# process.
+#
+# H15's own indicator: can this process open `TCC.db`. `: <` opens the file and reads nothing. It is
+# an indicator of Full Disk Access reaching the process, not a query of TCC itself. Full Disk Access
+# changed E6c's outcomes, and a run whose context is known only from the operator's account of a
+# grant cannot be contrasted with anything — so every staging script records it. Skipped only when
+# the CALLER says it is a dry run: a builtin redirect cannot be stubbed, so a dry run would put this
+# machine's real posture into an artifact whose banner says nothing in it measures the machine.
+#
+# **The skip is an argument, not the environment.** It read `XCV_DRYRUN` directly at first, and only
+# E6c has a dry-run mode that validates it. A stray `XCV_DRYRUN=1` exported for E6c's dry run and
+# carried by `sudo -E` into a real E6b or item-4 run would have recorded "NOT PROBED" under a banner
+# that never says dry run — the run's TCC context lost again, the thing this line exists to prevent.
+xcv_stage_tcc_indicator() {
+    local err
+    if [ "${1:-0}" = 1 ]; then
+        echo "TCC indicator: NOT PROBED (dry run)"
+    elif err="$( { : < "/Library/Application Support/com.apple.TCC/TCC.db"; } 2>&1 )"; then
+        echo "TCC indicator: TCC.db opened by this process — Full Disk Access reaches it"
+    else
+        echo "TCC indicator: TCC.db NOT opened by this process (${err##*: }) — Full Disk Access does not reach it"
     fi
 }
 

@@ -8,12 +8,13 @@ import XCTest
 ///
 /// Every individual check in the verb is correct. The composition is what erases data: while the
 /// volume is connected the descriptor-based mount query answers `.isMountPoint` and the verb
-/// refuses; after a disconnect the local stub reappears `root:admin 0755`, the guarded walk passes,
+/// refuses; after a disconnect the local directory is there `root:admin 0755`, the guarded walk passes,
 /// the mount query *truthfully* answers `.isNotMountPoint`, and the contents are deleted with
 /// `ok: true, "cleaned …"`.
 ///
-/// That the stub reappears at all is **inferred, not observed** — see `HelperMountHistory` for the
-/// evidence that does exist and for why the guard is correct whether or not it does.
+/// That directory is **observed**, not inferred, since E6c's seventh run (2026-09-25): it is the
+/// pre-existing mount point, not something that reappears — see `HelperMountHistory` for the
+/// evidence and for what is still open.
 ///
 /// The fix gives the verb the state its reviewer identified as missing — a record of what it has
 /// previously observed at each target — so a plain directory where a mount point used to be is a

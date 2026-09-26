@@ -584,18 +584,9 @@ echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Own
 echo "donor standing mount (before any cell): $(mount | grep "^$(xcv_re_escape "$XCV_DEV") on " | head -1)"
 # **The run's TCC context, measured rather than narrated.** Full Disk Access changed these cells'
 # outcomes (H15), and the reading rules forbid contrasting cells from different TCC contexts — but
-# through run 6 the context was known only from the operator's account of a grant. This is H15's own
-# indicator: whether THIS process can open `TCC.db`. `: <` opens the file and reads nothing. It is an
-# indicator of Full Disk Access reaching this process, not a query of TCC itself. Skipped on a dry
-# run, for the reason the flags block below gives: a builtin redirect cannot be stubbed, so it would
-# put this machine's real posture into an artifact whose banner says nothing here measures it.
-if [ "${XCV_DRYRUN:-0}" = 1 ]; then
-    echo "TCC indicator: NOT PROBED (dry run)"
-elif xcv_tcc_err="$( { : < "/Library/Application Support/com.apple.TCC/TCC.db"; } 2>&1 )"; then
-    echo "TCC indicator: TCC.db opened by this process — Full Disk Access reaches it"
-else
-    echo "TCC indicator: TCC.db NOT opened by this process (${xcv_tcc_err##*: }) — Full Disk Access does not reach it"
-fi
+# through run 6 the context was known only from the operator's account of a grant. Shared with E6b
+# through `mount-staging.sh`, where the reasons are written down.
+xcv_stage_tcc_indicator "${XCV_DRYRUN:-0}"
 # The target's CONTENTS, recorded and guarded the way the probe's are. The 2026-09-22 run
 # recorded only `stat`, so "the mount point was not empty" — a textbook DiskArbitration refusal
 # that produces exactly diskutil's bare failure template — could not be ruled out for the one
