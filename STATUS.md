@@ -403,8 +403,9 @@ is done. The post-publication issue backlog replaced it._
    boots holds 13 "Unable to use dyld shared cache … not currently available" lines and, at info
    level, no creation request; that nothing was built rests on the directory staying empty. The
    oldest retained `simdiskimaged` entry is 2026-09-22 20:14, after the 25G229 cache was built
-   (~2026-09-16), so what built it is unrecoverable here. A passive `log stream --level debug` runs
-   to catch the next rig boot's decision.
+   (~2026-09-16), so what built it is unrecoverable here. A passive `log stream --level debug` left
+   running to catch the next rig boot's decision **failed**: 11,600 "messages dropped" notices and no
+   message, so its silence is not an absence.
 
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not

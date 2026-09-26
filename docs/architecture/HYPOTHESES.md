@@ -1793,6 +1793,15 @@ messages was started on 2026-09-26, reading the log only, writing to the session
 (`dyld-cache-stream.log`) — not to the evidence directory. It is stopped by the agent that started
 it; anything it catches goes into evidence only through the redacted-evidence path, never pasted.
 
+**It failed as an instrument, and caught nothing that can be read.** Stopped on 2026-09-26 after
+the rig's next activity (idle at 12:32): 11,602 lines, of which 11,600 are `=== Messages dropped
+during live streaming (use `log show` to see what they were)` and none is a message. At `debug` level
+the live stream could not keep up, and whatever the rig's boots logged about the cache — creation or
+skip — may be among the dropped. **So its silence is not an absence**, the same distinction E6c's
+capture makes between a failed `log show` and an empty window. A second attempt would need a
+narrower stream (`--level info`, or a subsystem predicate) or a persistent debug configuration for
+the CoreSimulator subsystem, which is a settings change and the operator's to make.
+
 ### E6c, eighth run, at `Caches/dyld` with a PHYSICAL donor — the reading, fixed BEFORE the run *(written 2026-09-26; run pending)*
 
 **What is new.** Every E6c run so far — seven — used a disk image as the donor; item 4 then showed
