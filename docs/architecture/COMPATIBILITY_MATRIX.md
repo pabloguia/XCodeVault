@@ -1091,3 +1091,32 @@ substitution may not be waved through. Issue #29 stays open.
   device-class rows the runs actually recorded say `Protocol=Disk Image` for `/dev/disk9s1` in both
   runs that captured them, and the donor was a sparse image that no longer exists. Prose over the
   measured row, the third time in this series — the original sentence was right.)*
+
+### E6c at `Caches/dyld` (H14's own path) — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-26T00:03Z (2026-09-25 local), seventh E6c run, the first at this target.
+- Hypothesis reference: H14 (path reachability only — not the stub question), H15.
+- Test performed: mount, both mechanisms, at `/Library/Developer/CoreSimulator/Caches/dyld`, emptied
+  beforehand (0 entries, directory intact). Reading pre-registered in `HYPOTHESES.md` and committed
+  (be87cb6) before the run.
+- Result: **pass for reachability.** `D. mount_apfs at the cache target: MOUNTED` and
+  `E. diskutil at the cache target, with B0's own image: MOUNTED`, each with its verified mount line
+  at `…/Caches/dyld`. A, H1, B0, E0, E0b, B3 MOUNTED. B1, B2, H2 REFUSED and C VOID — all four
+  `0x0000004D`, all on the donor's device. Every teardown went through DiskArbitration; no VOID
+  marker; donor root unchanged.
+- Evidence: `docs/research/evidence/e6c-mount-mechanism-dyld-macos26.7-25G229-xcode26.5-x86_64.txt`.
+- Functional checks: N/A — no simulator booted, by design (the guard refuses one).
+- Verdict: **verified, one run, for this configuration**: a volume can be mounted at `Caches/dyld`
+  by root, from a process Full Disk Access reaches, by `mount_apfs` and by `diskutil`.
+- Notes:
+  - **Context measured, not narrated — a first for this series.** The header records
+    `TCC indicator: TCC.db opened by this process` and the donor's standing mount
+    `… mounted by <user>`, both taken before any cell.
+  - **The volume class is the same as every earlier run: disk images.** Physical removable media is
+    still untested.
+  - **Not comparable with the `Cryptex/Caches` entry above.** The target, the donor (recreated after
+    a reboot cleared `/tmp`) and the recorded TCC context all differ, and runs 1–6 recorded no TCC
+    context at all.
+  - **What it does not show:** whether a stub reappears after the volume goes away (H14 proper;
+    E6c tears down cleanly and never asks), anything about a launchd daemon's TCC posture, or
+    anything that reopens ADR-0004.

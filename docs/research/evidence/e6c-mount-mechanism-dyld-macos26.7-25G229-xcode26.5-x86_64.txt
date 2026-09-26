@@ -1,0 +1,409 @@
+# Experiment: E6c — mount mechanism × path, after E6b's mount_apfs returned EPERM
+# Date: 2026-09-26T00:03:06Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+donor: /Volumes/<vault> (/dev/disk7s1, APFS, whole disk disk7, UUID <vault-uuid>)
+owners on donor: Disabled
+donor standing mount (before any cell): /dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled, noowners, mounted by <user>)
+TCC indicator: TCC.db opened by this process — Full Disk Access reaches it
+cache target: /Library/Developer/CoreSimulator/Caches/dyld (entries: 0)
+## flags on the target and its ancestors (a 'restricted' flag here would be SIP path policy):
+   drwxr-xr-x  7 root  admin  - 224 Sep 24 16:22 /Library/Developer/CoreSimulator
+   drwxr-xr-x@ 3 root  admin  -  96 Jul 16 01:05 /Library/Developer/CoreSimulator/Caches
+   drwxr-xr-x@ 2 root  admin  -  64 Sep 25 19:19 /Library/Developer/CoreSimulator/Caches/dyld
+## SIP path policy naming Developer:
+   MobileStorageMounter		/System/Developer
+control dir:  /Library/Developer/xcv-e6c-probe
+
+## unmount donor from its mount point
+$ diskutil unmount /dev/disk7s1
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+
+==================== B0. E1b replicated, on a throwaway image ====================
+## create a 512 MB APFS sparse image
+$ hdiutil create -size 512m -fs APFS -volname XCVB0-78501 -type SPARSE /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/tmp.AbBmGQrAQi/e6c-b0
+created: /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/tmp.AbBmGQrAQi/e6c-b0.sparseimage
+[exit=0]
+
+B0 image whole disk: /dev/disk8   volume: /dev/disk9s1   store: disk8s1   name: XCVB0-78501
+-- /dev/disk7s1: Owners=Disabled Protocol=Disk Image Device Location=External Removable Media=Removable 
+-- /dev/disk9s1: Owners=Disabled Protocol=Disk Image Device Location=External Removable Media=Removable 
+
+==================== B0. E1b replicated, diskutil at the control dir (sparse image) ====================
+## B0. E1b replicated, diskutil at the control dir (sparse image)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume XCVB0-78501 on /dev/disk9s1 mounted
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk9s1): .fseventsd 
+   root after the window (/dev/disk9s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume XCVB0-78501 on disk9s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== E0. diskutil at the control dir AGAIN, same image (history control) ====================
+## E0. diskutil at the control dir AGAIN, same image (history control)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume XCVB0-78501 on /dev/disk9s1 mounted
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk9s1): .fseventsd 
+   root after the window (/dev/disk9s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume XCVB0-78501 on disk9s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+## re-checking the cache target immediately before cell E
+## stat /Library/Developer/CoreSimulator/Caches/dyld
+$ stat -f type=%HT mode=%Sp owner=%Su:%Sg links=%l /Library/Developer/CoreSimulator/Caches/dyld
+type=Directory mode=drwxr-xr-x owner=root:admin links=2
+[exit=0]
+
+## NOTE: a BROWSABLE filesystem covers /Library/Developer/CoreSimulator/Caches/dyld for the duration of this cell.
+## It is B0's 512 MB throwaway image, not the donor — but anything a daemon
+## writes during the window lands on it and is DESTROYED with it minutes later.
+## The 'root after the window' listing is the only record that survives.
+## Browsable to match B0, which is E's control.
+
+==================== E. diskutil at the cache target, with B0's own image ====================
+## E. diskutil at the cache target, with B0's own image
+$ diskutil mount -mountPoint /Library/Developer/CoreSimulator/Caches/dyld /dev/disk9s1
+Volume XCVB0-78501 on /dev/disk9s1 mounted
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/CoreSimulator/Caches/dyld (apfs, local, nodev, nosuid, journaled, noowners)
+-> MOUNTED at /Library/Developer/CoreSimulator/Caches/dyld
+   root of the mounted volume (/dev/disk9s1): .fseventsd 
+   root after the window (/dev/disk9s1): .fseventsd 
+## unmount /Library/Developer/CoreSimulator/Caches/dyld via DiskArbitration
+$ diskutil unmount /Library/Developer/CoreSimulator/Caches/dyld
+Volume XCVB0-78501 on disk9s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== E0b. diskutil at the control dir a THIRD time (depth control for E) ====================
+## E0b. diskutil at the control dir a THIRD time (depth control for E)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk9s1
+Volume XCVB0-78501 on /dev/disk9s1 mounted
+[exit=0]
+
+   mounts of /dev/disk9s1 now: /dev/disk9s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk9s1): .fseventsd 
+   root after the window (/dev/disk9s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume XCVB0-78501 on disk9s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+## detach B0's image
+$ hdiutil detach /dev/disk8
+"disk8" ejected.
+[exit=0]
+
+
+==================== B1. diskutil at the control dir (E1b's call verbatim) ====================
+## B1. diskutil at the control dir (E1b's call verbatim)
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/xcv-e6c-probe; exit=1)
+## diskarbitrationd since 2026-09-25 21:03:21-0300 (this cell's own start), filtered to
+## this run's disks (see ADR-0005: an unfiltered dump would name volumes the
+## redactor cannot detect). Three limits, and two of them fabricate ABSENCE,
+## which is the direction a negative claim here would want:
+##   - one-second granularity: an event in the same second as the start can be
+##     inherited from the previous cell (widens; safe direction);
+##   - a backward clock step between capture and read puts the bound in the
+##     future and drops this cell's own events;
+##   - a record emitted just before the read may not be in the store yet.
+## And the window bounds event TIMESTAMPS, not causality: an asynchronously
+## emitted record from the previous cell's teardown lands here. Pair records to
+## their solicitation id to be sure; a start sentinel cannot fix that one.
+   raw lines in window: 21 (unfiltered; 1 = header only, DA logged nothing)
+2026-09-25 21:03:21.650 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [361]:26643 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk7s1, options = 0x00000002.
+2026-09-25 21:03:21.651 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, ongoing.
+2026-09-25 21:03:21.708 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk7s1
+2026-09-25 21:03:21.708 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, success.
+2026-09-25 21:03:21.709 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, ongoing.
+2026-09-25 21:03:21.734 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, failure.
+2026-09-25 21:03:21.734 E  diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+
+
+## B3 mounts the donor WHERE DA WANTS IT, so the run must put it back afterwards.
+
+==================== B3. diskutil with NO -mountPoint (the donor, DA's own choice of location) ====================
+## B3. diskutil with NO -mountPoint (the donor, DA's own choice of location)
+$ diskutil mount /dev/disk7s1
+Volume <vault> on /dev/disk7s1 mounted
+[exit=0]
+
+   mounts of /dev/disk7s1 now: /dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled, noowners, mounted by <user>)
+-> MOUNTED at /Volumes/<vault>
+   root of the mounted volume (/dev/disk7s1): .fseventsd 
+   root after the window (/dev/disk7s1): .fseventsd 
+## unmount /Volumes/<vault> via DiskArbitration
+$ diskutil unmount /Volumes/<vault>
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== B2. diskutil at the control dir, WITH nobrowse ====================
+## B2. diskutil at the control dir, WITH nobrowse
+$ diskutil mount nobrowse -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/xcv-e6c-probe; exit=1)
+## diskarbitrationd since 2026-09-25 21:03:30-0300 (this cell's own start), filtered to
+## this run's disks (see ADR-0005: an unfiltered dump would name volumes the
+## redactor cannot detect). Three limits, and two of them fabricate ABSENCE,
+## which is the direction a negative claim here would want:
+##   - one-second granularity: an event in the same second as the start can be
+##     inherited from the previous cell (widens; safe direction);
+##   - a backward clock step between capture and read puts the bound in the
+##     future and drops this cell's own events;
+##   - a record emitted just before the read may not be in the store yet.
+## And the window bounds event TIMESTAMPS, not causality: an asynchronously
+## emitted record from the previous cell's teardown lands here. Pair records to
+## their solicitation id to be sure; a start sentinel cannot fix that one.
+   raw lines in window: 10 (unfiltered; 1 = header only, DA logged nothing)
+2026-09-25 21:03:30.281 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk7s1, success.
+2026-09-25 21:03:30.545 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [361]:26643 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk7s1, options = 0x00000002.
+2026-09-25 21:03:30.546 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, ongoing.
+2026-09-25 21:03:30.707 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk7s1
+2026-09-25 21:03:30.708 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, success.
+2026-09-25 21:03:30.711 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, ongoing.
+2026-09-25 21:03:30.755 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, failure.
+2026-09-25 21:03:30.755 E  diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+
+
+## re-checking the cache target immediately before cell C
+## stat /Library/Developer/CoreSimulator/Caches/dyld
+$ stat -f type=%HT mode=%Sp owner=%Su:%Sg links=%l /Library/Developer/CoreSimulator/Caches/dyld
+type=Directory mode=drwxr-xr-x owner=root:admin links=2
+[exit=0]
+
+## B2 did not mount, so cell C drops nobrowse to ask the question with E1b's shape.
+## NOTE: the donor is BROWSABLE over a real cache path for the duration of this cell.
+
+==================== C. diskutil at the cache target (browsable — see note) ====================
+## C. diskutil at the cache target (browsable — see note)
+$ diskutil mount -mountPoint /Library/Developer/CoreSimulator/Caches/dyld /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/CoreSimulator/Caches/dyld; exit=1)
+## diskarbitrationd since 2026-09-25 21:03:33-0300 (this cell's own start), filtered to
+## this run's disks (see ADR-0005: an unfiltered dump would name volumes the
+## redactor cannot detect). Three limits, and two of them fabricate ABSENCE,
+## which is the direction a negative claim here would want:
+##   - one-second granularity: an event in the same second as the start can be
+##     inherited from the previous cell (widens; safe direction);
+##   - a backward clock step between capture and read puts the bound in the
+##     future and drops this cell's own events;
+##   - a record emitted just before the read may not be in the store yet.
+## And the window bounds event TIMESTAMPS, not causality: an asynchronously
+## emitted record from the previous cell's teardown lands here. Pair records to
+## their solicitation id to be sure; a start sentinel cannot fix that one.
+   raw lines in window: 9 (unfiltered; 1 = header only, DA logged nothing)
+2026-09-25 21:03:34.022 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [361]:26643 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk7s1, options = 0x00000002.
+2026-09-25 21:03:34.023 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, ongoing.
+2026-09-25 21:03:34.106 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk7s1
+2026-09-25 21:03:34.107 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, success.
+2026-09-25 21:03:34.109 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, ongoing.
+2026-09-25 21:03:34.134 Df diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, failure.
+2026-09-25 21:03:34.135 E  diskarbitrationd[142:e91a7] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+
+
+==================== A. mount_apfs at the control dir ====================
+## A. mount_apfs at the control dir
+$ mount_apfs -o nobrowse /dev/disk7s1 /Library/Developer/xcv-e6c-probe
+[exit=0]
+
+   mounts of /dev/disk7s1 now: /dev/disk7s1 on /Library/Developer/xcv-e6c-probe (apfs, local, journaled, nobrowse)
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+   root of the mounted volume (/dev/disk7s1): .fseventsd 
+   root after the window (/dev/disk7s1): .fseventsd 
+## unmount /Library/Developer/xcv-e6c-probe via DiskArbitration
+$ diskutil unmount /Library/Developer/xcv-e6c-probe
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== H1. mount_apfs at a run-created dir INSIDE CoreSimulator ====================
+## H1. mount_apfs at a run-created dir INSIDE CoreSimulator
+$ mount_apfs -o nobrowse /dev/disk7s1 /Library/Developer/CoreSimulator/xcv-e6c-hprobe
+[exit=0]
+
+   mounts of /dev/disk7s1 now: /dev/disk7s1 on /Library/Developer/CoreSimulator/xcv-e6c-hprobe (apfs, local, journaled, nobrowse)
+-> MOUNTED at /Library/Developer/CoreSimulator/xcv-e6c-hprobe
+   root of the mounted volume (/dev/disk7s1): .fseventsd 
+   root after the window (/dev/disk7s1): .fseventsd 
+## unmount /Library/Developer/CoreSimulator/xcv-e6c-hprobe via DiskArbitration
+$ diskutil unmount /Library/Developer/CoreSimulator/xcv-e6c-hprobe
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== H2. diskutil at that same in-hierarchy dir ====================
+## H2. diskutil at that same in-hierarchy dir
+$ diskutil mount -mountPoint /Library/Developer/CoreSimulator/xcv-e6c-hprobe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+-> REFUSED (nothing of ours is mounted at /Library/Developer/CoreSimulator/xcv-e6c-hprobe; exit=1)
+## diskarbitrationd since 2026-09-25 21:03:38-0300 (this cell's own start), filtered to
+## this run's disks (see ADR-0005: an unfiltered dump would name volumes the
+## redactor cannot detect). Three limits, and two of them fabricate ABSENCE,
+## which is the direction a negative claim here would want:
+##   - one-second granularity: an event in the same second as the start can be
+##     inherited from the previous cell (widens; safe direction);
+##   - a backward clock step between capture and read puts the bound in the
+##     future and drops this cell's own events;
+##   - a record emitted just before the read may not be in the store yet.
+## And the window bounds event TIMESTAMPS, not causality: an asynchronously
+## emitted record from the previous cell's teardown lands here. Pair records to
+## their solicitation id to be sure; a start sentinel cannot fix that one.
+   raw lines in window: 10 (unfiltered; 1 = header only, DA logged nothing)
+2026-09-25 21:03:38.015 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] unmounted disk, id = /dev/disk7s1, success.
+2026-09-25 21:03:38.205 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default]   storagekitd [361]:26643 queued solicitation, id = 0000000000000007:0000000000000007, kind = disk mount, disk = /dev/disk7s1, options = 0x00000002.
+2026-09-25 21:03:38.206 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, ongoing.
+2026-09-25 21:03:38.283 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default]  fsck status 0 /dev/rdisk7s1
+2026-09-25 21:03:38.284 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] probed disk, id = /dev/disk7s1, with apfs, success.
+2026-09-25 21:03:38.286 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, ongoing.
+2026-09-25 21:03:38.314 Df diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] mounted disk, id = /dev/disk7s1, failure.
+2026-09-25 21:03:38.314 E  diskarbitrationd[142:e9dc3] [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+
+## stat /Library/Developer/CoreSimulator/Caches/dyld before cell D
+$ stat -f type=%HT mode=%Sp owner=%Su:%Sg links=%l /Library/Developer/CoreSimulator/Caches/dyld
+type=Directory mode=drwxr-xr-x owner=root:admin links=2
+[exit=0]
+
+
+==================== D. mount_apfs at the cache target ====================
+## D. mount_apfs at the cache target
+$ mount_apfs -o nobrowse /dev/disk7s1 /Library/Developer/CoreSimulator/Caches/dyld
+[exit=0]
+
+   mounts of /dev/disk7s1 now: /dev/disk7s1 on /Library/Developer/CoreSimulator/Caches/dyld (apfs, local, journaled, nobrowse)
+-> MOUNTED at /Library/Developer/CoreSimulator/Caches/dyld
+   root of the mounted volume (/dev/disk7s1): .fseventsd 
+   root after the window (/dev/disk7s1): .fseventsd 
+## unmount /Library/Developer/CoreSimulator/Caches/dyld via DiskArbitration
+$ diskutil unmount /Library/Developer/CoreSimulator/Caches/dyld
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+   teardown: diskutil
+
+==================== shadow data on the donor ====================
+donor root listing unchanged, top-level names only (.fseventsd)
+
+==================== matrix (complete) ====================
+  (No run before 2026-09-25 measured D at this target. The 2026-09-21 EPERM and run
+   6's MOUNTED were at Cryptex/Caches; no earlier run's D is a baseline for this one.)
+  B0. E1b replicated, diskutil at the control dir (sparse image): MOUNTED
+  E0. diskutil at the control dir AGAIN, same image (history control): MOUNTED
+  E. diskutil at the cache target, with B0's own image: MOUNTED
+  E0b. diskutil at the control dir a THIRD time (depth control for E): MOUNTED
+  B1. diskutil at the control dir (E1b's call verbatim): REFUSED (exit 1)
+  B3. diskutil with NO -mountPoint (the donor, DA's own choice of location): MOUNTED
+  B2. diskutil at the control dir, WITH nobrowse: REFUSED (exit 1)
+  C. diskutil at the cache target (browsable — see note): REFUSED (exit 1)
+  A. mount_apfs at the control dir: MOUNTED
+  H1. mount_apfs at a run-created dir INSIDE CoreSimulator: MOUNTED
+  H2. diskutil at that same in-hierarchy dir: REFUSED (exit 1)
+  D. mount_apfs at the cache target: MOUNTED
+
+  !! CELL C IS VOID: its control (B1) refused. Do not read C's line above.
+
+Reading (fixed in HYPOTHESES.md H14 before the run, deliberately):
+  ** EVERY RULE IN THIS BLOCK compares cells from ONE run. A value carried over from an
+     earlier run is NOT admissible: Full Disk Access changed these outcomes on 2026-09-24
+     (H15), so two cells measured in different TCC contexts cannot be contrasted. That is
+     why D is a run cell now rather than a 2026-09-21 constant. **
+  any VOID marker above => a teardown bypassed DiskArbitration before that cell. Its
+                           REFUSED is the fallback talking, not macOS. Do not read it.
+  B0 REFUSED            => E1b's own call, on E1b's own kind of volume, no longer works.
+                           A RESULT about this OS build, not a harness fault. Stop here.
+  B0 MOUNTED, B1 REFUSED=> the call works; this DONOR is what diskutil will not take.
+                           Not a statement about the cache path. Do not read C.
+  B0 NOT MEASURED       => B1 REFUSED cannot be attributed to the call, the donor or the
+                           OS build. Fix B0 and re-run before reading anything below it.
+  B1 MOUNTED, B2 REFUSED=> `nobrowse` is what diskutil refuses, not the path. That alone
+                           explains the 2026-09-21 void and is worth recording.
+  E0 REFUSED            => a second -mountPoint mount of the same volume is refused;
+                           E was not run. Mount history becomes a live explanation for
+                           B1, not an established one.
+  E MOUNTED             => the cache path IS reachable by mounting, at root, via DA —
+                           FOR A DISK-IMAGE VOLUME. H14 is producible that way. It is
+                           not yet a product claim: E6b relocates to EXTERNAL storage,
+                           and B1 (the donor's own refusal) is still unexplained.
+  E REFUSED, E0 AND     => history is ruled out AT E'S OWN MOUNT DEPTH: DiskArbitration
+  E0b BOTH MOUNTED         refuses the cache path for a volume it accepts elsewhere.
+                           E0 alone is NOT enough — a rule monotone in mount depth gives
+                           the same pattern with the path playing no part (E0b).
+                           H14 closes as unreachable ONLY IF D ALSO REFUSED with A and
+                           H1 MOUNTED — this rule predates D being a run cell, and
+                           'unreachable' is a claim about both mechanisms. With D
+                           MOUNTED it is a DA-only refusal and H14 stays producible.
+  C MOUNTED             => the mechanism was the problem. E6b re-runs on DiskArbitration
+                           and H14 stays open.
+  C REFUSED, B1 MOUNTED => DiskArbitration refuses this donor at the cache path and not
+                           at the control dir. 'Unreachable by either mechanism' — and
+                           H14 closing as sized-but-unproducible — needs D REFUSED too,
+                           with A and H1 MOUNTED. With D MOUNTED, H14 stays producible.
+                           NOT 'by any privilege': Apple's own daemons mount these paths
+                           (F16/E4b), and two root cells do not license that claim.
+  H1 MOUNTED, D REFUSED => the CoreSimulator HIERARCHY is not what refuses; something
+                           about the cache path itself is. Without H1 the A-vs-D
+                           contrast cannot tell those apart.
+  H1 REFUSED            => /Library/Developer/CoreSimulator/ refuses mounting
+                           generally — a larger finding than 'this cache directory'.
+  A REFUSED             => the session lost the ability to mount ANYWHERE before the
+                           trailing control ran. C is uninterpretable and so is the
+                           A-vs-D comparison. The whole run is void.
+  A NOT MEASURED        => the run stopped before the trailing control, so nothing
+                           establishes the session could still mount at the end. Read
+                           no cell below B0.
+  C NOT MEASURED        => the cache-path cell did not run; the matrix answers nothing
+                           about the question it was built for.
+  A MOUNTED, D REFUSED  => the refusal is specific to the CoreSimulator path rather than
+                           to mount_apfs. **Read A, H1 and D together, not A and D**:
+                           H1 is mount_apfs at a NEUTRAL directory inside the
+                           hierarchy, so it separates 'this directory' from 'this
+                           hierarchy' in a way A cannot. A+H1 MOUNTED with D REFUSED
+                           is the only combination that isolates the cache directory.
+  H1 NOT MEASURED       => the A/H1/D rules below cannot be applied: without the neutral
+                           in-hierarchy cell, A-vs-D cannot separate 'this directory'
+                           from 'this hierarchy'. Read D alone, and no further.
+  A, H1 AND D MOUNTED   => nothing here refuses mount_apfs. Every REFUSED left in the
+                           matrix belongs to diskutil, and the question is about
+                           DiskArbitration and the VOLUME, not about the path.

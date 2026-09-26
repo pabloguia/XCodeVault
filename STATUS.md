@@ -368,6 +368,14 @@ is done. The post-publication issue backlog replaced it._
    recreated one. Known flake: "an interrupted run exits 130" failed in all seven parallel mutant
    runs under load and passed in every serial run — timing-sensitive, not yet fixed.
 
+   **Seventh run, same night, at `dyld`: D and E MOUNTED.** H14's own path accepts a volume by
+   `mount_apfs` and by DiskArbitration, from a process the header shows Full Disk Access reaches.
+   Every refusal is the donor's `0x0000004D` (B1, B2, H2; C VOID), B3 mounts it at its default
+   location, and the standing line says `mounted by <user>` — consistent with the user-session
+   candidate, not evidence for it. Only pre-registered rules fired. H14 itself stays unverified: the
+   run shows the volume can be there, not what appears after it goes. **Next, cheapest first:**
+   re-mount the donor as root and repeat B1; E6b at `dyld`; physical removable media; the yank.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

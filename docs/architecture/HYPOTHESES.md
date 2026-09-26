@@ -806,7 +806,7 @@ repeating B1 is decisive *against* prior placement but confounds the two axes, a
 operator's own image a detach and breaks the harness's donor contract — `DONOR_BEFORE` is captured
 from the donor's mount point, so `shadow_check` would report NOT MADE for the whole run.
 
-## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; E6c's 2026-09-22 answer at `Cryptex/Caches` was RETRACTED on 2026-09-24 — it measured the caller's TCC posture, see H15 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
+## H14 — a mount stub reappears at a CoreSimulator cache path after its volume goes away *(2026-09-19, still unverified; **its own path, `Caches/dyld`, was measured mountable by both mechanisms on 2026-09-25 — the seventh E6c run, see the end — so E6b can now run there**; E6c's 2026-09-22 answer at `Cryptex/Caches` was RETRACTED on 2026-09-24 — it measured the caller's TCC posture, see H15 and did NOT close this. A `mkdir` under `sudo` inside `/Library/Developer/CoreSimulator/` also failed that day — errno not captured, and a refusal to create a directory is not a refusal to mount one. See the end)*
 
 **The claim.** When a filesystem mounted at `/Library/Developer/CoreSimulator/Caches/dyld`
 disappears, macOS leaves or recreates a plain directory there — `root:admin 0755`, empty, and not a
@@ -1231,7 +1231,9 @@ safe without that diff.**
 **Gate: E6c is closed for `Cryptex/Caches`. H14 is NOT closed, and issue #29 stays open.**
 What remains, in order:
 
-1. `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **CLEARED
+1. ~~`Caches/dyld`, both mechanisms~~ — **DONE 2026-09-25: D and E both MOUNTED** (seventh run,
+   at the end of this section). What it leaves is E6b at `dyld`, the stub question itself.
+   `Caches/dyld`, both mechanisms — H14's own path and the #24 guard's path. **CLEARED
    2026-09-25 (H15's `rm`), and the reading of the run is fixed below, in "E6c, seventh run, at
    `Caches/dyld` — the reading, fixed BEFORE the run", committed before the operator ran it.** The
    rest of this item is how it got here. **UNBLOCKED
@@ -1506,3 +1508,40 @@ path worth mounting over) and E2 (the `xctest` restriction follows the device); 
 not a useful one. Physical removable media — the donor is a disk image, as in all six earlier runs.
 The physical-yank variant. And the privileged helper's own TCC posture: the indicator measures the
 operator's `sudo` child, and a launchd daemon's posture is not that.
+
+### E6c, seventh run, at `Caches/dyld`: RESULT *(run 2026-09-26T00:03Z; read against the rules above, unedited)*
+
+Evidence: `docs/research/evidence/e6c-mount-mechanism-dyld-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+**Admissibility, in the order fixed above.** `TCC indicator: TCC.db opened by this process — Full
+Disk Access reaches it`, so the rules apply. A and B0 MOUNTED. Every teardown is `diskutil`; no VOID
+marker. Every REFUSED is `unable to mount /dev/disk7s1 (status code 0x0000004D)` — the donor — and
+there is no other failure text in the file. `shadow_check`: *donor root listing unchanged*.
+
+**The instrument looked.** Each MOUNTED below is the cell's own verified line, not an exit status:
+D `/dev/disk7s1 on /Library/Developer/CoreSimulator/Caches/dyld (apfs, local, journaled, nobrowse)`,
+E `/dev/disk9s1 on /Library/Developer/CoreSimulator/Caches/dyld (apfs, local, nodev, nosuid,
+journaled, noowners)`.
+
+**The rules that fired:**
+
+- **A, H1 and D MOUNTED** ⇒ H14's own path accepts a volume mounted by root, with Full Disk Access,
+  via `mount_apfs`, on this configuration. **Issue #29's premise holds for this mechanism.** Nothing
+  here says whether a stub reappears afterwards.
+- **E MOUNTED, with B0, E0 and E0b MOUNTED** ⇒ DiskArbitration mounts a disk image at `Caches/dyld`.
+  With D, **both mechanisms reach H14's path.**
+- **C VOID** — B1 refused. Not read.
+- **B1 REFUSED and B3 MOUNTED, within this run**, and the standing line reads `… mounted by <user>`
+  ⇒ **consistent with** the user-session candidate, and not evidence for it over its rivals. Item 4
+  (re-mount the donor as root, repeat B1) is what isolates it.
+- **B2 REFUSED alongside B1** ⇒ nothing about `nobrowse`. **H2** tracks B1 and adds nothing.
+
+**No pattern outside the pre-registered set occurred**, so nothing here was read with a rule written
+afterwards.
+
+**What changes.** H14 is still unverified — its claim is about what appears after a volume goes away,
+and this run measured only that the volume can be there. What moves is that the premise is now
+measured at H14's own path rather than inferred from a sibling one: **E6b can run at `dyld`**, with
+`mount_apfs` (what E6b's staging already uses) and with DiskArbitration both shown to reach it. The
+open items keep their order — item 4 (donor re-mounted as root, repeat B1), then physical removable
+media, then the physical yank — with E6b at `dyld` now runnable alongside them.
