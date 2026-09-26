@@ -376,6 +376,15 @@ is done. The post-publication issue backlog replaced it._
    run shows the volume can be there, not what appears after it goes. **Next, cheapest first:**
    re-mount the donor as root and repeat B1; E6b at `dyld`; physical removable media; the yank.
 
+   **Item 4, same night: who attached the image is what DiskArbitration keys on.** Re-mounting as
+   root could not test it — B3 already does that and still reads `mounted by <user>` — so
+   `e6c-item4-attach-owner.sh` varied the attach instead, measured by `hdiutil info` `owner-uid`,
+   in four cells on one image file. Attached by the operator's session: refused three times
+   (`0x0000004D`), with and without a default-location mount. Attached by root: mounted. Order and
+   uid-vs-session are not separated. A pasted runbook for this failed review first — in zsh an
+   apostrophe in a comment swallowed three steps — which is why it became a script. **Next: E6b at
+   `dyld`, then physical removable media, then the yank.**
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

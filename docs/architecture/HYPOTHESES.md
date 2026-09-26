@@ -1635,3 +1635,46 @@ are nearly, not exactly, fixed.
 **What this cannot answer.** Anything about CoreSimulator paths; physical removable media; the stub
 question; a launchd daemon's TCC posture; and why DiskArbitration makes the choice, only whether this
 variable moves it.
+
+### Item 4: RESULT *(run 2026-09-26T02:22Z; read against the rules above, unedited)*
+
+Evidence: `docs/research/evidence/e6c-item4-attach-owner-macos26.7-25G229-xcode26.5-x86_64.txt`.
+
+**Admissibility.** `TCC indicator: TCC.db opened by this process`. Each cell's `owner-uid` is the one
+the table asks for — B1u 501, B1c 501, B1n 501, B1r 0 — and the script verified each attach before the
+cell ran. Every REFUSED carries `unable to mount /dev/disk7s1 (status code 0x0000004D)` for its own
+device with `log show exit=0`. B1r's MOUNTED is its verified line,
+`/dev/disk7s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)`.
+Every teardown and every step of the restore went through DiskArbitration, and the run ended as it
+began: `final: attached=1 owner-uid=501 mount-point=/Volumes/<vault>`, probe removed.
+
+**B1c's own check passes.** Its `standing mount:` line is identical to B1u's, options and
+`mounted by <user>` included, so B1c is a like-for-like re-attach and the B1u → B1c contrast is read.
+
+**The rules that fired:**
+
+- **B1u REFUSED with `0x0000004D`** — the replication.
+- **B1u → B1c, both REFUSED** ⇒ a fresh attach by the operator's session, through the script's attach
+  path, changes nothing. The two later contrasts are clean of it.
+- **B1c → B1n, both REFUSED** ⇒ **the default-location mount is not the variable.** The candidate's
+  placement form is falsified for this image: with no standing mount at all before the cell,
+  DiskArbitration still refused the caller-chosen mount point.
+- **B1n → B1r, REFUSED → MOUNTED** ⇒ **a detach and re-attach by root, instead of by the operator's
+  session, changed DiskArbitration's answer.** This is the first discriminating support the candidate
+  has had in the series, and it is in its attach form. Its limits, as registered: B1r ran last, so
+  order is not excluded; and "the attaching uid" and "a user session" moved together, so this does
+  not say which of the two DiskArbitration keys on.
+
+**A correction to the design text, not a reading.** The table listed "new nodes" among B1c's
+differences. They were not new: every attach in the run came back as `disk6` / `disk7s1`, and the
+UUID check confirmed the same volume each time. So device nodes were held fixed, not varied — which
+removes one confound from every contrast rather than adding one.
+
+**What moves, and only within this run.** An image attached by the operator's session was refused a
+caller-chosen mount point by DiskArbitration although root asked, and the same file attached by root
+was accepted. That is consistent with the B0/donor pattern in runs 5–7, and it does **not** explain
+those runs: their donors, boot sessions and (for 5–6) recorded TCC context differ from this one. Nor
+does it say why DiskArbitration makes that choice. **For the product, it is a question, not a
+finding:** if a helper attaches an image as root, DiskArbitration would place it where asked — but the
+product's volumes are physical external drives, which nobody attaches, and removable media is still
+untested. That is now the next item, with the physical yank after it.

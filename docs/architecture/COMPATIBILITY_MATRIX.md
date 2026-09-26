@@ -1120,3 +1120,20 @@ substitution may not be waved through. Issue #29 stays open.
   - **What it does not show:** whether a stub reappears after the volume goes away (H14 proper;
     E6c tears down cleanly and never asks), anything about a launchd daemon's TCC posture, or
     anything that reopens ADR-0004.
+
+### DiskArbitration `-mountPoint` refusal vs who attached the image (E6c item 4) — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-26T02:22Z (2026-09-25 local).
+- Hypothesis reference: H14 (the donor asymmetry inside E6c; not the stub question).
+- Test performed: `diskutil mount -mountPoint <control dir>` against one sparse image in one run, four
+  times — attached by the operator's session (B1u), re-attached by it (B1c), re-attached by it with
+  `-nomount` (B1n), re-attached by root with `-nomount` (B1r). Attacher measured as `hdiutil info`
+  `owner-uid`. Reading pre-registered (76e177f).
+- Result: B1u, B1c, B1n **REFUSED**, each `0x0000004D`; **B1r MOUNTED**.
+- Evidence: `docs/research/evidence/e6c-item4-attach-owner-macos26.7-25G229-xcode26.5-x86_64.txt`.
+- Functional checks: N/A.
+- Verdict: **probable, one run**: on this configuration DiskArbitration refuses a caller-chosen mount
+  point for a disk image attached by the user's session, whoever asks, and accepts it when root
+  attached the image; a default-location mount is not the variable.
+- Notes: order is not excluded (B1r ran last); uid and session moved together. Disk images only —
+  physical removable media untested, and it is what the product's volumes are.

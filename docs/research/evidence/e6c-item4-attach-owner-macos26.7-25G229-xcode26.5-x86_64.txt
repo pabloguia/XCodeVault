@@ -1,0 +1,154 @@
+# Experiment: E6c item 4 — does who attached the donor decide DiskArbitration's -mountPoint answer?
+# Date: 2026-09-26T02:22:26Z
+# macOS: 26.7 (25G229)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+TCC indicator: TCC.db opened by this process — Full Disk Access reaches it
+image: /tmp/e6b-donor.sparseimage
+donor: /Volumes/<vault> (/dev/disk7s1, whole disk /dev/disk6, UUID <vault-uuid>)
+control dir: /Library/Developer/xcv-e6c-probe
+
+
+==================== B1u ====================
+owner-uid: 501
+standing mount: /dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled, noowners, mounted by <user>)
+## unmount from /Volumes/<vault>
+$ diskutil unmount /dev/disk7s1
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+## B1u
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+## diskarbitrationd for /dev/disk7s1 since 2026-09-25 23:22:29
+   log show exit=0
+   2026-09-25 23:22:30.059396-0300 0x17f994   Error       0x0                  142    7    diskarbitrationd: [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+-> REFUSED (nothing of ours at /Library/Developer/xcv-e6c-probe; exit=1)
+
+==================== re-attach as <user> (auto-mount) ====================
+## detach
+$ hdiutil detach /dev/disk6
+"disk6" ejected.
+[exit=0]
+
+## attach as <user>
+$ launchctl asuser 501 sudo -u <user> hdiutil attach /tmp/e6b-donor.sparseimage
+/dev/disk6          	GUID_partition_scheme          	
+/dev/disk6s1        	Apple_APFS                     	
+/dev/disk7          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk7s1        	41504653-0000-11AA-AA11-0030654	/Volumes/<vault>
+[exit=0]
+
+owner-uid after attach: 501
+
+==================== B1c ====================
+owner-uid: 501
+standing mount: /dev/disk7s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled, noowners, mounted by <user>)
+## unmount from /Volumes/<vault>
+$ diskutil unmount /dev/disk7s1
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+## B1c
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+## diskarbitrationd for /dev/disk7s1 since 2026-09-25 23:22:36
+   log show exit=0
+   2026-09-25 23:22:36.201353-0300 0x181ba3   Error       0x0                  142    7    diskarbitrationd: [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+-> REFUSED (nothing of ours at /Library/Developer/xcv-e6c-probe; exit=1)
+
+==================== re-attach as <user> -nomount ====================
+## detach
+$ hdiutil detach /dev/disk6
+"disk6" ejected.
+[exit=0]
+
+## attach as <user>
+$ launchctl asuser 501 sudo -u <user> hdiutil attach -nomount /tmp/e6b-donor.sparseimage
+/dev/disk6          	GUID_partition_scheme          	
+/dev/disk6s1        	Apple_APFS                     	
+/dev/disk7          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk7s1        	41504653-0000-11AA-AA11-0030654	
+[exit=0]
+
+owner-uid after attach: 501
+
+==================== B1n ====================
+owner-uid: 501
+standing mount: 
+## B1n
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume on disk7s1 failed to mount
+[exit=1]
+
+   mounts of /dev/disk7s1 now: <none>
+## diskarbitrationd for /dev/disk7s1 since 2026-09-25 23:22:39
+   log show exit=0
+   2026-09-25 23:22:39.448536-0300 0x17f994   Error       0x0                  142    7    diskarbitrationd: [com.apple.DiskArbitration.diskarbitrationd:default] unable to mount /dev/disk7s1 (status code 0x0000004D).
+-> REFUSED (nothing of ours at /Library/Developer/xcv-e6c-probe; exit=1)
+
+==================== re-attach as root -nomount ====================
+## detach
+$ hdiutil detach /dev/disk6
+"disk6" ejected.
+[exit=0]
+
+## attach as root
+$ hdiutil attach -nomount /tmp/e6b-donor.sparseimage
+/dev/disk6          	GUID_partition_scheme          	
+/dev/disk6s1        	Apple_APFS                     	
+/dev/disk7          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk7s1        	41504653-0000-11AA-AA11-0030654	
+[exit=0]
+
+owner-uid after attach: 0
+
+==================== B1r ====================
+owner-uid: 0
+standing mount: 
+## B1r
+$ diskutil mount -mountPoint /Library/Developer/xcv-e6c-probe /dev/disk7s1
+Volume <vault> on /dev/disk7s1 mounted
+[exit=0]
+
+   mounts of /dev/disk7s1 now: /dev/disk7s1 on /Library/Developer/xcv-e6c-probe (apfs, local, nodev, nosuid, journaled, noowners)
+## diskarbitrationd for /dev/disk7s1 since 2026-09-25 23:22:41
+   log show exit=0
+-> MOUNTED at /Library/Developer/xcv-e6c-probe
+## teardown
+$ diskutil unmount /dev/disk7s1
+Volume <vault> on disk7s1 unmounted
+[exit=0]
+
+
+==================== restore ====================
+## detach the image
+$ hdiutil detach /dev/disk6
+"disk6" ejected.
+[exit=0]
+
+## attach the image again, as <user>
+$ launchctl asuser 501 sudo -u <user> hdiutil attach /tmp/e6b-donor.sparseimage
+/dev/disk6          	GUID_partition_scheme          	
+/dev/disk6s1        	Apple_APFS                     	
+/dev/disk7          	EF57347C-0000-11AA-AA11-0030654	
+/dev/disk7s1        	41504653-0000-11AA-AA11-0030654	/Volumes/<vault>
+[exit=0]
+
+final: attached=1 owner-uid=501 mount-point=/Volumes/<vault>
+removed /Library/Developer/xcv-e6c-probe
+
+==================== cells ====================
+  B1u (owner-uid 501): REFUSED (exit 1)
+  B1c (owner-uid 501): REFUSED (exit 1)
+  B1n (owner-uid 501): REFUSED (exit 1)
+  B1r (owner-uid 0): MOUNTED
