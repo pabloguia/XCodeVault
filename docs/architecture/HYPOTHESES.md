@@ -1870,3 +1870,47 @@ context). B0 and E are the run's own disk image, so the two classes sit side by 
 
 **What it cannot answer.** Physical removable media; the physical yank; whether anything is written into
 `Caches/dyld` afterwards; a launchd daemon's TCC posture; ADR-0004.
+
+### E6c, eighth run, PHYSICAL donor: RESULT *(run 2026-09-26T19:33Z; read against the rules above, unedited)*
+
+Evidence: `docs/research/evidence/e6c-mount-mechanism-dyld-physical-macos26.7-25G229-xcode26.5-x86_64.txt`
+— a new file; run 7's evidence was not rotated.
+
+**Admissibility.** The header reads `donor protocol: USB (evidence name class: -physical)` and
+`TCC indicator: TCC.db opened by this process`; the device-class rows record the donor as
+`Protocol=USB … Removable Media=Fixed` and B0's image as `Protocol=Disk Image … Removable
+Media=Removable`. A and B0 MOUNTED; no VOID marker and no `!!` line anywhere in the file; every
+teardown `diskutil`; `shadow_check`: donor root unchanged (`.fseventsd`, `.Spotlight-V100`). The
+donor was named by `--donor-uuid` and matched. After the run the operator's data volume in the same
+container was still mounted where it was, the donor was back at its default location, and
+`Caches/dyld` was empty.
+
+**Every cell MOUNTED**, each by its verified line — twelve of twelve, both mechanisms, both volumes,
+all three locations. The rules that fired:
+
+- **B1 MOUNTED** ⇒ DiskArbitration honours a caller-chosen mount point for this physical volume, so
+  C is readable.
+- **C MOUNTED** — `/dev/disk9s2 on /Library/Developer/CoreSimulator/Caches/dyld (… nobrowse)` ⇒
+  **DiskArbitration places an external physical volume at H14's path.** The product's own question,
+  answered positively for this configuration.
+- **D MOUNTED, with A and H1 MOUNTED** ⇒ `mount_apfs` does too.
+- **E MOUNTED** with B0, E0, E0b — the run's disk-image control at the target.
+- B2, B3, H2 MOUNTED: descriptive.
+
+No pattern outside the pre-registered set occurred. The class-by-path rule did not fire, because C
+mounted; so this run shows no interaction of path with class — protocol and removability together,
+unseparated.
+
+**Descriptive, not a reading.** The donor's standing line — taken before any cell — carries no
+`mounted by` attribution, although the operator created and mounted the volume from their own
+session; the disk-image donors of runs 6–7 and item 4 did carry `mounted by <user>`. This run
+registered no rule on that line for a MOUNTED B1, so it is recorded and not interpreted.
+
+**What changes.** The canonical-mount path is reachable for a physical external volume, by both
+mechanisms, at the cache path H14 names, on this configuration. **It does not reopen ADR-0004**:
+the demotion rests on E1 (nothing under that path worth mounting over) and E2 (the `xctest`
+restriction follows the device), and a mount that is permitted is not one that is useful. What
+remains of H14 is unchanged: whether anything is written into `Caches/dyld` after the volume goes
+away, and the physical yank — which needs a drive with nothing else on it: pulling this SSD's
+cable would yank the operator's data volume in the same container, mid-mount or not.
+Physical *removable* media remains untested: this SSD reports `Fixed`.

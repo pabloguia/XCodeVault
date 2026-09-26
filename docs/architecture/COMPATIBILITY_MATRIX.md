@@ -1137,3 +1137,21 @@ substitution may not be waved through. Issue #29 stays open.
   attached the image; a default-location mount is not the variable.
 - Notes: order is not excluded (B1r ran last); uid and session moved together. Disk images only —
   physical removable media untested, and it is what the product's volumes are.
+
+### E6c at `Caches/dyld`, PHYSICAL donor (USB SSD, `Removable Media: Fixed`) — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-09-26T19:33Z, eighth E6c run.
+- Hypothesis reference: H14 (path reachability only).
+- Test performed: the E6c matrix with a new, empty APFS volume added to the container of a USB SSD
+  as donor, named by `--donor-uuid`; the run's own disk image (B0) as the in-run control. Reading
+  pre-registered (540612d).
+- Result: **all twelve cells MOUNTED** — B1, B2, B3, C (`diskutil`, nobrowse, at `Caches/dyld`), A,
+  H1, H2, D (`mount_apfs` at `Caches/dyld`), and B0, E0, E, E0b for the image.
+- Evidence: `docs/research/evidence/e6c-mount-mechanism-dyld-physical-macos26.7-25G229-xcode26.5-x86_64.txt`.
+- Functional checks: N/A.
+- Verdict: **verified, one run, this configuration**: an external physical APFS volume can be
+  mounted at `/Library/Developer/CoreSimulator/Caches/dyld` by root with Full Disk Access, by
+  DiskArbitration and by `mount_apfs`.
+- Notes: protocol (USB) and removability (Fixed) differ from the disk images together; physical
+  removable media is untested. The donor's standing mount carried no `mounted by` attribution
+  (descriptive). Does not reopen ADR-0004.

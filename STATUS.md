@@ -407,6 +407,15 @@ is done. The post-publication issue backlog replaced it._
    running to catch the next rig boot's decision **failed**: 11,600 "messages dropped" notices and no
    message, so its silence is not an absence.
 
+   **Eighth run, same day, with a PHYSICAL donor: all twelve cells MOUNTED.** A new empty volume
+   added to the operator's USB SSD, named by `--donor-uuid`, mounted at `Caches/dyld` by
+   DiskArbitration (C) and by `mount_apfs` (D), and everywhere else asked; the operator's data volume
+   in the same container was untouched. So an external physical volume can sit at H14's path on this
+   configuration. It does not reopen ADR-0004. The SSD reports `Fixed`, so physical removable media
+   is still untested. **Next: the physical yank (E6b variant B) — which needs a disposable drive,
+   NOT this SSD: pulling its cable yanks the operator's data volume too — and what writes into
+   `Caches/dyld` afterwards.**
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the
