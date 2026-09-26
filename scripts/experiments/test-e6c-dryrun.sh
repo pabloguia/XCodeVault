@@ -148,7 +148,7 @@ scenario() {
 # the arm a real `dyld` run takes in `matrix` had never executed — and it was wrong.
 e6c() {
     XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$WORK/ev" SUDO_USER="$FAKE_USER" \
-        bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" "${E6C_TARGET:-cryptex}" 2>&1
+        bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" "${E6C_TARGET:-cryptex}" --donor-uuid "${E6C_DONOR_UUID-AAAA-BBBB-CCCC}" 2>&1
 }
 # A FILE, not a variable: every call site is `out="$(run_e6c)"`, so an assignment inside would
 # happen in the subshell and never reach `check`. That is the same shape as the defects this
@@ -169,12 +169,12 @@ calls() { cat "$WORK/calls" 2>/dev/null; }
 evidence() { cat "$WORK"/ev/*.txt 2>/dev/null; }
 
 # ---- the mode's own guards, which are what keep a dry run from ever being a real one -----------
-out="$(XCV_DRYRUN=1 XCV_STUB_BIN=/nonexistent XCV_DRYRUN_EVIDENCE_DIR=/tmp bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1)"
+out="$(XCV_DRYRUN=1 XCV_STUB_BIN=/nonexistent XCV_DRYRUN_EVIDENCE_DIR=/tmp bash ./e6c-mount-mechanism.sh /Volumes/D cryptex --donor-uuid AAAA-BBBB-CCCC 2>&1)"
 check "a dry run without a stub directory is refused" "yes" "$(contains "needs XCV_STUB_BIN" "$out")"
 
 scenario guards
 out="$(XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$(cd ../.. && pwd)/docs/research/evidence" \
-    bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1)"
+    bash ./e6c-mount-mechanism.sh /Volumes/D cryptex --donor-uuid AAAA-BBBB-CCCC 2>&1)"
 check "a dry run refuses to write to the real evidence directory" "yes" \
     "$(contains "refuses to write to the real evidence" "$out")"
 
@@ -203,7 +203,7 @@ check "a dry run refuses to write to the real evidence directory" "yes" \
 # banner are what catch that.
 rootout="$(bash -c 'id() { echo 0; }; export -f id
     XCV_DRYRUN=1 XCV_STUB_BIN="$1" XCV_DRYRUN_EVIDENCE_DIR="$2" \
-        bash ./e6c-mount-mechanism.sh /Volumes/D cryptex 2>&1; echo "rc=$?"' _ "$WORK/bin" "$WORK/ev")"
+        bash ./e6c-mount-mechanism.sh /Volumes/D cryptex --donor-uuid AAAA-BBBB-CCCC 2>&1; echo "rc=$?"' _ "$WORK/bin" "$WORK/ev")"
 check "a dry run that believes it is root refuses" "yes" "$(contains "must NOT run as root" "$rootout")"
 check "and STOPS, rather than printing and proceeding" "yes" "$(contains "rc=2" "$rootout")"
 check "and never reaches the stubs" "no" "$(contains "NOTHING IS MOUNTED" "$rootout")"
@@ -537,6 +537,60 @@ check "a booted simulator device refuses the run" "yes" "$(contains "A simulator
 check "and nothing is mounted by either mechanism" "no|no" \
     "$(contains "mount_apfs" "$(calls)")|$(contains "diskutil mount" "$(calls)")"
 check "and the refusal came from asking for launchd_sim" "yes" "$(contains "pgrep -qx launchd_sim" "$(calls)")"
+
+# ---- the donor's class is in the evidence name, from its measured Protocol ----------------------
+# The first physical-donor run at a target would otherwise have rotated that target's committed
+# disk-image evidence to `-superseded-`. B0's failed create is the shortest route to a publish.
+scenario donor-class-physical
+donor_ok
+printf '   Part of Whole:             disk9\n   Protocol:                  USB\n   Device Location:           External\n   Removable Media:           Fixed\n   Owners:                    Disabled\n' \
+    > "$WORK/out.diskutil.info._dev_disk9s1"
+echo 1 > "$WORK/rc.hdiutil.create"
+out="$(run_e6c)"
+check "a USB donor publishes under -physical" "yes" "$(contains "e6c-mount-mechanism-cryptex-physical-DRYRUN" "$(ls -1 "$WORK/ev")")"
+check "and records the protocol it read" "yes" "$(contains "donor protocol: USB (evidence name class: -physical)" "$(evidence)")"
+
+scenario donor-class-unreadable
+donor_ok
+printf '   Part of Whole:             disk9\n   Owners:                    Disabled\n' > "$WORK/out.diskutil.info._dev_disk9s1"
+echo 1 > "$WORK/rc.hdiutil.create"
+out="$(run_e6c)"
+check "an unreadable class never takes the disk-image name" "yes" "$(contains "e6c-mount-mechanism-cryptex-unknownclass-DRYRUN" "$(ls -1 "$WORK/ev")")"
+
+# ---- the donor is named twice: a mount point that resolves to another volume is refused --------
+# A physical donor sits in the same APFS container as the operator's data volume, and the two differ
+# only by name. Both refusals must come before anything is unmounted or mounted.
+scenario donor-uuid-missing
+donor_ok
+out="$(E6C_DONOR_UUID="" run_e6c)"
+check "a run without --donor-uuid is refused" "yes" "$(contains "--donor-uuid <Volume UUID> is required" "$out")"
+check "and touches no device" "no|no|no" \
+    "$(contains "diskutil unmount" "$(calls)")|$(contains "diskutil mount" "$(calls)")|$(contains "mount_apfs" "$(calls)")"
+
+scenario donor-uuid-mismatch
+donor_ok
+out="$(E6C_DONOR_UUID="FFFF-0000-FFFF" run_e6c)"
+check "a UUID that does not match the resolved volume is refused" "yes" \
+    "$(contains "not the one given with --donor-uuid" "$out")"
+check "and touches no device" "no|no|no" \
+    "$(contains "diskutil unmount" "$(calls)")|$(contains "diskutil mount" "$(calls)")|$(contains "mount_apfs" "$(calls)")"
+check "and publishes nothing" "0" "$(ls -1 "$WORK"/ev/*.txt 2>/dev/null | wc -l | tr -d ' ')"
+
+# ---- the DiskArbitration capture is the cell's own node, not the shared container -------------
+# For a volume added to a real drive, the container (`Part of Whole`) also holds the operator's data
+# volume, and `disk9s1` unanchored matches `disk9s10`. Neither may land in the donor's cell block.
+scenario da-filter-own-node
+donor_ok
+echo 1 > "$WORK/rc.mount_apfs"
+echo 1 > "$WORK/rc.diskutil.mount"
+printf '%s\n' 'Timestamp               Ty Process[PID:TID]' \
+    '2026-09-26 12:00:00.000 E  diskarbitrationd[1:1] unable to mount /dev/disk9s1 (status code 0x0000004D).' \
+    '2026-09-26 12:00:00.001 Df diskarbitrationd[1:1] SIBLINGLINE probe /dev/disk9s10' \
+    '2026-09-26 12:00:00.002 Df diskarbitrationd[1:1] CONTAINERLINE container disk9 idle' > "$WORK/out.log"
+out="$(run_e6c)"
+check "the donor's own DiskArbitration line is captured" "yes" "$(contains "unable to mount /dev/disk9s1 (status code" "$(evidence)")"
+check "a sibling volume's node is not" "no" "$(contains "SIBLINGLINE" "$(evidence)")"
+check "nor a container-level line" "no" "$(contains "CONTAINERLINE" "$(evidence)")"
 
 # ---- a guard refusal must not force-unmount a stranger's filesystem -----------------------------
 # The EXIT trap is armed BEFORE the pre-flight guards, and those guards refuse the run precisely

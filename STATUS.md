@@ -396,6 +396,16 @@ is done. The post-publication issue backlog replaced it._
    is real and its trigger is unknown. **Next: identify what rebuilds
    `Caches/dyld` (research, read-only first); then physical removable media; then the yank.**
 
+   **Same day, the read-only research.** The binaries' strings (static, not behaviour) suggest an
+   explicit route — `simctl runtime dyld_shared_cache update` — and an automatic one that can decline,
+   reporting four properties, one named after defaults (no such key found); which reaches
+   `simdiskimaged`, and how, is not shown. The unified log over a window including the rig's two
+   boots holds 13 "Unable to use dyld shared cache … not currently available" lines and, at info
+   level, no creation request; that nothing was built rests on the directory staying empty. The
+   oldest retained `simdiskimaged` entry is 2026-09-22 20:14, after the 25G229 cache was built
+   (~2026-09-16), so what built it is unrecoverable here. A passive `log stream --level debug` runs
+   to catch the next rig boot's decision.
+
    **Product consequence, recorded before anyone ships against it.** `clean` lists
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the

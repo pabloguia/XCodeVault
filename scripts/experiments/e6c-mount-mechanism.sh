@@ -69,7 +69,7 @@
 # The full rule set, including every void condition, is printed by `matrix` at the end of the run
 # and is fixed in HYPOTHESES.md H14 before it.
 #
-# Usage: sudo scripts/experiments/e6c-mount-mechanism.sh /Volumes/DONOR [dyld|cryptex]
+# Usage: sudo scripts/experiments/e6c-mount-mechanism.sh /Volumes/DONOR <dyld|cryptex> --donor-uuid <Volume UUID>
 #
 # Nothing is written to either target. Every cell unmounts before the next one starts, and the
 # EXIT trap unmounts what THIS RUN mounted — matched by device, not by "is anything mounted
@@ -108,7 +108,17 @@ TARGET="$(xcv_e6b_target "$TARGET_NAME")" || {
     echo "!! unknown target '$TARGET_NAME'. Allowed: dyld, cryptex (see scripts/experiments/e6b-check.sh)."
     exit 2
 }
-[ -n "$MP" ] || { echo "!! usage: sudo $0 /Volumes/DONOR [dyld|cryptex]"; exit 2; }
+[ -n "$MP" ] || { echo "!! usage: sudo $0 /Volumes/DONOR <dyld|cryptex> --donor-uuid <Volume UUID>"; exit 2; }
+# **The donor is named twice, independently: by mount point and by volume UUID.** Through run 7 the
+# mount point was the only identification, which was safe while every donor was a throwaway disk
+# image. A physical donor is a volume added to a real drive, next to the operator's own data volume
+# in the same APFS container, and the two differ only by name — `/Volumes/PABLO` for
+# `/Volumes/XCVPHYS` is one word, and it would unmount the operator's data and mount it over a
+# CoreSimulator cache path. An argument, not an environment variable: sudo's default policy refuses
+# `VAR=value` on its command line. Checked against the UUID resolved from the mount point, below.
+EXPECT_DONOR_UUID=""
+[ "${3:-}" = "--donor-uuid" ] && EXPECT_DONOR_UUID="${4:-}"
+[ -n "$EXPECT_DONOR_UUID" ] || { echo "!! --donor-uuid <Volume UUID> is required. Read it from 'diskutil apfs list', next to the donor's NAME — not from the mount point you typed, or a typo there carries into the UUID."; exit 2; }
 
 # **Dry run — the harness for the paths nothing else can reach.**
 #
@@ -151,12 +161,11 @@ else
     [ -n "${SUDO_USER:-}" ] || { echo "!! SUDO_USER is empty; redaction cannot be verified. Use \`sudo\`, not \`sudo -i\`."; exit 2; }
 fi
 
-out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-$(xcv_env_slug).txt"
+# The evidence name (`$out`) is set after the donor is resolved, below: it carries the donor's class.
 # `-DRYRUN` in the NAME, because the two banners above go to the terminal, before the report is
 # opened, and never reach the file. A dry run's output is otherwise indistinguishable from real
 # evidence: same filename pattern, same `xcv_header`, a full matrix — all of it fabricated from
 # stub answers. There are already `-superseded-` files sitting untracked in that directory.
-[ "${XCV_DRYRUN:-0}" = 1 ] && out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-DRYRUN-$(xcv_env_slug).txt"
 
 # A throwaway directory, deliberately NOT under CoreSimulator: it is the control that separates
 # "this path" from "this mechanism". `/Library/Developer` because that is where E1b mounted.
@@ -240,6 +249,26 @@ B0_STORE_DISK=""
 
 exec 3>&1
 xcv_stage_resolve_donor "$MP" || exit 1
+[ "$XCV_DONOR_UUID" = "$EXPECT_DONOR_UUID" ] || {
+    echo "!! $MP resolves to a volume whose UUID is not the one given with --donor-uuid. Refusing: check the"
+    echo "   mount point and the UUID against 'diskutil apfs list' before running anything."
+    echo "   The mount point you gave is the volume named: $(diskutil info "$MP" 2>/dev/null | sed -n 's/^ *Volume Name: *//p' | head -1)"
+    exit 1
+}
+# **The donor's class goes into the evidence NAME, measured rather than declared.** Every run through
+# run 7 used a disk image, and the name carried only the target — so the first run with a physical
+# donor at the same target would have rotated run 7's committed evidence to `-superseded-`, as if the
+# new run replaced it. They are different measurements. The class is the donor's own `Protocol`
+# line: "Disk Image" keeps the historical name; anything else is `-physical`; an unreadable one is
+# `-unknownclass`, so that no guess about the class can rename or displace existing evidence.
+XCV_DONOR_PROTOCOL="$(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Protocol: *//p' | head -1)"
+case "$XCV_DONOR_PROTOCOL" in
+    "Disk Image") DONOR_CLASS="" ;;
+    "") DONOR_CLASS="-unknownclass" ;;
+    *) DONOR_CLASS="-physical" ;;
+esac
+out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME$DONOR_CLASS-$(xcv_env_slug).txt"
+[ "${XCV_DRYRUN:-0}" = 1 ] && out="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME$DONOR_CLASS-DRYRUN-$(xcv_env_slug).txt"
 xcv_stage_guard_target "$TARGET" || exit 1
 
 REPORT="$(mktemp -t xcv-e6c)"
@@ -356,7 +385,7 @@ cleanup() {
         # refused, this log is a SUCCESSFUL experiment's evidence and must not be filed as FAILED.
         local why=FAILED
         [ "${XCV_PUBLISH_FAILED:-0}" = 1 ] && why=PUBLISH-FAILED
-        local diag="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME-$why-$(xcv_env_slug).txt"
+        local diag="$XCV_EVIDENCE_DIR/e6c-mount-mechanism-$TARGET_NAME${DONOR_CLASS:-}-$why-$(xcv_env_slug).txt"
         if ! xcv_stage_write_evidence "$REPORT" "$diag"; then
             discard=0
             echo "!! the log could NOT be redacted, so it was not published — see the messages above." >&3
@@ -576,6 +605,7 @@ if [ "${XCV_DRYRUN:-0}" = 1 ]; then
 fi
 echo "donor: $MP ($XCV_DEV, $XCV_FS, whole disk $XCV_DONOR_DISK, UUID $XCV_DONOR_UUID)"
 echo "owners on donor: $(diskutil info "$XCV_DEV" 2>/dev/null | sed -n 's/^ *Owners: *//p' | head -1)"
+echo "donor protocol: ${XCV_DONOR_PROTOCOL:-<unreadable>} (evidence name class: ${DONOR_CLASS:-none})"
 # **Who placed the donor, measured before the run touches it.** The one candidate left for the
 # donor's `0x0000004D` is that DiskArbitration declines a caller-chosen mount point for a volume
 # whose standing placement is a user-session mount. Through run 6 that attribution was read off
@@ -896,8 +926,14 @@ cell() {
                 echo "   !! This is NOT an empty window. Do not read absence from this cell."
                 da_log=""
             else
+                # **The cell's own node, with a boundary — not the container.** This used to admit
+                # `XCV_DONOR_DISK` too, which is the APFS container (`Part of Whole`). For an image
+                # the container held only the donor; for a volume added to a real drive it also holds
+                # the operator's data volume, whose DiskArbitration events would have landed in this
+                # cell's block and read as the donor's. And `disk9s1` unanchored also matches
+                # `disk9s10`.
                 da_log="$(printf '%s\n' "$da_raw" \
-                    | grep -E "$(xcv_re_escape "${XCV_DONOR_DISK:-__none__}")|$(xcv_re_escape "${dev#/dev/}")" \
+                    | grep -E "$(xcv_re_escape "${dev#/dev/}")([^0-9]|\$)" \
                     | tail -40)"
                 # **The unfiltered count, and it is the only in-band detector for two of the three
                 # limits above.** A backward clock step puts the bound in the future, and that

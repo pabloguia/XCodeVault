@@ -1729,3 +1729,135 @@ an OS update, so the rebuild exists and its trigger is unidentified. That is the
 **Also observed then: the booted-simulator guard's positive control.** `pgrep -x launchd_sim` found
 the process while the device was booted (pid 59621). The name `xcv_stage_guard_target` checks for
 was until then inferred from the binary in the runtime; it is now observed, once.
+
+### 2026-09-26: what writes `Caches/dyld` — the machinery, read-only, and what the log shows
+
+**Static, from `strings -a` on the binaries on this machine — what messages and symbols exist, not
+which call site logs which, nor how control flows between them.** The CoreSimulator binary contains
+`-[SimDiskImageManager prepareDYLDSharedCacheWithRuntimeBundle:forceRecreation:…]`,
+`Requesting creation of dyld shared cache (isForcedRebuild = %@, runtime = %@)`, `dyld shared cache
+prep failed because we don't have a connection to simdiskimaged`, and a decline message that reports
+four properties: `Skipping automatic dyld shared cache creation for %@ - %@.
+runtimeContainsDyldSharedCache=%@, runtimeSupportsBuildingDyldSharedCache=%@,
+cacheBuildingAllowedByDefaults=%@, invalidExecutionEnvironmentForAutoBuildingCache=%@`. `simctl`
+documents an explicit `runtime dyld_shared_cache update (<runtime> || --all) [--force]`, and
+`simdiskimaged` contains a `DYLDSharedCacheUpdater` that logs `Updating dyld shared cache for runtime
+bundle: %s` and names `update_dyld_sim_shared_cache-stdout.txt`/`-stderr.txt` and
+`/Library/Developer/CoreSimulator/Caches/dyld` (the stderr file's contents are described at
+FINDINGS-2026-09-05.md:670; E13b copies it aside, EXPERIMENTS.md:248).
+
+What those strings *suggest*: an explicit route and an automatic one, with the prepare path reaching
+`simdiskimaged`. What they do not show: whether "Requesting creation" belongs to one route or both
+(it prints `isForcedRebuild`, and the prepare method takes `forceRecreation:`), whether the explicit
+route reaches `simdiskimaged` at all, and whether the four printed properties are the whole gate or
+how they combine. One property's name refers to defaults; no matching key was found — no plain
+alphabetic string for it in the binary, and nothing dyld- or cache-related in
+`defaults read com.apple.CoreSimulator`.
+
+**No cache inside the runtimes.** `find /Library/Developer/CoreSimulator/Volumes -maxdepth 16 \(
+-name 'dyld_sim_shared_cache*' -o -name 'dyld_shared_cache*' \)` found nothing. Depth 16 reaches
+`…/RuntimeRoot/System/Library/*/`, where a carried cache would sit (an earlier depth-12 search stopped
+one level short and could not have found one; the reviewer re-ran it at 16 independently, also
+empty). That argues against "the runtime already contains its cache" as the reason for the empty
+boots — but `runtimeContainsDyldSharedCache` may be computed some other way, so it is not settled.
+
+**Measured, in the unified log**, with exactly this command, run at about 11:15 on 2026-09-26:
+
+```
+/usr/bin/log show --start '2026-09-25 23:50:00' --info --predicate '(process == "com.apple.CoreSimulator.CoreSimulatorService" OR process == "simdiskimaged" OR process == "update_dyld_sim_shared_cache") AND (eventMessage CONTAINS[c] "dyld")' --style compact
+```
+
+grouped with `uniq -c`: **13** × `Unable to use dyld shared cache as it is not currently available at
+…/Caches/dyld/25G229/…` — for the iOS 26.5 runtime, and one, the first at 00:02:53, for watchOS
+26.5 — and **nothing else**. The reviewer replicated the 13 independently with a message-only
+predicate and no process filter, and found `process == "simdiskimaged" AND eventMessage CONTAINS[c]
+"dyld"` empty. So in that window — which includes the two rig boots observed — CoreSimulatorService
+noticed the cache was missing and, **at `info` level**, logged no `Requesting creation` and no
+`Skipping automatic`. Either may be logged at `debug`, which the store does not keep, so their absence
+is not evidence that neither path ran. That nothing was *built* rests on the directory measurements
+(0 entries at 00:38, mtime still 19:19), not on the log.
+
+**What the log cannot reach.** The oldest retained `simdiskimaged` entry is 2026-09-22 20:14 (other
+subsystems may keep logs longer or shorter). The 25G229 cache was built within the hour after the
+26.7 update (H11), which came hours after E13 on 2026-09-16 — E13b's header already reads 26.7
+(25G229) at 2026-09-16T22:53Z — so its build is outside retention and unrecoverable here. A later
+rebuild between 2026-09-22 and 2026-09-25 is not ruled out by the log, because the 12-day search for
+the creation messages timed out; it is only made unlikely because the 7.1 GB H15 cleared equals
+H11's 4.4G + 2.7G.
+
+**What this changes for #24.** On this machine, in this window, booting did not repopulate
+`Caches/dyld`; H11 recorded a rebuild after an OS update with no recorded request; and the binaries
+contain an automatic path that can decline, reporting four properties. Which of those held is the open
+question, and it is observable passively: a `/usr/bin/log stream --level debug` filtered to these
+messages was started on 2026-09-26, reading the log only, writing to the session scratchpad
+(`dyld-cache-stream.log`) — not to the evidence directory. It is stopped by the agent that started
+it; anything it catches goes into evidence only through the redacted-evidence path, never pasted.
+
+### E6c, eighth run, at `Caches/dyld` with a PHYSICAL donor — the reading, fixed BEFORE the run *(written 2026-09-26; run pending)*
+
+**What is new.** Every E6c run so far — seven — used a disk image as the donor; item 4 then showed
+that, for a disk image, DiskArbitration's `-mountPoint` answer followed who attached it. A physical
+volume has no attach at all, so item 4's variable does not exist here, and the product's volumes are physical. The
+donor here is a **new, empty APFS volume added by the operator to the container of a USB SSD**
+(`diskutil apfs addVolume`), alongside an existing volume holding the operator's data, which the
+run never touches: E6c operates only on the donor's own device node, and `XCV_DONOR_DISK` is used
+for logging only. The volume is deleted afterwards by the operator, **by the device node and UUID the
+run's header records**, never by a label typed from memory — the container also holds their data.
+
+**Two variables change at once, and this run cannot separate them.** Every donor line recorded in
+the committed E6c evidence reads `Protocol=Disk Image … Removable Media=Removable` — disk images are
+classed as removable, so removable-media handling was present in every earlier run. This SSD reports
+`Protocol: USB` and `Removable Media: Fixed` (read on 2026-09-26). So against the run's own disk
+image (B0, E: Disk Image and Removable), the physical donor differs in **protocol and removability
+together**. Wherever the reading below says "class", it means both, unseparated. What stays untested
+is *physical removable* media.
+
+**Instrument changes for this run**, each pinned by `test-e6c-dryrun.sh` and each killed by a
+mutant verified to have applied:
+- The evidence name carries the donor's measured class (`Protocol` other than "Disk Image" ⇒
+  `-physical`, unreadable ⇒ `-unknownclass`), because the first physical run at `dyld` would
+  otherwise have rotated run 7's committed evidence to `-superseded-`. The header prints the
+  protocol it read.
+- **The donor is named twice**: E6c now requires `--donor-uuid <Volume UUID>` and refuses, before
+  anything is unmounted, if the mount point resolves to another volume. With the donor and the
+  operator's data volume in one container, differing only by name, a one-word typo would otherwise
+  have mounted their data over `Caches/dyld`.
+- **The DiskArbitration capture is the cell's own node, with a boundary.** It used to admit the
+  container too, which here also holds the operator's volume, and `disk9s1` unanchored matched
+  `disk9s10`.
+
+**Admissibility** — as run 7: `TCC indicator … opened`; A and B0 MOUNTED; no VOID marker; a REFUSED
+cell is read as DiskArbitration's refusal only with `0x0000004D` for its own device; "mounted" means
+the cell's verified line. And: the header must read `donor protocol: USB (evidence name class:
+-physical)` — anything else, `<unreadable>` included, and this is not the run it claims to be, and
+nothing below is read.
+
+**The reading, within this run only** (not against run 7 or item 4: different donor, class, boot and
+context). B0 and E are the run's own disk image, so the two classes sit side by side here.
+
+- **B1** (`diskutil`, physical donor, control dir):
+  - **MOUNTED** ⇒ DiskArbitration honours a caller-chosen mount point for this physical volume. C is
+    readable.
+  - **REFUSED `0x0000004D`, with B0 MOUNTED** ⇒ DiskArbitration refuses a caller-chosen mount point for
+    this physical volume while taking the run's disk image there. Item 4's variable — who attached
+    the image — has no counterpart for a physical volume; whether an analogous one (who placed the
+    standing mount, recorded in the header) matters is not tested by this run. Record the standing
+    line and the refusal as not explained by item 4.
+- **C** (`diskutil`, physical donor, `Caches/dyld`) — **the product's own question**, readable only
+  with B1 MOUNTED:
+  - **MOUNTED** ⇒ DiskArbitration places an external physical volume at H14's path.
+  - **REFUSED, B1 MOUNTED, E MOUNTED** ⇒ DiskArbitration refuses this path for the physical volume
+    while taking the run's disk image there: an interaction of path with class — protocol and
+    removability together, unseparated — measured in one run.
+- **D** (`mount_apfs`, physical donor, `Caches/dyld`) with **A and H1 MOUNTED**:
+  - **MOUNTED** ⇒ `mount_apfs` places an external physical volume at H14's path.
+  - **REFUSED `EPERM`** ⇒ a directory-specific refusal for this volume, read as run 7 registered it.
+- **E** (`diskutil`, B0's image, `Caches/dyld`) with B0, E0, E0b MOUNTED: the run's disk-image
+  control at the target; read as in run 7.
+- **B3** MOUNTED/REFUSED and **B2**, **H2**: descriptive, read as in run 7.
+- `shadow_check` DONOR ROOT CHANGED ⇒ something wrote onto the physical volume while it sat over a
+  live CoreSimulator path; recorded on its own, as in run 7.
+- **Any pattern not listed** is recorded as not pre-registered.
+
+**What it cannot answer.** Physical removable media; the physical yank; whether anything is written into
+`Caches/dyld` afterwards; a launchd daemon's TCC posture; ADR-0004.
