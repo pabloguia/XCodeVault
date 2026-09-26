@@ -365,8 +365,13 @@ is done. The post-publication issue backlog replaced it._
    refuses a booted simulator (`launchd_sim`), which a headless `simctl boot` slipped past. And the
    dry-run suite never exercised account-name redaction at all: `id` is stubbed, so the redactor's
    identity was empty. The donor image from runs 5–6 is gone (a reboot cleared `/tmp`); the run uses a
-   recreated one. Known flake: "an interrupted run exits 130" failed in all seven parallel mutant
-   runs under load and passed in every serial run — timing-sensitive, not yet fixed.
+   recreated one. "An interrupted run exits 130" failed in every parallel mutant run
+   and passed in every serial one; first recorded here as a timing flake under load. **That
+   diagnosis was wrong** (corrected 2026-09-26): CPU load alone and the scratch location alone both
+   pass; two suites launched as `&` jobs both fail with rc=0. A non-interactive shell starts an `&`
+   job with SIGINT ignored, and a signal ignored at a shell's start cannot be trapped, so the
+   scenario's INT did nothing. Measured on a four-line script: foreground 130, `&` job 0, `&` job
+   through a `perl` SIGINT reset 130. The harness now resets SIGINT before starting E6c.
 
    **Seventh run, same night, at `dyld`: D and E MOUNTED.** H14's own path accepts a volume by
    `mount_apfs` and by DiskArbitration, from a process the header shows Full Disk Access reaches.

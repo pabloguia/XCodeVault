@@ -146,8 +146,16 @@ scenario() {
 # e6c — run the real script against the current scenario. Captures everything.
 # `E6C_TARGET` picks the allowlisted target NAME. Every scenario ran `cryptex` until 2026-09-25, so
 # the arm a real `dyld` run takes in `matrix` had never executed — and it was wrong.
+#
+# **SIGINT reset to default before the script starts, by `perl`, because bash cannot do it.** A
+# non-interactive shell starts an `&` job with SIGINT and SIGQUIT ignored, and a signal ignored when a
+# shell starts can never be trapped by it. So when this suite itself ran as a background job — every
+# parallel mutant run did — the interrupt scenario's INT was silently ignored, the run finished with
+# 0, and "an interrupted run exits 130" failed. That was recorded as a load flake for a day; measured,
+# it is neither load nor timing: foreground 130, `&` job 0, `&` job through this reset 130.
 e6c() {
     XCV_DRYRUN=1 XCV_STUB_BIN="$WORK/bin" XCV_DRYRUN_EVIDENCE_DIR="$WORK/ev" SUDO_USER="$FAKE_USER" \
+        perl -e '$SIG{INT} = "DEFAULT"; $SIG{QUIT} = "DEFAULT"; exec @ARGV or die "exec: $!"' \
         bash ./e6c-mount-mechanism.sh "/Volumes/DRYDONOR" "${E6C_TARGET:-cryptex}" --donor-uuid "${E6C_DONOR_UUID-AAAA-BBBB-CCCC}" 2>&1
 }
 # A FILE, not a variable: every call site is `out="$(run_e6c)"`, so an assignment inside would
