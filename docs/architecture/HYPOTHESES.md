@@ -589,8 +589,9 @@ the E6c guard requires (empty, not absent). So H15 accounts for the entire refus
 create, delete and mount alike — and nothing in this hierarchy needed explaining beyond the caller's
 Full Disk Access.
 
-**A consequence for the product, and it is the good direction.** `xcodevaultctl clean` lists
-`CoreSimulator system dyld caches` as `[root — helper needed]` and the open question was whether a
+**A consequence for the product, and it is the good direction.** `xcodevaultctl clean` listed
+`CoreSimulator system dyld caches` as `[root — helper needed]` (relabelled 2026-09-27 to "root
+with Full Disk Access — not executable yet", scoped to `Caches/dyld`) and the open question was whether a
 privileged helper could execute it at all if the gate was TCC rather than ownership. The gate is
 demonstrably passable: a root process with Full Disk Access cleared 7.1 GB from that path. What is
 still unverified is a launchd daemon's TCC posture, which is not the same as a granted Terminal's —
@@ -659,7 +660,7 @@ measurements ran from **demonstrably lacks Full Disk Access**: reading
 This is a **grant the operator makes**, not something an experiment should arrange, and it is
 unrelated to SIP: nothing here asks for SIP to be weakened, which rule 1 forbids unconditionally.
 
-**Why this matters beyond the experiment.** `xcodevaultctl clean` lists
+**Why this matters beyond the experiment.** `xcodevaultctl clean` listed (until 2026-09-27)
 `CoreSimulator system dyld caches` as `[root — helper needed]`, deferring it to the privileged
 helper. If the gate is TCC rather than ownership, **root is not the missing ingredient and the
 helper may not be either** — a launchd daemon's TCC posture is different from a Terminal child's,

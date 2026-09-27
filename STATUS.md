@@ -65,6 +65,20 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Next three actions
 
+**As of 2026-09-27** (the same list, with its reasons, is in `docs/process/SESSION-HANDOFF.md`
+"What to do, in priority order"):
+
+1. **E6b variant B, the physical yank** (#29) — blocked on a disposable USB pendrive. The guards
+   are in (e800fde): `--donor-uuid`, and the donor must be the only volume on its whole drive.
+   Before running: erase the pendrive as APFS with one volume, pre-register the reading, review.
+2. **What rebuilds `Caches/dyld`** — the trigger is unidentified (H11, H14; FINDINGS "Corrections,
+   2026-09-27"). Candidate: first use on a new host build. Interactive use is unmeasured.
+3. **#30 / M4–M5** — the helper has never run live; needs a signed build. Whether a launchd daemon
+   has the Full Disk Access `Caches/dyld` needs (H15) is part of what that run must answer.
+
+Everything below in this section is the history of how the list got here. It is kept because
+the reasons are the record, not because it is current.
+
 _Item 1 was "Publish" until 2026-09-18; the repository is public and CI runs on both runners, so it
 is done. The post-publication issue backlog replaced it._
 
