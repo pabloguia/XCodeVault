@@ -86,9 +86,12 @@ extension Doctor {
     ///     /Library/Developer/CoreSimulator/Caches/dyld/<hostBuild>/<runtimeIdentifier>.<build>/
     ///     /Library/Developer/CoreSimulator/Caches/dyld/<hostBuild>/inc/<runtimeIdentifier>.<build>/
     ///
-    /// The distinction this rule exists to draw: "rebuilt on next boot" is true of a cache whose
-    /// runtime is installed — deleting it buys a slow first boot, not free space — and false of a
-    /// cache whose runtime is gone. Only the latter is a durable win, and the category cannot say so.
+    /// The distinction this rule exists to draw: a cache whose runtime is installed can come back —
+    /// after a macOS update the installed runtimes' caches were rebuilt within the hour — and a cache
+    /// whose runtime is gone did not. Only the latter is a durable win, and the category cannot say
+    /// so. This used to read "rebuilt on next boot"; that one post-update rebuild is the only one
+    /// recorded, no user-deleted cache has been seen rebuilt, and two boots of an installed runtime
+    /// left an emptied cache empty (H11, H14 2026-09-26).
     ///
     /// **The remediation used to be "restart first", and that ordering was deliberate — then the
     /// restart was measured and it does nothing here. See E13 below.** The one time this
@@ -237,7 +240,7 @@ extension Doctor {
                     id: id, severity: .warning, title: "Orphaned dyld cache: \(dirName) (\(size))",
                     detail:
                         "\(reason)\(age) Nothing will rebuild it, because the runtime it belongs to is gone — unlike the rest of this tree, "
-                        + "where deleting a cache only costs the next boot the time to rebuild it.",
+                        + "where on one machine the caches for installed runtimes were rebuilt after a macOS update (H11, the one rebuild recorded; its trigger is not identified).",
                     path: path,
                     remediation:
                         "Do not start with a restart: where this was measured (macOS 26.6.2 / 25G83, 2026-09-16) the tree came back byte-identical across "

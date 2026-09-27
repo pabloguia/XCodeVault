@@ -10,7 +10,8 @@ struct Clean: ParsableCommand {
         discussion: """
             Without --apply this only prints the plan. Deletions are journaled to \
             ~/Library/Application Support/XCodeVault/journal.jsonl. Root-owned categories are listed \
-            but require the privileged helper (not shipped yet). Every category here is labeled \
+            but not executable: the dyld caches need root with Full Disk Access (H15), and whether the \
+            privileged helper would have that access is unmeasured. Every category here is labeled \
             experimental until its functional probes are recorded in the compatibility matrix.
             """)
     @OptionGroup var global: GlobalOptions
@@ -38,7 +39,7 @@ struct Clean: ParsableCommand {
         print("Cleanup plan (\(plan.actions.count) action(s), \(ByteCount.format(plan.totalBytes))):")
         for a in plan.actions {
             print(
-                "  \(TextRendererPad.pad(ByteCount.format(a.bytes), 10)) \(TextRendererPad.pad(a.categoryName, 34)) \(a.requiresRoot ? "[root — helper needed] " : "")\(a.isExperimental ? "(exp.) " : "")\(a.path)"
+                "  \(TextRendererPad.pad(ByteCount.format(a.bytes), 10)) \(TextRendererPad.pad(a.categoryName, 34)) \(a.privilegeRequirement.map { "[\($0)] " } ?? "")\(a.isExperimental ? "(exp.) " : "")\(a.path)"
             )
         }
         for s in plan.skipped { print("  skipped: \(s)") }

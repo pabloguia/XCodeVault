@@ -214,8 +214,11 @@ public enum StorageCatalog {
             id: "coreSimulatorSystemCaches", name: "CoreSimulator system dyld caches", subsystem: .coreSimulator,
             pathTemplates: ["/Library/Developer/CoreSimulator/Caches/dyld"],
             description:
-                "Root-owned dyld shared caches built per runtime when simulators boot. Observed at 7.4 GB on one Xcode 26.5 machine (E1), 9.4 GiB on another. "
-                + "Rebuilt on next boot — so deleting a cache whose runtime is installed buys a slow first boot, not free space. The exception is a cache whose "
+                "Root-owned dyld shared caches, keyed by host build and runtime. Observed at 7.4 GB on one Xcode 26.5 machine (E1), 9.4 GiB on another. "
+                + "After a macOS update the installed runtimes' caches were rebuilt under the new host build within the hour, on the one machine measured (H11). "
+                + "No cache deleted by a user has been seen rebuilt: an emptied one stayed empty there through two simulator boots and about 20 hours of "
+                + "headless rig use (H14; interactive use not measured). So deleting a cache whose runtime is installed may be undone by a later rebuild whose "
+                + "trigger is unidentified, and until one happens the runtime runs without a shared cache. The exception is a cache whose "
                 + "runtime was removed: nothing rebuilds that, it outlived a day of uptime, and a reboot did not collect it either where that was measured "
                 + "— byte-identical across a restart on one machine, macOS 26.6.2 / 25G83 (F10, E13 2026-09-16). "
                 + "`doctor` reports those separately. A cache for an older macOS build should be dead too, but none has been observed, so that stays conjecture.",
@@ -223,8 +226,8 @@ public enum StorageCatalog {
             recommendedStrategy: .safeCleanup, allowedStrategies: [.safeCleanup], privilege: .root,
             evidence: nil,
             notes: [
-                "Cleanup requires the privileged helper (M3). Until a functional probe (boot after delete) is recorded in the matrix this stays experimental.",
-                "Do NOT infer root-deletability from the absence of SIP flags: the stranded Inbox file had no BSD flags and was absent from rootless.conf either, and root still got EPERM — a restart reclaimed it (F1 2026-09-06, F10). The reboot probe has since run for THIS path and came back negative (E13 2026-09-16), so the startup reaper is path-specific rather than general. The next probe here is the root deletion (E13b), and the Inbox is the reason to expect it may be refused as well.",
+                "Cleanup needs root with Full Disk Access: the root refusals re-tested in this hierarchy (`mkdir`, `rm`, `mount_apfs`) were the caller's TCC posture, and a granted terminal emptied this path as root (H15, 2026-09-25). Whether the privileged helper, a launchd daemon, has that access is unmeasured, and it has never run live (#30). Until a functional probe (a simulator used after the delete) is recorded in the matrix this stays experimental.",
+                "Do NOT infer root-deletability from the absence of SIP flags: the stranded Inbox file had no BSD flags and was absent from rootless.conf either, and root still got EPERM — a restart reclaimed it (F1 2026-09-06, F10). The reboot probe has since run for THIS path and came back negative (E13 2026-09-16), so the startup reaper is path-specific rather than general. The root deletion here has since succeeded — from a terminal with Full Disk Access, after days of refusals without it (H15 `rm`, 2026-09-25). The Inbox refusal was never re-tested that way, because a restart had already reclaimed the file.",
             ]),
         StorageCategory(
             id: "runtimeInbox", name: "Runtime download staging (Inbox)", subsystem: .coreSimulator,

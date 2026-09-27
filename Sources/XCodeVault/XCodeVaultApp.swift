@@ -221,8 +221,8 @@ struct CleanView: View {
     @State private var confirm = false
     @State private var useTrash = true
 
-    /// The rows that will actually be deleted: selected, and not gated behind the privileged
-    /// helper. Rows needing root are listed and selectable but never acted on.
+    /// The rows that will actually be deleted: selected, and not root-owned. Rows needing root are
+    /// listed and selectable but never acted on (`CleanAction.privilegeRequirement` says what they lack).
     ///
     /// This is a single definition on purpose. The confirmation dialog used to title itself with
     /// `selection.count` while the delete acted on this filtered set, so selecting one root-owned
@@ -239,7 +239,7 @@ struct CleanView: View {
                     TableColumn("Size") { Text(ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
                     TableColumn("Category") { Text($0.categoryName + ($0.isExperimental ? " (experimental)" : "")) }
                     TableColumn("Path") { Text($0.path).font(.system(.body, design: .monospaced)) }
-                    TableColumn("Needs") { Text($0.requiresRoot ? "privileged helper (not available yet)" : "") }
+                    TableColumn("Needs") { Text($0.privilegeRequirement ?? "") }
                 }
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
                 ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }

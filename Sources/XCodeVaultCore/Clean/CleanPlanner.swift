@@ -17,6 +17,21 @@ public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
     public var risk: RiskLevel
     public var requiresRoot: Bool
     public var notes: [String]
+
+    /// What a root action still lacks, in one place so the CLI tag, the GUI column and the
+    /// executor's refusal cannot drift apart. For the dyld cache root alone is not the requirement.
+    /// In its hierarchy the root refusals re-tested (`mkdir`, `rm`, `mount_apfs`) were
+    /// the calling process lacking Full Disk Access, and the same commands succeeded as root once the
+    /// terminal had it (H15), `rm` on this very path. The Inbox refusal (F1) was never re-tested that
+    /// way, so the Full Disk Access text is scoped to the path it was measured on, not the hierarchy. Whether the privileged helper — a launchd daemon, a different TCC
+    /// context from a granted terminal — would have that access is unmeasured, and the helper has
+    /// never run live, so neither text promises that installing it makes the action executable.
+    public var privilegeRequirement: String? {
+        guard requiresRoot else { return nil }
+        let dyld = "/Library/Developer/CoreSimulator/Caches/dyld"
+        if path == dyld || path.hasPrefix(dyld + "/") { return "root with Full Disk Access — not executable yet" }
+        return "root — not executable yet"
+    }
 }
 
 public struct CleanPlan: Sendable, Codable, Equatable {
@@ -31,8 +46,8 @@ public struct CleanPlan: Sendable, Codable, Equatable {
 
 /// Builds a cleanup plan from a scan. Only categories whose catalog entry allows `safeCleanup`
 /// are eligible; non-regenerable data is structurally excluded (CatalogRules); Archives can
-/// never appear here. Root-owned categories are listed but not executable until the
-/// privileged helper exists (M3).
+/// never appear here. Root-owned categories are listed but not executable: see
+/// `CleanAction.privilegeRequirement` for what they lack, which is not only the helper.
 public struct CleanPlanner: Sendable {
     public let home: String
     public init(home: String = NSHomeDirectory()) { self.home = home }
@@ -101,14 +116,19 @@ public struct CleanPlanner: Sendable {
         }
         if actions.contains(where: { $0.categoryID == "coreSimulatorSystemCaches" }) {
             // The byte total on this line is real but it is not all *recoverable* space, and saying so
-            // matters more here than anywhere else in the plan: it is usually the single largest line,
-            // so a user reading it as "delete this and get 10 GB back" will be disappointed twice —
-            // once when it needs root, and again when most of it returns on the next simulator boot.
+            // matters more here than anywhere else in the plan: it is usually the single largest line.
+            // What the warning may NOT say is *when* the space comes back. It used to say "on the next
+            // boot"; on this project's one measured machine two boots of an installed runtime (12 and
+            // 17 minutes) and about 20 hours of headless rig use left an emptied cache empty, while an
+            // OS update was followed by caches built under the new host build within the hour (H11, H14
+            // 2026-09-26). No user-deleted cache has been seen rebuilt, so the text names the observation
+            // and not a mechanism.
             warnings.append(
-                "CoreSimulator dyld caches are root-owned: listed for accounting, executable only through the privileged helper (M3). "
-                    + "Most of this total is NOT durable free space — a cache whose runtime is still installed is rebuilt on the next boot of that runtime, "
-                    + "so deleting it buys a slow first boot rather than disk. `doctor` reports the part that is not rebuilt on the next boot — caches whose "
-                    + "runtime is gone — and a restart does not reclaim those either, measured byte-identical across a reboot (F10, E13).")
+                "CoreSimulator dyld caches are root-owned and need root with Full Disk Access (H15): listed for accounting, not executable yet. "
+                    + "Most of this total is NOT durable free space — on one machine (H11), caches for installed runtimes were rebuilt within an hour after a macOS update, "
+                    + "but no deleted cache has been seen rebuilt and the trigger is not identified; until a rebuild those simulators run without a dyld shared cache. "
+                    + "`doctor` reports the part nothing was seen to rebuild — caches whose runtime is gone — and a restart does not reclaim those "
+                    + "either, measured byte-identical across a reboot (F10, E13).")
         }
         // One line per declined category, largest first, naming the total across every device rather
         // than each device separately. The short reason lives here; the full one is in `doctor`,
@@ -291,7 +311,7 @@ public struct CleanExecutor: Sendable {
     }
 
     func preflight(_ a: CleanAction) throws {
-        guard !a.requiresRoot else { throw CleanError("\(a.path) requires the privileged helper (not available yet)") }
+        if let needs = a.privilegeRequirement { throw CleanError("\(a.path) needs \(needs)") }
         var st = stat()
         guard lstat(a.path, &st) == 0 else { throw CleanError("\(a.path) no longer exists") }
         guard (st.st_mode & S_IFMT) != S_IFLNK else { throw CleanError("\(a.path) is a symlink — refusing") }

@@ -30,8 +30,10 @@ final class CleanTests: XCTestCase {
             devices: [], volumes: [], items: items, summary: ScanSummary(), warnings: [])
     }
 
-    /// The dyld-cache line is usually the largest number in the plan, and most of it is not free
-    /// space: a cache whose runtime is installed is rebuilt on the next boot of that runtime. Before
+    /// The dyld-cache line is usually the largest number in the plan, and most of it is not
+    /// durable space: caches for installed runtimes were rebuilt after a macOS update (H11, one
+    /// machine), and when a deleted one comes back is not known — it used to say "on the next boot",
+    /// which two boots did not bear out (H14 2026-09-26). Before
     /// F10 the warning said only "root-owned", which reads as "you would get 10 GB back if you had
     /// permission". The durability caveat is the load-bearing half.
     func testTheDyldCacheWarningSaysMostOfTheTotalIsNotDurableSpace() {
@@ -47,7 +49,8 @@ final class CleanTests: XCTestCase {
         XCTAssertEqual(w.count, 1, "\(plan.warnings)")
         let only = try? XCTUnwrap(w.first)
         XCTAssertTrue(only?.contains("NOT durable free space") == true, "\(w)")
-        XCTAssertTrue(only?.contains("rebuilt on the next boot") == true, "the reason must be stated, not just the caveat: \(w)")
+        XCTAssertTrue(only?.contains("rebuilt within an hour after a macOS update") == true, "the reason must be stated, not just the caveat: \(w)")
+        XCTAssertFalse(only?.contains("next boot") == true, "a boot-triggered rebuild is not recorded (H14 2026-09-26): \(w)")
         // This asserted `contains("untested")` until 2026-09-16, when E13 tested it: the orphaned
         // part of the tree came back byte-identical across a reboot. The warning must now state the
         // measurement rather than the gap, and must cite the experiment so the claim stays checkable.
@@ -849,5 +852,49 @@ final class XcodeLocationsTests: XCTestCase {
         try XcodeLocations.apply(.init(key: .derivedData, newValue: "/tmp/dd"), runner: runner, journal: journal)
         try XcodeLocations.apply(.init(key: .derivedData, newValue: nil), runner: runner, journal: journal)
         XCTAssertEqual(try journal.entries().map(\.state), [.started, .completed, .started, .completed])
+    }
+}
+
+/// `privilegeRequirement` is the one text the CLI tag, the GUI column and the executor's refusal
+/// share. What is pinned is which actions get the Full Disk Access requirement, not its wording.
+final class PrivilegeRequirementTests: XCTestCase {
+    private func action(_ path: String, root: Bool, category: String = "x") -> CleanAction {
+        CleanAction(categoryID: category, categoryName: "X", path: path, bytes: 1, isExperimental: true, risk: .low, requiresRoot: root, notes: [])
+    }
+
+    func testOnlyRootActionsCarryARequirement() {
+        XCTAssertNil(action("/Library/Developer/CoreSimulator/Caches/dyld", root: false).privilegeRequirement)
+        XCTAssertNotNil(action("/Library/Developer/CommandLineTools", root: true).privilegeRequirement)
+    }
+
+    func testFullDiskAccessIsNamedForTheDyldCacheOnly() throws {
+        for path in ["/Library/Developer/CoreSimulator/Caches/dyld", "/Library/Developer/CoreSimulator/Caches/dyld/25G229"] {
+            let inside = try XCTUnwrap(action(path, root: true).privilegeRequirement)
+            XCTAssertTrue(inside.contains("Full Disk Access"), path)
+        }
+        // H15's `rm` was measured on this one path; a sibling that merely shares the prefix string, or another
+        // root path, must not inherit a requirement nobody measured for it.
+        // The Inbox is inside the hierarchy but its refusal was never re-tested with the grant (F1).
+        for path in [
+            "/Library/Developer/CoreSimulatorX/Caches", "/Library/Developer/CommandLineTools",
+            "/Library/Developer/CoreSimulator/Caches/dyldX", "/Library/Developer/CoreSimulator/Cryptex/Images/Inbox",
+        ] {
+            let other = try XCTUnwrap(action(path, root: true).privilegeRequirement)
+            XCTAssertFalse(other.contains("Full Disk Access"), path)
+        }
+    }
+
+    func testExecutorRefusesARootActionWithoutTouchingIt() throws {
+        let t = TempDir()
+        let dd = t.dir("Library/Developer/Xcode/DerivedData/Proj-1")
+        let executor = CleanExecutor(journal: Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl")), home: t.path, isXcodeRunning: { false })
+        // Two layers: `execute` only takes `userActions`, and `preflight` refuses a root action on
+        // its own. Each is checked separately, so removing either one fails a line here.
+        let r = try executor.execute(CleanPlan(actions: [action(dd, root: true, category: "derivedData")], skipped: [], warnings: []))
+        XCTAssertEqual(r.deleted, [])
+        XCTAssertEqual(r.failedPairs.count, 0)
+        XCTAssertThrowsError(try executor.preflight(action(dd, root: true, category: "derivedData")))
+        XCTAssertNoThrow(try executor.preflight(action(dd, root: false, category: "derivedData")))  // positive control: the same path passes as a user action
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dd))
     }
 }

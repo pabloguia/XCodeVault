@@ -721,7 +721,7 @@ final class OrphanedDyldCacheTests: XCTestCase {
     func testACacheWhoseRuntimeIsStillInstalledIsNotReported() throws {
         let root = try makeTree(["\(hostBuild)/\(iOSid).23F77"])
         let f = check(root, runtimes: [runtime(iOSid, build: "23F77")])
-        XCTAssertTrue(f.isEmpty, "a live runtime's cache is rebuilt on demand, not orphaned: \(f.map(\.title))")
+        XCTAssertTrue(f.isEmpty, "a live runtime's cache is not orphaned: \(f.map(\.title))")
     }
 
     func testACacheWhoseRuntimeIsGoneIsReported() throws {

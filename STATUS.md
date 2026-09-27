@@ -31,6 +31,16 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Blocked / pending — manual (ask the user)
 
+- **E6b variant B, the physical yank — PENDING a disposable USB drive (operator, 2026-09-27).** The
+  operator's USB SSD cannot be used: pulling its cable disconnects the whole drive, and it holds
+  their data volume. A pendrive is preferred because it will likely report `Removable Media:
+  Removable`, which also covers physical *removable* media — the one class E6c has not measured
+  (run 8's SSD reports `Fixed`). **Guards added 2026-09-27:** `--donor-uuid` (both E6b variants,
+  shared with E6c), and a refusal unless the donor is the only volume on its drive — mounted or not,
+  because volumes in one APFS container share its metadata. Still needed when the pendrive is here:
+  a pre-registered reading, and the pendrive erased as APFS with the donor as its only volume.
+  Closes the last hardware item of issue #29.
+
 - **E1 mount half: done by the user with sudo (2026-09-07) — H8 verified**, default mount is
   `noowners`. The physical yank for E6 still needs hands on the Mac.
 - **E9 (symlink `~/Library/Developer/CoreSimulator`, gates H5): done (2026-09-08) — the reported
@@ -412,6 +422,14 @@ is done. The post-publication issue backlog replaced it._
    running to catch the next rig boot's decision **failed**: 11,600 "messages dropped" notices and no
    message, so its silence is not an absence.
 
+   **A second, info-level listener worked** (2026-09-26 → 27): 0 dropped, and its positive control
+   present — 545 "Unable to use dyld shared cache … not currently available" over twenty hours of the
+   rig's simulator use — against zero creation requests at info level. A device booted for three
+   hours left `Caches/dyld` empty. So about twenty hours of the rig's use (headless, boot path
+   unknown) neither built nor, at info level, requested the cache. Interactive use is not measured,
+   and one decline property is named for the execution environment. The only recorded rebuild is
+   still H11's, after an OS update.
+
    **Eighth run, same day, with a PHYSICAL donor: all twelve cells MOUNTED.** A new empty volume
    added to the operator's USB SSD, named by `--donor-uuid`, mounted at `Caches/dyld` by
    DiskArbitration (C) and by `mount_apfs` (D), and everywhere else asked; the operator's data volume
@@ -421,10 +439,16 @@ is done. The post-publication issue backlog replaced it._
    NOT this SSD: pulling its cable yanks the operator's data volume too — and what writes into
    `Caches/dyld` afterwards.**
 
-   **Product consequence, recorded before anyone ships against it.** `clean` lists
+   **Product consequence, recorded before anyone ships against it.** `clean` listed
    `CoreSimulator system dyld caches` as `[root — helper needed]`. If the gate is TCC, root is not
    the missing ingredient and the privileged helper may not be either. The feasibility of the
    cleanup verb for the largest root-owned category is an open question now, not a detail.
+   **Relabelled 2026-09-27:** the CLI tag, GUI column and executor refusal now share
+   `CleanAction.privilegeRequirement` — "root with Full Disk Access — not executable yet" for
+   `Caches/dyld` only (where H15's `rm` was measured), "root — not executable yet" elsewhere — and
+   the "rebuilt on next boot" claims are gone from the catalog, the `clean` warning and `doctor`
+   (H11's one rebuild followed an OS update; two boots did not rebuild, H14). Whether the launchd
+   helper has Full Disk Access is still unmeasured.
 
    **A caution about #30's issue text.** Its body predates `d154143` and still says "there is no
    client anywhere". There is: `Sources/XCodeVaultHelperClient/HelperClient.swift`, with tests. The
