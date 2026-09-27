@@ -1,119 +1,86 @@
 # XCodeVault — continuing the work
 
-Starting point for a new session. Project at `~/projects/XCodeVault`.
+Starting point for a new session. Project at `~/projects/XCodeVault`, public at
+`github.com/pabloguia/XCodeVault` since 2026-09-18.
 
-> **State verified 2026-09-16 20:01** (OS, vault, free space, devices, dyld cache, git tree).
-> Point-in-time — re-verify before acting, including what is written here.
-> One command: `du -shcx ~/Library/Developer/CoreSimulator/Devices/*/data/Library/Caches/com.apple.containermanagerd/Dead`
-> If the priority order changes because of it, follow the evidence and not this document.
-> When you finish an item, update this page along with `STATUS.md`.
+> **State verified 2026-09-27 17:44.** Point-in-time — re-verify before acting, including what is
+> written here. When you finish an item, update this page along with `STATUS.md`.
 >
-> **On Sep 16 this cost us dearly twice in the same day.** The machine went from macOS 26.6.2
-> (25G83) to 26.7 (25G229) mid-session, and a command pointed at the path measured in the morning
-> no longer existed that evening. And a measurement taken during the dyld cache's rebuild window
-> became the claim "9.4 GB recovered / 29 GiB free" — eight minutes later it was 7.1 GB rebuilt and
-> 19 GiB. **A number measured inside a transient window is not state.** Measure twice, separated in
-> time, before writing a number here.
-
-## Publication — prepared 2026-09-17, **only the push is left**
-
-> The push is **held by a decision of the repository owner** (Sep 17): before it comes a broad
-> review of architecture, code and agents. What follows is the procedure, not an authorization.
-> Creating the remote and doing the push are still his to do.
->
-> The branch is `main`, and this repository's convention is to **follow GitHub's default** when
-> there is no concrete reason to diverge.
-
-The repository is publishable. ADR-0005's three sub-decisions are closed (MIT; authorship kept;
-evidence redacted and history rewritten) and there is a fourth: `.claude/` and `.codex/` are
-published. Details and the corrected inventory are in the ADR; the lessons are in `STATUS.md`.
-
-**What is left is mine, not the next session's:** create the remote and push. Nothing has been
-pushed, and no remote exists.
-
-```bash
-git remote add origin git@github.com:<user>/XCodeVault.git
-```
-
-```bash
-git push -u origin main
-```
-
-> **The backup of the unredacted history has already left the repository** (Sep 17):
-> `refs/original` was deleted and the objects pruned, so the pre-rewrite commit no longer exists
-> here and no `git push`, not even `--mirror`, can publish it. The only copy is
-> `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle`, outside the repository — **do not delete
-> that file before checking the push, and never move it inside the tree.**
->
-> To restore from it, if you need to:
-> `git fetch ~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle master:pre-rewrite`
->
-> The `master` there is the branch **inside the bundle**, not this one — the local branch became
-> `main` on Sep 17. Do not "fix" that name or the fetch stops finding the ref.
-
-Before running the push, three things are worth checking:
-
-- **It is irreversible.** A public repository is cloned and indexed within minutes. The whole tree
-  and the whole history become public at the same time.
-- **Enable private vulnerability reporting** (Settings ▸ Code security) before or right after.
-  `SECURITY.md` points at that channel and publishes no email address at all.
-- **Authorship stays visible**, by decision: personal name and email on every commit.
-
-What was deliberately left undone is in `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md`, with who
-found each item and what makes it non-blocking *today* — several stop being so the moment the
-helper is packaged. That file exists to become public issues after the push.
-
-One inconsistency that publication exposed: **this file and the `PROMPT-*.md` files were in
-Portuguese while all the rest of the repository is in English.** For an outside reader that is
-noise, and this file is where both entry points send a cold start. Settled in the 2026-09-18
-pre-publication review: this file was translated, and the completed session briefs were deleted
-rather than translated, because a finished brief's durable content already lives in an ADR. See
-`docs/process/REVIEW-2026-09-17.md`.
-
-The three completed session briefs — `BOOTSTRAP_PROMPT.md`, `PROMPT-PUBLICATION-PREP.md` and
-`PROMPT-NEXT-SESSION.md` — were deleted in that same review, after an independent pass checked every
-reason each one carried for a second copy elsewhere and named the destination. Five items had none;
-they were moved first (to `CONTRIBUTING.md`, `docs/process/EXECUTION_PHASES.md` and the
-`safety-review` skill) and the deletions followed. `PROMPT-PUBLICATION-PREP.md`'s inventory table had
-five errors, and ADR-0005 carries the corrections plus a sixth the table never had.
+> **A number measured inside a transient window is not state** (2026-09-16, twice in one day).
+> Measure twice, separated in time, before writing one here — and name who measured it: the
+> operator's terminal has Full Disk Access and the agent's process does not (H15), so the same
+> command can answer differently from the two.
 
 ## Read before acting, in this order
 
 1. `CLAUDE.md` — the non-negotiable safety rules (especially 3, 5, 6, 7).
-2. `STATUS.md` — **read the last three sections**, which are from 2026-09-09: the closing of E4,
-   the post-E4 research with the ranking, and the process lessons. They contain the essentials.
-3. `docs/research/FINDINGS-2026-09-05.md` §F10–F21 (the recent findings).
-4. `docs/architecture/HYPOTHESES.md` — H6, H9, H12, H13.
+2. `STATUS.md` — the live sections at the top ("In flight", "Blocked / pending — manual", "Next
+   three actions"). Item 1 of "Next three actions" holds the E6c/H14/H15 series in order.
+3. `docs/architecture/HYPOTHESES.md` — **H15**, then **H14 from its title to the end of the file**:
+   every E6c run's pre-registered reading sits immediately before its RESULT.
+4. `docs/architecture/COMPATIBILITY_MATRIX.md` — the last four E6c entries.
 
-Do not re-read the rest of `docs/research`.
-
-## Where the project has got to
+## Where the project has got to (2026-09-27)
 
 What the product does today: accounting (`scan`/`doctor`), cleanup of regenerable data, and the
-Runtime Library flow (export the installer to the external vault → `runtime offload` →
-`runtime import` when you need it). That works and freed ~23 GiB.
+Runtime Library flow (export → `runtime offload` → `runtime import`). Milestones M1–M3 committed; M4
+has a first GUI slice; M5 (signing, notarization) is not started. **The privileged helper has never
+run live** — issue #30, blocked on a signed build.
 
-**Runtime relocation is closed, negatively and with a reason:** root cannot write
-`/Library/Developer/CoreSimulator/Images/images.plist` (`Operation not permitted`, no BSD flag, no
-ACL, absent from `rootless.conf`) while `simdiskimaged` rewrites it at will (F16). The barrier is
-**authorization, not integrity** — E4a proved the image keeps a valid APFS seal when copied byte
-for byte to an external volume. ADR-0004 gained an addendum, not a reversal.
+The week's series, in one paragraph each — details and evidence in H14/H15:
 
-## Machine state (measured 2026-09-16 22:15)
+- **H15 — the "root is refused inside CoreSimulator" signature was the caller's TCC posture.** With
+  Full Disk Access, `mkdir`, `rm` and `mount_apfs` all work there. Every harness run now records a
+  measured `TCC indicator` line; nothing may be contrasted across TCC contexts.
+- **E6c — what refuses mounting at the CoreSimulator cache paths: nothing, with the grant.** Runs 6–8:
+  `mount_apfs` and DiskArbitration both mount at `Cryptex/Caches` and at `Caches/dyld`, for disk
+  images (runs 6–7) and for a physical USB SSD volume (run 8, all twelve cells). DiskArbitration's
+  refusal of the disk-image donor at caller-chosen mount points followed **who attached the image**
+  (item 4: user session refused, root accepted). None of it reopens ADR-0004.
+- **H14 / issue #29 — the "stub" is the mount point itself.** After a clean unmount the pre-existing
+  directory is there, `root:admin 0755`, empty (run 7). What remains: the physical yank (pending a
+  pendrive), and what writes into `Caches/dyld` afterwards — twenty hours of the rig's headless use
+  requested nothing at info level; H11's one recorded rebuild followed an OS update.
 
-- **macOS 26.7 (25G229)** — updated from 26.6.2 (25G83) during this session, reboot at 19:14.
-  Xcode 26.5 (17F42).
-- Internal: **20 GiB free** (it was 16 GiB before the update; 19 GiB two hours before this
-  measurement — the number moves all the time, do not quote it as state without the time).
-- Vault `/Volumes/<vault>` mounted: Case-sensitive APFS, USB, External,
-  UUID `<vault-uuid>`, 349 GiB free.
-- Two runtimes installed (iOS 26.5 + watchOS 26.5, 14.8 GB). Installers in the vault.
-- Device set: **8.2 GB**.
-- dyld cache: **7.1 GB**, all under `25G229` — the previous build's tree vanished in the update and
-  the caches for the installed runtimes rebuilt at the same sizes (4.4G iOS + 2.7G watchOS).
-  `inc/` is at 0B and the tvOS orphan did not come back.
+## Machine state (measured 2026-09-27 17:44, by the agent, read-only)
+
+- macOS **26.7 (25G229)**, Xcode **26.5**. Intel, `x86_64`.
+- **Internal free: 9.3 GiB** — down from 44 GiB on 2026-09-25 after `Caches/dyld` was cleared.
+  Not investigated; `~/projects` 27G, CoreSimulator `Devices` 10G (8.2G on 2026-09-16),
+  `DerivedData` 5.1G, runtime images 15G. The operator's to look into.
+- Runtimes: iOS 26.5 (23F77) and watchOS 26.5 (23T570), both Ready.
+- `/Library/Developer/CoreSimulator/Caches/dyld`: **empty** (0 entries, mtime 2026-09-25 19:19) —
+  cleared by the operator for E6c; not rebuilt since.
+- Attached: `/tmp/e6b-donor.sparseimage` (label `E6BDONOR`, 1 GB, disposable, from E6c run 7 —
+  detach whenever), and the operator's USB SSD with their data volume. **Never use that SSD for a
+  physical yank** (it disconnects their data with the donor).
+- `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle` exists outside the tree: the only copy of the
+  history before the 2026-09-17 redaction rewrite. It is unredacted — never move it inside the tree,
+  never push it; restore with `git fetch <bundle> master:pre-rewrite` (the bundle's branch is `master`).
+- The operator runs test rigs on the shared simulators: check `pgrep -lx 'xcodebuild|launchd_sim'`
+  before anything that boots or mounts. `test-common.sh`'s "an ordinary directory passes the target
+  guard" fails whenever a device is booted — that is the guard working, not a regression.
 
 ## What to do, in priority order
+
+1. **E6b variant B — the physical yank, with a disposable USB pendrive.** Guards are in place
+   (`--donor-uuid`; the donor must be the only volume on its drive). Before running: erase the
+   pendrive as APFS with one volume, pre-register the reading, review. See STATUS "Blocked /
+   pending".
+2. **What rebuilds `Caches/dyld`.** Candidate trigger, untested: the first boot on a new host build
+   (H14's last subsection). Interactive Xcode/Simulator.app use is unmeasured. The info-level
+   listener pattern works (0 dropped); the debug-level one drops everything.
+3. Issue #30 and M4/M5 — need a signed build.
+
+**Harness facts that cost time to learn:** every E6c/E6b run needs `--donor-uuid`; run test suites
+in the foreground or through the `perl` SIGINT reset (an `&` job ignores SIGINT); `scripts/preflight.sh`
+before every push, run while the rig is idle.
+
+## History — priorities as of 2026-09-16
+
+The sections below are kept as they were written; they are a record, not instructions.
+
+### What to do, in priority order (2026-09-16)
 
 ### 1. ~~The ~5.4 GB of regenerable data inside the devices~~ — DONE 2026-09-13, with the result inverted
 
@@ -333,7 +300,7 @@ SIP flag and no `rootless.conf` entry — OS behavior to report to Apple, not a 
    and the real gain was 2.3 GB. **Before writing a number that claims permanence, measure twice
    separated in time, or write the window down alongside the number.**
 
-## Where to start
+## Where to start (2026-09-16 — historical; the current order is at the top)
 
 ### Re-baseline on macOS 26.7 — done 2026-09-16, five entries
 

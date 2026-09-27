@@ -29,6 +29,95 @@ XCV_STAGE_CLEANED=0
 
 xcv_whole_disk() { diskutil info "$1" 2>/dev/null | sed -n 's/^ *Part of Whole: *//p' | head -1; }
 
+# xcv_physical_disk <device> — the PHYSICAL disk a volume lives on, through an APFS container.
+#
+# `xcv_whole_disk` answers `Part of Whole`, which for an APFS volume is the synthesized container
+# (`disk9`), not the drive. `APFS Physical Store` names the partition the container sits on
+# (`disk8s1`), whose whole disk is the drive (`disk8`). A non-APFS volume has no physical store, and
+# its `Part of Whole` already is the drive. Measured on this machine 2026-09-27: the USB SSD's two
+# volumes both report `APFS Physical Store: disk8s1`; `/` reports `disk0s2`.
+xcv_physical_disk() {
+    local ps
+    ps="$(diskutil info "$1" 2>/dev/null | sed -n 's/^ *APFS Physical Store: *//p' | head -1)"
+    if [ -n "$ps" ]; then xcv_whole_disk "$ps"; else xcv_whole_disk "$1"; fi
+}
+
+# xcv_stage_require_donor_uuid <expected-uuid> — the donor is named twice: by mount point, and by the
+# volume UUID the operator read next to its NAME. Call after `xcv_stage_resolve_donor`, before
+# anything is unmounted.
+#
+# Added to E6c on 2026-09-26 for a physical donor sharing an APFS container with the operator's data
+# volume, where the two differ only by name; shared here so both E6b variants carry the same check
+# rather than a copy. A typo in the mount point resolves to a different UUID and is refused.
+xcv_stage_require_donor_uuid() {
+    local expected="$1"
+    if [ -z "$expected" ]; then
+        echo "!! --donor-uuid <Volume UUID> is required. Read it from 'diskutil apfs list' (or 'diskutil list'), next to the donor's NAME — not from the mount point you typed, or a typo there carries into the UUID." >&3
+        return 1
+    fi
+    if [ "$XCV_DONOR_UUID" != "$expected" ]; then
+        echo "!! $XCV_DONOR_MP resolves to a volume whose UUID is not the one given with --donor-uuid. Refusing: check the" >&3
+        echo "   mount point and the UUID against 'diskutil apfs list' before running anything." >&3
+        echo "   The mount point you gave is the volume named: $(diskutil info "$XCV_DONOR_MP" 2>/dev/null | sed -n 's/^ *Volume Name: *//p' | head -1)" >&3
+        return 1
+    fi
+    return 0
+}
+
+# xcv_stage_refuse_other_volumes_on_drive — refuse unless the donor is the ONLY volume on its physical
+# drive, mounted or not. Before a physical disconnect, this is the difference between yanking a
+# disposable volume and yanking the operator's data with it.
+#
+# **Every volume on the drive counts, not only the mounted ones.** The first version read the mount
+# table and told the operator to "unmount them first". A reviewer showed why that is wrong: volumes
+# in one APFS container share its metadata — checkpoints, the space manager, the object map — which
+# the mounted donor writes, so a cable pulled mid-write can damage a sibling that is not mounted at
+# all. Following the old advice (unmount PABLO, run on the SSD) would have produced exactly the
+# configuration STATUS rules out.
+#
+# From `diskutil list -plist`: on the donor's physical disk, an `EFI` partition is allowed, an
+# `Apple_APFS` partition is a physical store whose container's volumes are enumerated, and any other
+# partition is another volume. Fails closed: an unreadable listing, an unresolvable physical disk, or
+# a donor that does not appear among the enumerated volumes is a refusal.
+xcv_stage_refuse_other_volumes_on_drive() {
+    local phys verdict
+    phys="$(xcv_physical_disk "$XCV_DEV")"
+    [ -n "$phys" ] || { echo "!! could not resolve the physical disk under $XCV_DEV. Refusing." >&3; return 1; }
+    verdict="$(diskutil list -plist 2>/dev/null | plutil -convert json -o - - 2>/dev/null | /usr/bin/python3 -c '
+import json, sys
+phys, donor = sys.argv[1], sys.argv[2].replace("/dev/", "")
+try: d = json.load(sys.stdin)
+except Exception: print("ERR unreadable listing"); raise SystemExit
+ents = d.get("AllDisksAndPartitions", [])
+drive = [e for e in ents if e.get("DeviceIdentifier") == phys]
+if len(drive) != 1: print("ERR drive %s not listed" % phys); raise SystemExit
+others, stores, found = [], set(), False
+for p in drive[0].get("Partitions", []):
+    c = p.get("Content", "")
+    if c == "EFI": continue
+    if c == "Apple_APFS": stores.add(p.get("DeviceIdentifier")); continue
+    others.append("%s(%s)" % (p.get("DeviceIdentifier"), c or "no content"))
+for e in ents:
+    ps = {s.get("DeviceIdentifier") for s in e.get("APFSPhysicalStores", [])}
+    if not ps & stores: continue
+    for v in e.get("APFSVolumes", []):
+        if v.get("DeviceIdentifier") == donor: found = True
+        else: others.append(v.get("DeviceIdentifier"))
+if not found: print("ERR donor %s is not among the volumes on %s" % (donor, phys)); raise SystemExit
+print("OK" if not others else "OTHERS " + " ".join(others))
+' "$phys" "$XCV_DEV")"
+    case "$verdict" in
+        OK) return 0 ;;
+        OTHERS*)
+            echo "!! $phys, the donor's physical drive, carries other volumes: ${verdict#OTHERS }" >&3
+            echo "   Mounted or not, they are yanked with it. Use a drive with nothing on it but the donor." >&3
+            return 1 ;;
+        *)
+            echo "!! could not establish what else is on the donor's drive (${verdict:-no answer}). Refusing." >&3
+            return 1 ;;
+    esac
+}
+
 # xcv_stage_resolve_donor <mount-point>
 #
 # Sets XCV_DEV, XCV_FS, XCV_DONOR_UUID, XCV_DONOR_DISK. Refuses anything that must never be yanked.
@@ -171,8 +260,9 @@ xcv_stage_guard_target() {
     #
     # **What the name rests on, and what it does not.** `sbin/launchd_sim` exists in both runtimes
     # installed here (iOS 26.5, watchOS 26.5), measured 2026-09-25 with `find`. That a booted device
-    # runs a process by that name is NOT measured on this machine — that would mean booting a shared
-    # simulator. If the name is wrong this never fires, which is the behaviour without it.
+    # runs a process by that name was then observed once, on a device a rig had booted (H14,
+    # 2026-09-26: `pgrep -x launchd_sim` found it). Observed, not guaranteed for every runtime: if the
+    # name is wrong somewhere this never fires, which is the behaviour without it.
     if pgrep -qx launchd_sim; then
         echo "!! A simulator device is booted (a launchd_sim process is running). A rig may be using it," >&3
         echo "   and CoreSimulator may rebuild the dyld cache under the mount. Check whose it is first." >&3

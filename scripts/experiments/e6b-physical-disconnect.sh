@@ -23,7 +23,7 @@
 #      which is how Ctrl-C at the cable prompt, the likeliest interrupt here, still reached the
 #      success epilogue.
 #
-# Usage: sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<donor>
+# Usage: sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<donor> <dyld|cryptex> --donor-uuid <Volume UUID>
 source "$(dirname "$0")/common.sh"
 source "$(dirname "$0")/mount-staging.sh"
 
@@ -33,6 +33,9 @@ MP="$1"
 # `HelperCleanupTarget`, so the experiment cannot stage over anything the product would not
 # itself treat as regenerable.
 TARGET_NAME="${2:-dyld}"
+# The donor is named twice — mount point and UUID — checked by `xcv_stage_require_donor_uuid` below.
+EXPECT_DONOR_UUID=""
+[ "${3:-}" = "--donor-uuid" ] && EXPECT_DONOR_UUID="${4:-}"
 TARGET="$(xcv_e6b_target "$TARGET_NAME")" || {
     echo "!! unknown target '$TARGET_NAME'. Allowed: dyld, cryptex (see scripts/experiments/e6b-check.sh)."
     exit 2
@@ -53,6 +56,10 @@ out="$XCV_EVIDENCE_DIR/e6b-physical-$TARGET_NAME-$(xcv_env_slug).txt"
 exec 3>&1
 
 xcv_stage_resolve_donor "$MP" || exit 1
+xcv_stage_require_donor_uuid "$EXPECT_DONOR_UUID" || exit 1
+# Nothing else may be mounted on the drive that is about to be pulled. Checked here, before anything
+# is staged, and again immediately before the cable prompt.
+xcv_stage_refuse_other_volumes_on_drive || exit 1
 xcv_stage_guard_target "$TARGET" || exit 1
 
 REPORT="$(mktemp -t xcv-e6b-physical)"
@@ -128,6 +135,14 @@ xcv_stage_probe "$TARGET" "1. while mounted (verified as $XCV_DEV)"
 
 echo
 echo "==================== the physical act ===================="
+# Again, because the check above has expired: the run has mounted and probed since, and what is on
+# the drive can change underneath it. The cleanup trap is armed here, so a
+# refusal still unmounts the target and gives the donor back.
+if ! xcv_stage_refuse_other_volumes_on_drive; then
+    echo "!!!! the donor is no longer the only volume on its drive at the cable prompt. Nothing was pulled."
+    XCV_RUN_FAILED=1
+    exit 1
+fi
 {
     echo
     echo ">>> PHYSICALLY DISCONNECT $MP ($XCV_DEV) NOW."
@@ -202,11 +217,11 @@ echo
 echo "==================== reading this ===================="
 echo "Probes 2-5 are the answer, and they exist only because the mount and the disconnect were both"
 echo "verified — an unverified run aborts and records nothing rather than reporting 'absent'."
-echo "The guard added for #24 matters only if a DIRECTORY is present and is NOT a mount point; if"
-echo "this run created that directory the NOTE above says so, and the reading is ambiguous."
-echo "If every probe says absent, the cleanup verb returns \"nothing to do\" before it ever reads its"
-echo "record, and the composition #24 describes was never reachable by this route — a finding worth"
-echo "recording, not a disappointment."
+echo "A target that existed before the run is expected to be a plain directory after the volume goes"
+echo "away: it was the mount point, and mount semantics leave it (HYPOTHESES.md H14, 2026-09-26). That"
+echo "alone is not a finding. What this run adds is the SURPRISE removal: whether probes 2-5 differ from"
+echo "a clean unmount — owner, mode, entries, or a mount point that is still listed — and the 'entries'"
+echo "line, which shows whether anything was written into the local directory afterwards."
 
 # **Both** streams. `exec >>"$REPORT" 2>&1` redirected stdout *and* stderr into the report;
 # restoring only stdout left every `>&2` in the epilogue writing into a file the EXIT trap

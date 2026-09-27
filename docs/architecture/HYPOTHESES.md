@@ -1914,3 +1914,34 @@ remains of H14 is unchanged: whether anything is written into `Caches/dyld` afte
 away, and the physical yank — which needs a drive with nothing else on it: pulling this SSD's
 cable would yank the operator's data volume in the same container, mid-mount or not.
 Physical *removable* media remains untested: this SSD reports `Fixed`.
+
+### 2026-09-27: the info-level listener works, and answers for its window
+
+The debug-level stream failed (above). A second, passive `log stream --level info`, filtered to
+CoreSimulatorService, `simdiskimaged` and `update_dyld_sim_shared_cache` messages containing "dyld",
+ran from 2026-09-26 afternoon to 2026-09-27 17:42, writing to the session scratchpad. **It dropped
+nothing** (0 "messages dropped" notices, against 11,600 for the debug attempt), and **its positive
+control is present**: 545 × `Unable to use dyld shared cache as it is not currently available at
+…/Caches/dyld/25G229/…` — 472 for iOS 26.5, 73 for watchOS 26.5 — between 2026-09-26 18:56 and
+2026-09-27 14:39, all from CoreSimulatorService, across the operator's rig's simulator activity.
+
+**Against that control, at `info` level: zero `Requesting creation`, zero `Skipping automatic`, and
+no line at all from `simdiskimaged` or `update_dyld_sim_shared_cache`.** And at 17:42 a device
+booted since 14:34 — three hours — had written nothing: `Caches/dyld` at 0 entries with its mtime
+still 2026-09-25 19:19, the user-level cache at 0 KB. (Those four readings are the agent's own
+read-only commands, and the stream's output sits in the session scratchpad; neither is in an
+evidence file.)
+
+**What it licenses, and not more.** Unplanned and uncontrolled: the boots were the rig's — headless,
+by a path unknown here. Within that, about twenty hours of the rig's simulator use neither built
+nor, at info level, requested the cache; CoreSimulatorService noticed its absence every time and
+went on without it. Either message may be `debug` and still unseen, so *why* the automatic path did
+not run is not answered — and one of the four properties its decline message reports is
+`invalidExecutionEnvironmentForAutoBuildingCache`, for which a headless rig is a plausible trigger.
+So this does **not** say what interactive Xcode or Simulator.app use does. For #24 it narrows the
+damage question for this rig's kind of use only. The only rebuild on record remains H11's, after
+an OS update, with no recorded request. An old handoff note (SESSION-HANDOFF.md, "3b. E13b ran in
+inspection mode…") records the caches rebuilt within eight minutes of E13b's reading — an upper
+bound — on first use after the update, with `dyld/`'s mtime at the time that run woke `simctl`; a
+log query over the window then found nothing, and who removed the old tree is not established. That
+makes "first use on a new host build" a candidate trigger, not a finding.

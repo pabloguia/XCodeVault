@@ -24,7 +24,7 @@
 # The staging is shared with variant B in `mount-staging.sh` now, because keeping two copies is
 # exactly how this one was left behind while the runbook told people to run it first.
 #
-# Usage: sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<donor>
+# Usage: sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<donor> <dyld|cryptex> --donor-uuid <Volume UUID>
 source "$(dirname "$0")/common.sh"
 source "$(dirname "$0")/mount-staging.sh"
 
@@ -34,6 +34,9 @@ MP="$1"
 # `HelperCleanupTarget`, so the experiment cannot stage over anything the product would not
 # itself treat as regenerable.
 TARGET_NAME="${2:-dyld}"
+# The donor is named twice — mount point and UUID — checked by `xcv_stage_require_donor_uuid` below.
+EXPECT_DONOR_UUID=""
+[ "${3:-}" = "--donor-uuid" ] && EXPECT_DONOR_UUID="${4:-}"
 TARGET="$(xcv_e6b_target "$TARGET_NAME")" || {
     echo "!! unknown target '$TARGET_NAME'. Allowed: dyld, cryptex (see scripts/experiments/e6b-check.sh)."
     exit 2
@@ -52,6 +55,7 @@ out="$XCV_EVIDENCE_DIR/e6b-mount-stub-$TARGET_NAME-$(xcv_env_slug).txt"
 exec 3>&1
 
 xcv_stage_resolve_donor "$MP" || exit 1
+xcv_stage_require_donor_uuid "$EXPECT_DONOR_UUID" || exit 1
 xcv_stage_guard_target "$TARGET" || exit 1
 
 REPORT="$(mktemp -t xcv-e6b-stub)"
@@ -159,11 +163,10 @@ xcv_stage_probe "$TARGET" "4. after simctl touched CoreSimulator"
 
 echo
 echo "==================== what this means for the issue #24 guard ===================="
-echo "Read probes 2-4. The guard matters only if a *directory* is present and is NOT a mount point —"
-echo "and if this run created that directory, the NOTE above says so and the reading is ambiguous."
-echo "If every probe says 'absent', the cleanup verb returns \"nothing to do\" before it ever reads"
-echo "its record, and the composition issue #24 describes was never reachable by this route — which"
-echo "is a finding worth recording, not a disappointment."
+echo "Read probes 2-4. A target that existed before the run is expected to be a plain directory after"
+echo "the unmount: it was the mount point, and mount semantics leave it (HYPOTHESES.md H14,"
+echo "2026-09-26). That alone is not a finding. The 'entries' line is: it shows whether anything was"
+echo "written into the local directory after the volume went away."
 
 # **Both** streams. `exec >>"$REPORT" 2>&1` redirected stdout *and* stderr into the report;
 # restoring only stdout left every `>&2` in the epilogue writing into a file the EXIT trap

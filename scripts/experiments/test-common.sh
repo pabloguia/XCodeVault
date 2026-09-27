@@ -388,6 +388,79 @@ GT="$(cd "$FIX" && pwd -P)/guard"
 mkdir -p "$GT/real/inner"
 ln -s "$GT/real" "$GT/link"
 ln -s "$GT/real/inner" "$GT/real/sym"
+# ---- the physical-disk and donor-identity guards (2026-09-27) ---------------------------------
+# Behavioural, through FAKE `diskutil` and `mount` defined as functions inside a subshell — a function
+# beats PATH, and the subshell keeps them from leaking into the rest of this file. The fixture is one
+# physical disk (disk19) carrying an APFS container (disk20) with two volumes, plus an unrelated disk
+# and a non-APFS volume. Drawn from what this machine reports: an APFS volume answers both
+# `Part of Whole` (the container) and `APFS Physical Store` (the partition on the drive).
+fake_stage() {  # fake_stage <diskutil-list-json|FAIL> <command...> — prints the command's fd-3 output and "rc=N"
+    local listing="$1"; shift
+    (
+        diskutil() {
+            case "$1 ${2:-}" in
+                "list -plist")
+                    [ "$listing" = FAIL ] && return 1
+                    printf '%s' "$listing" | plutil -convert xml1 -o - - ;;
+                "info /dev/disk20s1"|"info /dev/disk20s2") printf '   Part of Whole:  disk20\n   APFS Physical Store:  disk19s2\n' ;;
+                "info disk19s2") printf '   Part of Whole:  disk19\n' ;;
+                "info /dev/disk30s1") printf '   Part of Whole:  disk30\n' ;;
+                *) return 1 ;;
+            esac
+        }
+        "$@" 3>&1
+        echo "rc=$?"
+    ) 2>/dev/null
+}
+# The drive (disk19) as `diskutil list -plist` describes it: GUID, an EFI partition, one APFS physical
+# store (disk19s2) under container disk20. `vols` is the container's volume list; `extra` adds a
+# partition to the drive itself.
+drive_json() {  # drive_json <container-volumes-json> [extra-partition-json]
+    printf '{"AllDisksAndPartitions":[{"DeviceIdentifier":"disk19","Content":"GUID_partition_scheme","Partitions":[{"DeviceIdentifier":"disk19s1","Content":"EFI"},{"DeviceIdentifier":"disk19s2","Content":"Apple_APFS"}%s]},{"DeviceIdentifier":"disk20","Content":"Apple_APFS_Container","APFSPhysicalStores":[{"DeviceIdentifier":"disk19s2"}],"APFSVolumes":%s},{"DeviceIdentifier":"disk5","Content":"Apple_APFS_Container","APFSPhysicalStores":[{"DeviceIdentifier":"disk4s1"}],"APFSVolumes":[{"DeviceIdentifier":"disk5s1"}]}]}' "${2:+,$2}" "$1"
+}
+check "physical disk through an APFS container" "disk19" "$(fake_stage "" xcv_physical_disk /dev/disk20s1 | head -1)"
+check "physical disk of a non-APFS volume is its own whole disk" "disk30" "$(fake_stage "" xcv_physical_disk /dev/disk30s1 | head -1)"
+check "a donor alone on its drive is allowed" "rc=0" \
+    "$(XCV_DEV=/dev/disk20s1 fake_stage "$(drive_json '[{"DeviceIdentifier":"disk20s1"}]')" xcv_stage_refuse_other_volumes_on_drive | tail -1)"
+# The reviewer's case: a sibling in the donor's own container, NOT mounted. The first version of this
+# guard read the mount table and let it through, and told the operator to unmount siblings to pass.
+sib_out="$(XCV_DEV=/dev/disk20s1 fake_stage "$(drive_json '[{"DeviceIdentifier":"disk20s1"},{"DeviceIdentifier":"disk20s2"}]')" xcv_stage_refuse_other_volumes_on_drive)"
+check "an UNMOUNTED volume in the donor's container refuses the run" "rc=1" "$(printf '%s\n' "$sib_out" | tail -1)"
+check "and names it" "1" "$(printf '%s\n' "$sib_out" | grep -c 'carries other volumes: disk20s2$')"
+check "and does not advise unmounting as the way through" "0" "$(printf '%s\n' "$sib_out" | grep -ci 'unmount')"
+check "another partition on the same drive refuses the run" "rc=1" \
+    "$(XCV_DEV=/dev/disk20s1 fake_stage "$(drive_json '[{"DeviceIdentifier":"disk20s1"}]' '{"DeviceIdentifier":"disk19s3","Content":"Microsoft Basic Data"}')" xcv_stage_refuse_other_volumes_on_drive | tail -1)"
+# An EMPTY container, so the donor's absence is the only reason to refuse. The first version put
+# `disk20s9` there, which is refused as "another volume" whether or not the donor check exists — the
+# mutant deleting that check survived. A scenario that passes for the wrong reason, again.
+check "a listing that does not contain the donor refuses (fails closed)" "rc=1" \
+    "$(XCV_DEV=/dev/disk20s1 fake_stage "$(drive_json '[]')" xcv_stage_refuse_other_volumes_on_drive | tail -1)"
+check "an unreadable listing refuses (fails closed)" "rc=1" \
+    "$(XCV_DEV=/dev/disk20s1 fake_stage FAIL xcv_stage_refuse_other_volumes_on_drive | tail -1)"
+check "a donor whose physical disk cannot be resolved is refused" "rc=1" \
+    "$(XCV_DEV=/dev/disk77s1 fake_stage "$(drive_json '[{"DeviceIdentifier":"disk20s1"}]')" xcv_stage_refuse_other_volumes_on_drive | tail -1)"
+check "the donor UUID given matches: allowed" "rc=0" \
+    "$(XCV_DONOR_UUID=AAAA XCV_DONOR_MP=/Volumes/DONOR fake_stage "" xcv_stage_require_donor_uuid AAAA | tail -1)"
+check "the donor UUID given differs: refused" "rc=1" \
+    "$(XCV_DONOR_UUID=AAAA XCV_DONOR_MP=/Volumes/DONOR fake_stage "" xcv_stage_require_donor_uuid BBBB | tail -1)"
+check "no donor UUID given: refused" "rc=1" \
+    "$(XCV_DONOR_UUID=AAAA XCV_DONOR_MP=/Volumes/DONOR fake_stage "" xcv_stage_require_donor_uuid "" | tail -1)"
+# Wiring, by ORDER in each script: the identity check must come before anything is staged, and
+# variant B's sibling check must run again after staging and before the cable prompt. Line numbers of
+# the first non-comment occurrence; a check that is present but late fails.
+first_line() { grep -nE "$2" "$1" | grep -vE '^[0-9]+:[[:space:]]*#' | head -1 | cut -d: -f1; }
+for sc in e6b-mount-stub-reappearance.sh e6b-physical-disconnect.sh e6c-mount-mechanism.sh; do
+    u=$(first_line "$sc" '^xcv_stage_require_donor_uuid ')
+    st=$(first_line "$sc" 'xcv_stage_mount |cell "|diskutil unmount')
+    check "$sc checks the donor UUID before it stages anything" "yes" \
+        "$([ -n "$u" ] && [ -n "$st" ] && [ "$u" -lt "$st" ] && echo yes || echo no)"
+done
+sib2=$(grep -n 'xcv_stage_refuse_other_volumes_on_drive' e6b-physical-disconnect.sh | grep -vE '^[0-9]+:[[:space:]]*#' | sed -n 2p | cut -d: -f1)
+stage=$(first_line e6b-physical-disconnect.sh '^xcv_stage_mount ')
+prompt=$(first_line e6b-physical-disconnect.sh 'read -r </dev/tty')
+check "variant B re-checks the drive after staging and before the cable prompt" "yes" \
+    "$([ -n "$sib2" ] && [ -n "$stage" ] && [ -n "$prompt" ] && [ "$stage" -lt "$sib2" ] && [ "$sib2" -lt "$prompt" ] && echo yes || echo no)"
+
 # The TCC indicator's skip is the CALLER's decision, passed as an argument. It read `XCV_DRYRUN` from
 # the environment at first, so a value exported for E6c's dry run and carried by `sudo -E` into a
 # real E6b or item-4 run would have printed "NOT PROBED (dry run)" into a live run's evidence.
@@ -403,13 +476,32 @@ check "the caller's dry-run flag does suppress it" "TCC indicator: NOT PROBED (d
 # every refusal check below pass for the wrong reason. This block sat above the `. ./mount-staging.sh`
 # on its first draft and did exactly that.
 check "the target guard is actually loaded" "function" "$(type -t xcv_stage_guard_target)"
+# The guard also runs `pgrep -qx "xcodebuild|Xcode|Simulator"` and `pgrep -qx launchd_sim`. Until
+# 2026-09-27 these checks asked the real `pgrep`, so the file went red whenever a rig on this
+# machine left a device booted — and a preflight that waited for the rig to go idle waited hours.
+# `pgrep` is now a function answering "nothing running" (FAKE_PGREP names the one pattern that
+# should match). This gives the `xcodebuild|Xcode|Simulator` branch its first positive test; the
+# `launchd_sim` branch already had one in test-e6c-dryrun.sh (booted-simulator-refuses) and has been
+# seen to fire live (HYPOTHESES.md H14, 2026-09-26). The fake only answers a `-qx` call: without
+# `-x`, "Simulator" substring-matches the always-present XPC services the guard's own comment warns
+# about, and a guard that dropped the flag would otherwise still pass here.
+pgrep() {
+    local pat
+    [ "$#" -eq 2 ] && [ "$1" = "-qx" ] || return 2
+    pat="$2"
+    [ -n "${FAKE_PGREP:-}" ] && [ "$pat" = "$FAKE_PGREP" ]
+}
 guard() { xcv_stage_guard_target "$1" >/dev/null 2>&1 3>/dev/null && echo allowed || echo refused; }
-# The one environment-dependent check in this file: the guard also runs `pgrep -qx
-# "xcodebuild|Xcode|Simulator"` and `pgrep -qx launchd_sim`, so this fails with Xcode open or any
-# simulator device booted. It fails loudly rather than
-# vacuously, which is the safe direction, but it is the reason a red run here may not be a code
-# change. This machine runs test rigs on its simulators, so it will happen.
 check "an ordinary directory passes the target guard" "allowed" "$(guard "$GT/real/inner")"
+check "  ...and is refused while a simulator device is booted" "refused" \
+    "$(FAKE_PGREP=launchd_sim; guard "$GT/real/inner")"
+check "  ...and while xcodebuild, Xcode or Simulator runs" "refused" \
+    "$(FAKE_PGREP='xcodebuild|Xcode|Simulator'; guard "$GT/real/inner")"
+# Not vacuous if the guard's patterns drift: the fake then never matches, the guard allows, and the
+# two refusals above fail. The "passes" check is the positive control for the fake itself. A call
+# without `-qx` returns 2, which `if` reads as "not running": the guard then allows, and the refusal
+# check for the branch that lost the flag fails (the booted-simulator line for `launchd_sim`, the
+# xcodebuild line for `xcodebuild|Xcode|Simulator`).
 check "a symlinked ANCESTOR is refused" "refused" "$(guard "$GT/link/inner")"
 check "a symlinked LEAF is refused" "refused" "$(guard "$GT/real/sym")"
 

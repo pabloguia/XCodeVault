@@ -249,12 +249,8 @@ B0_STORE_DISK=""
 
 exec 3>&1
 xcv_stage_resolve_donor "$MP" || exit 1
-[ "$XCV_DONOR_UUID" = "$EXPECT_DONOR_UUID" ] || {
-    echo "!! $MP resolves to a volume whose UUID is not the one given with --donor-uuid. Refusing: check the"
-    echo "   mount point and the UUID against 'diskutil apfs list' before running anything."
-    echo "   The mount point you gave is the volume named: $(diskutil info "$MP" 2>/dev/null | sed -n 's/^ *Volume Name: *//p' | head -1)"
-    exit 1
-}
+# Shared with both E6b variants since 2026-09-27, so the three scripts carry one check, not copies.
+xcv_stage_require_donor_uuid "$EXPECT_DONOR_UUID" || exit 1
 # **The donor's class goes into the evidence NAME, measured rather than declared.** Every run through
 # run 7 used a disk image, and the name carried only the target — so the first run with a physical
 # donor at the same target would have rotated run 7's committed evidence to `-superseded-`, as if the
