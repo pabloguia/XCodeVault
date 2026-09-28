@@ -90,8 +90,8 @@ final class AppModel {
             let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
                 () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
                 if let survey { return survey() }
-                // No capability detection: it runs `xcodebuild` and `simctl` from every bundle that calls itself
-                // Xcode in /Applications or ~/Applications, inside the app's grant. Nothing in the app reads it.
+                // No capability detection: nothing in the app reads it, and it would run the selected Xcode's
+                // `xcodebuild` and `simctl` inside the app's grant for no use (ADR-0009).
                 let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
                 let doctor = Doctor()
                 let findings = doctor.diagnoseAll(report: report)

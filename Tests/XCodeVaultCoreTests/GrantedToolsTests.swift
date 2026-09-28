@@ -53,16 +53,21 @@ final class GrantedToolEnvironmentTests: XCTestCase {
     }
 }
 
-/// The app's scan runs nothing from a discovered Xcode bundle (F3). A bundle is accepted on its Info.plist
-/// alone, and anything named `Xcode*.app` in /Applications or ~/Applications is a candidate.
+/// Discovery runs tools only from the Xcode `xcode-select` names (F3; ADR-0009). A bundle is accepted on its
+/// Info.plist alone, and anything named `Xcode*.app` in /Applications or ~/Applications is a candidate, so any
+/// process of the user can put one there; the app's scan runs nothing from any of them.
 final class XcodeCapabilityExecutionTests: XCTestCase {
     /// A folder that passes `XcodeDiscovery.inspect`: the name and the Info.plist are all it checks.
-    private func fakeXcode(in t: TempDir) -> String {
-        let app = t.dir("Applications/Xcode-probe.app")
-        t.dir("Applications/Xcode-probe.app/Contents/Developer/usr/bin")
+    private func fakeXcode(in t: TempDir, name: String = "Xcode-probe.app") -> String {
+        let app = t.dir("Applications/" + name)
+        t.dir("Applications/" + name + "/Contents/Developer/usr/bin")
         let info: NSDictionary = ["CFBundleIdentifier": "com.apple.dt.Xcode", "CFBundleShortVersionString": "99.0"]
         XCTAssertTrue(info.write(toFile: app + "/Contents/Info.plist", atomically: true))
         return app
+    }
+
+    private func selecting(_ developerDir: String) -> [String: CommandResult] {
+        ["xcode-select -p": CommandResult(status: 0, stdout: developerDir + "\n", stderr: "")]
     }
 
     func testDiscoveryWithoutCapabilitiesRunsOnlyXcodeSelect() {
@@ -75,19 +80,83 @@ final class XcodeCapabilityExecutionTests: XCTestCase {
         XCTAssertEqual(runner.invocations, ["xcode-select -p"])
     }
 
-    func testDiscoveryWithCapabilitiesRunsTheBundlesTools() {
-        // The contrast: the CLI's default runs the bundle's own `xcodebuild`, and `simctl` with its developer
-        // directory.
+    /// The selected Xcode and one planted beside it. `calls` keeps full paths and environments, so which bundle ran
+    /// is visible: `xcodebuild` is started by path, and `xcrun` runs whatever `DEVELOPER_DIR` points into.
+    func testOnlyTheSelectedXcodesToolsRun() {
         let t = TempDir()
-        _ = fakeXcode(in: t)
-        let runner = RecordingRunner()
-        _ = XcodeDiscovery.discover(runner: runner, searchRoots: [t.path + "/Applications"], detectCapabilities: true)
-        XCTAssertEqual(runner.invocations, ["xcode-select -p", "xcodebuild -help", "xcrun simctl runtime"])
+        let selected = fakeXcode(in: t, name: "Xcode.app")
+        let planted = fakeXcode(in: t, name: "Xcode-planted.app")
+        var responses = selecting(selected + "/Contents/Developer")
+        responses["xcodebuild -help"] = CommandResult(status: 0, stdout: Fixtures.string("xcodebuild-help-xcode26.5.txt"), stderr: "")
+        let runner = RecordingRunner(responses: responses)
+        let found = XcodeDiscovery.discover(runner: runner, searchRoots: [t.path + "/Applications"], detectCapabilities: true)
+        XCTAssertEqual(Set(found.map(\.path)), [selected, planted], "both bundles were found")
+        let calls = runner.calls
+        // Positive control: the selected Xcode's tools ran, so the planted one's absence below is the rule at work.
+        XCTAssertTrue(calls.contains { $0.executable == selected + "/Contents/Developer/usr/bin/xcodebuild" && $0.arguments == ["-help"] }, "\(calls)")
+        XCTAssertTrue(
+            calls.contains { $0.executable == Tools.xcrun && $0.environment?["DEVELOPER_DIR"] == selected + "/Contents/Developer" }, "\(calls)")
+        XCTAssertEqual(found.first { $0.path == selected }?.capabilities.downloadPlatform, true, "the selected Xcode's own help was read")
+        XCTAssertEqual(found.first { $0.path == selected }?.capabilitiesProbed, true)
+        XCTAssertEqual(found.first { $0.path == planted }?.capabilitiesProbed, false, "not probed, which is not 'absent'")
+        // What discovery calls selected is what the `runtime` verbs run (`Runtime.selected`).
+        XCTAssertEqual(found.first { $0.path == selected }?.isSelected, true)
+        XCTAssertEqual(found.first { $0.path == planted }?.isSelected, false)
+        // Nothing from the planted bundle, started by path or through `xcrun`.
+        XCTAssertFalse(calls.contains { $0.executable.hasPrefix(planted + "/") }, "\(calls)")
+        XCTAssertFalse(calls.contains { $0.environment?["DEVELOPER_DIR"]?.hasPrefix(planted + "/") == true }, "\(calls)")
+    }
+
+    /// No Xcode selected: the Command Line Tools are, or `xcode-select` gave no answer. No bundle's tools run.
+    func testNoBundlesToolsRunWhenNoXcodeIsSelected() {
+        for answer in [selecting("/Library/Developer/CommandLineTools"), [:]] {
+            let t = TempDir()
+            let app = fakeXcode(in: t)
+            let runner = RecordingRunner(responses: answer)
+            let found = XcodeDiscovery.discover(runner: runner, searchRoots: [t.path + "/Applications"], detectCapabilities: true)
+            // Positive control: the bundle was found, so "nothing ran from it" is the rule, not an empty search.
+            XCTAssertEqual(found.map(\.path), [app])
+            XCTAssertEqual(runner.invocations, ["xcode-select -p"], "xcode-select answered \(answer)")
+            XCTAssertEqual(found.map(\.capabilitiesProbed), [false])
+            XCTAssertEqual(found.map(\.isSelected), [false])
+        }
+    }
+
+    /// `xcode-select -p` echoes `DEVELOPER_DIR` as it is set, a trailing space included, and `xcrun` refuses that
+    /// path (both measured 2026-09-28). The answer is taken as printed, less its newline, so no Xcode is selected
+    /// either: trimming the space would run the tools of an Xcode the user's own `xcrun` would not.
+    func testAnAnswerXcrunWouldRefuseSelectsNoXcode() {
+        // Positive control first: the same bundle, answered without the space, is selected and probed.
+        for (suffix, selected) in [("", true), (" ", false)] {
+            let t = TempDir()
+            let app = fakeXcode(in: t)
+            let runner = RecordingRunner(responses: selecting(app + "/Contents/Developer" + suffix))
+            let found = XcodeDiscovery.discover(runner: runner, searchRoots: [t.path + "/Applications"], detectCapabilities: true)
+            XCTAssertEqual(found.map(\.path), [app], "answer suffix '\(suffix)'")
+            XCTAssertEqual(found.map(\.isSelected), [selected], "answer suffix '\(suffix)'")
+            XCTAssertEqual(runner.invocations.contains("xcodebuild -help"), selected, "\(runner.invocations)")
+        }
+    }
+
+    /// "Probed" means the selected Xcode's `xcodebuild -help` ran. When it cannot be started, the flags are not a
+    /// measurement, and `xcode list` would show a ✗ for each (helper-security review of F3, round 1).
+    func testASelectedXcodeWhoseXcodebuildCannotStartIsNotProbed() {
+        let t = TempDir()
+        let app = fakeXcode(in: t)
+        for startable in [true, false] {
+            let runner = RecordingRunner(responses: selecting(app + "/Contents/Developer"))
+            if !startable { runner.unstartable = ["xcodebuild -help"] }
+            let found = XcodeDiscovery.discover(runner: runner, searchRoots: [t.path + "/Applications"], detectCapabilities: true)
+            // Positive control: the selected Xcode's xcodebuild was attempted both times.
+            XCTAssertTrue(runner.calls.contains { $0.executable == app + "/Contents/Developer/usr/bin/xcodebuild" }, "\(runner.calls)")
+            XCTAssertEqual(found.map(\.isSelected), [true])
+            XCTAssertEqual(found.map(\.capabilitiesProbed), [startable], "xcodebuild startable: \(startable)")
+        }
     }
 
     /// The scanner passes its flag through. The bundle is offered as `xcode-select`'s answer, so the result does
     /// not depend on what this machine has in /Applications.
-    func testTheScannerPassesTheFlagThrough() {
+    func testTheScannerPassesTheFlagThrough() throws {
         let t = TempDir()
         let app = fakeXcode(in: t)
         for detect in [false, true] {
@@ -99,6 +168,10 @@ final class XcodeCapabilityExecutionTests: XCTestCase {
             XCTAssertTrue(report.xcodes.contains { $0.path == app }, "the probe bundle was found (detect: \(detect))")
             XCTAssertEqual(runner.invocations.contains("xcodebuild -help"), detect, "\(runner.invocations)")
             XCTAssertEqual(runner.invocations.contains("xcrun simctl runtime"), detect, "\(runner.invocations)")
+            XCTAssertEqual(report.xcodes.first { $0.path == app }?.capabilitiesProbed, detect)
+            // This bundle's line only: any Xcode this machine has in /Applications is found too, and is not probed.
+            let line = try XCTUnwrap(TextRenderer.scan(report).split(separator: "\n").first { $0.contains("  \(app)  [") })
+            XCTAssertEqual(line.contains("capabilities not probed"), !detect, String(line))
         }
     }
 }

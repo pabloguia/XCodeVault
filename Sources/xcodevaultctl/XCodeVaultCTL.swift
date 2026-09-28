@@ -104,23 +104,34 @@ struct Xcode: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let xcodes = XcodeDiscovery.discover()
-            try emit(xcodes, json: global.json) {
-                var o = ""
-                for x in xcodes {
-                    o += "\(x.isSelected ? "*" : " ") Xcode \(x.version) (\(x.build)) — \(x.path)\n"
-                    let c = x.capabilities
-                    let rows: [(String, Bool)] = [
-                        ("downloadPlatform", c.downloadPlatform), ("downloadAllPlatforms", c.downloadAllPlatforms),
-                        ("-exportPath (Runtime Library export)", c.exportPath), ("-buildVersion", c.buildVersion),
-                        ("-architectureVariant", c.architectureVariant), ("importPlatform", c.importPlatform),
-                        ("downloadComponent / importComponent / deleteComponent", c.downloadComponent && c.importComponent), ("showComponent", c.showComponent),
-                        ("checkForNewerComponents", c.checkForNewerComponents), ("prepareDeviceSupport", c.prepareDeviceSupport),
-                        ("simctl runtime add / delete / unmount / verify", c.simctlRuntimeAdd && c.simctlRuntimeDelete),
-                    ]
-                    for (n, v) in rows { o += "    \(v ? "✓" : "✗") \(n)\n" }
+            try emit(xcodes, json: global.json) { Self.render(xcodes) }
+        }
+
+        static func render(_ xcodes: [XcodeInstallation]) -> String {
+            var o = ""
+            for x in xcodes {
+                o += "\(x.isSelected ? "*" : " ") Xcode \(x.version) (\(x.build)) — \(x.path)\n"
+                // Every flag reads ✗ when nothing was probed, which would say "unsupported" about what was never asked
+                // (ADR-0009).
+                guard x.capabilitiesProbed else {
+                    o +=
+                        x.isSelected
+                        ? "    capabilities not probed: its `xcodebuild -help` could not be run\n"
+                        : "    capabilities not probed: only the xcode-select'ed Xcode's tools are run\n"
+                    continue
                 }
-                return o
+                let c = x.capabilities
+                let rows: [(String, Bool)] = [
+                    ("downloadPlatform", c.downloadPlatform), ("downloadAllPlatforms", c.downloadAllPlatforms),
+                    ("-exportPath (Runtime Library export)", c.exportPath), ("-buildVersion", c.buildVersion),
+                    ("-architectureVariant", c.architectureVariant), ("importPlatform", c.importPlatform),
+                    ("downloadComponent / importComponent / deleteComponent", c.downloadComponent && c.importComponent), ("showComponent", c.showComponent),
+                    ("checkForNewerComponents", c.checkForNewerComponents), ("prepareDeviceSupport", c.prepareDeviceSupport),
+                    ("simctl runtime add / delete / unmount / verify", c.simctlRuntimeAdd && c.simctlRuntimeDelete),
+                ]
+                for (n, v) in rows { o += "    \(v ? "✓" : "✗") \(n)\n" }
             }
+            return o
         }
     }
 }

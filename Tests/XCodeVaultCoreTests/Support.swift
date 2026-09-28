@@ -11,18 +11,38 @@ import XCTest
 /// the offload path at once — `--dry-run` and `--keep-asset` silently appended to a 12 GB
 /// deletion, and the `hdiutil` check pointed at the wrong file — all with a green suite.
 final class RecordingRunner: CommandRunning, @unchecked Sendable {
+    /// One command as it was started: the full executable path and the environment added to it.
+    struct Call: Equatable {
+        let executable: String
+        let arguments: [String]
+        let environment: [String: String]?
+    }
+
     private let lock = NSLock()
     private var _invocations: [String] = []
+    private var _calls: [Call] = []
     var responses: [String: CommandResult]
+    /// Commands, matched as `responses` are, that cannot be started: `run` throws, as `ProcessCommandRunner` does
+    /// when there is nothing to run at the path. The attempt is still recorded.
+    var unstartable: [String] = []
 
     init(responses: [String: CommandResult] = [:]) { self.responses = responses }
 
     /// Every command as it would read on a command line, in order.
     var invocations: [String] { lock.withLock { _invocations } }
+    /// The same commands with their full paths and environments, which `invocations` drops: two Xcodes'
+    /// `xcodebuild` read the same there, and `DEVELOPER_DIR` decides which Xcode `xcrun` runs (F3).
+    var calls: [Call] { lock.withLock { _calls } }
 
     func run(_ executable: String, _ arguments: [String], environment: [String: String]?) throws -> CommandResult {
         let key = ([(executable as NSString).lastPathComponent] + arguments).joined(separator: " ")
-        lock.withLock { _invocations.append(key) }
+        lock.withLock {
+            _invocations.append(key)
+            _calls.append(Call(executable: executable, arguments: arguments, environment: environment))
+        }
+        for k in unstartable where key.hasPrefix(k) {
+            throw CommandError(executable: executable, arguments: arguments, result: nil, underlying: "RecordingRunner: \(key) cannot be started")
+        }
         for (k, v) in responses where key.hasPrefix(k) { return v }
         return CommandResult(status: 127, stdout: "", stderr: "RecordingRunner: no response for \(key)")
     }

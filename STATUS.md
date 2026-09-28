@@ -2776,3 +2776,155 @@ Declared gaps, still open (details in `KNOWN-ISSUES-AT-PUBLICATION.md`):
 - A folder that vanishes, or answers an I/O error, between the existence check and the measurement reads as
   "not connected". By reading; only a race.
 - The GUI's Volumes section shows AMBIGUOUS in red with the detail. Known by reading; not run on screen.
+
+## 2026-09-28 — F3: the CLI runs only the selected Xcode's tools (ADR-0009)
+
+Found by the helper-security review of deliverable 3 of the permissions plan, round 2. That deliverable fixed the
+app and declared the CLI open. To say what each Xcode supports, `XcodeDiscovery` ran `xcodebuild -help` and
+`xcrun simctl runtime` from every folder named `Xcode*.app` in /Applications and ~/Applications whose Info.plist
+named Xcode, inside the terminal's grant when there is one (H15). The CLI's `scan`, `status`, `report`, `doctor`,
+`clean`, `xcode list` and `runtime delete`, `export`, `import` and `offload` did this. The `runtime` verbs used
+the first Xcode found when none was selected. The probe dates from M1 (23fc324, 2026-09-06), which the public tag
+`pre-review-2026-09-17` contains, and the fallback from M2 (d5be647). No release.
+
+What changed:
+- `XcodeDiscovery.inspect` runs the two tools only for the bundle whose developer directory is the one
+  `xcode-select -p` answered, compared as strings. Every other bundle is only read. The answer is taken as
+  printed, less its newline: `xcode-select` echoes a trailing space in `DEVELOPER_DIR`, `xcrun` refuses that
+  path, and trimming it would select an Xcode `xcrun` would not run.
+- `XcodeInstallation.capabilitiesProbed`: the Xcode is the selected one, and its `xcodebuild -help` ran. Every
+  capability of an Xcode that was not probed reads `false`, so `xcode list` says "capabilities not probed", and
+  why, in place of its ✗ rows: "only the xcode-select'ed Xcode's tools are run", or, for the selected one, "its
+  `xcodebuild -help` could not be run". The scan's text flags it "capabilities not probed". The key is new in
+  the `--json` output of `xcode list`, `scan`, `status` and `report`.
+- The `runtime` verbs (`Runtime.selected`) refuse when no Xcode is selected. The refusal counts the Xcodes found,
+  prints none of their paths, and says how to select one: `xcode-select -s`, or `DEVELOPER_DIR`.
+- `RecordingRunner` keeps each call's executable path and environment (`calls`), and can model a tool that
+  cannot be started (`unstartable`).
+- ADR-0009; the user guide; a "Fixed 2026-09-28" section in `KNOWN-ISSUES-AT-PUBLICATION.md`; and the app's
+  comment on why it detects no capabilities, which described the old behaviour.
+
+Measured on this machine: macOS 26.7 (25G229), x86_64, Xcode 26.5 (17F42) at /Applications. The planted folder
+was `~/Applications/Xcode-x.app` in a scratch home (`HOME` and `CFFIXED_USER_HOME` moved for that one process):
+an Info.plist and three scripts, `xcodebuild`, `simctl` and `xcrun`, that only record that they ran.
+- **Before**, with the CLI built at 11:39 from the unfixed tree: `xcode list` ran the folder's `xcodebuild -help`
+  by path, and `/usr/bin/xcrun` handed `simctl runtime` to the folder's `usr/bin/xcrun`. With no `xcrun` in the
+  folder, only its `xcodebuild` ran.
+- **How `/usr/bin/xcrun` hands off**, measured with scratch developer directories after the review corrected my
+  first description:
+  - It loads the directory's `usr/lib/libxcrun.dylib`, and runs its `usr/bin/xcrun` only when there is no such
+    library. With neither, it refuses ("missing xcrun").
+  - A library that fails to load stops it; it does not fall back to `usr/bin/xcrun`.
+  - A planted library, empty or signed ad hoc, was refused: "mapping process is a platform binary, but mapped
+    file is not".
+  - Apple's own library, copied into one planted folder, refused with "unable to find Xcode installation". In the
+    review's planted folder, whose plists differed, it ran the folder's own `usr/bin/xcodebuild`, and tried to
+    when there was none. Which plist content decides it was not established. So "loads only platform code" is no
+    defence: Apple's library is platform code anyone can copy.
+  - Xcode 26.5 ships that library, signed `identifier "com.apple.libxcrun" and anchor apple`, and no
+    `usr/bin/xcrun`. `/usr/bin/xcrun` has signing flags `0x0`.
+- **The signature check**, measured and not chosen (ADR-0009).
+  - The bundle's designated requirement is not `anchor apple`.
+  - `codesign --verify -R '=anchor apple'` on `xcodebuild` exits 0 in 0.09 s; the same check naming a team it
+    does not have exits 3.
+  - `simctl` is a bash script that `codesign -dv` says "is not signed at all", covered only by a seal over
+    121,000 files. Verifying the whole seal at background priority had not finished after 120 s. One file can
+    be checked against the seal alone, though (`SecCodeValidateFileResource`, public since macOS 10.13), so
+    cost is not the ADR's reason.
+  - Its reasons: what runs cannot be listed in advance (`simctl` runs `xcodebuild -runFirstLaunch` when
+    CoreSimulator is not the version it expects, and `xcodebuild` loads a framework through `@rpath` entries
+    into the bundle); a file checked in a folder the user can write can change before it runs; and a genuine
+    older Xcode passes every check.
+- **After**, with the CLI built at 14:04 from this tree: the planted folder ran nothing, and
+  /Applications/Xcode.app, which is selected, was probed (all 11 rows ✓). Control: with the planted folder
+  selected through `DEVELOPER_DIR`, its `xcodebuild` and its `usr/bin/xcrun` ran, and /Applications/Xcode.app
+  was listed as not probed. So "nothing" is the rule at work, not a broken marker.
+- **A trailing space.** With `DEVELOPER_DIR` set to /Applications/Xcode.app's developer directory plus a space,
+  `xcode-select -p` answers it (exit 0) and `xcrun` refuses it ("missing DEVELOPER_DIR path", exit 1). `xcode
+  list` now selects nothing and probes nothing.
+- **The refusal.** `runtime delete xcv-bogus-id`, without `--yes`, with
+  `DEVELOPER_DIR=/Library/Developer/CommandLineTools`: "No Xcode is selected: `xcode-select -p` names none of
+  the Xcodes found (1; `xcodevaultctl xcode list` lists them). …", exit 64. Control, with
+  /Applications/Xcode.app selected: the existing "Pass --yes to confirm, or --dry-run" refusal, exit 64.
+  `DEVELOPER_DIR=/Applications/Xcode.app` reaches the same point: `xcode-select -p` then answers
+  `/Applications/Xcode.app/Contents/Developer`.
+- **Red first.**
+  - Round 1: on the unfixed code, `testOnlyTheSelectedXcodesToolsRun` and
+    `testNoBundlesToolsRunWhenNoXcodeIsSelected` failed. The second got `["xcode-select -p", "xcodebuild -help",
+    "xcrun simctl runtime"]` where it expected `["xcode-select -p"]`.
+  - Round 2: on the round-1 code, the four tests for the review's changes failed, each for its reason (10 run,
+    4 failing). The trailing space selected the Xcode; `capabilitiesProbed` was true with `xcodebuild`
+    unstartable; the refusal printed both paths; and `xcode list` gave the selected Xcode the other reason.
+    Their in-test controls passed.
+  - The `isSelected` pins and the first `CLIXcodeSelectionTests` pin code that already worked; the mutants below
+    are their red.
+- **Suite.** The full `swift test` Executed 597 tests, 0 failures, none skipped (581 before this work), on the
+  tree frozen as a63612a. That run covers the F9 entry below too.
+- **Mutants.** Fourteen, at a63612a in a separate worktree, after the gold tree there built and ran the four
+  classes this work uses green (31 tests). Each was proven applied, killed, restored byte for byte with the
+  whole tree proven identical to the snapshot, and its class re-run green; none failed to compile. Nine of them
+  were also run at b387e61, the round-1 code, and killed there.
+  - Every bundle probed (the fix deleted), and the rule inverted: the discovery tests, and with the inversion
+    the scanner test too.
+  - `capabilitiesProbed` true for every bundle: three discovery tests. True when `xcodebuild` was only
+    attempted: the unstartable test.
+  - An empty `xcode-select` answer selecting every bundle (`hasPrefix` for `==`): the no-selection test.
+  - Discovery reporting every bundle selected: the three tests that pin `isSelected` (the review's first item).
+  - The answer trimmed of all whitespace again: the trailing-space test.
+  - The `runtime` verbs falling back to the first Xcode found: the refusal test. Ignoring the selection: that
+    and the selection test. Printing the paths found again: the refusal test.
+  - `xcode list` printing rows for an Xcode it did not probe, or giving each Xcode the other's reason: both list
+    tests.
+  - The scan's text dropping the flag, or flagging the probed Xcode instead: the scanner test.
+
+Review:
+- **Helper security, round 1** at 43ec909: REQUEST CHANGES. It found no path that runs a non-selected bundle's
+  tools, and that the string comparison cannot fail open. Taken:
+  - two required changes: pin `isSelected` from discovery, which `Runtime.selected` trusts (`runtime export`
+    lists runtimes through the chosen Xcode before any capability check); and replace the ledger's detection
+    command, which fails in zsh;
+  - three corrections, each re-measured before it was written: the `xcrun` hand-off through `libxcrun.dylib`;
+    the ADR's cost argument against a signature check; and the app's comment;
+  - three hardenings: the answer less only its newline; "probed" meaning `xcodebuild -help` ran; and a refusal
+    that prints no path.
+  - Not taken: a refusal in `RuntimeOperations` for an Xcode that is not selected, which the reviewer offered
+    against future callers and not as a boundary. The ADR records where the rule is enforced instead.
+- **Helper security, round 2** at 0955743: APPROVE. It verified each fix, by measurement where one applied, ran
+  the four classes from the prebuilt binaries (13 tests, 0 failures), and repeated the planted-folder run and its
+  control end to end. It also found that `xcrun` refuses a trailing carriage return, and, from a check of the
+  same Swift expression, that discovery then selects nothing either. Its three notes, all taken as text:
+  - the genuine-library measurement above, which is also in the ADR and the `inspect` comment;
+  - an `xcodebuild -help` that starts and then fails counting as probed: declared below, rather than a code
+    change after the approval;
+  - the ledger's wording for zsh.
+- **Round 3** at 66d86e2: APPROVE. It confirmed that each of the four `runtime` verbs refuses when a flag it
+  needs reads `false`, and judged the `capabilitiesProbed` change a reasonable follow-up rather than a blocker.
+  Its three notes were wording, taken here without a fourth round: the genuine library's refusal turned on the
+  plists, not on a missing `xcodebuild`; "what is displayed" rather than "what `xcode list` shows"; and what its
+  round 2 measured rather than read.
+
+The tree committed differs from a63612a, where the suite and the mutants ran, only in documentation and in two
+comments; its own preflight is in the commit message.
+
+Declared gaps:
+- The comparison is by string. When `xcode-select -p` spells the selected bundle through a symlink, the bundle is
+  listed twice and only the spelling that matches is probed. Seen once, with `DEVELOPER_DIR` under
+  `/private/tmp` for a folder found under `/tmp`. Not fixed.
+- The selected Xcode is trusted whatever it is, and `xcrun`'s cache stays trusted (deliverable 3).
+- The rule is enforced where an Xcode is chosen: `RuntimeOperations` and `SimulatorDiscovery.runtimes(developerDir:)`
+  accept any developer directory, and `inspect` is public.
+- A failure of `xcrun simctl runtime` alone, with `xcodebuild -help` run, still reads as ✗ on the `simctl` rows.
+- Probed means `xcodebuild -help` ran, not that it succeeded: one that starts and then fails reads as probed, its
+  flags parsed from whatever it printed. A healthy install's exits 0, as the review measured. This changes only
+  what is displayed (`xcode list`, the scan's text, `--json`); a `runtime` verb whose flag reads `false` refuses.
+- `xcode list`, `scan`, `status` and `report` print the paths of the Xcodes found as they are, a planted folder's
+  included. That predates this change.
+- `scripts/experiments/e8-feature-detect.sh` runs the tools of every `/Applications/Xcode*.app` when run without
+  arguments: by hand, and by CI on every push, on runners with no user's grant. Not changed.
+- `locations set-compilation-cache` still falls back to the first Xcode found when none is selected, for its
+  version only; it runs nothing from it.
+- An `XcodeInstallation` stored before this would not decode: a Codable default does not make a missing key
+  decode, as deliverable 3's review measured. Nothing in the tree decodes one from storage, by reading (the
+  review agrees): the decoders are the journal, the registry, the sentinel and `simctl`'s output.
+- Of the `runtime` verbs, only `delete`'s refusal was run end to end; `export`, `import` and `offload` share
+  `Runtime.selected` and were not run.

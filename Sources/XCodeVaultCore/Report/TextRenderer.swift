@@ -12,6 +12,7 @@ public enum TextRenderer {
         for x in r.xcodes {
             let caps = x.capabilities
             var flags: [String] = []
+            if !x.capabilitiesProbed { flags.append("capabilities not probed") }
             if caps.supportsRuntimeLibrary { flags.append("runtime-library") }
             if caps.architectureVariant { flags.append("arch-variant") }
             if caps.downloadComponent { flags.append("components") }

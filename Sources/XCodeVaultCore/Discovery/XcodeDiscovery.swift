@@ -77,12 +77,18 @@ public struct XcodeInstallation: Sendable, Codable, Equatable, Identifiable {
     public var build: String  // 17F42
     public var isSelected: Bool  // xcode-select -p points here
     public var capabilities: XcodeCapabilities
+    /// Whether `capabilities` was measured: this is the selected Xcode, and its `xcodebuild -help` ran. Only the
+    /// selected Xcode's tools are run (`XcodeDiscovery.inspect`), so another Xcode's capabilities are "not probed",
+    /// which is not "absent": every flag reads `false` either way. The `simctl runtime` flags come from a second
+    /// run, which can fail on its own; they then read `false` too.
+    public var capabilitiesProbed = false
 
     public var majorVersion: Int { Int(version.split(separator: ".").first ?? "0") ?? 0 }
 }
 
 public enum XcodeDiscovery {
-    /// Finds Xcode bundles in the standard locations plus the `xcode-select`ed one.
+    /// Finds Xcode bundles in the standard locations plus the `xcode-select`ed one. With `detectCapabilities`, runs
+    /// the selected one's tools to feature-detect what it supports, and no other bundle's (`inspect`).
     public static func discover(
         runner: CommandRunning = ProcessCommandRunner(),
         searchRoots: [String] = ["/Applications", NSHomeDirectory() + "/Applications"],
@@ -98,7 +104,10 @@ public enum XcodeDiscovery {
         }
         var selectedDev = ""
         if let r = try? runner.run(Tools.xcodeSelect, ["-p"]), r.succeeded {
-            selectedDev = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            // As printed, less the newline that ends it. `xcode-select` echoes `DEVELOPER_DIR` as it is set, a trailing
+            // space included, and `xcrun` refuses such a path (measured 2026-09-28): trimming more would select, and run
+            // the tools of, an Xcode the user's own `xcrun` would not.
+            selectedDev = r.stdout.hasSuffix("\n") ? String(r.stdout.dropLast()) : r.stdout
             if selectedDev.hasSuffix("/Contents/Developer") {
                 candidates.insert(String(selectedDev.dropLast("/Contents/Developer".count)))
             }
@@ -111,6 +120,21 @@ public enum XcodeDiscovery {
         return result.sorted { ($0.isSelected ? 0 : 1, $0.version) < ($1.isSelected ? 0 : 1, $1.version) }
     }
 
+    /// Reads a bundle's Info.plist and version.plist, and runs its tools only when it is the selected Xcode.
+    ///
+    /// Only the developer directory `xcode-select -p` names (`DEVELOPER_DIR` steers that answer) has its
+    /// `xcodebuild` and `xcrun simctl` run: they are what every developer tool the user runs already executes. Any
+    /// other bundle is only read. A folder named `Xcode*.app` in ~/Applications can be put there by any process of
+    /// the user, and in /Applications by the admin group, and its Info.plist is all that makes it an Xcode here.
+    /// Running its tools ran its code inside whatever grant the caller has, and a terminal with Full Disk Access
+    /// passes its grant to them (H15). `xcodebuild` is started by path. `/usr/bin/xcrun` loads a developer
+    /// directory's `usr/lib/libxcrun.dylib`, and runs its `usr/bin/xcrun` when there is no such library (F3, from
+    /// the helper-security review of deliverable 3; measured 2026-09-28 with planted folders: their `xcodebuild`
+    /// and `usr/bin/xcrun` ran; a planted library, empty or signed ad hoc, was refused; and a copy of Apple's own
+    /// library, beside a copy of Apple's version.plist, ran the folder's own `xcodebuild`). ADR-0009 records why a
+    /// signature check was not the vetting step instead.
+    ///
+    /// Probed means `xcodebuild -help` ran: when it cannot be started, the flags would measure nothing.
     public static func inspect(appPath: String, selectedDeveloperDir: String, runner: CommandRunning, detectCapabilities: Bool) -> XcodeInstallation? {
         let dev = appPath + "/Contents/Developer"
         let infoPlist = appPath + "/Contents/Info.plist"
@@ -120,16 +144,21 @@ public enum XcodeDiscovery {
         else { return nil }
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = (NSDictionary(contentsOfFile: versionPlist)?["ProductBuildVersion"] as? String) ?? "unknown"
+        let isSelected = dev == selectedDeveloperDir
         var caps = XcodeCapabilities()
-        if detectCapabilities {
+        var probed = false
+        if detectCapabilities && isSelected {
             let xb = dev + "/usr/bin/xcodebuild"
-            if let r = try? runner.run(xb, ["-help"]) { caps = XcodeCapabilities.parse(xcodebuildHelp: r.stdout + r.stderr) }
+            if let r = try? runner.run(xb, ["-help"]) {
+                caps = XcodeCapabilities.parse(xcodebuildHelp: r.stdout + r.stderr)
+                probed = true
+            }
             if let r = try? runner.run(Tools.xcrun, ["simctl", "runtime"], environment: ["DEVELOPER_DIR": dev]) {
                 caps.apply(simctlRuntimeHelp: r.stdout + r.stderr)
             }
         }
         return XcodeInstallation(
             path: appPath, developerDirectory: dev, version: version, build: build,
-            isSelected: dev == selectedDeveloperDir, capabilities: caps)
+            isSelected: isSelected, capabilities: caps, capabilitiesProbed: probed)
     }
 }

@@ -29,9 +29,10 @@ Three details that are easy to get wrong:
 - **The tools an app starts work inside its grant** — the same rule that makes your terminal's grant
   reach the commands you run in it (H15). `XCodeVault.app` starts system tools, and the developer tools
   `xcrun` resolves for the Xcode chosen with `xcode-select` — through `xcrun`'s own per-user cache, which
-  it trusts as every developer tool does. It runs nothing from other copies of Xcode it finds, and
-  ignores `DEVELOPER_DIR`, `TOOLCHAINS` and `SDKROOT`. `xcodevaultctl` keeps your environment: it is
-  your terminal's grant, and your choice.
+  it trusts as every developer tool does. It ignores `DEVELOPER_DIR`, `TOOLCHAINS` and `SDKROOT`.
+  `xcodevaultctl` keeps your environment: it is your terminal's grant, and your choice. Neither runs
+  anything from another copy of Xcode it finds, only from the one `xcode-select -p` names: the others
+  are read, not run (ADR-0009).
 - **Whether the helper itself needs Full Disk Access is unmeasured.** Emptying the dyld cache needed
   root *with* Full Disk Access when it was measured from a terminal (H15). The helper runs as a
   launchd daemon, which is a different context, and it has never run live (issue #30).
@@ -70,7 +71,7 @@ These never change anything.
 | `compatibility` | Every category with its strategy, evidence status and privilege level |
 | `permissions` | The Full Disk Access state and the helper state, each with why and one next step. Changes nothing |
 | `volumes` | Mounted volumes and whether each qualifies as a vault |
-| `xcode list` | Installed Xcodes and what each supports |
+| `xcode list` | Installed Xcodes, and what the selected one supports; for the others it says their capabilities were not probed |
 | `runtime list` | Installed runtimes |
 | `runtime library --dir <dir>` (*experimental*) | The installers in a Runtime Library folder, and whether each installed runtime has one |
 | `locations show` | Xcode's DerivedData, Archives and compilation-cache locations |
@@ -89,6 +90,9 @@ Each one is recorded in the journal, except `vault forget`, which only edits XCo
 No strategy has met the Definition of Done in [`NON_GOALS_AND_SAFETY.md`](product/NON_GOALS_AND_SAFETY.md)
 yet, so every command below is *experimental* except `runtime delete` (Apple's own
 `simctl runtime delete`) and the `locations reset-*` commands, which return to Xcode's default.
+
+The `runtime` commands work with the Xcode `xcode-select -p` names (`DEVELOPER_DIR` steers it). With
+none selected they refuse rather than pick another copy of Xcode.
 
 | Command | What it changes | How to undo |
 |---|---|---|

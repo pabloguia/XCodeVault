@@ -8,9 +8,24 @@ extension Runtime {
     static var extendedSubcommands: [ParsableCommand.Type] { [List.self, Delete.self, Export.self, Import.self, Library.self, Offload.self] }
 
     static func selectedXcode() throws -> (XcodeInstallation, HostEnvironment) {
-        let xcodes = XcodeDiscovery.discover()
-        guard let x = xcodes.first(where: \.isSelected) ?? xcodes.first else { throw ValidationError("No Xcode found.") }
-        return (x, HostEnvironment.discover())
+        (try selected(XcodeDiscovery.discover()), HostEnvironment.discover())
+    }
+
+    /// The Xcode whose tools the runtime verbs run: the selected one, and only it. Until 2026-09-28 they fell back to
+    /// the first Xcode found when none was selected, which could be a bundle any process of the user had put in
+    /// ~/Applications, and then ran its `xcodebuild` and `simctl` (F3, ADR-0009).
+    ///
+    /// The refusal counts the Xcodes found and prints none of their paths: whoever made a folder chose its name,
+    /// which can hold a newline or a terminal escape, and this is printed right above advice to run `sudo`.
+    static func selected(_ xcodes: [XcodeInstallation]) throws -> XcodeInstallation {
+        guard let x = xcodes.first(where: \.isSelected) else {
+            guard !xcodes.isEmpty else { throw ValidationError("No Xcode found.") }
+            throw ValidationError(
+                "No Xcode is selected: `xcode-select -p` names none of the Xcodes found (\(xcodes.count); `xcodevaultctl xcode list` "
+                    + "lists them). Select one with `sudo xcode-select -s <path to Xcode.app>`, or run this with "
+                    + "DEVELOPER_DIR=<path to Xcode.app>.")
+        }
+        return x
     }
 
     struct Delete: ParsableCommand {

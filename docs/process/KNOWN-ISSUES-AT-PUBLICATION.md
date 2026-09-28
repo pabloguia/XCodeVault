@@ -229,6 +229,31 @@ and again by the author:
   read as nothing registered and no journal; the `/Volumes` check returns nothing when `/Volumes`
   cannot be listed; and the app shows "None registered." when the registry cannot be read.
 
+## Fixed 2026-09-28: the CLI ran the tools of any folder named `Xcode*.app` it found (on `main` since 2026-09-06)
+
+To say what each Xcode supports, discovery ran `xcodebuild -help` and `xcrun simctl runtime` from every
+folder named `Xcode*.app` in /Applications and ~/Applications whose Info.plist named Xcode. The CLI's
+`scan`, `status`, `report`, `doctor`, `clean`, `xcode list` and `runtime delete`, `export`, `import` and
+`offload` did this; `locations set-compilation-cache` read only the version. The `runtime` verbs used the
+first Xcode found when none was selected. Any process of the user can create such a folder in
+~/Applications. Its scripts then ran inside whatever grant the terminal had: measured 2026-09-28 with a
+planted folder, whose `xcodebuild` ran by path, and whose `usr/bin/xcrun` ran when `/usr/bin/xcrun` handed
+over to it. Found by the helper-security review of deliverable 3 of the permissions plan. The app was fixed
+in that deliverable; the CLI was declared open there.
+
+Fixed: only the Xcode `xcode-select -p` names has its tools run (`DEVELOPER_DIR` steers that answer, as it
+steers `xcrun`). `xcode list` says the others' capabilities were not probed, and the `runtime` verbs
+refuse when no Xcode is selected. ADR-0009 records why a signature check was not used instead. The probe
+dates from M1 (23fc324, 2026-09-06), which the public tag `pre-review-2026-09-17` contains; there has been
+no release. On an earlier build, look for folders you did not install with `find`, since in zsh a pattern
+that matches nothing aborts the whole `ls` and lists nothing:
+`find /Applications ~/Applications -maxdepth 1 -name 'Xcode*.app'`.
+
+Still open: `scripts/experiments/e8-feature-detect.sh` runs the tools of every `/Applications/Xcode*.app`,
+by design, when run without arguments: by hand, and by CI on every push, on runners with no user's grant.
+`xcode list`, `scan`, `status` and `report` print the paths of the Xcodes found as they are, a planted
+folder's name included.
+
 ## Compatibility
 
 Every claim in `docs/architecture/COMPATIBILITY_MATRIX.md` was measured on one Mac, one
