@@ -39,7 +39,8 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 - Read-only (all `--json`): `scan`, `status`, `report`, `doctor`, `xcode list`,
   `runtime list`, `runtime library --dir`, `volumes`, `compatibility`, `locations show`,
   `journal`, `vault status`, `migration status`, `bench <dir>`.
-- Changing (each journaled; dry-run/plan by default where meaningful):
+- Changing (each journaled except `vault forget`, which only edits the registry; dry-run/plan by
+  default where meaningful):
   `clean [--category …] [--apply] [--trash] [--force]`,
   `runtime delete <id> [--keep-asset] [--dry-run] --yes`,
   `runtime export <platform> --to <dir> [--build-version] [--arch]`,
@@ -48,11 +49,44 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   `vault init <mount>`, `vault forget <uuid>`,
   `externalize --category archives --vault <ref> [--apply] [--remove-source-after-verify
   --i-confirm-deleting-non-regenerable-data]`, `restore --category … --vault … --name … [--to …] --apply`,
-  `migration abort <id>`.
+  `migration abort <id>`, `migration resume <id>`,
+  `migration forget <id> --i-verified-both-copies-myself`.
 - Not implemented (from the original candidate list): `plan` (folded into each command's
   dry run), `verify` (folded into externalize/restore; a standalone re-verify is a follow-up),
   `mount status` (no canonical-mount strategy in v1, ADR-0004), `runtime install`
   (= `runtime import`).
+
+## Permissions — asked at the moment of need (spec 2026-09-27, ADR-0007)
+
+> Status: specification. Each item says which deliverable of
+> `docs/superpowers/plans/2026-09-27-user-first-permissions.md` ships it; until then it is planned.
+
+The rule: the first run asks for nothing, and a permission is asked for only when an action needs
+it. Wherever macOS allows it, asking means one system prompt; the GUI never hands the user a Terminal
+command as the primary route. The client never runs a root shell (`osascript … with administrator
+privileges`, `AuthorizationExecuteWithPrivileges`, spawned `sudo`): the helper's allowlisted verbs
+are the only privileged path.
+
+- **`xcodevaultctl permissions [--json]`** (read-only, deliverable 2): the Full Disk Access state
+  (`granted | notGranted | unknown`) and the helper state (`unavailableInThisBuild | notInstalled |
+  awaitingApproval | enabled`), each with one sentence of why and one next step. `--json` shape:
+  `{"fullDiskAccess": {"state", "why", "nextStep"}, "helper": {"state", "why", "nextStep"}}`.
+  `clean`'s tag for a root row points to it.
+- **GUI Permissions section** (deliverable 3; buttons for the helper in deliverable 4): two rows —
+  Full Disk Access and the helper — each with a status, one sentence of why, and one button:
+  **Open Settings** for Full Disk Access; **Install…** or **Uninstall…** for the helper. When the app
+  becomes active after the user returns from System Settings, it re-checks and rescans.
+- **Full Disk Access at need** (deliverable 3): the Overview says "Some folders could not be read"
+  with **Open Settings** only when a scan reports folders refused with `EPERM`, and only while the
+  grant is not known to be present.
+- **The helper at need** (deliverable 4): choosing a root action opens a sheet with one sentence of
+  why and **Allow**; then `register()`, `SMAppService.openSystemSettingsLoginItems()`, poll the
+  status, and run the action when it reaches `enabled`. **Uninstall…** calls `unregister()`.
+- **A button that cannot work is never shown.** A build with no usable team ID, or without the daemon
+  in its bundle, says "Not available in this build" in the same place and shows the manual route
+  (the text remediation) instead.
+- Whether the launchd daemon needs Full Disk Access for `Caches/dyld` is **unmeasured** until the
+  helper's first live run (#30).
 
 ## Doctor subsystem
 

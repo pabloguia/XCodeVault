@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-19. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-09-27. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -14,6 +14,13 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
+  plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
+  one commit each. **1 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
+  ADR-0007, and the `SECURITY_MODEL.md` correction (the daemon's Full Disk Access is unmeasured, not
+  "not needed"). Next: the Permissions model in Core and `xcodevaultctl permissions`. The helper
+  flow is **pending — needs a signed build** (#30); `COMPATIBILITY_MATRIX.md` "Pending — added
+  2026-09-27" lists it.
 - Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
   publication are closed; `gh issue list` is the live queue and `git log` records which commit
   closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
@@ -2302,3 +2309,29 @@ data-moving surface, the session diff and the public surface — **architecture 
 configuration (`.claude/`, `.codex/`) were never in scope**. Whoever conducts that review should read
 `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md` first, so as not to re-litigate decisions that were
 made with the reason recorded.
+
+## 2026-09-27 — user-first permissions, deliverable 1 of 4: the docs say what exists
+
+The README is now one screen for a user: what it does, install, first run, a permissions table,
+five things it never does, and the honest state; research and contributor material moved to a
+block of links. `docs/USER_GUIDE.md` covers every GUI section and command with what it changes and
+how to undo it. Everything the later deliverables add is written as **planned** here and flipped by
+the deliverable that ships it — the docs must not describe a command or a button that does not
+exist yet. ADR-0007 records the three decisions (ask at need; no root shell in the client; Full Disk
+Access guided because it cannot be automated). `SECURITY_MODEL.md`'s "a root launchd daemon does not
+need Full Disk Access" is struck in place, citing H15, with the reasoning kept.
+
+Before this plan was written, three places where the spec did not match the code went to the
+operator; the answers are recorded at the top of the plan (vault-folder finding derived from a
+journaled `vault init` refusal; "not available in this build" also when the daemon is not bundled;
+the dyld cache wired to the helper in deliverable 4).
+
+The independent docs review returned REQUEST CHANGES on its first round, and every important
+finding held up against the code: three undo answers were wrong (simulator device sets reach the
+Trash already emptied by `simctl`; the folder `vault init` creates can hold the only copy of Archives
+after `externalize`; `restore` refuses while the original exists), the experimental labels
+contradicted each other, and two sentences were prose rather than measurement — "the disconnection
+itself loses nothing" (only a forced unmount was measured; the physical unplug is pending) and
+"Nothing in this repository can produce one", said of a signed build (the scripts can; the
+certificate is what is missing). The struck Full Disk Access claim also survived where it originated,
+`FINDINGS-2026-09-05.md`, and is corrected there too.

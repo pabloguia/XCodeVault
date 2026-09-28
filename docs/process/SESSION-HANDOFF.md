@@ -27,6 +27,10 @@ Runtime Library flow (export → `runtime offload` → `runtime import`). Milest
 has a first GUI slice; M5 (signing, notarization) is not started. **The privileged helper has never
 run live** — issue #30, blocked on a signed build.
 
+**In flight (2026-09-27): user-first permissions**, four deliverables in
+`docs/superpowers/plans/2026-09-27-user-first-permissions.md`; `STATUS.md` "In flight" says how many
+are done.
+
 The week's series, in one paragraph each — details and evidence in H14/H15:
 
 - **H15 — the "root is refused inside CoreSimulator" signature was the caller's TCC posture.** With

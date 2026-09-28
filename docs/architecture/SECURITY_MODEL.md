@@ -104,11 +104,12 @@ require it as a precondition for any documented flow. Never modify `/System`.
 
 ### Registration
 
-> **Specification, not shipped behaviour.** `SMAppService` is named in two comments and called
-> nowhere: there is no registration, no `.status` handling, no `unregister()`, and no client opens a
-> connection to the helper at all. `README.md` says so plainly ("Built and security-reviewed, not
-> reachable from any client") and `scripts/bundle-app.sh` keeps the daemon behind `--with-helper`,
-> off by default. This section says what registration must do when it is written.
+> **Specification, not shipped behaviour.** `SMAppService` is called in one place, read-only
+> (`HelperClient.serviceStatus()` reads `.status`): there is no registration, no `unregister()`, and
+> no client opens a connection to the helper at all. `README.md` says so plainly ("Built and
+> security-reviewed; not reachable from any client") and `scripts/bundle-app.sh` keeps the daemon
+> behind `--with-helper`, off by default. This section says what registration must do when it is
+> written.
 
 - Use **`SMAppService.daemon(plistName:)`** (macOS 13+). `SMJobBless` is deprecated as
   of macOS 13 and, per ADR-0001, we do not ship a parallel SMJobBless path.
@@ -144,10 +145,19 @@ require it as a precondition for any documented flow. Never modify `/System`.
 ### Privilege and TCC facts worth designing around
 - **No entitlement exists or is needed** for an unsandboxed root daemon to mount. The
   App Sandbox is what blocks it (`system.volume.external.mount` authorization right).
-- **A root launchd daemon does not need Full Disk Access** — TCC is a user-level concept.
-  The **GUI app**, running as the user, is the part that hits TCC enumerating
-  `~/Library`. Split responsibilities accordingly: app does UI and presentation, helper
-  does privileged filesystem work and can also serve size accounting if TCC bites.
+- ~~**A root launchd daemon does not need Full Disk Access** — TCC is a user-level concept.~~
+  **Struck 2026-09-27; kept so the reasoning that rested on it can be found.** It was a desk claim
+  from the 2026-09-05 research pass, never measured here. H15 measured the opposite for root
+  *processes*: inside `/Library/Developer/CoreSimulator/`, `mkdir`, `rm` and `mount_apfs` run as
+  root failed with `EPERM` from a terminal without Full Disk Access and succeeded once that terminal
+  had it. TCC applies to root. Whether a root **launchd daemon** — a different TCC context from a
+  granted terminal — has that access is **unmeasured** until the helper's first live run (#30).
+  ADR-0007 records what follows from it.
+- ~~The **GUI app**, running as the user, is the part that hits TCC enumerating `~/Library`.~~
+  Struck with the claim above: the app is not the only part TCC applies to. The split itself stands:
+  app does UI and presentation, helper does privileged filesystem work ~~and can also
+  serve size accounting if TCC bites~~ — struck too, because the helper cannot be assumed to read
+  what TCC hides from the app. ADR-0007 records how the app asks for Full Disk Access instead.
 - Whether `~/Library/Developer` is TCC-protected on macOS 26/27 is unverified — test on
   a clean VM before designing either way.
 - Removable volumes have their own TCC category with **no API to preflight or request

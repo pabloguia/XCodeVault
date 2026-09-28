@@ -741,6 +741,14 @@ those entries "pending — manual" until someone actually runs and records the r
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 
+### Pending — added 2026-09-27 (user-first permissions, ADR-0007)
+
+| Item | Gates | Status |
+|---|---|---|
+| Helper registration: `SMAppService.daemon` `register()` → approval in Login Items & Extensions → `.enabled` | #30, M5 | **pending — needs a signed build.** No Developer ID certificate is available yet (M5), so no signed build has been made — `scripts/bundle-app.sh --sign … --team … --with-helper` is the route once one is; no code calls `register()` |
+| Helper verbs over XPC, end to end (`createVaultDirectory`, `removeRegenerableSystemDirectoryContents`) | #30, H15 | **pending — needs a signed build.** The interface has crossed a real XPC connection only in-process, over an anonymous listener (`HelperXPCBoundaryTests`: `version`, and `createVaultDirectory` refused on bad input); `HelperClient` has never reached the launchd daemon, and no verb has done privileged work |
+| Whether the root launchd daemon has the Full Disk Access `Caches/dyld` needs | H15 | **unmeasured** — the first live helper run (#30) records it |
+
 ---
 
 ### Re-baseline: E1 + E8 + E14a re-run — macOS 26.7 (25G229) · Xcode 26.5 (17F42) · x86_64

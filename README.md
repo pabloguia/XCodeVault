@@ -1,110 +1,96 @@
 # XCodeVault
 
-Honest accounting and safe relocation of the disk space Apple developer tooling consumes —
-simulator runtimes, CoreSimulator data, DerivedData, device support, caches, archives — while
-keeping Xcode, Simulator, `xcodebuild`, `simctl` and `devicectl` working.
+XCodeVault shows what Xcode, the Simulator and their tools keep on your Mac's internal disk, and
+frees the part that can be freed safely — while Xcode, the Simulator, `xcodebuild`, `simctl` and
+`devicectl` keep working. It is not finished: read [the honest state](#the-honest-state) before
+trusting it with anything you cannot re-create.
 
-Every mature tool in this space **deletes**; almost none **relocates**. The one prior tool that
-tries symlinks `~/Library/Developer/CoreSimulator`, which this project refuses at any risk level.
-Note what that refusal does *not* rest on: the August 2025 report that the layout breaks the
-Simulator **did not reproduce here** (E9). What E9 did show is that CoreSimulator caches the
-resolved path and recreates a `CoreSimulator` directory there after a service restart — empty in
-that run, and observed after the symlink had already been removed. That is the shadow-data failure
-mode rule 6 exists for, and an unverified report plus one demonstrated way to strand data is
-reason enough not to inherit the design. XCodeVault treats each storage category as an independent
-unit with its own strategy, and refuses to claim a strategy works until it has been measured.
+## What it does
 
-## What this is not
+- **Accounts** for developer storage per category (simulator runtimes, CoreSimulator data,
+  DerivedData, device support, caches, archives) and says which part is cleanable, relocatable
+  with Apple's own mechanisms, or neither.
+- **Cleans** the regenerable data you select, showing the plan first and journaling every change.
+- **Relocates** only through Apple-supported mechanisms, or by a verified copy to an external
+  drive you register.
+- **Diagnoses** unsafe setups, such as data written to an external drive's path while the drive was
+  unplugged, and proposes the fix. It never applies a fix on its own.
 
-- **Not a one-click space reclaimer.** Deletion is gated, planned, and shown before it happens.
-  Archives and other non-regenerable artifacts are never deleted automatically.
-- **Not a SIP workaround.** It never disables SIP, never asks you to, and never modifies `/System`.
-  A machine with SIP already off is outside the threat model, not a supported configuration.
-- **Not finished.** See the state below before trusting it with anything you cannot re-create.
+## Install
 
-The full list of things this project will not do, and why, is in
-[`docs/product/NON_GOALS_AND_SAFETY.md`](docs/product/NON_GOALS_AND_SAFETY.md).
+- **Today — build from source** (macOS 14 or later, a recent Xcode):
 
-## State, honestly
+  ```bash
+  git clone https://github.com/pabloguia/XCodeVault.git
+  cd XCodeVault
+  swift build
+  ```
 
-| area | state |
-|---|---|
-| Accounting (`scan`, `status`, `report`, `doctor`, `volumes`, `journal`, `compatibility`) | Working. Read-only, `--json` on every read command. |
-| Cleanup and Apple-supported relocation (`clean`, `locations`, `runtime`) | Working, journaled, gated. **These change your machine**, and every underlying strategy is still labelled **experimental** — see `compatibility`. |
-| Vault / external migration (`vault`, `externalize`, `restore`, `migration`) | **Experimental.** Verified copy with explicit, opt-in source removal. |
-| GUI | First slice only. Builds, launches, read-only plus the clean flow. |
-| Privileged helper | Built and security-reviewed, **not reachable from any client** — it needs a signed bundle first. |
-| Releases | None. Nothing is signed or notarised. |
-| CI | Configured for `macos-15` and `macos-26`. Has never executed: this repository had no remote until now. |
+  `scripts/bundle-app.sh` assembles `dist/XCodeVault.app`. Builds made this way are unsigned.
+- **Planned — not available yet:** a signed, notarized DMG and a Homebrew cask.
 
-**The important caveat.** Every compatibility claim in
-[`docs/architecture/COMPATIBILITY_MATRIX.md`](docs/architecture/COMPATIBILITY_MATRIX.md) was
-measured on a **single** Mac — one architecture, two macOS builds of the same major version, one
-Xcode, one external volume.
-Several findings are therefore marked `probable` rather than `verified`, and no amount of review
-upgrades them. Publishing this repository is how that changes: CI on two macOS versions, and
-results from machines that are not the author's. See
-[`docs/adr/0005-public-open-source-release.md`](docs/adr/0005-public-open-source-release.md).
+## First run
 
-## Build and run
+Nothing is asked for. The first run scans and shows; it changes nothing.
 
 ```bash
-swift build
-
-.build/debug/xcodevaultctl status         # quick environment summary
-.build/debug/xcodevaultctl scan           # what is consuming the internal SSD, per category
-.build/debug/xcodevaultctl doctor         # broken/unsafe configurations, proposed repairs
-.build/debug/xcodevaultctl compatibility  # every category, strategy, evidence status
-.build/debug/xcodevaultctl volumes        # mounted volumes and whether they qualify
+.build/debug/xcodevaultctl scan      # what is using the internal disk, per category
+.build/debug/xcodevaultctl doctor    # unsafe or broken setups, and the proposed fix for each
+.build/debug/xcodevaultctl clean     # the cleanup plan; nothing is deleted without --apply
 ```
 
-`scan`, `status`, `report`, `doctor`, `xcode`, `runtime list`, `volumes`, `journal` and
-`compatibility` are read-only and never change anything. `clean`, `locations set-*`, `runtime delete/import/offload`,
-`externalize`, `restore` and `bench` (which writes a temporary 256 MB file) do change things; each
-of the first five shows a plan first, and every change is recorded in a journal you can inspect
-with `journal`.
+## Permissions
 
-`report` exists to be pasted into an issue: it redacts your home directory.
+By design (ADR-0007), XCodeVault asks for a permission only when an action needs it, and says why;
+the last column says what this build does.
 
-Requires macOS 14 or later (ADR-0001) and a recent Xcode.
+| Permission | Asked for when | Why | How it is asked | In this build |
+|---|---|---|---|---|
+| Full Disk Access | A scan could not read folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals | The app opens the exact System Settings pane; you switch it on; the app notices and scans again. Code cannot grant it, so the app never tries | Planned (see `STATUS.md`) |
+| Privileged helper — a background item that runs as root, approved once by an administrator | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root; the helper can do only a fixed list of actions on paths it resolves itself | A one-sentence sheet with **Allow**; then macOS asks you to approve the helper in Login Items & Extensions | Not available: it needs a signed build (issue #30). The vault folder is created with the command `vault init` prints; the dyld cache is listed, never cleaned |
 
-## How claims are made here
+XCodeVault never asks for your password itself, never runs `sudo`, and never opens a root shell.
+Details, and the rest of the product, are in the [user guide](docs/USER_GUIDE.md).
 
-This project is research-first, and the docs are the product as much as the code is:
+## What it never does
 
-- [`docs/research/`](docs/research/) — sourced findings, and the raw evidence behind each one.
-- [`docs/architecture/HYPOTHESES.md`](docs/architecture/HYPOTHESES.md) — the open questions, H1–H9.
-- [`docs/architecture/EXPERIMENTS.md`](docs/architecture/EXPERIMENTS.md) — the gating experiments.
-- [`docs/architecture/COMPATIBILITY_MATRIX.md`](docs/architecture/COMPATIBILITY_MATRIX.md) — what
-  holds on which macOS/Xcode combination, with evidence.
+- Disable SIP, ask you to, or modify `/System`.
+- Run a root shell. Root work goes only through the helper's fixed list of actions.
+- Delete Archives, or anything else that cannot be regenerated, unless you choose that item.
+- Delete a source before its copy has been verified.
+- Symlink `~/Library/Developer`, its `CoreSimulator`, or its `DeveloperDiskImages`.
+
+## The honest state
+
+| Area | State |
+|---|---|
+| Accounting (`scan`, `status`, `report`, `doctor`, `volumes`, `journal`, `compatibility`) | Working. Read-only; `--json` on every read command. |
+| Cleanup and Apple-supported relocation (`clean`, `locations`, `runtime`) | Working, journaled, gated. These change your machine, and every strategy stays labelled **experimental** until it meets the Definition of Done. |
+| Vault / external migration (`vault`, `externalize`, `restore`, `migration`) | **Experimental.** Verified copy; the source is removed only when you opt in. |
+| GUI | First slice: read-only views plus the clean flow. |
+| Privileged helper | Built and security-reviewed; not reachable from any client. It needs a signed build and has never run live (issue #30). |
+| Releases | None. Nothing is signed or notarized. |
+| CI | Every push to `main` and every pull request, on `macos-15` and `macos-26`. |
+
+Every compatibility claim was measured on a single Mac — one architecture, two macOS builds of the
+same major version, one Xcode. What was not measured is marked pending in
+[`docs/architecture/COMPATIBILITY_MATRIX.md`](docs/architecture/COMPATIBILITY_MATRIX.md).
+
+## For contributors
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — the contribution this project is short of is an experiment
+  run on a Mac that is not the author's. Read [`SECURITY.md`](SECURITY.md) before reporting
+  anything about the root helper.
+- [`CLAUDE.md`](CLAUDE.md) and [`docs/product/NON_GOALS_AND_SAFETY.md`](docs/product/NON_GOALS_AND_SAFETY.md) — the safety rules in full.
+- [`docs/research/`](docs/research/), [`docs/architecture/HYPOTHESES.md`](docs/architecture/HYPOTHESES.md),
+  [`docs/architecture/EXPERIMENTS.md`](docs/architecture/EXPERIMENTS.md) — findings, open questions, experiments.
 - [`docs/adr/`](docs/adr/) — decisions, including the ones that reversed earlier decisions.
-
-A strategy is labelled **experimental** in code, CLI help, UI and docs until it meets the Definition
-of Done in [`docs/product/NON_GOALS_AND_SAFETY.md`](docs/product/NON_GOALS_AND_SAFETY.md). "The copy
-succeeded" is not that definition.
-
-## Safety rules
-
-Never disables SIP. Never modifies `/System`. Never symlinks `~/Library/Developer`, its
-`CoreSimulator`, or its `DeveloperDiskImages`. Never deletes a source before a migration is verified
-and reversible. Never auto-deletes Archives. Treats a disconnected external volume as a first-class
-failure mode rather than an accident. The privileged helper exposes an allowlisted API only — no
-arbitrary shell, no client-supplied paths.
-
-Full list in [`CLAUDE.md`](CLAUDE.md) and
-[`docs/product/NON_GOALS_AND_SAFETY.md`](docs/product/NON_GOALS_AND_SAFETY.md).
-
-## Contributing
-
-The contribution this project is short of is **a run of an experiment on a machine that is not the
-author's**. See [`CONTRIBUTING.md`](CONTRIBUTING.md), and
-[`SECURITY.md`](SECURITY.md) before reporting anything about the root helper.
+- [`STATUS.md`](STATUS.md) — what is in flight and what is next.
 
 ## License
 
-[MIT](LICENSE).
-
-`xcodevaultctl` statically links [swift-argument-parser](https://github.com/apple/swift-argument-parser),
-which is Apache-2.0 with the Runtime Library Exception, and it ships inside the app bundle and the
-Homebrew cask. [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) carries its full licence text and
-the clause-by-clause reasoning; the same file is copied into `XCodeVault.app/Contents/Resources/`.
+[MIT](LICENSE). `xcodevaultctl` statically links
+[swift-argument-parser](https://github.com/apple/swift-argument-parser) (Apache-2.0 with the Runtime
+Library Exception) and ships inside the app bundle and the Homebrew cask;
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) carries its licence text and the reasoning, and is
+copied into `XCodeVault.app/Contents/Resources/`.
