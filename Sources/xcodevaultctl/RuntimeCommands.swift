@@ -32,7 +32,7 @@ extension Runtime {
 
     struct Export: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Download a runtime installer to a Runtime Library directory (`xcodebuild -downloadPlatform … -exportPath`).")
+            abstract: "Experimental. Download a runtime installer to a Runtime Library directory (`xcodebuild -downloadPlatform … -exportPath`).")
         @Argument(help: "iOS | watchOS | tvOS | visionOS") var platform: String
         @Option(name: .long, help: "Destination directory (your Runtime Library, e.g. on an external APFS volume).") var to: String
         @Option(name: .long, help: "OS version, e.g. 26.5 (feature-detected; omit for the matching runtime).") var buildVersion: String?
@@ -56,7 +56,8 @@ extension Runtime {
     }
 
     struct Import: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Install a runtime from a Runtime Library installer (`xcodebuild -importPlatform`).")
+        static let configuration = CommandConfiguration(
+            abstract: "Experimental. Install a runtime from a Runtime Library installer (`xcodebuild -importPlatform`).")
         @Argument(help: "Path to the .dmg installer.") var dmg: String
         @Flag(name: .long, help: "Only run the preflight checks (staging space, capability).") var preflight = false
         func run() throws {
@@ -72,7 +73,7 @@ extension Runtime {
 
     struct Library: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "List runtime installers in a Runtime Library directory and whether each installed runtime has one.")
+            abstract: "Experimental. List runtime installers in a Runtime Library directory and whether each installed runtime has one.")
         @OptionGroup var global: GlobalOptions
         @Option(name: .long, help: "Runtime Library directory.") var dir: String
         struct Row: Encodable { let installer: RuntimeInstaller?; let runtime: SimulatorRuntime? }

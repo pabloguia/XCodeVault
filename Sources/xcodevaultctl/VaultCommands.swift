@@ -8,7 +8,7 @@ struct Vault: ParsableCommand {
         subcommands: [Init.self, Status.self, Forget.self], defaultSubcommand: Status.self)
     struct Init: ParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Register a mounted external APFS volume as a vault (creates <mount>/\(VaultVolume.directoryName) and a sentinel).",
+            abstract: "Experimental. Register a mounted external APFS volume as a vault (creates <mount>/\(VaultVolume.directoryName) and a sentinel).",
             discussion: """
                 Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
                 to use a folder you can write, or create the default one with the command this prints when it fails.
@@ -35,6 +35,8 @@ struct Vault: ParsableCommand {
         }
     }
     struct Status: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Experimental. Registered vault volumes and the state of each: verified by UUID and sentinel, or why not.")
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let checks = try VaultVerifier().checkAll()
@@ -45,7 +47,7 @@ struct Vault: ParsableCommand {
         }
     }
     struct Forget: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Remove a volume from the registry (data on the volume is untouched).")
+        static let configuration = CommandConfiguration(abstract: "Experimental. Remove a volume from the registry (data on the volume is untouched).")
         @Argument var uuid: String
         func run() throws { try VaultRegistry().forget(uuid: uuid); print("Forgot \(uuid).") }
     }

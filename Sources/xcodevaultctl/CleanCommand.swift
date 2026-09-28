@@ -6,7 +6,7 @@ import XCodeVaultCore
 
 struct Clean: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Plan (default) or apply deletion of regenerable developer data. Never touches Archives or anything non-regenerable.",
+        abstract: "Experimental. Plan (default) or apply deletion of regenerable developer data. Never touches Archives or anything non-regenerable.",
         discussion: """
             Without --apply this only prints the plan. Deletions are journaled to \
             ~/Library/Application Support/XCodeVault/journal.jsonl. Root-owned categories are listed \

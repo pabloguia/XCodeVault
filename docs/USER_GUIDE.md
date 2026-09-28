@@ -64,10 +64,15 @@ These never change anything.
 | `compatibility` | Every category with its strategy, evidence status and privilege level |
 | `volumes` | Mounted volumes and whether each qualifies as a vault |
 | `xcode list` | Installed Xcodes and what each supports |
-| `runtime list`, `runtime library --dir <dir>` | Installed runtimes; the installers in a Runtime Library folder |
+| `runtime list` | Installed runtimes |
+| `runtime library --dir <dir>` (*experimental*) | The installers in a Runtime Library folder, and whether each installed runtime has one |
 | `locations show` | Xcode's DerivedData, Archives and compilation-cache locations |
 | `journal` | The last 50 journal entries by default (`--last N`): every change XCodeVault made, and any interrupted operation |
-| `vault status`, `migration status` | Registered vault volumes; interrupted migrations |
+| `vault status` (*experimental*) | Registered vault volumes, and whether each is verified |
+| `migration status` (*experimental*) | Interrupted migrations and leftover partial copies |
+
+The *experimental* rows read the state of an experimental strategy (the Runtime Library, vaults and
+migrations), so their help carries the label too.
 
 `bench <dir>` does not touch your data, but it writes and then removes a temporary 256 MB file in `<dir>`.
 

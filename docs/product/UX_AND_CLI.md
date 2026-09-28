@@ -51,6 +51,11 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   --i-confirm-deleting-non-regenerable-data]`, `restore --category … --vault … --name … [--to …] --apply`,
   `migration abort <id>`, `migration resume <id>`,
   `migration forget <id> --i-verified-both-copies-myself`.
+- Labels (rule 10): every command whose strategy is experimental — read-only ones included, such as
+  `runtime library`, `vault status` and `migration status` — says so in its `abstract`, the first line
+  of its own `--help` and the only line the parent's command list shows; a `discussion:` shows in the
+  command's own help only. `runtime delete` and `locations reset-*` carry no label.
+  `CLIExperimentalLabelTests` pins the labels, and the absence on `runtime delete`, against the catalog.
 - Not implemented (from the original candidate list): `plan` (folded into each command's
   dry run), `verify` (folded into externalize/restore; a standalone re-verify is a follow-up),
   `mount status` (no canonical-mount strategy in v1, ADR-0004), `runtime install`

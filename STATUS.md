@@ -2335,3 +2335,23 @@ itself loses nothing" (only a forced unmount was measured; the physical unplug i
 "Nothing in this repository can produce one", said of a signed build (the scripts can; the
 certificate is what is missing). The struck Full Disk Access claim also survived where it originated,
 `FINDINGS-2026-09-05.md`, and is corrected there too.
+
+## 2026-09-28 — CLI help: the experimental label reaches every subcommand
+
+A subcommand's `--help` shows its own `CommandConfiguration`, not its group's. Measured on the built
+binary: `vault init`, `vault status`, `vault forget` and the four `migration` subcommands opened
+their help without the "Experimental." their groups carry; `runtime export`, `runtime import` and
+`runtime library` had no label at all; `externalize` and `clean` had it only in the discussion, which
+the top-level command list does not show. All of them now say it in the abstract. `runtime delete`
+(Apple's `simctl runtime delete`) and `locations reset-*` stay unlabelled; the three `locations set-*`
+already carried the label, at the end of their abstract. `docs/USER_GUIDE.md` marks the three
+read-only commands that read an experimental strategy's state.
+
+`CLIExperimentalLabelTests` reads each abstract from the `xcodevaultctl` sources (the executable
+target cannot be imported) and ties it to the catalog entry that makes the strategy experimental;
+`runtime delete` is the control that the check can say no. It reads source text, not the help
+ArgumentParser renders. Full suite: 460 tests, 0 failures. Five mutants, each killed by exactly the
+expected test: the label removed from `runtime export`; from `externalize`'s abstract with its
+discussion still saying "Experimental:"; from the nested `vault init`; the Runtime Library rated
+`.verified` in the catalog; and the instrument made to read the whole file, which only the `runtime
+delete` control catches.

@@ -5,7 +5,7 @@ import XCodeVaultCore
 struct Externalize: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract:
-            "Copy a cold-storage category (Archives) to a verified vault volume with deep verification. The source is kept unless --remove-source-after-verify is given.",
+            "Experimental. Copy a cold-storage category (Archives) to a verified vault volume with deep verification. The source is kept unless --remove-source-after-verify is given.",
         discussion:
             "Experimental: labeled so until the Definition of Done is met. Never merges into existing vault data; never removes a source without re-verification."
     )
@@ -84,13 +84,15 @@ struct Migration: ParsableCommand {
     struct Resume: ParsableCommand {
         static let configuration = CommandConfiguration(
             abstract:
-                "Finish a cleanup interrupted after verification: re-verify the renamed-aside original against the vault copy, then remove it (or restore it if they differ)."
+                "Experimental. Finish a cleanup interrupted after verification: re-verify the renamed-aside original against the vault copy, then remove it (or restore it if they differ)."
         )
         @Argument var operationID: String
         @Flag(name: .customLong("i-confirm-deleting-non-regenerable-data"), help: "Required for Archives.") var confirmNonRegenerable = false
         func run() throws { print(try MigrationEngine().resume(operationID: operationID, confirmNonRegenerable: confirmNonRegenerable)) }
     }
     struct Status: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Experimental. Interrupted migrations, leftover partial copies, and copies you closed out by hand that may still be on disk.")
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let interrupted = try Journal().interrupted().filter { $0.kind == .migration }
@@ -128,7 +130,7 @@ struct Migration: ParsableCommand {
     struct Forget: ParsableCommand {
         static let configuration = CommandConfiguration(
             abstract:
-                "Close out a migration this tool will not finish for you, after you have compared both copies by hand. Touches no files; only clears the journal entry so migrations can run again."
+                "Experimental. Close out a migration this tool will not finish for you, after you have compared both copies by hand. Touches no files; only clears the journal entry so migrations can run again."
         )
         @Argument var operationID: String
         @Flag(name: .customLong("i-verified-both-copies-myself"), help: "Required. Asserts you compared the vault copy and the original yourself.")
@@ -141,7 +143,8 @@ struct Migration: ParsableCommand {
     struct Abort: ParsableCommand {
         static let configuration = CommandConfiguration(
             abstract:
-                "Remove the partial destination copy of a migration interrupted before verification; refuses after verification; the source is never touched.")
+                "Experimental. Remove the partial destination copy of a migration interrupted before verification; refuses after verification; the source is never touched."
+        )
         @Argument var operationID: String
         func run() throws {
             try MigrationEngine().abort(operationID: operationID);
