@@ -119,7 +119,15 @@ public struct VaultRegistry: Sendable {
             throw VaultError("Invalid vault directory '\(relativeDirectory)'.")
         }
         let dir = mp + "/" + rel
-        guard PathSafety.isContained(dir, in: mp) else { throw VaultError("\(dir) is not inside \(mp).") }
+        // Where the folder will be created, missing parents included. `isContained` resolves the parent with `realpath`,
+        // which fails when any folder on the way is missing, so `--directory a/b/c` with `a/b` absent was refused as
+        // "not inside" before `createDirectory`, or the command naming each missing folder, could be reached
+        // (migration-safety review of deliverable 4, F9). A path that cannot be resolved still refuses, as itself.
+        let inside: Bool
+        do { inside = try PathSafety.isContainedAllowingMissingParents(dir, in: mp) } catch {
+            throw VaultError("Cannot tell where \(dir) would be created: \(error). Nothing was written.")
+        }
+        guard inside else { throw VaultError("\(dir) is not inside \(mp).") }
         if rel.hasPrefix(".TemporaryItems") {
             try journal.record(
                 kind: .migration, state: .planned, summary: "warning: vault directory under .TemporaryItems is not durable (macOS may purge it)", paths: [dir])

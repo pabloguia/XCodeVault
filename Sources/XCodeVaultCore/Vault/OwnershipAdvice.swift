@@ -44,10 +44,9 @@ public enum OwnershipAdvice {
     /// folder instead. `chown -h`, and no `-m`, as there. Folders created on the way stay root's, as `install -d`
     /// left them: only the vault is handed over.
     ///
-    /// What `vault init` reaches today is the one-folder case. Its containment check resolves the vault's parent
-    /// with `realpath`, which fails when any folder on the way is missing, so a missing parent stops it earlier,
-    /// with a misleading "not inside" error of its own (migration-safety review of deliverable 4). The
-    /// several-folder output is tested here and not printed by anything yet.
+    /// `vault init` reaches the several-folder case since 2026-09-28. Until then its containment check resolved the
+    /// vault's parent with `realpath`, which fails when any folder on the way is missing, so a missing parent
+    /// stopped it earlier with a misleading "not inside" (migration-safety review of deliverable 4, F9).
     public static func createVaultDirectoryCommand(mountPoint: String, relativeDirectory: String) -> String {
         createVaultDirectoryCommand(mountPoint: mountPoint, relativeDirectory: relativeDirectory, exists: pathExists)
     }

@@ -268,6 +268,71 @@ final class VaultTests: XCTestCase {
         XCTAssertTrue(readable.remediation?.contains("if it only contains regenerable data") == true, readable.remediation ?? "no remediation")
     }
 
+    // MARK: - A nested --directory whose parents are missing (migration-safety review of deliverable 4, F9)
+    //
+    // The containment check resolved the vault's parent with `realpath`, which fails when any folder on the way is
+    // missing, so `vault init --directory a/b/c` with `a/b` absent was refused as "not inside" before `createDirectory`,
+    // or the command naming each missing folder, could be reached.
+
+    private func registerNested(_ t: TempDir, mountPoint: String, directory: String) throws -> VaultVolume {
+        let uuid = "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D"
+        return try VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")).register(
+            fakeVolume(uuid: uuid, mountPoint: mountPoint), relativeDirectory: directory, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")),
+            isMountPoint: { _ in true }, volumeUUID: { _ in uuid })
+    }
+
+    func testANestedDirectoryWhoseParentsAreMissingIsCreated() throws {
+        let t = TempDir()
+        let mnt = t.dir("mnt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mnt + "/a"), "precondition: no folder on the way exists")
+        let vv = try registerNested(t, mountPoint: mnt, directory: "a/b/c")
+        XCTAssertEqual(vv.relativeDirectory, "a/b/c")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mnt + "/a/b/c/" + VaultVolume.sentinelName))
+    }
+
+    /// The same folders on a mount point this user cannot write into, which is how a root-owned volume root refuses:
+    /// the refusal is the one naming each missing folder, parents first, and not "not inside". Nothing is created.
+    func testARefusalForMissingParentsNamesThemNotContainment() throws {
+        let t = TempDir()
+        let mnt = t.dir("mnt")
+        chmod(mnt, 0o555)
+        defer { chmod(mnt, 0o755) }
+        try XCTSkipIf(access(mnt, W_OK) == 0, "this environment can write through mode 555 (running as root?)")
+        XCTAssertThrowsError(try registerNested(t, mountPoint: mnt, directory: "a/b/c")) {
+            let text = "\($0)"
+            XCTAssertFalse(text.contains("is not inside"), text)
+            XCTAssertTrue(text.contains("sudo mkdir '\(mnt)/a' '\(mnt)/a/b' '\(mnt)/a/b/c' && sudo chown -h "), text)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mnt + "/a"))
+    }
+
+    /// Fail-closed for symlinks, as `PathSafety`'s rules require: a folder on the way that is a symlink out of the
+    /// volume refuses, and nothing is created where it points. The control is the same link pointing at a folder
+    /// inside the volume, which registers, so the refusal is about leaving the volume.
+    func testAFolderOnTheWayThatLeavesTheVolumeRefuses() throws {
+        let t = TempDir()
+        let mnt = t.dir("mnt")
+        let outside = t.dir("outside")
+        let link = t.symlink("mnt/a", to: outside)
+        XCTAssertThrowsError(try registerNested(t, mountPoint: mnt, directory: "a/b/c")) { XCTAssertTrue("\($0)".contains("is not inside"), "\($0)") }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: outside), [], "nothing was created outside")
+
+        try FileManager.default.removeItem(atPath: link)
+        let inside = t.dir("mnt/inside")
+        t.symlink("mnt/a", to: inside)
+        XCTAssertNoThrow(try registerNested(t, mountPoint: mnt, directory: "a/b/c"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inside + "/b/c/" + VaultVolume.sentinelName))
+    }
+
+    /// A dangling symlink on the way exists and cannot be resolved, so where the vault would be is unknown: the
+    /// refusal says so, rather than "not inside".
+    func testADanglingSymlinkOnTheWayRefuses() throws {
+        let t = TempDir()
+        let mnt = t.dir("mnt")
+        t.symlink("mnt/a", to: t.path + "/nowhere")
+        XCTAssertThrowsError(try registerNested(t, mountPoint: mnt, directory: "a/b/c")) { XCTAssertTrue("\($0)".contains("Cannot tell where"), "\($0)") }
+    }
+
     func testRegisterWithRelativeDirectoryAndRegistryBackCompat() throws {
         let t = TempDir()
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))

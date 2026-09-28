@@ -254,6 +254,29 @@ by design, when run without arguments: by hand, and by CI on every push, on runn
 `xcode list`, `scan`, `status` and `report` print the paths of the Xcodes found as they are, a planted
 folder's name included.
 
+## Fixed 2026-09-28: `vault init --directory` refused a nested folder whose parents were missing (on `main` since 2026-09-06)
+
+`vault init <mount> --directory a/b/c` with `a/b` missing was refused as "…/a/b/c is not inside <mount>":
+the containment check resolved the folder's parent with `realpath`, which fails when any folder in the path
+is missing. It refused, so nothing was written; the message was wrong, and the refusal that names each
+folder to create was never reached. Found by the migration-safety review of deliverable 4 of the
+permissions plan.
+
+Fixed: the check resolves the deepest folder that exists and appends the missing ones as written. A symlink
+on the way that leaves the volume is "not inside"; a dangling one, or a folder that cannot be looked up,
+refuses as "cannot tell". `vault init` then creates the missing folders, or, when it is not allowed to,
+prints one `sudo mkdir` naming each of them, parents first. The check dates from `--directory` (0c79d94,
+2026-09-06), which the public tag `pre-review-2026-09-17` contains; there has been no release. On an earlier
+build, with the drive connected, create the folders on the way first, one `mkdir` per folder rather than
+`mkdir -p`. Run the `sudo install -d` line that build prints for the vault folder only while the drive is
+connected: `install -d`, like `mkdir -p`, creates every missing folder, and after an eject that includes the
+drive's mount point, on the internal disk.
+
+Still open (STATUS.md, 2026-09-28, the F9 entry): a vault folder that resolves off its volume — through a
+symlink put on the way between the check and the creation, or through a folder on the way that is another
+volume's mount point, with no race — reads as VERIFIED, before and after a copy into it is refused. A
+creation that fails part way leaves the folders already made, with nothing recorded.
+
 ## Compatibility
 
 Every claim in `docs/architecture/COMPATIBILITY_MATRIX.md` was measured on one Mac, one

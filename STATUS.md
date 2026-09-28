@@ -2928,3 +2928,113 @@ Declared gaps:
   review agrees): the decoders are the journal, the registry, the sentinel and `simctl`'s output.
 - Of the `runtime` verbs, only `delete`'s refusal was run end to end; `export`, `import` and `offload` share
   `Runtime.selected` and were not run.
+
+## 2026-09-28 — F9: `vault init --directory` with missing folders reaches the step that creates them
+
+Found by the migration-safety review of deliverable 4 of the permissions plan. `VaultRegistry.register` checked
+that the vault folder is inside the volume with `PathSafety.isContained`. That resolves the folder's parent with
+`realpath(3)`, which fails when any folder in the path is missing. So `vault init <mount> --directory a/b/c` with
+`a/b` absent was refused as "…/a/b/c is not inside <mount>". It never reached
+`createDirectory(withIntermediateDirectories: true)`, nor the refusal that names each missing folder
+(`OwnershipAdvice.createVaultDirectoryCommand`). It refused, so nothing was written; the message was wrong, and
+the nested case could not be reached. Since `--directory` was added (0c79d94, 2026-09-06), which the public tag
+`pre-review-2026-09-17` contains. No release.
+
+What changed:
+- `PathSafety.canonicalizeAllowingMissingParents` and `isContainedAllowingMissingParents`, both internal. The
+  deepest folder on the path that exists, by `lstat`, is resolved through `realpath`, and the missing folders
+  under it are appended as written. `..` and `.` refuse, as in `canonicalize`. A symlink on the way counts as
+  existing and is resolved: pointing off the volume it is "not inside", and dangling it refuses. Any `lstat`
+  error other than "no such file" refuses: `EACCES`, `ENOTDIR`. With every parent present the answer is
+  `canonicalize`'s. The containment check does not check that the root exists; the doc comment says so, and
+  that `register` asserts the mount before and after it.
+- `canonicalize` and `isContained` are unchanged, so every other caller — the migration engine, journal
+  forensics, the catalog, `CleanPlanner` and `XcodeLocations` — gets the answers it got before.
+- `register` uses the new check. A path it cannot resolve refuses as "Cannot tell where … would be created: ….
+  Nothing was written.", which is not "not inside".
+- `OwnershipAdvice`'s comment no longer says the several-folder command is unreachable; the user guide's
+  `vault init` row names the folders created on the way; and `KNOWN-ISSUES-AT-PUBLICATION.md` has a "Fixed
+  2026-09-28" section with what an earlier build needs.
+
+Measured on this machine:
+- **The path shapes**, pinned by `PathSafetyMissingParentsTests`, which pass here:
+  - every parent present: the same answer as `canonicalize`, a dangling symlink as the last component included;
+  - missing folders: appended to the deepest one, resolved, also through a symlinked path to the root;
+  - a symlink on the way: pointing off the root, not contained; re-pointed into it, contained;
+  - a dangling symlink on the way refuses with "No such file", a path under a regular file with "Not a
+    directory", and `..`, `.` and a relative path are refused;
+  - a folder at mode `000` on the way refuses with "Permission denied", and the same path resolves once it is
+    searchable again.
+- **`register`**, driven with the mount-point and volume-UUID seams on scratch folders, where it creates real
+  folders:
+  - `--directory a/b/c` with `a` missing registers, and writes the sentinel in `a/b/c`;
+  - on a volume root at mode `555`, the refusal names `'<mnt>/a' '<mnt>/a/b' '<mnt>/a/b/c'` in one `sudo mkdir`,
+    does not say "is not inside", and creates nothing;
+  - a folder on the way that is a symlink off the volume refuses as "not inside" and creates nothing where it
+    points; the same link pointing into the volume registers;
+  - a dangling symlink on the way refuses as "Cannot tell where".
+- **Red first.** On the unfixed code all four new `VaultTests` failed, each with "…/mnt/a/b/c is not inside …",
+  where they expected a registration, the folders named, or "Cannot tell where". `PathSafetyMissingParentsTests`
+  tests the two functions this change added, so it was written after them; the mutants below are its red.
+- **Not run end to end.** `vault init` reads the mount and its UUID from the system, so it needs a mounted
+  volume, which here means attaching a disk image. That was not done unasked.
+- **Suite**: the run in the F3 entry above. **Mutants**: seven, at the same snapshot and the same way, after the
+  same gold proof; all seven were also run at b387e61 and killed there.
+  - `register` reverted to `isContained`: all four new `VaultTests`.
+  - Any `lstat` error read as "missing": the `ENOTDIR` and `EACCES` tests. At b387e61 both failed with "did not
+    throw" (the per-mutant run logs), and the review confirmed with a small C program that `realpath` of a
+    mode-`000` folder succeeds while a path beneath it answers `EACCES`: the `EACCES` guard is what refuses there.
+  - The missing folders not appended: the appending test, and the `EACCES` test's positive control.
+  - A parent `realpath` cannot resolve used as written, the fail-open direction: the dangling-symlink tests in
+    both classes.
+  - "Cannot tell" read as "not inside": the dangling-symlink `VaultTests` test. Both refuse, so this pins the
+    wording only.
+  - The containment answer ignored: the symlink-off-the-volume test, where the mutant created `b` in the folder
+    the link points to.
+  - The prefix without its separator: the appending test's `mntx` case.
+
+Review: **migration safety, round 1** at 43ec909: APPROVE. It confirmed the check fails closed when it runs,
+with a harness over the edge cases (symlink loops, links to files, over-long names, unsearchable folders,
+dangling links, links out and back), and that no other caller's answer changed. Its notes, all taken:
+- two declared gaps, both below: what the verifier makes of a vault folder that resolves off the volume, and a
+  creation that fails part way, which it measured;
+- a doc comment saying the check does not check the root exists;
+- the complete list of other callers;
+- a "Fixed" section in the ledger;
+- two assertions that could never fail — that a dangling symlink's target was not created — which are gone.
+  Nothing can create under a dangling link — the kernel answers `ENOENT` there — and `mkdir` of the link itself
+  answers `EEXIST`, as the reviewer found. The earlier text here said "and creates nothing" for that case; it
+  was true by construction, not measured, and is gone too.
+
+**Round 2** at 0955743: REQUEST CHANGES, for three sentences; the code approval stands. All taken:
+- The ledger's advice for an earlier build now says to create the folders one `mkdir` at a time, with the drive
+  connected. The `sudo install -d` that build prints, like `mkdir -p`, creates every missing folder, the drive's
+  mount point on the internal disk included after an eject.
+- "Until a copy is attempted" was wrong: the vault reads VERIFIED after a refused copy too.
+- The dangling-link sentence claimed more than was found: creating a file through a dangling link, rather than a
+  folder under it, creates the link's target.
+
+Two optional notes were taken as well: "to the volume" in a doc comment, and the C check of `realpath` above.
+The note that came with that check, that the "did not throw" output was not saved, was wrong, as round 3 said
+itself: it is in the per-mutant `.run` files, which its search did not include. **Round 3** at 66d86e2: APPROVE;
+its one note, that correction, is taken here.
+
+Declared gaps:
+- Between the check and `createDirectory`, a folder put on the way — a symlink where a missing folder was — is
+  followed by `createDirectory` and by the sentinel write, and the volume is registered. The same window existed
+  for folders that were present. `vault status` and `doctor` read such a vault as VERIFIED, and still do after a
+  copy into it has been refused: the verifier reads the sentinel through the path, reads no journal, and nothing
+  checks that the folder is on the volume. A folder on the way that is another volume's mount point does the
+  same, with no race. By reading, as
+  the review traced it: the migration engine's `assertVaultVolumeStillPresent` resolves the path and compares its
+  volume UUID before it writes, so a copy there refuses; `register` itself does not check again.
+- `createDirectory` makes the folders one at a time. A failure part way leaves the folders already made on the
+  volume, with no journal entry, and the printed `sudo mkdir` names only the rest. Examples are a name longer
+  than the filesystem allows, a full volume, or an inherited deny entry. The review measured this on scratch
+  folders: a 300-byte last component (Cocoa error 514) left `a` and `a/b`, and an inherited deny entry (513) left
+  `a`. For the long name, the printed command would fail with "File name too long", under a message that blames
+  root ownership. New with this change: before it, at most one folder could be created.
+- "Nothing was written." in `register`'s later refusals (no longer a mount point, an identity it cannot read, a
+  different volume) is true of the volume but not of the journal: they come after the journal line for a vault
+  under `.TemporaryItems`.
+  Pre-existing, found by the review; the new refusal comes before every write.

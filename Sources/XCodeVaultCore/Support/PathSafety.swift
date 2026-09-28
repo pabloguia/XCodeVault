@@ -73,6 +73,53 @@ public enum PathSafety {
         return p == r || p.hasPrefix(r + "/")
     }
 
+    /// `canonicalize` for a directory about to be created together with any folders missing on the way to it, which
+    /// `canonicalize` refuses: `realpath(3)` fails with `ENOENT` when any folder in the path is missing, the last
+    /// included (migration-safety review of deliverable 4, F9; measured again 2026-09-28).
+    ///
+    /// The deepest parent that exists is resolved through `realpath`, and the folders below it, which do not exist,
+    /// are appended as written; `..` and `.` are refused as in `canonicalize`, so what is appended means what it says.
+    /// Existence is `lstat`, so a symlink on the way counts as existing whatever it points at, and is resolved: one
+    /// pointing out of the root fails the comparison, and a dangling one fails `realpath` and refuses. Any `lstat`
+    /// answer but "no such file" refuses too: a folder that cannot be looked up (`EACCES`), or a path under a file
+    /// (`ENOTDIR`), is not known to be missing. With every parent present this is `canonicalize` exactly.
+    ///
+    /// Internal, and a new function rather than a change to `canonicalize`, so no other caller's answer changes.
+    static func canonicalizeAllowingMissingParents(_ path: String) throws -> String {
+        guard path.hasPrefix("/") else { throw Violation("\(path): not an absolute path") }
+        let comps = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard !comps.contains("..") && !comps.contains(".") else { throw Violation("\(path): relative components are not allowed") }
+        guard let last = comps.last else { return "/" }
+        var existing = Array(comps.dropLast())
+        var missing: [String] = []
+        while !existing.isEmpty {
+            let p = "/" + existing.joined(separator: "/")
+            var st = stat()
+            if lstat(p, &st) == 0 { break }
+            let code = errno
+            guard code == ENOENT else { throw Violation("\(p): \(String(cString: strerror(code)))") }
+            missing.insert(existing.removeLast(), at: 0)
+        }
+        let parent = "/" + existing.joined(separator: "/")
+        guard let real = realpath(parent, nil) else { throw Violation("\(parent): \(String(cString: strerror(errno)))") }
+        defer { free(real) }
+        let base = String(cString: real)
+        let tail = (missing + [last]).joined(separator: "/")
+        return base == "/" ? "/" + tail : base + "/" + tail
+    }
+
+    /// `isContained` for a directory about to be created with its missing parents. Throws when where it would be
+    /// created cannot be told, which is a different answer from "outside".
+    ///
+    /// It does not check that `root` exists: a missing root contains its would-be children here, where `isContained`
+    /// says no (migration-safety review of F9). The caller asserts that the root is there — `VaultRegistry.register`
+    /// asserts the mount before and after this check, and before it writes to the volume.
+    static func isContainedAllowingMissingParents(_ path: String, in root: String) throws -> Bool {
+        let p = try canonicalizeAllowingMissingParents(path)
+        let r = try canonicalize(root)
+        return p == r || p.hasPrefix(r + "/")
+    }
+
     // `requireContained(_:in:home:what:)` lived here until 2026-09-15 and is deliberately gone.
     // Every caller passed a category's `pathTemplates`, which for a per-device category names the
     // enclosing CoreSimulator device set rather than the category — so the check accepted the whole

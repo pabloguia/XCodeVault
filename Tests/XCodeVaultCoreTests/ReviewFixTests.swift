@@ -20,6 +20,83 @@ final class PathSafetyTests: XCTestCase {
     }
 }
 
+/// `canonicalizeAllowingMissingParents`, which `vault init` checks a nested `--directory` with, so one whose folders
+/// do not exist yet reaches the step that creates them (migration-safety review of deliverable 4, F9). `canonicalize`
+/// itself still refuses a missing parent: its other callers rely on that.
+final class PathSafetyMissingParentsTests: XCTestCase {
+    func testWithEveryParentPresentItIsCanonicalize() throws {
+        let t = TempDir()
+        t.dir("real/a")
+        t.symlink("link", to: t.path + "/real")
+        // A dangling symlink as the last component, kept as written: the last component is never resolved.
+        t.symlink("real/a/last", to: t.path + "/nowhere")
+        for path in ["/", "/xcv-no-such-folder", t.path + "/real", t.path + "/link/a/b", t.path + "/real/a/last"] {
+            XCTAssertEqual(try PathSafety.canonicalizeAllowingMissingParents(path), try PathSafety.canonicalize(path), path)
+        }
+    }
+
+    func testMissingFoldersAreAppendedToTheDeepestOneThatExists() throws {
+        let t = TempDir()
+        t.dir("mnt")
+        t.symlink("via", to: t.path + "/mnt")
+        let mnt = try PathSafety.canonicalize(t.path + "/mnt")
+        // Positive control: `canonicalize` refuses this path, the refusal `vault init` used to reach.
+        XCTAssertThrowsError(try PathSafety.canonicalize(t.path + "/mnt/a/b/c"))
+        XCTAssertEqual(try PathSafety.canonicalizeAllowingMissingParents(t.path + "/mnt/a/b/c"), mnt + "/a/b/c")
+        // The folder that exists is resolved, the missing ones are appended as written.
+        XCTAssertEqual(try PathSafety.canonicalizeAllowingMissingParents(t.path + "/via/a/b/c"), mnt + "/a/b/c")
+        XCTAssertTrue(try PathSafety.isContainedAllowingMissingParents(t.path + "/via/a/b/c", in: t.path + "/mnt"))
+        XCTAssertFalse(try PathSafety.isContainedAllowingMissingParents(t.path + "/mntx/a/b", in: t.path + "/mnt"), "a prefix without a separator")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: t.path + "/mnt/a"), "nothing was created on the way")
+    }
+
+    func testASymlinkOnTheWayIsResolved() throws {
+        let t = TempDir()
+        t.dir("mnt/inside")
+        t.dir("outside")
+        t.symlink("mnt/a", to: t.path + "/outside")
+        XCTAssertFalse(try PathSafety.isContainedAllowingMissingParents(t.path + "/mnt/a/b/c", in: t.path + "/mnt"))
+        // Control: the same link pointing into the root is contained.
+        try FileManager.default.removeItem(atPath: t.path + "/mnt/a")
+        t.symlink("mnt/a", to: t.path + "/mnt/inside")
+        XCTAssertTrue(try PathSafety.isContainedAllowingMissingParents(t.path + "/mnt/a/b/c", in: t.path + "/mnt"))
+    }
+
+    /// A path that cannot be resolved is not "outside": where it would be created is unknown, and that refuses.
+    func testWhatCannotBeResolvedRefuses() throws {
+        let t = TempDir()
+        t.dir("mnt")
+        t.symlink("mnt/dangling", to: t.path + "/nowhere")
+        t.file("mnt/file", bytes: 1)
+        XCTAssertThrowsError(try PathSafety.canonicalizeAllowingMissingParents(t.path + "/mnt/dangling/b/c")) {
+            XCTAssertTrue("\($0)".contains("/mnt/dangling: No such file"), "\($0)")
+        }
+        XCTAssertThrowsError(try PathSafety.canonicalizeAllowingMissingParents(t.path + "/mnt/file/b/c")) {
+            XCTAssertTrue("\($0)".contains("/mnt/file/b: Not a directory"), "\($0)")
+        }
+        for path in ["mnt/a", t.path + "/mnt/../mnt/a", t.path + "/mnt/./a"] {
+            XCTAssertThrowsError(try PathSafety.canonicalizeAllowingMissingParents(path), path)
+        }
+        // Positive control: a missing folder that is only missing resolves.
+        XCTAssertNoThrow(try PathSafety.canonicalizeAllowingMissingParents(t.path + "/mnt/missing/b/c"))
+    }
+
+    func testAFolderThatCannotBeSearchedRefuses() throws {
+        let t = TempDir()
+        let locked = t.dir("mnt/locked")
+        XCTAssertEqual(chmod(locked, 0o000), 0)
+        defer { chmod(locked, 0o755) }
+        var st = stat()
+        guard lstat(locked + "/probe", &st) != 0, errno == EACCES else { throw XCTSkip("this user can search a mode-000 folder") }
+        XCTAssertThrowsError(try PathSafety.canonicalizeAllowingMissingParents(locked + "/x/y")) {
+            XCTAssertTrue("\($0)".contains("/locked/x: Permission denied"), "\($0)")
+        }
+        // Positive control: searchable again, the same path resolves with its missing folders appended.
+        XCTAssertEqual(chmod(locked, 0o755), 0)
+        XCTAssertEqual(try PathSafety.canonicalizeAllowingMissingParents(locked + "/x/y"), try PathSafety.canonicalize(locked) + "/x/y")
+    }
+}
+
 final class ReviewFixMigrationTests: XCTestCase {
     typealias Fixture = MigrationEngineTests.Fixture
 
