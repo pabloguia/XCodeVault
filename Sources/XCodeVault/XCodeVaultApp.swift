@@ -2,7 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 import XCodeVaultCore
-import XCodeVaultHelperClient
 
 /// The GUI is a projection of XCodeVaultCore: every number and action here comes from the same
 /// Scanner / Doctor / CleanPlanner / VaultVerifier the CLI uses (ADR-0003).
@@ -41,7 +40,10 @@ final class AppModel {
     var vaultChecks: [VaultVolumeCheck] = []
     var cleanPlan: CleanPlan?
     var journal: [JournalEntry] = []
-    var isScanning = false
+    /// Every scan starts through this: never two at once, and one more after the running one when a scan was
+    /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
+    private var scanGate = ScanGate()
+    var isScanning: Bool { scanGate.isScanning }
     var lastError: String?
     var lastCleanResult: CleanResult?
     var fullDiskAccess: FullDiskAccessState = .unknown
@@ -54,8 +56,7 @@ final class AppModel {
     /// Nothing here connects to the helper.
     func refreshPermissions() {
         fullDiskAccess = FullDiskAccessProbe().state()
-        let client = HelperClient()
-        helperState = HelperState(status: client.serviceStatus(), teamIDIsUsable: client.hasUsableTeamID, daemonIsBundled: client.bundlesDaemon)
+        helperState = LiveHelper().state()
     }
 
     /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
@@ -71,23 +72,104 @@ final class AppModel {
         await refresh()
     }
 
+    /// Does not clear `lastError`: the alert clears it when dismissed, and `perform(_:)` reports an outcome and
+    /// then asks for a rescan, which would otherwise erase the error before it was seen.
     func refresh() async {
+        guard scanGate.requestScan() else { return }
+        repeat {
+            refreshPermissions()
+            let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
+                () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
+                // No capability detection: it runs `xcodebuild` and `simctl` from every bundle that calls itself
+                // Xcode in /Applications or ~/Applications, inside the app's grant. Nothing in the app reads it.
+                let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
+                let doctor = Doctor()
+                let findings = doctor.diagnoseAll(report: report)
+                let checks = (try? VaultVerifier().checkAll()) ?? []
+                let plan = CleanPlanner().plan(report: report)
+                let journal = (try? Journal().entries()) ?? []
+                return (report, findings, checks, plan, journal)
+            }.value
+            self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
+            self.journal = journal.suffix(100).reversed()
+        } while scanGate.scanEnded()
+    }
+
+    // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
+
+    /// A root action waiting on the helper's approval: set when the user chose one and the helper still needs
+    /// approving; `showsHelperSheet` presents the one-sentence explanation with **Allow**.
+    var pendingPrivilegedAction: PrivilegedAction?
+    var showsHelperSheet = false
+    /// Non-nil while waiting for the user to approve the helper in System Settings.
+    var helperProgress: String?
+    var lastPrivilegedResult: String?
+    private var approvalTask: Task<Void, Never>?
+
+    /// Every button that runs a root action comes through here and decides by `helperState.actionControl`, the
+    /// tested function, never on its own.
+    func request(_ action: PrivilegedAction) {
+        switch helperState.actionControl {
+        case .run:
+            Task { await perform(action) }
+        case .requestHelper:
+            pendingPrivilegedAction = action
+            showsHelperSheet = true
+        case .notAvailableInThisBuild:
+            return  // no button is shown in this state (ADR-0007)
+        }
+    }
+
+    /// **Allow** in the sheet (with the action) and **Install…** in Permissions (without one).
+    ///
+    /// One wait at a time: a second request replaces the running wait instead of adding one, which would run its
+    /// own action whenever the helper came up (migration-safety and helper-security reviews of deliverable 4).
+    func installHelper(then action: PrivilegedAction?) {
+        approvalTask?.cancel()
+        showsHelperSheet = false
+        pendingPrivilegedAction = nil
+        helperProgress = "Waiting for you to approve XCodeVault in System Settings ▸ General ▸ Login Items & Extensions…"
+        approvalTask = Task {
+            let outcome = await HelperApprovalFlow(helper: LiveHelper()).run()
+            // Cancelled by Stop or by a newer request: this wait no longer owns the progress text, or the action.
+            guard !Task.isCancelled else { return }
+            helperProgress = nil
+            approvalTask = nil
+            refreshPermissions()
+            switch outcome {
+            case .enabled:
+                if let action { await perform(action) }
+            case .notAvailableInThisBuild:
+                lastError = HelperState.unavailableInThisBuild.why
+            case .timedOut:
+                lastError = "macOS has not approved the helper yet. Approve it in System Settings ▸ General ▸ Login Items & Extensions, then try again."
+            case .cancelled:
+                break
+            case .failed(let why):
+                lastError = why
+            }
+        }
+    }
+
+    /// The cancelled wait returns without touching anything, so the state it would have cleared is cleared here.
+    func stopWaitingForApproval() {
+        approvalTask?.cancel()
+        approvalTask = nil
+        helperProgress = nil
         refreshPermissions()
-        isScanning = true; lastError = nil
-        let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
-            () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
-            // No capability detection: it runs `xcodebuild` and `simctl` from every bundle that calls itself
-            // Xcode in /Applications or ~/Applications, inside the app's grant. Nothing in the app reads it.
-            let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
-            let doctor = Doctor()
-            let findings = doctor.diagnoseAll(report: report)
-            let checks = (try? VaultVerifier().checkAll()) ?? []
-            let plan = CleanPlanner().plan(report: report)
-            let journal = (try? Journal().entries()) ?? []
-            return (report, findings, checks, plan, journal)
-        }.value
-        self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan; self.journal = journal.suffix(100).reversed()
-        isScanning = false
+    }
+
+    func perform(_ action: PrivilegedAction) async {
+        switch await PrivilegedActionRunner(helper: LiveHelper()).run(action) {
+        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess].compactMap { $0 }.joined(separator: "\n\n")
+        case .refused(let why), .failed(let why): lastError = why
+        }
+        await refresh()
+    }
+
+    func uninstallHelper() async {
+        do { try await LiveHelper().unregister() } catch { lastError = "\(error)" }
+        refreshPermissions()
     }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
@@ -135,7 +217,7 @@ struct MainView: View {
                             report: r, findings: model.findings, fullDiskAccess: model.fullDiskAccess,
                             openSettings: { model.openFullDiskAccessSettings() })
                     case .storage: StorageView(report: r)
-                    case .doctor: DoctorView(findings: model.findings)
+                    case .doctor: DoctorView(model: model)
                     case .clean: CleanView(model: model)
                     case .volumes: VolumesView(report: r, checks: model.vaultChecks)
                     case .runtimes: RuntimesView(report: r)
@@ -172,6 +254,26 @@ struct MainView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.appDidBecomeActive() }
+        }
+        .sheet(isPresented: $model.showsHelperSheet) { HelperRequestSheet(model: model) }
+        .overlay(alignment: .top) {
+            if let progress = model.helperProgress {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(progress)
+                    Button("Stop waiting") { model.stopWaitingForApproval() }
+                }
+                .padding(8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding()
+            }
+        }
+        .alert("Done", isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })) {
+            Button("OK") {
+                // Dismissing is the whole action, as with the error alert above.
+            }
+        } message: {
+            Text(model.lastPrivilegedResult ?? "")
         }
     }
 }
@@ -255,12 +357,12 @@ struct StorageView: View {
 }
 
 struct DoctorView: View {
-    let findings: [Finding]
+    @Bindable var model: AppModel
     var body: some View {
-        if findings.isEmpty {
+        if model.findings.isEmpty {
             ContentUnavailableView("No findings", systemImage: "checkmark.seal")
         } else {
-            List(findings) { f in
+            List(model.findings) { f in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(f.severity.rawValue.uppercased()).font(.caption).bold().foregroundStyle(
@@ -270,6 +372,10 @@ struct DoctorView: View {
                     Text(f.detail).font(.callout)
                     if let p = f.path { Text(p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
                     if let r = f.remediation { Text("→ " + r).font(.callout) }
+                    // The finding carries the action; the button never re-derives it (carried note 2).
+                    if let action = f.action {
+                        PrivilegedActionControlView(action: action, state: model.helperState) { model.request(action) }
+                    }
                     if let e = f.evidence { Text("evidence: " + e).font(.caption2).foregroundStyle(.secondary) }
                 }.padding(.vertical, 4)
             }
@@ -282,9 +388,12 @@ struct CleanView: View {
     @State private var selection = Set<String>()
     @State private var confirm = false
     @State private var useTrash = true
+    /// The root row whose own button was pressed, waiting on its destructive confirmation.
+    @State private var confirmPrivileged: CleanAction?
 
     /// The rows that will actually be deleted: selected, and not root-owned. Rows needing root are
-    /// listed and selectable but never acted on (`CleanAction.privilegeRequirement` says what they lack).
+    /// listed and selectable but never acted on by **Delete selected…** (`CleanAction.privilegeRequirement`
+    /// says what they lack); the dyld cache has its own button, through the privileged helper.
     ///
     /// This is a single definition on purpose. The confirmation dialog used to title itself with
     /// `selection.count` while the delete acted on this filtered set, so selecting one root-owned
@@ -305,6 +414,20 @@ struct CleanView: View {
                 }
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
                 ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }
+                let privileged = plan.actions.filter { $0.privilegedAction != nil }
+                if !privileged.isEmpty {
+                    GroupBox("Needs the privileged helper") {
+                        ForEach(privileged) { a in
+                            HStack {
+                                Text("\(a.categoryName) (experimental) — \(ByteCount.format(a.bytes))")
+                                Spacer()
+                                if let action = a.privilegedAction {
+                                    PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }
+                                }
+                            }
+                        }
+                    }
+                }
                 HStack {
                     let chosen = deletable(in: plan)
                     Text("\(chosen.count) selected · \(ByteCount.format(chosen.reduce(0) { $0 + $1.bytes }))")
@@ -330,6 +453,19 @@ struct CleanView: View {
             } message: {
                 Text(
                     "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. Deletions are journaled."
+                )
+            }
+            .confirmationDialog(
+                confirmPrivileged?.privilegedAction?.title ?? "",
+                isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
+                presenting: confirmPrivileged
+            ) { a in
+                Button("Empty \(ByteCount.format(a.bytes))", role: .destructive) {
+                    if let action = a.privilegedAction { model.request(action) }
+                }
+            } message: { _ in
+                Text(
+                    "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs."
                 )
             }
         } else {
@@ -406,6 +542,7 @@ struct JournalView: View {
 /// `PermissionsReport`, the same the CLI prints; this view decides nothing.
 struct PermissionsView: View {
     @Bindable var model: AppModel
+    @State private var confirmUninstall = false
     var body: some View {
         let report = PermissionsReport(fullDiskAccess: model.fullDiskAccess, helper: model.helperState)
         Form {
@@ -419,7 +556,11 @@ struct PermissionsView: View {
             Section("Privileged helper") {
                 LabeledContent("Status", value: report.helper.state.displayName)
                 Text(report.helper.why).font(.callout)
-                Text(report.helper.nextStep).font(.callout).foregroundStyle(.secondary)
+                switch model.helperState.rowButton {
+                case .install: Button("Install…") { model.installHelper(then: nil) }
+                case .uninstall: Button("Uninstall…") { confirmUninstall = true }
+                case .none: Text(report.helper.nextStep).font(.callout).foregroundStyle(.secondary)
+                }
             }
             Section {
                 Text("XCodeVault never runs a shell and never asks for your password itself.")
@@ -428,5 +569,46 @@ struct PermissionsView: View {
         }
         .formStyle(.grouped)
         .task { model.refreshPermissions() }
+        .confirmationDialog("Uninstall the privileged helper?", isPresented: $confirmUninstall) {
+            Button("Uninstall", role: .destructive) { Task { await model.uninstallHelper() } }
+        } message: {
+            Text("Actions that need root are unavailable until you install it again.")
+        }
+    }
+}
+
+/// What stands next to a root action. `HelperState.actionControl` decides; this only renders it, and never
+/// renders a button for a build that cannot reach the helper.
+struct PrivilegedActionControlView: View {
+    let action: PrivilegedAction
+    let state: HelperState
+    let perform: @MainActor () -> Void
+    var body: some View {
+        switch state.actionControl {
+        case .run: Button(action.title, action: perform)
+        case .requestHelper: Button(action.title + "…", action: perform)
+        case .notAvailableInThisBuild: Text("Not available in this build.").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Spec §3: one sentence of why, and **Allow**.
+struct HelperRequestSheet: View {
+    @Bindable var model: AppModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(model.pendingPrivilegedAction?.title ?? "Install the privileged helper").font(.headline)
+            Text(model.pendingPrivilegedAction?.requirement.why ?? PrivilegeRequirement.helper.why)
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    model.showsHelperSheet = false
+                    model.pendingPrivilegedAction = nil
+                }
+                Button("Allow") { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 460)
     }
 }

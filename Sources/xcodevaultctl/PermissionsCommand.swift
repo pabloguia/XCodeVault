@@ -18,7 +18,9 @@ struct PermissionsCommand: ParsableCommand {
         let client = HelperClient()
         let report = PermissionsReport(
             fullDiskAccess: FullDiskAccessProbe().state(),
-            helper: HelperState(status: client.serviceStatus(), teamIDIsUsable: client.hasUsableTeamID, daemonIsBundled: client.bundlesDaemon))
+            helper: HelperState(
+                status: client.serviceStatus(), teamIDIsUsable: client.hasUsableTeamID, signedByThatTeam: client.isSignedByItsTeam,
+                daemonIsBundled: client.bundlesDaemon))
         try emit(report, json: global.json) { TextRenderer.permissions(report) }
     }
 }

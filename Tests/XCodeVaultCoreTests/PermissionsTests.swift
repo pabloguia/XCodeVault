@@ -43,34 +43,47 @@ final class HelperStateTests: XCTestCase {
     private let known: [SMAppService.Status] = [.notRegistered, .enabled, .requiresApproval, .notFound]
 
     func testEveryStatusMapsAsSpecifiedWhenTheBuildCanReachTheHelper() {
-        XCTAssertEqual(HelperState(status: .enabled, teamIDIsUsable: true, daemonIsBundled: true), .enabled)
-        XCTAssertEqual(HelperState(status: .requiresApproval, teamIDIsUsable: true, daemonIsBundled: true), .awaitingApproval)
+        XCTAssertEqual(HelperState(status: .enabled, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .enabled)
+        XCTAssertEqual(HelperState(status: .requiresApproval, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .awaitingApproval)
         // Both mean "not installed" (HelperClient.serviceStatus() documents why both occur).
-        XCTAssertEqual(HelperState(status: .notRegistered, teamIDIsUsable: true, daemonIsBundled: true), .notInstalled)
-        XCTAssertEqual(HelperState(status: .notFound, teamIDIsUsable: true, daemonIsBundled: true), .notInstalled)
+        XCTAssertEqual(HelperState(status: .notRegistered, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .notInstalled)
+        XCTAssertEqual(HelperState(status: .notFound, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .notInstalled)
     }
 
     func testAnUnusableTeamIDMeansUnavailableWhateverLaunchdSays() {
         for s in known {
-            XCTAssertEqual(HelperState(status: s, teamIDIsUsable: false, daemonIsBundled: true), .unavailableInThisBuild, "status \(s.rawValue)")
+            XCTAssertEqual(
+                HelperState(status: s, teamIDIsUsable: false, signedByThatTeam: true, daemonIsBundled: true), .unavailableInThisBuild, "status \(s.rawValue)")
         }
         // Positive control: the same status with a usable team is not unavailable.
-        XCTAssertEqual(HelperState(status: .enabled, teamIDIsUsable: true, daemonIsBundled: true), .enabled)
+        XCTAssertEqual(HelperState(status: .enabled, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .enabled)
     }
 
     func testAMissingDaemonMeansUnavailableWhateverLaunchdSays() {
         // Operator decision 2026-09-27: a build without the daemon's plist has nothing to register.
         for s in known {
-            XCTAssertEqual(HelperState(status: s, teamIDIsUsable: true, daemonIsBundled: false), .unavailableInThisBuild, "status \(s.rawValue)")
+            XCTAssertEqual(
+                HelperState(status: s, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: false), .unavailableInThisBuild, "status \(s.rawValue)")
         }
-        XCTAssertEqual(HelperState(status: .requiresApproval, teamIDIsUsable: true, daemonIsBundled: true), .awaitingApproval)
+        XCTAssertEqual(HelperState(status: .requiresApproval, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .awaitingApproval)
+    }
+
+    func testABuildNotSignedByItsTeamIsUnavailableWhateverLaunchdSays() {
+        // Carried note 5 of the 2026-09-27 permissions plan: an unsigned `bundle-app.sh --team … --with-helper`
+        // build has a usable team ID and the plist, and `register()` still cannot succeed for it.
+        for s in known {
+            XCTAssertEqual(
+                HelperState(status: s, teamIDIsUsable: true, signedByThatTeam: false, daemonIsBundled: true), .unavailableInThisBuild, "status \(s.rawValue)")
+        }
+        // Positive control: signed by that team, the same status is not unavailable.
+        XCTAssertEqual(HelperState(status: .notFound, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .notInstalled)
     }
 
     func testAStatusNobodyHasSeenIsNeverEnabled() throws {
         // Measured 2026-09-27 with a scratch binary: `SMAppService.Status(rawValue: 99)` yields a value,
         // and it reaches `@unknown default`.
         let future = try XCTUnwrap(SMAppService.Status(rawValue: 99))
-        XCTAssertEqual(HelperState(status: future, teamIDIsUsable: true, daemonIsBundled: true), .notInstalled)
+        XCTAssertEqual(HelperState(status: future, teamIDIsUsable: true, signedByThatTeam: true, daemonIsBundled: true), .notInstalled)
     }
 }
 

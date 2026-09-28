@@ -37,7 +37,10 @@ final class VaultDirectoryFindingTests: XCTestCase {
         let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
         XCTAssertThrowsError(try register(reg, volume(unwritableMountPoint(t)), journal)) {
-            XCTAssertTrue("\($0)".contains("sudo install -d"), "the text fallback is unchanged: \($0)")
+            // The text fallback is still printed, in the form that cannot create the mount point (carried note 4).
+            let text = "\($0)"
+            XCTAssertTrue(text.contains("sudo mkdir ") && text.contains("/\(VaultVolume.directoryName)' && sudo chown -h "), text)
+            XCTAssertFalse(text.contains("install -d"), text)
         }
         let refusals = try journal.entries().filter(VaultDirectoryRefusal.matches)
         XCTAssertEqual(refusals.count, 1)
@@ -131,8 +134,9 @@ final class VaultDirectoryFindingTests: XCTestCase {
         XCTAssertFalse(command.contains("install -d") || command.contains("mkdir -p") || command.contains("mkdir -m"), command)
         // And the ownership change does not follow a symlink swapped in between the two commands.
         XCTAssertTrue(command.contains(" && sudo chown -h "), command)
-        // Control: `vault init`'s own message, printed while the drive is connected, keeps `install -d`.
-        XCTAssertTrue(OwnershipAdvice.createVaultDirectoryCommand("/Volumes/VAULT/XCodeVault").contains("install -d"))
+        // `vault init` prints the same command for the default folder since carried note 4 of the plan.
+        XCTAssertEqual(
+            OwnershipAdvice.createVaultDirectoryCommand(mountPoint: "/Volumes/VAULT", relativeDirectory: "XCodeVault", exists: { _ in false }), command)
     }
 
     func testTheRefusalIsMatchedToItsOwnVolumeByUUID() throws {

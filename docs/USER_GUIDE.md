@@ -18,7 +18,7 @@ system prompt, not a command for you to paste.
 | Permission | Asked for when | Why | How XCodeVault asks | In this build |
 |---|---|---|---|---|
 | **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it. The app asks when a scan was refused, and its Permissions section shows the state (built and unit-tested; not yet exercised on screen) |
-| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available: it needs a signed build (issue #30). `vault init`, and then `doctor`, print the command for the vault folder; the dyld cache is listed, never cleaned |
+| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache (experimental) | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available in any build made today: it needs a signed build that includes the helper (issue #30), and it has never run live. Until then the app says "Not available in this build" and shows the manual route where there is one: `vault init` and `doctor` print the command for the vault folder; the dyld cache stays listed, not cleaned |
 
 Three details that are easy to get wrong:
 
@@ -48,12 +48,12 @@ The app shows the same numbers and runs the same checks as the command line. Res
 |---|---|---|---|
 | Overview | Internal disk used by developer tooling; how much is cleanable or relocatable; warnings; doctor issues of error severity or worse; when a scan was refused by macOS privacy protection, **Open Settings** for Full Disk Access | Nothing | — |
 | Storage | Every storage category present on this Mac, with size, outcome, strategy and path; symlinks and mount points flagged | Nothing | — |
-| Doctor | Unsafe or broken setups, with the proposed fix where there is one | Nothing: doctor proposes, it never applies a fix | — |
-| Clean | The cleanup plan — regenerable data only, largest first, every category labelled experimental. Select rows, then **Delete selected…**; the confirmation shows the exact count | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are listed, never deleted here; the **Needs** column says what they lack | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
+| Doctor | Unsafe or broken setups, with the proposed fix where there is one. A finding that the privileged helper can fix — the vault folder a drive refused — also has a button, or "Not available in this build." while this build cannot reach the helper | Nothing by itself: doctor proposes, it never applies a fix. The button, where there is one, creates the vault folder through the helper | Remove the folder it created, if you no longer want it |
+| Clean | The cleanup plan — regenerable data only, largest first, every category labelled experimental. Select rows, then **Delete selected…**; the confirmation shows the exact count | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete selected…**; the **Needs** column says what they lack. The CoreSimulator dyld cache (*experimental*) has its own button, which needs the privileged helper and a confirmation | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
 | Volumes | Mounted volumes, whether each qualifies as a vault, and the state of registered vault volumes | Nothing; registering a vault is `xcodevaultctl vault init` | — |
 | Runtimes | Installed simulator runtimes | Nothing | — |
 | Journal | The last 100 journal entries | Nothing | — |
-| Permissions | The Full Disk Access and helper states, each with one sentence of why: **Open Settings** for Full Disk Access; for the helper, where the manual route is while this build cannot reach it | Nothing by itself. **Open Settings** opens System Settings; when you come back, the app checks again and rescans — if macOS asks you to quit and reopen XCodeVault, do so | Switch the permission off in System Settings |
+| Permissions | The Full Disk Access and helper states, each with why and one control: **Open Settings** for Full Disk Access; **Install…** or **Uninstall…** for the helper — or, while this build cannot reach it, the manual route | Nothing by itself. **Open Settings** opens System Settings; when you come back, the app checks again and rescans — if macOS asks you to quit and reopen XCodeVault, do so. **Install…** registers the helper and opens Login Items & Extensions, where you approve it; **Uninstall…** removes the registration. Both need a signed build that includes the helper, and none exists yet | Switch the permission off in System Settings; for the helper, **Uninstall…** |
 
 ## The command line
 
@@ -141,8 +141,28 @@ Because the data is regenerable, which is why it was offered for cleaning:
 
 - **Delete selected… is disabled**: no row that `clean` may delete is selected. Rows that need root
   do not count; the **Needs** column says what they lack.
-- **A row says it needs root**: XCodeVault's only route to root is its privileged helper, and this
-  build cannot reach it (see [Permissions](#permissions-which-when-why-and-how-the-app-asks)).
+- **A row says it needs root, or "Not available in this build"**: XCodeVault's only route to root is
+  its privileged helper, and this build cannot reach it — no build made today can (see
+  [Permissions](#permissions-which-when-why-and-how-the-app-asks)). The app never shows a button that
+  cannot work: it shows the manual route instead, where one exists. With a build that can reach the
+  helper, the same place shows a button that asks for it at that moment.
 - **Rescan is disabled**: a scan is already running.
 - **Everything is labelled experimental**: no strategy has met the Definition of Done yet, and the
   label stays until one does.
+
+### I built XCodeVault from `main` between 2026-09-18 and 2026-09-28. Should I check anything?
+
+Only if you ran one of the commands below while Xcode was open. In builds from those days, the check
+for a running Xcode read only the first few dozen processes the system listed, so it could answer "not
+running" with Xcode open. It was fixed on 2026-09-28. There has been no release, so no release has it.
+
+- **`clean` of DerivedData or previews**: a build running at the time may have failed. The next build
+  starts from scratch; nothing needs checking.
+- **`externalize … --remove-source-after-verify`, or `migration resume` finishing a removal**: Xcode
+  may have been writing into the original while it was removed. The copy is verified again after the
+  original is moved aside, which catches what was written before that moment, not during the deletion.
+  Run `xcodevaultctl doctor` and `xcodevaultctl migration status`, and look for anything you made in
+  Xcode during the removal — in the vault copy and at the original location.
+- **`locations set-*` or `reset-*`**: Xcode keeps these settings in memory and may write its old value
+  back when it quits. Run `xcodevaultctl locations show`, and set them again if they are not what you
+  chose.

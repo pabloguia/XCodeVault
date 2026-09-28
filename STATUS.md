@@ -16,14 +16,16 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
-  one commit each. **3 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
+  one commit each. **4 of 4 done (2026-09-28):** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
   ADR-0007, and the `SECURITY_MODEL.md` correction (the daemon's Full Disk Access is unmeasured, not
   "not needed"); then the Permissions model in Core, `xcodevaultctl permissions` (in cli-smoke), and
   the `vault-dir:<uuid>` finding carrying the structured action; then the GUI Permissions section, Full
   Disk Access asked for when a scan is refused, ad hoc hardened-runtime signing for builds without a
-  Developer ID, and the app's tools kept to the `xcode-select`ed Xcode. Next: the helper flow, **pending
-  — needs a signed build** (#30); `COMPATIBILITY_MATRIX.md` "Pending — added 2026-09-27" lists it, and
-  the plan's deliverable 4 opens with what the deliverable 2 and 3 reviews carried to it.
+  Developer ID, and the app's tools kept to the `xcode-select`ed Xcode; then the helper flow — register,
+  approval, unregister and the two root-action buttons — **written and tested with fakes, never run
+  live, and shown only in a build signed by a usable team that includes the daemon, which none is**
+  (#30; `COMPATIBILITY_MATRIX.md` lists each part as pending). What is left of the plan is M5's: a
+  Developer ID build, the live run, and the list beside `--with-helper` in `scripts/bundle-app.sh`.
 - Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
   publication are closed; `gh issue list` is the live queue and `git log` records which commit
   closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
@@ -75,7 +77,7 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Next three actions
 
-**As of 2026-09-27** (the same list, with its reasons, is in `docs/process/SESSION-HANDOFF.md`
+**As of 2026-09-28** (the same list, with its reasons, is in `docs/process/SESSION-HANDOFF.md`
 "What to do, in priority order"):
 
 1. **E6b variant B, the physical yank** (#29) — blocked on a disposable USB pendrive. The guards
@@ -83,8 +85,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
    Before running: erase the pendrive as APFS with one volume, pre-register the reading, review.
 2. **What rebuilds `Caches/dyld`** — the trigger is unidentified (H11, H14; FINDINGS "Corrections,
    2026-09-27"). Candidate: first use on a new host build. Interactive use is unmeasured.
-3. **#30 / M4–M5** — the helper has never run live; needs a signed build. Whether a launchd daemon
-   has the Full Disk Access `Caches/dyld` needs (H15) is part of what that run must answer.
+3. **#30 / M4–M5** — the helper has never run live; needs a signed build. The client half now exists
+   (deliverable 4 of the permissions plan) and is shown only in such a build. Whether a launchd daemon
+   has the Full Disk Access `Caches/dyld` needs (H15) is part of what that run must answer, and so is
+   the list beside `--with-helper` in `scripts/bundle-app.sh`, which now includes the requirement
+   checking replies and not requests.
 
 Everything below in this section is the history of how the list got here. It is kept because
 the reasons are the record, not because it is current.
@@ -2505,3 +2510,97 @@ Declared gaps:
 - `refreshPermissions()` runs on the main actor; its latency is unmeasured.
 - Coming back from System Settings during the first scan starts a second, overlapping scan. Both only
   read; the result shown is whichever ends last. Carried to deliverable 4, plan item (7).
+
+## 2026-09-28 — user-first permissions, deliverable 4 of 4: the helper flow, gated on a signed build
+
+`HelperClient` can now register and unregister the daemon through `SMAppService.daemon`, open Login Items &
+Extensions for the approval, and call the two verbs — `createVaultDirectory` and
+`removeRegenerableSystemDirectoryContents(coreSimulatorDyldCache)` — over one connection per message: the
+requirement set before `resume()`, exactly one outcome (`ResumeOnce`), the connection always invalidated.
+That requirement checks the daemon's **replies**, not the requests: the helper-security review measured a
+failing peer running the method while the caller got error 4102, as xpc/connection.h:790-793 says. So an
+old daemon still holding the name would act on a verb first; the fix is written down as the M5 TODO on
+`helperRequirement` (a validated `version()` round trip before the verb) and listed beside `--with-helper`
+and in `KNOWN-ISSUES-AT-PUBLICATION.md`. Core decides when:
+- `HelperApprovalFlow`: register → open Settings → poll → enabled. A `register()` that throws while the
+  service lands in approval is read from the status, not from the throw; the wait is bounded and
+  cancellable. The app runs one wait at a time: a new request cancels the running one, and a cancelled wait
+  does nothing.
+- `PrivilegedActionRunner`: only when the helper is enabled; journaled before acting and refused when the
+  journal cannot be written; the dyld cache refused while Xcode, a simulator, `simctl`, `xcodebuild` or the
+  cache builder (`update_dyld_sim_shared_cache`) runs, and "cannot tell" counts as running. A failed reply
+  that still freed bytes is journaled with them. `public-surface` pins the two in-use defaults, and
+  `helper-invariants` now holds that only the app's adapter calls a verb, and that only it and
+  `permissions` name the client, in any import spelling.
+- The app shows a root action's button only when `HelperState.actionControl` says so. The vault folder
+  has one on its doctor finding; the dyld cache has one in Clean alone, behind a destructive confirmation
+  and titled experimental — a source test holds that no doctor finding carries it, since the Doctor's
+  buttons have no confirmation of their own. Permissions offers **Install…** and **Uninstall…**.
+
+In every build made today all of it renders "Not available in this build": a build must carry a usable
+team ID, be signed by that team — read from the running code's own signature, measured to answer no team
+for an ad hoc binary — and include the daemon. Nothing of it has run live (#30).
+
+**Found by the migration-safety review, and older than this deliverable: the in-use checks read a sliver
+of the process table.** `CleanExecutor.runningExecutablePaths()` read `proc_listallpids`' answers as byte
+counts; they are counts of pids. Measured 2026-09-28: it looked at the first 44 of 699 pids, and neither
+launchd nor Finder was among them. So since 9557b3d (2026-09-18) `xcodeIsRunning()` could answer "no" with
+Xcode open — the guard in front of `clean`, the migration engine's source removal (`externalize
+--remove-source-after-verify`, `migration resume`) and `locations set-*`/`reset-*` — and the new
+dyld refusal had the same blind spot. Fixed, and a full buffer now counts as "cannot tell";
+`testTheProcessListReachesLaunchd` pins it with launchd, whose path it first shows is readable. No tag
+contains 9557b3d and there has been no release: the exposure is builds from public `main` in that window.
+The user guide's FAQ says what to check, and `KNOWN-ISSUES-AT-PUBLICATION.md` has the details. The
+refusals that rest on it now say "or the process list could not be read" where they are new or `clean`'s;
+the migration engine's and `locations`' texts are unchanged.
+
+What the earlier reviews carried here, done:
+- `vault init` no longer prints `install -d`, which creates missing parents — the mount point too, pasted
+  after an eject. It prints `mkdir` for each missing folder, parents first, then `chown -h` on the vault.
+  Only the one-folder case is reachable today: `vault init`'s containment check stops earlier when a
+  parent is missing (the open "misleading error" task).
+- "Never two scans; one more after the running one" is `ScanGate`, in Core and tested; every scan the app
+  starts goes through it.
+- `bundle-app.sh`'s list beside `--with-helper` was re-verified against the helper's code: four of its five
+  items had been fixed. Still open there: the cleanup verb's missing in-use check (the client's refusal
+  guards against accident, not a hostile client), the reply-not-request limit above, the missing version
+  predicates, and the unthrottled audit trail. Its release condition was rewritten: the old one ("when a
+  shipped binary calls `connect()`") is met by this deliverable.
+- `Failure.notRegistered` no longer says "Run the app once" (ADR-0007).
+
+One change the plan did not have: `refresh()` no longer clears `lastError`. The plan's `perform(_:)` set
+an error and then rescanned, which would have erased it before it was seen.
+
+Full suite at the last Swift change: Executed 550 tests, with 0 failures; no test skipped. Mutants,
+each proven applied, measured, and restored byte for byte: round 1, 16, all detected — 14 by a named
+test, M4-5 as a crash on the fakes' synthetic double-resume paths (a real connection calls one handler,
+measured by the helper-security review), and M4-6 by `public-surface` naming the runner's default;
+round 2, 13, of which 12 were killed by the test written for them and M5-2, the full-buffer refusal in
+the process listing, survives and is declared; round 3, 2, both killed. The `helper-invariants` rule was
+measured case by case on copies of the tree, a non-BSD `grep` included.
+
+Reviews: `helper-security-reviewer` and `migration-safety-reviewer`, four rounds each. Both returned
+REQUEST CHANGES at the first snapshot (e03fc01) — the requirement's reply-not-request limit and the process
+listing above came from those rounds — and APPROVE at the next three (bb32311, 08de88c, 6f819fb), each
+approval's non-blocking notes taken into the round after it. One comment line went into
+`helper-invariants.sh` after both round-4 approvals: an escape the helper-security reviewer measured and
+offered to list there.
+
+Declared gaps:
+- None of it has run live: registration, approval, the XPC calls, and whether the daemon has the Full
+  Disk Access `Caches/dyld` needs (#30, M5). `COMPATIBILITY_MATRIX.md` lists each as pending.
+- `isSignedByItsTeam` answering `true` is unmeasured: no Developer ID build exists.
+- The GUI has not been run on screen. The app's approval wait is pinned by its source text, not driven.
+- The cleanup verb itself has no in-use check; the client's refusal is a guard against accident.
+- The full-buffer refusal in the process listing is not pinned: a test cannot make the table outgrow the
+  kernel's headroom between two calls.
+- `send` has no timeout: a daemon that never replies leaves the call pending (now said in its doc). The
+  runner's `.started` record then stays open and `doctor` lists it as interrupted; a second click starts a
+  second call.
+- An interrupted dyld run gets `doctor`'s generic interrupted-clean text, which suggests re-running a
+  command; there is no CLI command for this action.
+- The `helper-invariants` rule is text: a vault-verb call split across lines in an app file, and
+  `LiveHelper().perform` called without the runner, are measured escapes, stated in the rule. Its
+  word-bounded patterns need BSD grep; the script now refuses to report ok under a grep without them.
+- `release.sh` does not pass `--with-helper`, so a release made today would show "Not available in this
+  build"; M5 adds it once the list beside the flag is empty or accepted in review.

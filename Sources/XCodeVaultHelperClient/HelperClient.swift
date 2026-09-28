@@ -9,10 +9,11 @@ import XCodeVaultHelperProtocol
 /// wraps. This path is that allowlist's single entry, which is what guarantees the peer validation
 /// below is read by a reviewer rather than assumed.
 ///
-/// **What exists here and what does not (issue #30).** Everything up to and including the moment
-/// the connection is configured is here and unit-tested. Actually *talking* to a helper is not:
-/// `SMAppService` will not register an unsigned daemon, so no verb has been driven end to end. That
-/// is M5 and the compatibility matrix records it as pending, not as working.
+/// **What exists here and what does not (issue #30).** The connection's configuration, registration and
+/// the two verb calls are here and unit-tested, the calls with a fake connection. None of it has run
+/// against a real daemon: no code called `register()` before deliverable 4 of the 2026-09-27 permissions
+/// plan, and no build has had a real Developer ID team ID, which both ends of the connection require. That
+/// is M5, and the compatibility matrix records it as pending, not as working.
 public struct HelperClient: Sendable {
 
     /// Substituted by `scripts/bundle-app.sh` at bundle time, exactly as the daemon's own team ID
@@ -25,6 +26,11 @@ public struct HelperClient: Sendable {
         case unusableTeamID(String)
         case requirementDoesNotParse(String)
         case notRegistered(String)
+        /// The helper did not reply: not running, not approved, the peer refused, or the connection broke.
+        case connectionFailed(String)
+        /// What came back was not the helper's interface. Unreachable with a connection `connect()`
+        /// configured; stated so a future change turns it into an error rather than a crash.
+        case unexpectedProxy
 
         public var description: String {
             switch self {
@@ -40,7 +46,13 @@ public struct HelperClient: Sendable {
             case .requirementDoesNotParse(let r):
                 return "The helper's code-signing requirement is not valid requirement-language: \(r). Refusing to connect."
             case .notRegistered(let s):
-                return "The helper is not registered with launchd (\(s)). Run the app once to install it, or see SECURITY_MODEL.md."
+                // Not "run the app once": nothing is installed at launch (ADR-0007).
+                return "The helper is not registered with launchd (\(s)). The app installs it when you choose an action that needs root, "
+                    + "or from Install… in its Permissions section; see SECURITY_MODEL.md."
+            case .connectionFailed(let why):
+                return "The privileged helper did not reply (\(why)). Whether it acted is unknown; rescan to see."
+            case .unexpectedProxy:
+                return "The connection did not return the privileged helper's interface. Refusing to use it."
             }
         }
     }
@@ -72,6 +84,10 @@ public struct HelperClient: Sendable {
     /// what this points at is chosen by whoever runs the CLI — a hint, never a gate.
     let bundleURL: URL
 
+    /// The team in the running code's own signature: `teamOfRunningCode` in production. Internal, like
+    /// `makeConnection`, so tests can say what a signed build would answer.
+    let runningTeam: @Sendable () -> String?
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -80,12 +96,17 @@ public struct HelperClient: Sendable {
             NSXPCConnection(machServiceName: name, options: .privileged)
         }
         self.bundleURL = Bundle.main.bundleURL
+        self.runningTeam = HelperClient.teamOfRunningCode
     }
 
-    init(team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL) {
+    init(
+        team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
+        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode
+    ) {
         self.team = team
         self.makeConnection = makeConnection
         self.bundleURL = bundleURL
+        self.runningTeam = runningTeam
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -114,10 +135,19 @@ public struct HelperClient: Sendable {
 
     /// A configured, resumed connection to the helper.
     ///
-    /// The ordering matters and is the whole of the peer validation: the requirement is set
-    /// **before** `resume()`, so no message can be exchanged with an unvalidated peer. Setting it
-    /// afterwards would leave a window in which the connection is live and unconstrained.
-    public func connect() throws -> NSXPCConnection {
+    /// The requirement is set **before** `resume()`, so from the first message on a reply from a peer that
+    /// fails it is refused: the call fails with `NSXPCConnectionCodeSigningRequirementFailure` (4102) instead
+    /// of returning what that peer said. Setting it afterwards would leave a window of unchecked replies.
+    ///
+    /// **It does not stop the request.** The requirement checks the messages this connection *receives*
+    /// (xpc/connection.h:790-793), and an in-process probe measured it on 2026-09-28 (helper-security review of
+    /// deliverable 4): the failing peer ran the method, and the caller got 4102. Whoever holds the Mach name
+    /// gets the message. What drops a request from a wrong client is the daemon's own listener requirement,
+    /// measured the same day; what keeps an old daemon from acting on a verb is the M5 TODO in
+    /// `HelperProtocol.swift`, which is not written yet.
+    ///
+    /// Internal (the same review): `send` is its only caller, and the compiler rather than review keeps it so.
+    func connect() throws -> NSXPCConnection {
         let requirement = try peerRequirement()
         let connection = makeConnection(HelperIdentity.machServiceName)
         connection.remoteObjectInterface = NSXPCInterface(with: XCodeVaultHelperXPC.self)
@@ -144,9 +174,9 @@ public struct HelperClient: Sendable {
     /// **This is an installation hint, never an authentication signal.** It reports the registration
     /// state of a plist relative to `Bundle.main`, and says nothing about who holds
     /// `HelperIdentity.machServiceName` in the bootstrap namespace: a helper installed by any other
-    /// route is reachable while this still answers `.notFound`. The only thing that authenticates the
-    /// peer is the code-signing requirement set before `resume()` in `connect()`. A caller that reads
-    /// `.enabled` as a reason to skip that has removed the peer validation entirely.
+    /// route is reachable while this still answers `.notFound`. The only thing that checks the peer is the
+    /// code-signing requirement set before `resume()` in `connect()` — on its replies; see there. A caller
+    /// that reads `.enabled` as a reason to skip that has removed the peer validation entirely.
     public func serviceStatus() -> SMAppService.Status {
         SMAppService.daemon(plistName: HelperIdentity.plistName).status
     }
@@ -162,5 +192,110 @@ public struct HelperClient: Sendable {
     /// 2026-09-27). A hint, like `serviceStatus()`: it says nothing about who holds the Mach name.
     public var bundlesDaemon: Bool {
         FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("Contents/Library/LaunchDaemons/\(HelperIdentity.plistName)").path)
+    }
+
+    /// Whether the running code is signed by the team this client validates the daemon against (carried note
+    /// 5 of the 2026-09-27 permissions plan). An unsigned or ad hoc `bundle-app.sh --team … --with-helper`
+    /// build carries a usable `team` and the daemon's plist, yet nothing it registered could be reached: both
+    /// requirements demand a Developer ID chain with that team. Whether `register()` itself fails for such a
+    /// build is unmeasured (helper-security review of deliverable 4). A button-visibility hint only:
+    /// `connect()`'s requirement checks the peer and never reads this.
+    public var isSignedByItsTeam: Bool { hasUsableTeamID && runningTeam() == team }
+
+    /// The team identifier in the running code's own signature, or nil when it carries none — ad hoc,
+    /// unsigned, or unreadable. Read from the signature, never from `team`: the constant is what the build
+    /// script substituted, not what the code is signed with.
+    static func teamOfRunningCode() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, SecCSFlags(), &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+            let info = info as? [String: Any]
+        else { return nil }
+        return info[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    // MARK: - Registration (deliverable 4 of the 2026-09-27 permissions plan)
+    //
+    // **Never called live.** No build has had a real Developer ID team ID (M5, issue #30), and both ends
+    // of the connection require one. The decisions around these calls — when to register, how long to
+    // wait, what counts as approved — live in Core's `HelperApprovalFlow`, tested with a fake.
+
+    /// Registers the daemon. For a daemon this lands in "requires approval": the user approves it in System
+    /// Settings ▸ General ▸ Login Items & Extensions, with administrator authentication.
+    public func register() throws {
+        try SMAppService.daemon(plistName: HelperIdentity.plistName).register()
+    }
+
+    /// Removes the registration, so no stale Background Task Management entry outlives the user's intent
+    /// (SECURITY_MODEL.md, Registration).
+    public func unregister() async throws {
+        try await SMAppService.daemon(plistName: HelperIdentity.plistName).unregister()
+    }
+
+    /// Opens System Settings at Login Items & Extensions, where the user approves the helper.
+    public static func openApprovalSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    // MARK: - Verbs (never run live, #30)
+
+    public func createVaultDirectory(volumeUUID: String) async throws -> HelperResult {
+        try await send { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
+    }
+
+    public func removeRegenerableSystemDirectoryContents(target: HelperCleanupTarget) async throws -> HelperResult {
+        try await send { helper, reply in helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply) }
+    }
+
+    /// One message over one connection, then the connection is invalidated.
+    ///
+    /// **The peer check is `connect()`'s and only `connect()`'s**, whatever `serviceStatus()` reports: a reply
+    /// from a peer that fails the requirement is never returned. The request is still delivered to whoever
+    /// holds the Mach name (see `connect()`).
+    ///
+    /// **Exactly one outcome.** XPC calls the reply or the error handler, exactly once (NSXPCConnection.h, and
+    /// measured with `invalidate()` after the reply and inside it; helper-security review of deliverable 4).
+    /// `ResumeOnce` does not rely on that: a second call — a violated contract, or a later change here — is
+    /// dropped instead of crashing the process.
+    ///
+    /// **No timeout** (helper-security review of deliverable 4, advisory A2): a daemon that takes the message and
+    /// never replies leaves this call pending, and the connection open, until the daemon or its connection dies.
+    /// Declared, not fixed.
+    func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
+        let connection = try connect()
+        defer { connection.invalidate() }
+        return try await withCheckedThrowingContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+                once.resume(throwing: Failure.connectionFailed(error.localizedDescription))
+            }
+            guard let helper = proxy as? any XCodeVaultHelperXPC else {
+                once.resume(throwing: Failure.unexpectedProxy)
+                return
+            }
+            message(helper) { result in once.resume(returning: result) }
+        }
+    }
+}
+
+/// Resumes a continuation at most once. `@unchecked Sendable` because every access is under the lock.
+final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, any Error>?
+
+    init(_ continuation: CheckedContinuation<T, any Error>) { self.continuation = continuation }
+
+    func resume(returning value: T) { take()?.resume(returning: value) }
+    func resume(throwing error: any Error) { take()?.resume(throwing: error) }
+
+    private func take() -> CheckedContinuation<T, any Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        let c = continuation
+        continuation = nil
+        return c
     }
 }

@@ -84,3 +84,78 @@ final class FullDiskAccessPromptTests: XCTestCase {
         XCTAssertFalse(FullDiskAccessState.granted.offersOpenSettings)
     }
 }
+
+/// Spec §4's first mutant target: a control that runs a root action appears only when the helper is enabled.
+final class PrivilegedActionControlTests: XCTestCase {
+    func testOnlyAnEnabledHelperRunsAnAction() {
+        XCTAssertEqual(HelperState.enabled.actionControl, .run)
+        XCTAssertEqual(HelperState.awaitingApproval.actionControl, .requestHelper)
+        XCTAssertEqual(HelperState.notInstalled.actionControl, .requestHelper)
+        XCTAssertEqual(HelperState.unavailableInThisBuild.actionControl, .notAvailableInThisBuild)
+        XCTAssertEqual(HelperState.allCases.filter { $0.actionControl == .run }, [.enabled])
+    }
+
+    func testTheHelperRowNeverOffersAButtonThisBuildCannotHonour() {
+        XCTAssertEqual(HelperState.unavailableInThisBuild.rowButton, HelperRowButton.none)
+        XCTAssertEqual(HelperState.notInstalled.rowButton, .install)
+        XCTAssertEqual(HelperState.awaitingApproval.rowButton, .install)
+        XCTAssertEqual(HelperState.enabled.rowButton, .uninstall)
+    }
+
+    func testOnlyTheWholeDyldCacheMapsToTheHelperVerb() {
+        func action(_ path: String, root: Bool) -> CleanAction {
+            CleanAction(categoryID: "x", categoryName: "X", path: path, bytes: 1, isExperimental: true, risk: .low, requiresRoot: root, notes: [])
+        }
+        XCTAssertEqual(action(PrivilegeRequirement.coreSimulatorDyldCachePath, root: true).privilegedAction, .emptyCoreSimulatorDyldCache)
+        // The verb empties the whole cache; a path inside it must not borrow that.
+        XCTAssertNil(action(PrivilegeRequirement.coreSimulatorDyldCachePath + "/25G229", root: true).privilegedAction)
+        XCTAssertNil(action("/Library/Developer/CommandLineTools", root: true).privilegedAction)
+        XCTAssertNil(action(PrivilegeRequirement.coreSimulatorDyldCachePath, root: false).privilegedAction)
+    }
+
+    func testTheSimulatorWorkPredicateNamesTheProcessesThatUseTheCache() {
+        for path in [
+            "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/launchd_sim",
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl", "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild",
+            // Where the builder was found on 2026-09-28, in each installed runtime.
+            "/Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime"
+                + "/Contents/Resources/update_dyld_sim_shared_cache",
+        ] {
+            XCTAssertTrue(CleanExecutor.isSimulatorWorkExecutable(path), path)
+        }
+        XCTAssertFalse(CleanExecutor.isSimulatorWorkExecutable("/usr/bin/xcodebuild-wrapper"))
+        XCTAssertFalse(CleanExecutor.isSimulatorWorkExecutable("/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"))
+        // The daemon that spawns the builder stays up; naming it would refuse the action for good.
+        XCTAssertFalse(CleanExecutor.isSimulatorWorkExecutable("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simdiskimaged"))
+    }
+}
+
+/// Carried note 7 of the 2026-09-27 permissions plan: never two scans, and one more after the running one when a
+/// scan was asked for meanwhile.
+final class ScanGateTests: XCTestCase {
+    func testTheFirstRequestStartsAScan() {
+        var gate = ScanGate()
+        XCTAssertFalse(gate.isScanning)
+        XCTAssertTrue(gate.requestScan())
+        XCTAssertTrue(gate.isScanning)
+    }
+
+    func testARequestWhileScanningStartsNothingAndOneMoreFollows() {
+        var gate = ScanGate()
+        XCTAssertTrue(gate.requestScan())
+        XCTAssertFalse(gate.requestScan(), "no second, overlapping scan")
+        XCTAssertFalse(gate.requestScan(), "however often it is asked")
+        XCTAssertTrue(gate.scanEnded(), "exactly one more, for the requests made meanwhile")
+        XCTAssertTrue(gate.isScanning, "still scanning: nothing can slip a scan in between")
+        XCTAssertFalse(gate.scanEnded())
+        XCTAssertFalse(gate.isScanning)
+    }
+
+    func testWithNoRequestMeanwhileTheGateReopens() {
+        var gate = ScanGate()
+        XCTAssertTrue(gate.requestScan())
+        XCTAssertFalse(gate.scanEnded(), "nothing was asked for meanwhile")
+        XCTAssertFalse(gate.isScanning)
+        XCTAssertTrue(gate.requestScan(), "a later request starts a scan again")
+    }
+}

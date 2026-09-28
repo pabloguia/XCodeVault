@@ -34,10 +34,45 @@ public enum OwnershipAdvice {
     }
 
     /// The one-time privileged command alone, as `vault init`'s refusal prints it through
-    /// `createVaultDirectory(_:)`, at the moment the drive is known to be connected.
-    public static func createVaultDirectoryCommand(_ dir: String) -> String {
+    /// `createVaultDirectory(mountPoint:relativeDirectory:)`: each folder from the drive's top folder down to the
+    /// vault that does not exist yet, parents first, then the vault handed to the user.
+    ///
+    /// `createVaultDirectoryInPlaceCommand` generalised to a nested `--directory`, for the same reasons (carried
+    /// note 4 of the 2026-09-27 permissions plan). It replaced `install -d`, which creates missing parents: the
+    /// drive is connected when this is printed, not necessarily when it is pasted, and run after an eject
+    /// `install -d` would create the mount point on the internal disk. `mkdir` without `-p` fails at the first
+    /// folder instead. `chown -h`, and no `-m`, as there. Folders created on the way stay root's, as `install -d`
+    /// left them: only the vault is handed over.
+    ///
+    /// What `vault init` reaches today is the one-folder case. Its containment check resolves the vault's parent
+    /// with `realpath`, which fails when any folder on the way is missing, so a missing parent stops it earlier,
+    /// with a misleading "not inside" error of its own (migration-safety review of deliverable 4). The
+    /// several-folder output is tested here and not printed by anything yet.
+    public static func createVaultDirectoryCommand(mountPoint: String, relativeDirectory: String) -> String {
+        createVaultDirectoryCommand(mountPoint: mountPoint, relativeDirectory: relativeDirectory, exists: pathExists)
+    }
+
+    /// `exists` is internal on purpose, like every seam here: tests say which folders are there.
+    static func createVaultDirectoryCommand(mountPoint: String, relativeDirectory: String, exists: (String) -> Bool) -> String {
+        var path = mountPoint
+        var missing: [String] = []
+        for component in relativeDirectory.split(separator: "/") {
+            path += "/" + component
+            // Once one folder is missing, every folder under it is too.
+            if !missing.isEmpty || !exists(path) { missing.append(path) }
+        }
+        // Printed only after creating the vault failed, so something is missing; if a race made it all exist,
+        // `mkdir` fails with "File exists" rather than doing anything.
+        if missing.isEmpty { missing = [path] }
         let (user, group) = currentUserAndGroup()
-        return "sudo install -d -o \(shellQuoted(user)) -g \(shellQuoted(group)) -m 755 \(shellQuoted(dir))"
+        return "sudo mkdir " + missing.map(shellQuoted).joined(separator: " ")
+            + " && sudo chown -h \(shellQuoted(user)):\(shellQuoted(group)) \(shellQuoted(path))"
+    }
+
+    /// Whether anything is at `path`, a symlink included: `lstat`, never following the last component.
+    static func pathExists(_ path: String) -> Bool {
+        var st = stat()
+        return lstat(path, &st) == 0
     }
 
     /// The same step for a folder directly under a mounted drive's top folder, as `doctor` prints it at any
@@ -56,22 +91,16 @@ public enum OwnershipAdvice {
         return "sudo mkdir \(shellQuoted(dir)) && sudo chown -h \(shellQuoted(user)):\(shellQuoted(group)) \(shellQuoted(dir))"
     }
 
-    /// The one-time privileged step that creates the vault directory already owned by the user.
+    /// The one-time privileged step that creates the vault directory owned by the user, as `vault init` prints it.
     ///
-    /// `install -d` rather than `mkdir` + `chown` because it is one idempotent command that also
-    /// fixes owner/group/mode on a directory that already exists. It is **not** atomic —
-    /// `install(1)` does `mkdir(2)` then `chown(2)`/`chmod(2)`, same as doing it by hand — so this
-    /// is a usability choice, not a safety one; do not restate it as closing a race.
-    ///
-    /// `-o/-g/-m` apply to the final component only, so with a nested `--directory` the intermediate
-    /// levels stay `root:wheel`. That is harmless for writes inside the leaf, and deliberate: only
-    /// the vault directory is handed over, never the volume root.
-    public static func createVaultDirectory(_ dir: String) -> String {
+    /// Only the vault directory is handed over, never the volume root: with a nested `--directory` the folders on
+    /// the way stay `root:wheel`, which is harmless for writes inside the vault.
+    public static func createVaultDirectory(mountPoint: String, relativeDirectory: String) -> String {
         return """
             The volume root is root-owned (that is normal, and it is what enabling ownership buys you).
-            Create the vault directory once, as yourself, with:
+            Create the vault directory once, owned by you, with:
 
-              \(createVaultDirectoryCommand(dir))
+              \(createVaultDirectoryCommand(mountPoint: mountPoint, relativeDirectory: relativeDirectory))
 
             Then re-run this command. Nothing after this step needs sudo: everything inside the vault
             will be yours. XCodeVault will not run this for you — read it, then run it if you agree.

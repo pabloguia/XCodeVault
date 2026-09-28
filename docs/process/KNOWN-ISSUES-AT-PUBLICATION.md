@@ -9,10 +9,16 @@ The blocking findings from the same reviews were fixed; see `STATUS.md` for that
 
 ## Privileged helper
 
-Nothing here is reachable by a client. No shipped artifact contains the helper — `bundle-app.sh`
-gates the binary and the LaunchDaemon plist behind `--with-helper`, off by default — and no code in
-the tree opens a connection to it. **Every item below becomes live the moment that flag is used in a
-release**, which is why the same list is repeated beside the flag in `scripts/bundle-app.sh`.
+> **Updated 2026-09-28.** Since the user-first permissions work the app's code can open a connection —
+> gated on a build signed by a usable team that includes the daemon, and none has been made. The list
+> below was re-verified against the helper's code that day; `scripts/bundle-app.sh` carries the result.
+
+Nothing here is reachable from a shipped artifact. None contains the helper — `bundle-app.sh` gates
+the binary and the LaunchDaemon plist behind `--with-helper`, off by default — and the client code
+that connects to it (deliverable 4 of the 2026-09-27 permissions plan) runs only in a build signed by a
+usable team that includes the daemon, which no build has been. **Every item below becomes live the
+moment that flag is used in a release**, which is why the same list is repeated beside the flag in
+`scripts/bundle-app.sh`.
 
 - ~~**Path-based cleanup verb.**~~ **Fixed 2026-09-18** (issue #1). The verb now walks every
   component from `/` with `openat` + `O_NOFOLLOW`, checking owner *and* mode at each level, and —
@@ -23,9 +29,10 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
   `FileManager.removeItem` (`removefile(3)` with `REMOVEFILE_RECURSIVE`) did not.
 - ~~**`isMountPoint` fails open in that same verb.**~~ **Fixed 2026-09-18** (issue #2). The query
   is three-valued (`MountAnswer`), is asked of the **descriptor** rather than the name, and the
-  verb refuses on `.undetermined`. `isMountPoint` survives for the byte accounting, where the
-  collapse is not a safety decision; its doc comment now names both callers and says why the
-  remaining guard use is safe.
+  verb refuses on `.undetermined`. `isMountPoint` survives only for the byte accounting, its one
+  caller, where the collapse is not a safety decision; the create verb asks the descriptor too
+  (`mountStatus(ofDescriptor:)`). Until 2026-09-28 this entry, and the function's doc comment, said
+  the create verb still used it in a guard (helper-security review of deliverable 4).
 
   Both of the above are now pinned *at the call site*, not only in the primitives. The mutations
   that restore each defect verbatim — replacing the mount switch with `_ = mount(fd)`, and the
@@ -80,6 +87,19 @@ release**, which is why the same list is repeated beside the flag in `scripts/bu
   branch `st_nlink == 2` (an empty directory is `.` plus its parent's entry) and `st_uid == 0`.
   **Stated as a verification, not an exclusion:** an attacker who can place an empty root-owned
   directory on that volume defeats it, and doing so requires root.
+- **Open: the cleanup verb has no in-use check of its own.** It deletes the CoreSimulator dyld and
+  Cryptex caches whatever is running against them. Since deliverable 4 the client refuses while Xcode,
+  a simulator, `simctl`, `xcodebuild` or the cache builder runs (`PrivilegedActionRunner`), which
+  guards against accident; a hostile client is not constrained by it.
+- **Open: the client's requirement refuses a wrong daemon's reply, not the request**
+  (xpc/connection.h:790-793; measured in-process 2026-09-28, helper-security review of deliverable 4).
+  A daemon from an older bundle still holding the name — ours never exits — acts on a verb before the
+  client can refuse it. The fix is written down as the M5 TODO on `helperRequirement`: a validated
+  `version()` round trip on the same connection before the verb.
+- **Open: neither requirement has a minimum-version predicate** (`clientRequirement` and
+  `helperRequirement` in `HelperProtocol.swift`, both TODO(M5)).
+- **Open: the audit trail is not rate-limited** (`HelperAudit.swift`). A client that passes the
+  requirement and the administrator check can flood the persisted log and push older records out.
 
 ## `scripts/helper-invariants.sh`
 
@@ -152,6 +172,21 @@ Three residuals were found in the original review:
   journal whose unwritability is the problem. Making the count independent of that journal is the
   remaining work, and the engine's comments scope the termination claim to a writable journal
   rather than stating it unconditionally.
+
+## Fixed 2026-09-28: the Xcode-running check read a few dozen processes (on `main` from 2026-09-18)
+
+`CleanExecutor.runningExecutablePaths()`, written in 9557b3d (2026-09-18) to replace a session-scoped
+`NSWorkspace` query, read `proc_listallpids`' answers as byte counts; they are counts of pids. It
+sized its buffer to a quarter of the table and divided what was listed by four again, so it looked at
+the first few dozen pids — 44 of 699 on this machine, measured 2026-09-28 — and neither launchd nor
+Finder was among them. Every guard built on it could miss a running Xcode: `clean`'s DerivedData and
+previews refusal, the migration engine's refusal before removing a source (`removeSource`) and before
+finishing a removal on `resume`, and the `locations set-*`/`reset-*` preflights. Found by the
+migration-safety review of deliverable 4 of the permissions plan. Fixed by reading both answers as
+counts, with a full buffer counted as "cannot tell", and pinned by `testTheProcessListReachesLaunchd`,
+which first shows launchd's path is readable. No tag contains 9557b3d and there has been no release,
+so the exposure is builds from public `main` in that window; what a user should check is in the user
+guide's FAQ.
 
 ## Compatibility
 

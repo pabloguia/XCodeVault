@@ -48,7 +48,7 @@ the last column says what this build does.
 | Permission | Asked for when | Why | How it is asked | In this build |
 |---|---|---|---|---|
 | Full Disk Access | A scan could not read folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals | The app opens the exact System Settings pane; you switch it on; the app notices and scans again. Code cannot grant it, so the app never tries | `xcodevaultctl permissions` reports it. The app asks when a scan was refused, and its Permissions section shows the state (built and unit-tested; not yet exercised on screen) |
-| Privileged helper — a background item that runs as root, approved once by an administrator | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root; the helper can do only a fixed list of actions on paths it resolves itself | A one-sentence sheet with **Allow**; then macOS asks you to approve the helper in Login Items & Extensions | Not available: it needs a signed build (issue #30). `vault init`, and then `doctor`, print the command for the vault folder; the dyld cache is listed, never cleaned |
+| Privileged helper — a background item that runs as root, approved once by an administrator | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache (experimental) | Those paths belong to root; the helper can do only a fixed list of actions on paths it resolves itself | A one-sentence sheet with **Allow**; then macOS asks you to approve the helper in Login Items & Extensions | Not available in any build made today: it needs a signed build that includes the helper (issue #30), and it has never run live. Until then the app says "Not available in this build" and shows the manual route where there is one: `vault init` and `doctor` print the command for the vault folder; the dyld cache stays listed, not cleaned |
 
 XCodeVault never asks for your password itself, never runs `sudo`, and never opens a root shell.
 Details, and the rest of the product, are in the [user guide](docs/USER_GUIDE.md).
@@ -68,8 +68,8 @@ Details, and the rest of the product, are in the [user guide](docs/USER_GUIDE.md
 | Accounting (`scan`, `status`, `report`, `doctor`, `volumes`, `journal`, `compatibility`) | Working. Read-only; `--json` on every read command. |
 | Cleanup and Apple-supported relocation (`clean`, `locations`, `runtime`) | Working, journaled, gated. These change your machine, and every strategy stays labelled **experimental** until it meets the Definition of Done. |
 | Vault / external migration (`vault`, `externalize`, `restore`, `migration`) | **Experimental.** Verified copy; the source is removed only when you opt in. |
-| GUI | First slice: read-only views, the clean flow, and a Permissions section. |
-| Privileged helper | Built and security-reviewed; not reachable from any client. It needs a signed build and has never run live (issue #30). |
+| GUI | First slice: read-only views, the clean flow, a Permissions section, and buttons for the two root actions that appear only in a build that can reach the helper — none can yet. |
+| Privileged helper | Built and security-reviewed. The app can register it and call its two verbs, gated on a signed build that includes it — none exists, so it has never run live (issue #30). |
 | Releases | None. Nothing is signed or notarized. |
 | CI | Every push to `main` and every pull request, on `macos-15` and `macos-26`. |
 

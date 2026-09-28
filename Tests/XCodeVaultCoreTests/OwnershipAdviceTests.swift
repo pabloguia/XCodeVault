@@ -15,20 +15,44 @@ final class OwnershipAdviceTests: XCTestCase {
     }
 
     func testCreateCommandUsesTheRealUserAndQuotesThePath() {
-        let advice = OwnershipAdvice.createVaultDirectory("/Volumes/Dev's SSD/XCodeVault")
+        let advice = OwnershipAdvice.createVaultDirectory(mountPoint: "/Volumes/Dev's SSD", relativeDirectory: "XCodeVault")
         let (user, group) = OwnershipAdvice.currentUserAndGroup()
+        let dir = "'/Volumes/Dev'\\''s SSD/XCodeVault'"
         XCTAssertTrue(
-            advice.contains(
-                "sudo install -d -o \(OwnershipAdvice.shellQuoted(user)) -g \(OwnershipAdvice.shellQuoted(group)) -m 755 '/Volumes/Dev'\\''s SSD/XCodeVault'"),
+            advice.contains("sudo mkdir \(dir) && sudo chown -h \(OwnershipAdvice.shellQuoted(user)):\(OwnershipAdvice.shellQuoted(group)) \(dir)"),
             "the pasted command must be correct verbatim: \(advice)")
         XCTAssertFalse(user.isEmpty)
         XCTAssertFalse(group.isEmpty)
-        // `install -d` over `mkdir`+`chown` for idempotency, NOT atomicity: install(1)
-        // does mkdir then chown, so the root-owned window exists either way.
-        XCTAssertFalse(advice.contains("mkdir"), "one idempotent command beats mkdir + chown")
         XCTAssertTrue(
             advice.contains("XCodeVault will not run this for you"),
             "must be explicit that the tool does not run privileged commands itself")
+    }
+
+    /// Carried note 4 of the 2026-09-27 permissions plan: `vault init` printed `install -d`, which creates missing
+    /// parents — the drive's mount point too, when pasted after an eject.
+    func testANestedDirectoryIsCreatedFolderByFolderAndNeverFromAboveTheDrive() {
+        let existing: Set<String> = ["/Volumes/V/Dev"]
+        let command = OwnershipAdvice.createVaultDirectoryCommand(
+            mountPoint: "/Volumes/V", relativeDirectory: "Dev/Tools/XCodeVault", exists: { existing.contains($0) })
+        let (user, group) = OwnershipAdvice.currentUserAndGroup()
+        XCTAssertEqual(
+            command,
+            "sudo mkdir '/Volumes/V/Dev/Tools' '/Volumes/V/Dev/Tools/XCodeVault' && sudo chown -h "
+                + "\(OwnershipAdvice.shellQuoted(user)):\(OwnershipAdvice.shellQuoted(group)) '/Volumes/V/Dev/Tools/XCodeVault'")
+        XCTAssertFalse(command.contains("install -d") || command.contains("mkdir -p") || command.contains(" -m "), command)
+    }
+
+    func testOnceAFolderIsMissingEveryFolderUnderItIsCreatedAfterIt() {
+        // A folder under a missing one cannot exist, whatever a check answers for it.
+        let command = OwnershipAdvice.createVaultDirectoryCommand(mountPoint: "/Volumes/V", relativeDirectory: "A/B", exists: { $0 == "/Volumes/V/A/B" })
+        XCTAssertTrue(command.hasPrefix("sudo mkdir '/Volumes/V/A' '/Volumes/V/A/B' && "), command)
+    }
+
+    func testTheDefaultFolderGetsTheSameCommandDoctorPrints() {
+        // One rule for the two places the command is printed.
+        XCTAssertEqual(
+            OwnershipAdvice.createVaultDirectoryCommand(mountPoint: "/Volumes/V", relativeDirectory: "XCodeVault", exists: { _ in false }),
+            OwnershipAdvice.createVaultDirectoryInPlaceCommand("/Volumes/V/XCodeVault"))
     }
 
     func testWritableDirectoryIsNotReportedAsAProblem() {

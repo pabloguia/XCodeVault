@@ -111,7 +111,12 @@ public enum HelperIdentity {
     /// that coupling, which is why it is written down here.
     ///
     /// TODO(M5): a minimum-version predicate, as `clientRequirement` also lacks. It matters more on
-    /// this side — this is the requirement that would refuse a *downgraded helper*.
+    /// this side — this is the requirement that would refuse a *downgraded helper*. **And a predicate
+    /// alone is not enough:** a client's requirement refuses the peer's *reply*, not the request, so an
+    /// old daemon still holding the name would act on a verb first (xpc/connection.h:790-793; measured
+    /// in-process 2026-09-28, helper-security review of deliverable 4; ours never exits, `main.swift`).
+    /// At M5, `HelperClient.send` must first complete a validated `version()` round trip on the same
+    /// connection, send the verb only after it, and treat an interruption as a failure.
     ///
     /// Same anchor and same marker OIDs as `clientRequirement`, differing only in the identifier —
     /// deliberately, so that weakening one and not the other is visible as a diff rather than as a
@@ -133,8 +138,9 @@ public enum HelperIdentity {
     /// false. `HelperClientTests` pins both, including that a refused connection is never resumed.
     ///
     /// `HelperClient` consumes this function. What is still gated on signing is the *live*
-    /// connection: `SMAppService` will not register an unsigned daemon, so no verb has been driven
-    /// end to end and `COMPATIBILITY_MATRIX.md` records that as pending, not as working.
+    /// connection: no build has had a real Developer ID team ID, which both ends of the connection
+    /// require, so no verb has been driven end to end and `COMPATIBILITY_MATRIX.md` records that as
+    /// pending, not as working.
     ///
     /// **What the invariants rule does and does not do about that**, stated carefully because an
     /// earlier version of this paragraph described a rule the same change had already replaced. It

@@ -71,7 +71,7 @@ extension HelperState {
     public var why: String {
         switch self {
         case .unavailableInThisBuild:
-            return "This build cannot reach the privileged helper: it has no usable Apple team ID, or the helper is not in it. "
+            return "This build cannot reach the privileged helper: it is not signed by a usable Apple team, or the helper is not in it. "
                 + "That takes a signed build that includes the helper (issue #30)."
         case .notInstalled:
             return "The helper is not installed. Only actions that need root use it."
@@ -88,11 +88,11 @@ extension HelperState {
         case .unavailableInThisBuild:
             return "Actions that need root stay manual. Where there is a manual route, `doctor` or `vault init` prints it."
         case .notInstalled:
-            return "Nothing to do until you choose an action that needs root."
+            return "Nothing to do until you choose an action that needs root; the app's Permissions section can also install it ahead of time."
         case .awaitingApproval:
             return "System Settings ▸ General ▸ Login Items & Extensions: switch XCodeVault on (administrator password)."
         case .enabled:
-            return "Nothing to do."
+            return "Nothing to do. The app's Permissions section can uninstall it."
         }
     }
 }

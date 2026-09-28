@@ -5,23 +5,36 @@
 #
 # Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper]
 #
-# `--with-helper` is off by default, and deliberately. Nothing in the shipped code connects to the
-# privileged helper — the CLI and the app link the client for read-only state and neither calls
-# `connect()` — so bundling it, together with its LaunchDaemon plist, offered the user a root
-# Mach service in the global bootstrap namespace in exchange for no functionality at all. That is
-# attack surface with no benefit, and it was reachable because the cask told people to enable it.
-# Bundle it when a shipped binary calls `connect()`; linking the client for read-only state, as the
-# CLI and the app do, is not that.
+# `--with-helper` is off by default, and deliberately. The app can connect since deliverable 4 of the
+# 2026-09-27 permissions plan — registration and the two verb calls — gated on a build signed by a
+# usable team and on this flag, so no build made without `--sign` and `--with-helper` can. None of it
+# has run live (#30). Without the flag the bundle offers no root Mach service in the global bootstrap
+# namespace at all, which stays the default until the helper has run live in a signed build and the
+# list below is empty or accepted in review. The cask once told people to enable it; it must not again.
 #
-# **Gate on this flag, not a backlog.** These are known and deliberately unfixed while nothing can
-# reach the helper; every one of them becomes live the moment this flag is used in a release:
-#   - the cleanup verb validates only the final path component, never the intermediate ones, and
-#     checks the target's owner but not its mode (a root-owned but group-writable target is enough);
-#   - `isMountPoint` fails *open* in that same verb: a getattrlist error reads as "not a mount point";
-#   - the cleanup verb has no in-use check: it deletes the CoreSimulator dyld and Cryptex caches
-#     regardless of whether a simulator, `simctl` or `xcodebuild` is running against them;
-#   - the volume-UUID lookup parses `ATTR_VOL_UUID` without confirming it was returned;
-#   - there is no audit log of any kind.
+# **Gate on this flag, not a backlog.** Re-verified against Sources/XCodeVaultHelperCore on 2026-09-28
+# (the list here had gone stale; helper-security review of deliverable 3) and completed by the review of
+# deliverable 4. Still true, and live the moment this flag is used in a release:
+#   - the cleanup verb has no in-use check of its own: it deletes the CoreSimulator dyld and Cryptex
+#     caches whatever is running against them. The client now refuses while Xcode, a simulator,
+#     `simctl`, `xcodebuild` or the cache builder runs (`PrivilegedActionRunner`), which protects against
+#     accident; the verb itself still has none, so a hostile client is not constrained by it;
+#   - the client's requirement refuses a wrong daemon's reply, not the request (xpc/connection.h:790-793;
+#     measured in-process 2026-09-28): a daemon from an older bundle still holding the name acts on a verb
+#     before the client can refuse it. The fix is the M5 TODO on `helperRequirement` in HelperProtocol.swift;
+#   - neither requirement has a minimum-version predicate yet (`clientRequirement` and `helperRequirement`
+#     in HelperProtocol.swift, both TODO(M5));
+#   - the audit trail is not rate-limited: a client that passes the requirement can flood the persisted
+#     log and push older records out (HelperAudit.swift:29-34).
+# Closed since the list was first written, with the evidence:
+#   - every component from `/` is opened with `O_NOFOLLOW`, and owner and mode are checked on each
+#     (`openGuardedDirectory`, HelperService.swift:245-251 and 695-794);
+#   - the mount question is asked of the descriptor, and an undetermined answer refuses
+#     (HelperService.swift:254-300);
+#   - `ATTR_VOL_UUID` is used only when the returned-attributes set says it was supplied
+#     (HelperService.swift:1052);
+#   - each verb emits an audit record through os_log (HelperAudit.swift:100-145, called from
+#     HelperService.swift:142, 162, 179 and 191).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG=debug; SIGN=""; TEAM=""; WITH_HELPER=0
@@ -35,11 +48,11 @@ HELPER_SRC=Sources/XCodeVaultHelper/main.swift
 # The client needs the same substitution as the daemon (issue #30). The CLI and the app link it since
 # the 2026-09-27 permissions work: `xcodevaultctl permissions` and the app's Permissions section report
 # the helper as "not available in this build" while the team ID is still the placeholder, so in a
-# signed build this substitution is what lets that report say anything else. Nothing yet opens a
-# connection to the helper from a shipped binary. What it prevents is the shape the protocol called "a
-# requirement written down, not a property held": a client whose team ID is still the placeholder
-# refuses every connection, which is fail-closed but inert — the daemon installed and nothing able to
-# talk to it.
+# signed build this substitution is what lets that report say anything else. The app's connection
+# (deliverable 4) also needs the running code signed by that team, which is `--sign`'s job, not this
+# one's. What it prevents is the shape the protocol called "a requirement written down, not a property
+# held": a client whose team ID is still the placeholder refuses every connection, which is
+# fail-closed but inert — the daemon installed and nothing able to talk to it.
 # `HelperClientTests` asserts this script still names the file; the check after the sed below is held
 # by review, not by a test.
 CLIENT_SRC=Sources/XCodeVaultHelperClient/HelperClient.swift

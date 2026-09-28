@@ -84,11 +84,11 @@ are the only privileged path.
 - **Full Disk Access at need** (shipped 2026-09-28, not yet exercised on screen): the Overview says "Some folders could not be read"
   with **Open Settings** only when a scan reports folders refused with `EPERM`, and only while the
   grant is not known to be present.
-- **The helper at need** (deliverable 4): choosing a root action opens a sheet with one sentence of
+- **The helper at need** (shipped 2026-09-28, gated on a signed build; never run live): choosing a root action opens a sheet with one sentence of
   why and **Allow**; then `register()`, `SMAppService.openSystemSettingsLoginItems()`, poll the
   status, and run the action when it reaches `enabled`. **Uninstall…** calls `unregister()`.
-- **A button that cannot work is never shown.** A build with no usable team ID, or without the daemon
-  in its bundle, says "Not available in this build" in the same place and shows the manual route
+- **A button that cannot work is never shown.** A build with no usable team ID, not signed by that
+  team, or without the daemon in its bundle, says "Not available in this build" in the same place and shows the manual route
   (the text remediation) instead.
 - Whether the launchd daemon needs Full Disk Access for `Caches/dyld` is **unmeasured** until the
   helper's first live run (#30).

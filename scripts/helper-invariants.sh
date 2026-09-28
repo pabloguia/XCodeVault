@@ -73,6 +73,15 @@ forbid() {  # forbid <file> <extended-regex> <why>
     return 0
 }
 
+# Several rules below use BSD grep's word boundaries, `[[:<:]]` and `[[:>:]]`. A grep without them matches nothing
+# with them, and `forbid` reads grep's output, not its status, so every such rule would pass in silence — which
+# the helper-security review measured with the ugrep an agent shell wraps `grep` in. Refuse instead of reporting ok
+# (helper-security and migration-safety reviews of deliverable 4, round 3).
+printf 'let c = HelperClient()\n' | grep -qE '[[:<:]]HelperClient[[:>:]]' \
+    || { echo "helper invariants: this grep does not honour [[:<:]]/[[:>:]]; refusing to report ok" >&2; exit 2; }
+printf 'let c = LiveHelperClients()\n' | grep -qE '[[:<:]]HelperClient[[:>:]]' \
+    && { echo "helper invariants: this grep matches across word boundaries; refusing to report ok" >&2; exit 2; }
+
 # Extracts one function body by **brace balance**, not by a fixed-indent terminator (issue #7).
 #
 # The old form stopped at the first line equal to `    }`. A one-line body — `func f() { return x }`
@@ -512,6 +521,54 @@ for f in scripts/bundle-app.sh scripts/release.sh; do
     forbid "$f" 'disable-library-validation' "library validation must stay on"
     forbid "$f" 'codesign.*--deep.*--sign|codesign.*--sign.*--deep' "never sign with --deep; sign inside-out"
 done
+
+# The verbs reach the helper through `PrivilegedActionRunner`, which journals before acting and refuses the
+# cleanup verb while the cache is in use — a check the verb does not make itself (the list beside
+# `--with-helper` in bundle-app.sh). The runner calls the app's adapter, `LiveHelper`, whose client is private.
+# So in the two client targets (migration-safety review of deliverable 4, widened after round 2 of both reviews):
+#   - no file but `LiveHelper.swift` and `PermissionsCommand.swift`, which reads the helper's state, names the
+#     client's module or its type. The identifier, not an import line: `@preconcurrency import`, `private import`
+#     and `import struct XCodeVaultHelperClient.HelperClient` all escaped the import-line pattern this replaced,
+#     measured by the helper-security review;
+#   - no file but `LiveHelper.swift` names the cleanup verb; `PermissionsCommand.swift` names neither verb; the
+#     app's other files may not call `.createVaultDirectory(volumeUUID` on an expression on the same line. The
+#     `PrivilegedAction` value of that name stays legal there as an implicit member, `.createVaultDirectory(…)`;
+#     spelled `PrivilegedAction.createVaultDirectory(…)` it is flagged, on the safe side;
+#   - `LiveHelper.swift` itself names the client's type on two lines only, the private stored client and the
+#     static Settings call, so it cannot hand the client out through an alias or an accessor. The migration-safety
+#     review measured that escape before this line existed: a `typealias` there, then a split call in the app.
+# A prohibition, not a proof. Known escapes, measured: a `.createVaultDirectory(volumeUUID:` call split across
+# lines in an app file, which needs a client the file can neither name nor reach; `LiveHelper().perform`
+# called without the runner — today the one call is the runner's (`AppModel.perform`); and verb calls written
+# inside `LiveHelper.swift` itself, which the two-line allowance counts by content, not by occurrence
+# (helper-security review of deliverable 4, round 4).
+# It refuses to report ok when `find` did not see `LiveHelper.swift` or `PermissionsCommand.swift`: a moved
+# directory must fail, not pass.
+seen_adapter=0
+seen_permissions=0
+while IFS= read -r f; do
+    case "$f" in
+        Sources/XCodeVault/LiveHelper.swift)
+            seen_adapter=1
+            hit=$(code_of "$f" | grep -nE '[[:<:]]HelperClient[[:>:]]' \
+                | grep -vE '^[0-9]+:    private let client = HelperClient\(\)$|^[0-9]+:    func openApprovalSettings\(\) \{ HelperClient\.openApprovalSettings\(\) \}$' \
+                | head -3)
+            [ -n "$hit" ] && violation "$f — names the helper client outside its two allowed lines" "$(printf '%s' "$hit" | tr '\n' ' ')" ;;
+        Sources/xcodevaultctl/PermissionsCommand.swift)
+            seen_permissions=1
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|createVaultDirectory' \
+                "the permissions command reads the helper's state and calls no verb" ;;
+        *)
+            forbid "$f" '[[:<:]](XCodeVaultHelperClient|HelperClient)[[:>:]]' \
+                "only LiveHelper and PermissionsCommand may use the helper client, whatever the import spelling"
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|[[:alnum:]_)][[:space:]]*\.createVaultDirectory\(volumeUUID' \
+                "only LiveHelper, driven by PrivilegedActionRunner, may call a verb: the journal and the in-use refusal are there" ;;
+    esac
+done < <(find Sources/XCodeVault Sources/xcodevaultctl -type f -name '*.swift' 2>/dev/null | sort)
+[ "$seen_adapter" = 1 ] || violation "Sources/XCodeVault/LiveHelper.swift — not found" \
+    "the client-target rule above checked nothing it was written for; move the rule with the file"
+[ "$seen_permissions" = 1 ] || violation "Sources/xcodevaultctl/PermissionsCommand.swift — not found" \
+    "the client-target rule above checked nothing it was written for; move the rule with the file"
 
 # Fed by `find`, not `git ls-files`: an untracked script is exactly where someone would put this.
 # Three files are excluded by name because each one *is* a checker for these patterns. Excluding them

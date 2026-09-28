@@ -838,12 +838,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
     /// Convenience for callers where an unanswerable question is not a safety decision.
     ///
-    /// **Two callers, and one of them is a guard.** `allocatedBytes` is the accounting use this
-    /// exists for, where guessing wrong costs a wrong number rather than a wrong deletion.
-    /// `doCreateVaultDirectory` also uses it in a `guard`, and that is safe only because the guard
-    /// requires `true`: `.undetermined` collapses to `false` and the call is refused. Anything
-    /// that needs `.undetermined` to *stop* it must use `mountStatus` and handle the case, because
-    /// the collapse is fail-open in that direction.
+    /// **One caller, and it is not a guard.** `allocatedBytes` is the accounting use this exists for,
+    /// where guessing wrong costs a wrong number rather than a wrong deletion. `doCreateVaultDirectory`
+    /// used it in a `guard` once; it asks the descriptor now (`mountStatus(ofDescriptor:)`), and this
+    /// comment said otherwise until the helper-security review of deliverable 4. Anything that needs
+    /// `.undetermined` to *stop* it must use `mountStatus` and handle the case, because the collapse
+    /// is fail-open in that direction.
     ///
     /// In `allocatedBytes` the collapse means "do not skip", i.e. **descend** — which is fail-open,
     /// and is held closed there only by `FTS_XDEV`.

@@ -7,8 +7,9 @@ import XCTest
 ///
 /// **What these can and cannot prove.** They exercise every decision the client makes *before* a
 /// message is exchanged: whether it will connect at all, what requirement it demands, and in what
-/// order it configures the connection. They cannot prove the daemon accepts it, because
-/// `SMAppService` will not register an unsigned daemon — that is M5 and
+/// order it configures the connection — and, since deliverable 4 of the 2026-09-27 permissions plan, how
+/// one message is sent over a fake connection. They cannot prove the daemon accepts it: no build has had a
+/// real Developer ID team ID, which both ends of the connection require — that is M5 and
 /// `COMPATIBILITY_MATRIX.md` records it as pending rather than as working.
 final class HelperClientTests: XCTestCase {
 
@@ -259,5 +260,142 @@ final class HelperClientTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: dir.appendingPathComponent(HelperIdentity.plistName).path, contents: Data())
         XCTAssertTrue(client.bundlesDaemon, "the plist in Contents/Library/LaunchDaemons")
+    }
+
+    /// Carried note 5 of the 2026-09-27 permissions plan: a usable team ID in the source is not a build signed
+    /// by that team. The buttons need both; `connect()` never reads this.
+    func testSignedByItsTeamNeedsTheSignatureNotJustTheSubstitutedConstant() {
+        func client(team: String, signedBy: String?) -> HelperClient {
+            HelperClient(team: team, makeConnection: { _ in NSXPCConnection() }, runningTeam: { signedBy })
+        }
+        XCTAssertTrue(client(team: goodTeam, signedBy: goodTeam).isSignedByItsTeam)  // positive control
+        XCTAssertFalse(client(team: goodTeam, signedBy: nil).isSignedByItsTeam, "ad hoc or unsigned: no team in the signature")
+        XCTAssertFalse(client(team: goodTeam, signedBy: "ZZZZZ99999").isSignedByItsTeam, "signed, by another team")
+        // A signature equal to an unusable constant is not a usable team either.
+        let placeholder = HelperIdentity.teamIDPlaceholder
+        XCTAssertFalse(client(team: placeholder, signedBy: placeholder).isSignedByItsTeam)
+    }
+
+    func testThisTestProcessIsNotSignedByAnyTeamThisProjectUses() {
+        // The production default reads the running code's signature. Whatever signs the test runner, it is not
+        // the placeholder and not the fixture team, so the shipped answer here is `false`.
+        XCTAssertFalse(HelperClient().isSignedByItsTeam)
+        XCTAssertFalse(HelperClient(team: goodTeam, makeConnection: { _ in NSXPCConnection() }).isSignedByItsTeam)
+    }
+
+    func testNotRegisteredNoLongerSaysRunTheAppOnce() {
+        // ADR-0007: nothing is installed at launch. Carried note 1 of the 2026-09-27 permissions plan.
+        let text = HelperClient.Failure.notRegistered("notFound").description
+        XCTAssertFalse(text.contains("Run the app once"), text)
+        XCTAssertTrue(text.contains("Install…"), text)
+    }
+
+    // MARK: - One message over one connection (deliverable 4; never run live, #30)
+
+    /// The daemon's side of a fake connection: answers each verb with a canned result and records the call.
+    private final class FakeDaemon: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
+        let lock = NSLock()
+        var calls: [String] = []
+        let result: HelperResult
+        init(result: HelperResult) { self.result = result }
+        private func record(_ s: String) { lock.withLock { calls.append(s) } }
+        func version(reply: @escaping @Sendable (String) -> Void) { reply("fake") }
+        func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+            record("clean:\(target)")
+            reply(result)
+        }
+        func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+            record("vault:\(volumeUUID)")
+            reply(result)
+        }
+        func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+            record("forget:\(target)")
+            reply(result)
+        }
+    }
+
+    /// A connection that hands out a chosen proxy, or fails through the error handler, and records the order
+    /// of the calls that matter. `invalidate()` also fires the stored error handler, after a reply too. That
+    /// second call is synthetic: a real connection calls exactly one handler (NSXPCConnection.h, measured by the
+    /// helper-security review of deliverable 4). It stands in for a violated contract, which is what
+    /// `ResumeOnce` exists to survive.
+    private final class ProxyConnection: NSXPCConnection, @unchecked Sendable {
+        let lock = NSLock()
+        var events: [String] = []
+        let proxy: Any
+        let failure: (any Error)?
+        var handler: ((any Error) -> Void)?
+        init(proxy: Any, failure: (any Error)? = nil) {
+            self.proxy = proxy
+            self.failure = failure
+            super.init()
+        }
+        private func record(_ s: String) { lock.withLock { events.append(s) } }
+        override func setCodeSigningRequirement(_ requirement: String) { record("requirement") }
+        override func resume() { record("resume") }
+        override func invalidate() {
+            record("invalidate")
+            handler?(NSError(domain: NSCocoaErrorDomain, code: NSXPCConnectionInvalid))
+        }
+        // The SDK's handler is not `@Sendable`; the override must match it exactly.
+        override func remoteObjectProxyWithErrorHandler(_ handler: @escaping (any Error) -> Void) -> Any {
+            record("proxy")
+            self.handler = handler
+            if let failure { handler(failure) }
+            return proxy
+        }
+    }
+
+    func testAVerbIsSentAfterTheRequirementAndTheConnectionIsInvalidatedAfterTheReply() async throws {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "created"))
+        let connection = ProxyConnection(proxy: daemon)
+        let result = try await HelperClient(team: goodTeam, makeConnection: { _ in connection }).createVaultDirectory(volumeUUID: "U-1")
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(daemon.calls, ["vault:U-1"])
+        XCTAssertEqual(connection.events, ["requirement", "resume", "proxy", "invalidate"])
+    }
+
+    func testAReplyFollowedByTheInvalidationErrorResumesOnce() async throws {
+        // The fake's `invalidate()` fires the error handler after the reply, a second call a real connection does
+        // not make (see `ProxyConnection`); without ResumeOnce it would crash the process.
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "done"))
+        let result = try await HelperClient(team: goodTeam, makeConnection: { _ in ProxyConnection(proxy: daemon) })
+            .removeRegenerableSystemDirectoryContents(target: .coreSimulatorDyldCache)
+        XCTAssertEqual(result.message, "done")
+        XCTAssertEqual(daemon.calls, ["clean:coreSimulatorDyldCache"], "the enum's raw value crosses the wire, never a path")
+    }
+
+    /// Not "and the daemon is never called", as this test was first named: its fake's proxy is not a daemon, so it
+    /// could not show that, and a real request can reach the daemon whatever becomes of the reply (see
+    /// `HelperClient.connect()` and `Failure.connectionFailed`; helper-security review of deliverable 4).
+    func testAConnectionErrorThrowsAndStillReleasesTheConnection() async {
+        let connection = ProxyConnection(proxy: NSObject(), failure: NSError(domain: NSCocoaErrorDomain, code: NSXPCConnectionInterrupted))
+        do {
+            _ = try await HelperClient(team: goodTeam, makeConnection: { _ in connection }).createVaultDirectory(volumeUUID: "U-1")
+            XCTFail("an interrupted connection must throw")
+        } catch let failure as HelperClient.Failure {
+            guard case .connectionFailed = failure else { return XCTFail("\(failure)") }
+        } catch { XCTFail("\(error)") }
+        XCTAssertTrue(connection.events.contains("invalidate"), "a failed call still releases its connection")
+    }
+
+    func testAnUnusableTeamIsRefusedBeforeAnyConnectionExists() async {
+        let connection = ProxyConnection(proxy: FakeDaemon(result: HelperResult(ok: true, message: "unused")))
+        do {
+            _ = try await HelperClient(team: HelperIdentity.teamIDPlaceholder, makeConnection: { _ in connection }).createVaultDirectory(volumeUUID: "U-1")
+            XCTFail("the placeholder build must refuse")
+        } catch {
+            XCTAssertEqual(error as? HelperClient.Failure, .unusableTeamID(HelperIdentity.teamIDPlaceholder))
+        }
+        XCTAssertEqual(connection.events, [], "refused before the connection was touched")
+    }
+
+    func testAProxyThatIsNotTheHelperIsAnErrorNotACrash() async {
+        do {
+            _ = try await HelperClient(team: goodTeam, makeConnection: { _ in ProxyConnection(proxy: NSObject()) }).createVaultDirectory(volumeUUID: "U")
+            XCTFail("expected unexpectedProxy")
+        } catch {
+            XCTAssertEqual(error as? HelperClient.Failure, .unexpectedProxy)
+        }
     }
 }

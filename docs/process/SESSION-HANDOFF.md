@@ -27,9 +27,10 @@ Runtime Library flow (export → `runtime offload` → `runtime import`). Milest
 has a first GUI slice; M5 (signing, notarization) is not started. **The privileged helper has never
 run live** — issue #30, blocked on a signed build.
 
-**In flight (2026-09-27): user-first permissions**, four deliverables in
-`docs/superpowers/plans/2026-09-27-user-first-permissions.md`; `STATUS.md` "In flight" says how many
-are done.
+**Done (2026-09-28): user-first permissions**, four deliverables in
+`docs/superpowers/plans/2026-09-27-user-first-permissions.md`, one commit each. The helper flow is
+written and tested with fakes, and shown only in a signed build that includes the daemon, which none
+is; what is left of it is M5's (#30).
 
 The week's series, in one paragraph each — details and evidence in H14/H15:
 
@@ -74,7 +75,9 @@ The week's series, in one paragraph each — details and evidence in H14/H15:
 2. **What rebuilds `Caches/dyld`.** Candidate trigger, untested: the first boot on a new host build
    (H14's last subsection). Interactive Xcode/Simulator.app use is unmeasured. The info-level
    listener pattern works (0 dropped); the debug-level one drops everything.
-3. Issue #30 and M4/M5 — need a signed build.
+3. Issue #30 and M4/M5 — need a signed build. The client half is written (deliverable 4 of the
+   permissions plan); the live run must also answer the list beside `--with-helper` in
+   `scripts/bundle-app.sh`.
 
 **Harness facts that cost time to learn:** every E6c/E6b run needs `--donor-uuid`; run test suites
 in the foreground or through the `perl` SIGINT reset (an `&` job ignores SIGINT); `scripts/preflight.sh`

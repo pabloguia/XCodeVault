@@ -172,7 +172,7 @@ public struct VaultRegistry: Sendable {
                     detail: [VaultDirectoryRefusal.reasonKey: VaultDirectoryRefusal.reason, VaultDirectoryRefusal.volumeUUIDKey: uuid])
             }
             throw VaultError(
-                "Cannot create \(dir): \(error.localizedDescription)\n" + OwnershipAdvice.createVaultDirectory(dir))
+                "Cannot create \(dir): \(error.localizedDescription)\n" + OwnershipAdvice.createVaultDirectory(mountPoint: mp, relativeDirectory: rel))
         }
         // The directory may pre-exist (created by the privileged step, by Finder, or by a previous
         // run). Creating it is not enough — it has to be *ours*, or every later write fails in a

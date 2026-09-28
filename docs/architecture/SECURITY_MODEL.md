@@ -104,12 +104,15 @@ require it as a precondition for any documented flow. Never modify `/System`.
 
 ### Registration
 
-> **Specification, not shipped behaviour.** `SMAppService` is called in one place, read-only
-> (`HelperClient.serviceStatus()` reads `.status`): there is no registration, no `unregister()`, and
-> no client opens a connection to the helper at all. `README.md` says so plainly ("Built and
-> security-reviewed; not reachable from any client") and `scripts/bundle-app.sh` keeps the daemon
-> behind `--with-helper`, off by default. This section says what registration must do when it is
-> written.
+> **Written, unit-tested, never run live (2026-09-28).** `HelperClient` registers and unregisters the
+> daemon through `SMAppService.daemon(plistName:)`, opens Login Items & Extensions for the approval, and
+> calls the two verbs over one connection per message, whose replies are checked against the helper's
+> code-signing requirement — the replies, not the requests (xpc/connection.h:790-793; measured in-process
+> 2026-09-28; the M5 fix is a TODO on `helperRequirement`). The app decides when through Core's
+> `HelperApprovalFlow` and `PrivilegedActionRunner`, tested with fakes, and offers any of it only to a
+> build signed by a usable team that includes the daemon. None of it has run against a real daemon: no
+> build has had a real Developer ID team ID (M5), and `scripts/bundle-app.sh` keeps the daemon behind
+> `--with-helper`, off by default (#30). `COMPATIBILITY_MATRIX.md` records it as pending.
 
 - Use **`SMAppService.daemon(plistName:)`** (macOS 13+). `SMJobBless` is deprecated as
   of macOS 13 and, per ADR-0001, we do not ship a parallel SMJobBless path.

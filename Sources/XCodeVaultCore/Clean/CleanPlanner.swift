@@ -25,6 +25,14 @@ public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
         guard requiresRoot else { return nil }
         return PrivilegeRequirement.forRootPath(path)
     }
+
+    /// The helper verb that performs this action, when one exists: the whole dyld cache only. The verb empties
+    /// every build's cache, so a path inside it must not borrow that (operator decision 2026-09-27). `clean`
+    /// never runs this; the app does, through `PrivilegedActionRunner`.
+    public var privilegedAction: PrivilegedAction? {
+        guard requiresRoot, path == PrivilegeRequirement.coreSimulatorDyldCachePath else { return nil }
+        return .emptyCoreSimulatorDyldCache
+    }
 }
 
 public struct CleanPlan: Sendable, Codable, Equatable {
@@ -117,7 +125,9 @@ public struct CleanPlanner: Sendable {
             // 2026-09-26). No user-deleted cache has been seen rebuilt, so the text names the observation
             // and not a mechanism.
             warnings.append(
-                "CoreSimulator dyld caches are root-owned and need root with Full Disk Access (H15): listed for accounting, not executable yet. "
+                "CoreSimulator dyld caches are root-owned and need root with Full Disk Access (H15). `clean` lists them for accounting and never "
+                    + "deletes them; the app can empty them through the privileged helper (experimental), which needs a signed build and whose own Full Disk "
+                    + "Access is unmeasured. "
                     + "Most of this total is NOT durable free space — on one machine (H11), caches for installed runtimes were rebuilt within an hour after a macOS update, "
                     + "but no deleted cache has been seen rebuilt and the trigger is not identified; until a rebuild those simulators run without a dyld shared cache. "
                     + "`doctor` reports the part nothing was seen to rebuild — caches whose runtime is gone — and a restart does not reclaim those "
@@ -232,24 +242,47 @@ public struct CleanExecutor: Sendable {
         return identify(path) == "com.apple.dt.Xcode"
     }
 
-    /// Every running process's executable path, or `nil` when the table could not be enumerated or
-    /// not one path could be read out of it. `nil` is the fail-closed signal; an empty array is not
+    /// Whether a simulator, `simctl`, `xcodebuild` or the cache builder is running — the processes that use or write
+    /// the CoreSimulator dyld cache, which the helper's cleanup verb does not check for itself (`scripts/bundle-app.sh`). Fails closed
+    /// like `xcodeIsRunning`: "I cannot tell" is not "no".
+    public static func simulatorWorkIsRunning() -> Bool {
+        switch runningExecutablePaths() {
+        case .none: return true
+        case .some(let paths): return paths.contains(where: isSimulatorWorkExecutable)
+        }
+    }
+
+    /// By basename, like `pgrep -x`: a booted simulator runs `launchd_sim`, `simctl` and `xcodebuild` are the
+    /// tools that start one, and `update_dyld_sim_shared_cache` — in each runtime's `Contents/Resources` —
+    /// builds the cache (migration-safety review of deliverable 4). Not `simdiskimaged`, which spawns that
+    /// builder: it is a daemon that stays up (running since 2026-09-25 on 2026-09-28), so naming it would refuse
+    /// the action for good.
+    static func isSimulatorWorkExecutable(_ path: String) -> Bool {
+        ["launchd_sim", "simctl", "xcodebuild", "update_dyld_sim_shared_cache"].contains((path as NSString).lastPathComponent)
+    }
+
+    /// Every running process's executable path, or `nil` when the table could not be enumerated, did not fit,
+    /// or not one path could be read out of it. `nil` is the fail-closed signal; an empty array is not
     /// returned.
     static func runningExecutablePaths() -> [String]? {
-        // `proc_listallpids(nil, 0)` returns a BYTE count, not an element count — XNU answers a
-        // NULL buffer with (nprocs + 20) * sizeof(int), so the kernel's own headroom is already in
-        // it. An earlier comment here called it a count and added 64 "for headroom", which
-        // over-allocated roughly fourfold and asserted a unit the API does not have.
-        let sizeInBytes = proc_listallpids(nil, 0)
-        guard sizeInBytes > 0 else { return nil }
-        var pids = [pid_t](repeating: 0, count: Int(sizeInBytes) / MemoryLayout<pid_t>.size)
-        let bytes = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
-        guard bytes > 0 else { return nil }
-        let n = Int(bytes) / MemoryLayout<pid_t>.size
+        // `proc_listallpids` answers a COUNT of pids, and takes its buffer size in BYTES: libproc divides
+        // `proc_listpids`'s byte count by `sizeof(int)` on the way out. Measured 2026-09-28: 718 for a NULL
+        // buffer — the kernel's headroom is in it — 699 listed, 702 in `ps -A`. This function was written
+        // (9557b3d, 2026-09-18) reading both answers as bytes: it sized the buffer to a quarter of the table
+        // and then divided what was listed by four again, so it looked at the first 44 of those 699 pids, and
+        // neither launchd nor Finder was among them. `xcodeIsRunning()` could answer "no" with Xcode open.
+        // Found by the migration-safety review of deliverable 4; `testTheProcessListReachesLaunchd` pins it.
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return nil }
+        var pids = [pid_t](repeating: 0, count: Int(count))
+        let listed = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        // A full buffer means the table outgrew the kernel's headroom between the two calls, and whatever did
+        // not fit is unknown: "I cannot tell", not a list.
+        guard listed > 0, Int(listed) < pids.count else { return nil }
         // PROC_PIDPATHINFO_MAXSIZE is a C macro (4 * MAXPATHLEN) and does not import into Swift.
         var buf = [UInt8](repeating: 0, count: Int(MAXPATHLEN) * 4)
         var paths: [String] = []
-        for i in 0..<min(n, pids.count) where pids[i] > 0 {
+        for i in 0..<Int(listed) where pids[i] > 0 {
             // A pid that exits between the listing and this call returns 0, which is ordinary. A
             // pid the caller may not inspect also returns 0 (EPERM), which is not — so "I read zero
             // paths" must not be reported as "Xcode is not running".
@@ -270,7 +303,10 @@ public struct CleanExecutor: Sendable {
     public func execute(_ plan: CleanPlan, force: Bool = false) throws -> CleanResult {
         let actions = plan.userActions
         if !force && isXcodeRunning() && actions.contains(where: { $0.categoryID == "derivedData" || $0.categoryID == "previews" }) {
-            throw CleanError("Xcode.app is running. Quit Xcode before cleaning DerivedData/previews, or pass --force.")
+            // "Or could not be read": `xcodeIsRunning()` answers true when it cannot tell (migration-safety review of
+            // deliverable 4, round 2).
+            throw CleanError(
+                "Xcode.app is running, or the process list could not be read. Quit Xcode before cleaning DerivedData/previews, or pass --force.")
         }
         let opID = UUID().uuidString
         try journal.record(

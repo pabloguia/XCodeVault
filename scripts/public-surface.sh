@@ -169,6 +169,8 @@ DEFAULTS = [
     ("VaultVerifier", "init", "isMountPoint", "MountStatus.isMountPoint($0)"),
     ("VaultRegistry", "register", "isMountPoint", "MountStatus.isMountPoint($0)"),
     ("VaultRegistry", "register", "volumeUUID", "MountStatus.volumeUUID(at: $0)"),
+    ("PrivilegedActionRunner", "init", "isXcodeRunning", "CleanExecutor.xcodeIsRunning"),
+    ("PrivilegedActionRunner", "init", "isSimulatorWorkRunning", "CleanExecutor.simulatorWorkIsRunning"),
 ]
 for owner, member, param, expected in DEFAULTS:
     seen = [

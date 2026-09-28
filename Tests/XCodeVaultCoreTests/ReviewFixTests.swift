@@ -888,6 +888,23 @@ final class PrePublicationReviewTests: XCTestCase {
             "an executable outside a .app bundle must not match")
     }
 
+    // MARK: - the process list reaches the whole table
+
+    /// `proc_listallpids` answers a count and takes its buffer size in bytes. Read as bytes both ways, the list
+    /// stopped at the first 44 of 699 pids, and launchd was not among them (measured 2026-09-28): `xcodeIsRunning()`
+    /// and `simulatorWorkIsRunning()` answered from a sliver of the table. Found by the migration-safety review of
+    /// deliverable 4.
+    func testTheProcessListReachesLaunchd() throws {
+        // Positive control: launchd's path is readable from here, so its absence below would be the listing's
+        // fault and not `proc_pidpath`'s.
+        var buf = [UInt8](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let len = proc_pidpath(1, &buf, UInt32(buf.count))
+        XCTAssertGreaterThan(len, 0, "launchd's path must be readable for this test to mean anything")
+        let launchd = String(decoding: buf[0..<Int(max(len, 0))], as: UTF8.self)
+        let paths = try XCTUnwrap(CleanExecutor.runningExecutablePaths(), "the process table could not be listed")
+        XCTAssertTrue(paths.contains(launchd), "pid 1 (\(launchd)) must be in the list; \(paths.count) paths were read")
+    }
+
     // MARK: - doctor reports "I could not check" rather than a clean bill of health
 
     /// `doctor` exits 0 unless an `.error` finding exists, so a registry that could not be read used

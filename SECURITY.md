@@ -8,9 +8,10 @@ threat model, the allowlisted API and the reasoning behind both are in
 `docs/architecture/SECURITY_MODEL.md`; read it before reporting, and certainly before proposing a
 patch.
 
-The helper is currently **built and code-signed-gated but not reachable from any client**: it is not
-yet wired into the CLI or the GUI, because that needs a signed bundle. That lowers the practical
-impact of a defect in it today. It does not lower the standard applied to changes.
+The helper is currently **built and code-signed-gated, and reachable from no build made today**: since
+2026-09-28 the app can register it and call its two verbs, but only in a build signed by a usable team
+that includes the daemon, and none has been made (#30). That lowers the practical impact of a defect in
+it today. It does not lower the standard applied to changes.
 
 ## Reporting a vulnerability
 

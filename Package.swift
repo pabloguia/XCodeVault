@@ -57,10 +57,10 @@ let package = Package(
         // execute the verbs in-process and mistake that for having exercised the boundary.
         //
         // The CLI depends on it for read-only state only (`xcodevaultctl permissions`: launchd's status,
-        // whether the team ID is usable, whether the daemon is bundled). Nothing in the CLI calls
-        // `connect()`. The app links it for the same read-only state (its Permissions section); deliverable 4
-        // of the 2026-09-27 permissions plan adds registration and the verb calls; a live connection stays
-        // gated on a signed bundle (issue #30).
+        // whether the team ID is usable and the code signed by it, whether the daemon is bundled). Nothing in
+        // the CLI calls `connect()`. The app links it for the Permissions section and, since deliverable 4 of
+        // the 2026-09-27 permissions plan, for registration and the verb calls; a live connection stays gated
+        // on a signed bundle that includes the daemon (issue #30).
         .target(
             name: "XCodeVaultHelperClient",
             dependencies: ["XCodeVaultHelperProtocol"],
