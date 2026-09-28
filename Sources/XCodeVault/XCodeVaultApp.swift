@@ -35,6 +35,14 @@ struct XCodeVaultApp: App {
 
 @MainActor @Observable
 final class AppModel {
+    /// A scan and what is derived from it, in the order `refresh()` stores them.
+    typealias Survey = (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry])
+
+    /// Everything outside the process; `.live` in the app (`AppEnvironment`).
+    let environment: AppEnvironment
+
+    init(environment: AppEnvironment = .live) { self.environment = environment }
+
     var report: ScanReport?
     var findings: [Finding] = []
     var vaultChecks: [VaultVolumeCheck] = []
@@ -55,15 +63,15 @@ final class AppModel {
     /// Both checks are cheap and read-only: one `open(2)` of H15's indicator, and `SMAppService`'s status.
     /// Nothing here connects to the helper.
     func refreshPermissions() {
-        fullDiskAccess = FullDiskAccessProbe().state()
-        helperState = LiveHelper().state()
+        fullDiskAccess = environment.fullDiskAccess()
+        helperState = environment.helper.state()
     }
 
     /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
     func openFullDiskAccessSettings() {
         guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
         returningFromSettings = true
-        NSWorkspace.shared.open(url)
+        environment.open(url)
     }
 
     func appDidBecomeActive() async {
@@ -76,10 +84,12 @@ final class AppModel {
     /// then asks for a rescan, which would otherwise erase the error before it was seen.
     func refresh() async {
         guard scanGate.requestScan() else { return }
+        let survey = environment.survey  // nil in the app: the real scan below runs
         repeat {
             refreshPermissions()
             let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
                 () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
+                if let survey { return survey() }
                 // No capability detection: it runs `xcodebuild` and `simctl` from every bundle that calls itself
                 // Xcode in /Applications or ~/Applications, inside the app's grant. Nothing in the app reads it.
                 let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
@@ -130,7 +140,7 @@ final class AppModel {
         pendingPrivilegedAction = nil
         helperProgress = "Waiting for you to approve XCodeVault in System Settings ▸ General ▸ Login Items & Extensions…"
         approvalTask = Task {
-            let outcome = await HelperApprovalFlow(helper: LiveHelper()).run()
+            let outcome = await environment.approvalFlow(environment.helper).run()
             // Cancelled by Stop or by a newer request: this wait no longer owns the progress text, or the action.
             guard !Task.isCancelled else { return }
             helperProgress = nil
@@ -160,7 +170,7 @@ final class AppModel {
     }
 
     func perform(_ action: PrivilegedAction) async {
-        switch await PrivilegedActionRunner(helper: LiveHelper()).run(action) {
+        switch await environment.runner(environment.helper).run(action) {
         case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess].compactMap { $0 }.joined(separator: "\n\n")
         case .refused(let why), .failed(let why): lastError = why
         }
@@ -168,15 +178,16 @@ final class AppModel {
     }
 
     func uninstallHelper() async {
-        do { try await LiveHelper().unregister() } catch { lastError = "\(error)" }
+        do { try await environment.helper.unregister() } catch { lastError = "\(error)" }
         refreshPermissions()
     }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
+        let clean = environment.clean
         do {
-            let result = try await Task.detached { try CleanExecutor(useTrash: useTrash).execute(selected) }.value
+            let result = try await Task.detached { try clean(selected, useTrash) }.value
             lastCleanResult = result
             await refresh()
         } catch { lastError = "\(error)" }

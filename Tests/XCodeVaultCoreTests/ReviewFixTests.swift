@@ -905,6 +905,19 @@ final class PrePublicationReviewTests: XCTestCase {
         XCTAssertTrue(paths.contains(launchd), "pid 1 (\(launchd)) must be in the list; \(paths.count) paths were read")
     }
 
+    /// Both in-use checks answer "running" when the list could not be read: "I cannot tell" is not "no". Every
+    /// caller injects its own check, so until the decision was split out nothing held this branch.
+    func testNeitherInUseCheckReadsAnUnreadableListAsNotRunning() {
+        XCTAssertTrue(CleanExecutor.xcodeIsRunning(paths: nil))
+        XCTAssertTrue(CleanExecutor.simulatorWorkIsRunning(paths: nil))
+        // Positive controls: a list that was read, and holds neither, answers "not running".
+        XCTAssertFalse(CleanExecutor.xcodeIsRunning(paths: ["/bin/ls", "/sbin/launchd"]))
+        XCTAssertFalse(CleanExecutor.simulatorWorkIsRunning(paths: ["/bin/ls", "/sbin/launchd"]))
+        XCTAssertTrue(
+            CleanExecutor.simulatorWorkIsRunning(
+                paths: ["/bin/ls", "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/launchd_sim"]))
+    }
+
     // MARK: - doctor reports "I could not check" rather than a clean bill of health
 
     /// `doctor` exits 0 unless an `.error` finding exists, so a registry that could not be read used

@@ -248,6 +248,34 @@ final class PrivilegedActionRunnerTests: XCTestCase {
         XCTAssertTrue(PrivilegedAction.emptyCoreSimulatorDyldCache.title.contains("(experimental)"))
     }
 
+    func testEachActionNamesWhatItNeeds() {
+        XCTAssertEqual(PrivilegedAction.createVaultDirectory(volumeUUID: "U").requirement, .helper)
+        XCTAssertEqual(PrivilegedAction.emptyCoreSimulatorDyldCache.requirement, .helperWithFullDiskAccess)
+    }
+
+    /// The app builds its runner with the real in-use checks. A helper that is not enabled is refused before they
+    /// are consulted and before the journal: the refusal is the state check's, whatever runs on this Mac. The
+    /// journal is a temporary one, so a regression of that check writes nothing real (migration-safety review of
+    /// the coverage change: this class is where a mutant of the check runs).
+    func testARunnerWithTheRealChecksRefusesAHelperThatIsNotEnabledFirst() async {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let waiting = FakeHelper([.awaitingApproval])
+        guard case .refused(let why) = await PrivilegedActionRunner(helper: waiting, journal: journal).run(.emptyCoreSimulatorDyldCache) else {
+            return XCTFail("must refuse")
+        }
+        XCTAssertEqual(why, "The privileged helper is not enabled.", "refused by the state check, not by an in-use check")
+        XCTAssertEqual(waiting.performed, [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: journal.url.path), "refused before the journal")
+        // Positive control: an enabled helper runs and journals where this looks. The vault folder, because the
+        // cache's in-use checks answer from whatever runs on this Mac.
+        let enabled = FakeHelper([.enabled])
+        guard case .done = await PrivilegedActionRunner(helper: enabled, journal: journal).run(.createVaultDirectory(volumeUUID: "U")) else {
+            return XCTFail("an enabled helper runs")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: journal.url.path))
+    }
+
     func testAnUnwritableJournalRefusesBeforeActing() async {
         let t = TempDir()
         let notADirectory = t.file("f", bytes: 1)
@@ -267,47 +295,6 @@ func packageSource(_ relativePath: String) throws -> String {
     return text.split(separator: "\n", omittingEmptySubsequences: false)
         .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
         .joined(separator: "\n")
-}
-
-/// The app's approval wait, pinned by its source text. The app target has no tests of its own, so these are wiring
-/// pins, not behaviour tests. Two waits at once would each run their action when the helper came up
-/// (migration-safety and helper-security reviews of deliverable 4).
-final class AppApprovalWaitWiringTests: XCTestCase {
-    private func body(of signature: String) throws -> Substring {
-        let code = try packageSource("Sources/XCodeVault/XCodeVaultApp.swift")
-        let start = try XCTUnwrap(code.range(of: signature), "\(signature) is gone; this pin is stale")
-        let end = code.range(of: "\n    func ", range: start.upperBound..<code.endIndex)?.lowerBound ?? code.endIndex
-        return code[start.upperBound..<end]
-    }
-
-    func testANewWaitCancelsTheRunningOneFirst() throws {
-        let install = try body(of: "func installHelper(then action: PrivilegedAction?) {")
-        let cancel = try XCTUnwrap(install.range(of: "approvalTask?.cancel()"), String(install))
-        let start = try XCTUnwrap(install.range(of: "approvalTask = Task {"), String(install))
-        XCTAssertLessThan(cancel.lowerBound, start.lowerBound)
-    }
-
-    func testACancelledWaitRunsNoAction() throws {
-        let install = try body(of: "func installHelper(then action: PrivilegedAction?) {")
-        let flow = try XCTUnwrap(install.range(of: "HelperApprovalFlow("), String(install))
-        let bail = try XCTUnwrap(install.range(of: "guard !Task.isCancelled else { return }"), String(install))
-        let act = try XCTUnwrap(install.range(of: "await perform(action)"), String(install))
-        XCTAssertLessThan(flow.lowerBound, bail.lowerBound)
-        XCTAssertLessThan(bail.lowerBound, act.lowerBound)
-        // Nor does it clear what the newer wait owns: above the check, a replaced wait would nil its replacement's
-        // handle and Stop would stop nothing (migration-safety review of deliverable 4, round 2).
-        for clear in ["approvalTask = nil", "helperProgress = nil"] {
-            let first = try XCTUnwrap(install.range(of: clear), "\(clear) is gone from installHelper: \(install)")
-            XCTAssertLessThan(bail.lowerBound, first.lowerBound, clear)
-        }
-    }
-
-    func testStoppingClearsWhatTheCancelledWaitNoLongerClears() throws {
-        let stop = try body(of: "func stopWaitingForApproval() {")
-        for line in ["approvalTask?.cancel()", "approvalTask = nil", "helperProgress = nil"] {
-            XCTAssertTrue(stop.contains(line), "\(line) is missing from stopWaitingForApproval: \(stop)")
-        }
-    }
 }
 
 /// `DoctorView` runs a finding's action with no confirmation of its own, so only the vault folder, which deletes

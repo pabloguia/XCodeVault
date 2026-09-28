@@ -535,8 +535,9 @@ done
 #     `PrivilegedAction` value of that name stays legal there as an implicit member, `.createVaultDirectory(…)`;
 #     spelled `PrivilegedAction.createVaultDirectory(…)` it is flagged, on the safe side;
 #   - `LiveHelper.swift` itself names the client's type on two lines only, the private stored client and the
-#     static Settings call, so it cannot hand the client out through an alias or an accessor. The migration-safety
-#     review measured that escape before this line existed: a `typealias` there, then a split call in the app.
+#     initialiser that takes one (the app passes none; tests pass a client whose connection and launchd calls are
+#     fakes), so it cannot hand the client out through an alias or an accessor. The migration-safety review
+#     measured that escape before this line existed: a `typealias` there, then a split call in the app.
 # A prohibition, not a proof. Known escapes, measured: a `.createVaultDirectory(volumeUUID:` call split across
 # lines in an app file, which needs a client the file can neither name nor reach; `LiveHelper().perform`
 # called without the runner — today the one call is the runner's (`AppModel.perform`); and verb calls written
@@ -551,7 +552,7 @@ while IFS= read -r f; do
         Sources/XCodeVault/LiveHelper.swift)
             seen_adapter=1
             hit=$(code_of "$f" | grep -nE '[[:<:]]HelperClient[[:>:]]' \
-                | grep -vE '^[0-9]+:    private let client = HelperClient\(\)$|^[0-9]+:    func openApprovalSettings\(\) \{ HelperClient\.openApprovalSettings\(\) \}$' \
+                | grep -vE '^[0-9]+:    private let client: HelperClient$|^[0-9]+:    init\(client: HelperClient = HelperClient\(\)\) \{ self\.client = client \}$' \
                 | head -3)
             [ -n "$hit" ] && violation "$f — names the helper client outside its two allowed lines" "$(printf '%s' "$hit" | tr '\n' ' ')" ;;
         Sources/xcodevaultctl/PermissionsCommand.swift)

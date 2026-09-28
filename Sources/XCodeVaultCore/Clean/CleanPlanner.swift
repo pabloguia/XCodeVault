@@ -220,8 +220,12 @@ public struct CleanExecutor: Sendable {
     /// **What it still does not detect:** a headless `xcodebuild` with no `Xcode.app` process. The
     /// stated purpose is protecting an in-flight build, and that case is not covered by this or by
     /// what it replaced. Stating it beats implying it away.
-    public static func xcodeIsRunning() -> Bool {
-        switch runningExecutablePaths() {
+    public static func xcodeIsRunning() -> Bool { xcodeIsRunning(paths: runningExecutablePaths()) }
+
+    /// The decision alone, so a test can hand it a process list: nil is "I cannot tell", and that answers
+    /// "running". Pinned by `testNeitherInUseCheckReadsAnUnreadableListAsNotRunning`.
+    static func xcodeIsRunning(paths: [String]?) -> Bool {
+        switch paths {
         case .none: return true  // could not enumerate, or enumerated and read nothing: "I cannot tell" is not "no"
         case .some(let paths): return paths.contains { isXcodeExecutable($0, bundleIdentifierAt: bundleIdentifier(ofExecutable:)) }
         }
@@ -245,8 +249,11 @@ public struct CleanExecutor: Sendable {
     /// Whether a simulator, `simctl`, `xcodebuild` or the cache builder is running — the processes that use or write
     /// the CoreSimulator dyld cache, which the helper's cleanup verb does not check for itself (`scripts/bundle-app.sh`). Fails closed
     /// like `xcodeIsRunning`: "I cannot tell" is not "no".
-    public static func simulatorWorkIsRunning() -> Bool {
-        switch runningExecutablePaths() {
+    public static func simulatorWorkIsRunning() -> Bool { simulatorWorkIsRunning(paths: runningExecutablePaths()) }
+
+    /// The decision alone, like `xcodeIsRunning(paths:)`.
+    static func simulatorWorkIsRunning(paths: [String]?) -> Bool {
+        switch paths {
         case .none: return true
         case .some(let paths): return paths.contains(where: isSimulatorWorkExecutable)
         }

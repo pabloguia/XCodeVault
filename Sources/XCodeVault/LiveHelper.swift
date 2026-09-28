@@ -8,9 +8,12 @@ import XCodeVaultHelperProtocol
 /// untested link, and it holds nothing that could be wrong in an interesting way.
 ///
 /// `client` is private so the rest of the app reaches the verbs only through `perform`, which the runner calls
-/// (`scripts/helper-invariants.sh`; migration-safety review of deliverable 4).
+/// (`scripts/helper-invariants.sh`; migration-safety review of deliverable 4). The app uses the default; tests
+/// hand in a client whose connection and launchd calls are fakes.
 struct LiveHelper: PrivilegedHelper {
-    private let client = HelperClient()
+    private let client: HelperClient
+
+    init(client: HelperClient = HelperClient()) { self.client = client }
 
     func state() -> HelperState {
         HelperState(
@@ -20,7 +23,7 @@ struct LiveHelper: PrivilegedHelper {
 
     func register() throws { try client.register() }
 
-    func openApprovalSettings() { HelperClient.openApprovalSettings() }
+    func openApprovalSettings() { client.openApprovalSettings() }
 
     func unregister() async throws { try await client.unregister() }
 

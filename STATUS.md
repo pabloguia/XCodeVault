@@ -26,6 +26,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   live, and shown only in a build signed by a usable team that includes the daemon, which none is**
   (#30; `COMPATIBILITY_MATRIX.md` lists each part as pending). What is left of the plan is M5's: a
   Developer ID build, the live run, and the list beside `--with-helper` in `scripts/bundle-app.sh`.
+  Sonar's gate failed deliverables 3 and 4 on new-code coverage (78.0%, 71.9%) because the app and the CLI
+  were absent from the coverage report; since ADR-0008 the test bundle links both (2026-09-28, "Coverage of
+  the app and the CLI").
 - Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
   publication are closed; `gh issue list` is the live queue and `git log` records which commit
   closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
@@ -2604,3 +2607,84 @@ Declared gaps:
   word-bounded patterns need BSD grep; the script now refuses to report ok under a grep without them.
 - `release.sh` does not pass `--with-helper`, so a release made today would show "Not available in this
   build"; M5 adds it once the list beside the flag is empty or accepted in review.
+
+## 2026-09-28 — Coverage of the app and the CLI: the test bundle links both (ADR-0008)
+
+SonarQube Cloud's quality gate failed the pushes of deliverables 3 and 4 on the coverage of new code: 78.0% and
+71.9%, against 80%. I did not notice the first at its close-out. The operator chose to raise the figure with
+tests rather than exclude the app from the measurement.
+
+Where it came from, recomputed line by line with `git blame` against the CI's own report for deliverable 4
+(e930f19): of its new lines in files the report contained, 274 of 296 were covered (92.6%). The rest were in
+`Sources/XCodeVault` and `Sources/xcodevaultctl`, which the report did not contain: the test bundle linked only
+the libraries, and the server counts an absent file as uncovered (measured 2026-09-20, recorded in `sonar.yml`).
+
+What changed (ADR-0008):
+- The test target depends on the app and the CLI. A probe measured first that the bundle builds (SwiftPM
+  renames an executable's entry point for the test build) and that a SwiftUI view's `body` runs in an
+  `NSHostingView` with no window.
+- `AppModel` takes an `AppEnvironment`: the survey, the Full Disk Access probe, the helper, the approval flow,
+  the runner, the clean and the URL opener. The app passes `.live`, whose members are the calls the app made
+  before (checked by reading in the migration-safety review). `HelperClient` reaches launchd through an internal
+  `Daemon` value, `LiveHelper` takes its client, `xcodevaultctl permissions` builds its report from a client it
+  is handed, and the two in-use checks take the process list as an argument; their public forms are one-line
+  wrappers.
+- New tests: `AppModelTests` (the scan, the permissions, a request in each helper state, the approval wait, the
+  root actions, uninstall, the clean), `LiveHelperTests`, `AppViewRenderTests` (every state deliverables 3 and 4
+  added, off screen), `CLIPermissionsCommandTests`, the `HelperClient` launchd seam, and the in-use checks'
+  "cannot tell". The approval-wait rules that were source-text pins are behaviour tests now, and the pins are
+  gone. That closes deliverable 4's declared gap "the app's approval wait is pinned by its source text, not
+  driven": it is driven, with fakes.
+
+Measured on this machine (x86_64; CI is arm64, where line counts can differ slightly). The suite and the
+coverage at 9d73742, this commit's tree before its last edits, which touched only comments and docs; the
+mutants at the snapshot each bullet names.
+- Full suite: Executed 578 tests, with 0 failures (550 at deliverable 4).
+- The coverage report: 57 files, 5782/7117 lines (81.2%). At e930f19 it had 45 files, 5360/6144 (87.2%). The
+  twelve new files are the app and the CLI, 378/965 (39.2%), mostly older views and commands no test reaches.
+  The percentage fell because those lines are in the report now; the server counted them as uncovered before.
+- New code by blame against this report: this change's lines, 34/41 (82.9%). Deliverable 4's lines would be
+  442/468 (94.4%), deliverable 3's 75/82 (91.5%). This change's seven uncovered lines are live-only: the
+  `.live` clean and URL-opener closures, the `.live` launchd register, unregister and Settings closures (#30),
+  and the two public in-use wrappers, which read this Mac's process table. Nothing is excluded from the
+  measurement.
+- Mutants at aa4c9c4, each proven applied, measured and restored byte for byte: 15, all killed, each by the
+  test written for it. The in-use checks' "cannot tell" (2), the launchd seam (2), `LiveHelper` (2),
+  `permissions` (1), the approval wait (5: the source-pin mutants M5-11 to M5-13, M6-1 and M6-2), and one each
+  for the permissions refresh, the helper sheet and the clean's Trash choice.
+- Rerun at 182ee19, whose tests the reviews changed: the five approval-wait mutants (M8-8 to M8-12) and M4-2,
+  the runner's first check weakened to refuse only an unavailable build. Each was applied, killed and restored
+  byte for byte. M4-2 was killed by the three tests the migration-safety reviewer predicted, among them the one
+  that used to fall back to the real journal. The test process ran with its home in a scratch directory
+  (`CFFIXED_USER_HOME` and `HOME`; a throwaway test bundle showed `xctest` resolves `NSHomeDirectory()` there):
+  nothing was written at the default journal path inside it, and the real journal's SHA-256 (b79ab47c…) was the
+  same before and after every run.
+
+Reviews at snapshot aa4c9c4. `helper-security-reviewer`: APPROVE with four notes, all taken. The claim that none
+of the new tests touches live state was false: two read it on purpose, and the ADR and the test header now say
+which. (Older tests read it too, launchd's status and the process table, and one attaches a temporary disk image
+with `hdiutil`.) This entry had to land with the ADR that cites it. The two Stop tests needed a positive
+control: each now has a model that is not stopped, approved at the same moment, and checks the stopped one only
+after the control has acted. The live runner needed a pin that it overrides none of its defaults: a source pin,
+since its in-use checks are closures. `migration-safety-reviewer`: REQUEST CHANGES, one item. Two new tests ran
+the runner with the real journal, safe only while the runner's first check held, and one sat in the class a
+mutant of that check runs.
+Now one uses a temporary journal and the other builds the live runner without running it. A static audit of
+every call in `Tests/` to the seven APIs whose journal defaults to the real one found no other direct call: four
+hits, all inside comments or string literals. It cannot see a call made through a closure or a wrapper, which is
+how it missed the one in `AppModelTests`; the migration-safety reviewer reproduced it independently. The real
+journal had 82 lines, was last written 2026-09-09, and held no `helper:` record, both before the mutants and after
+the full suite.
+
+Round 2 at 182ee19: both APPROVE. What they flagged was wording, taken here, in the ADR and in one test comment
+without a third round: where each figure was measured, "reads live state" scoped to the tests this change adds,
+what the audit cannot see, and that a passing run cannot show the 50 ms timing.
+
+Declared gaps:
+- Two approval-wait tests catch a regression of the replaced wait's cleanup only if that wait resumes within
+  50 ms. A passing run cannot show whether it did. The mutant runs can: both mutants that depend on it (M8-11
+  and M8-12, formerly M6-1 and M6-2) were killed at aa4c9c4 and again at 182ee19. The tests say so.
+- The GUI has still not been run on screen. The views render off screen; sheets, alerts and dialogs render only
+  when presented in a window, so their contents are not reached.
+- The server's figure for this push is the one that counts, and it arrives after this commit: the local figure
+  is an estimate.

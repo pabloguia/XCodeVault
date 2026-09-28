@@ -292,60 +292,6 @@ final class HelperClientTests: XCTestCase {
 
     // MARK: - One message over one connection (deliverable 4; never run live, #30)
 
-    /// The daemon's side of a fake connection: answers each verb with a canned result and records the call.
-    private final class FakeDaemon: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
-        let lock = NSLock()
-        var calls: [String] = []
-        let result: HelperResult
-        init(result: HelperResult) { self.result = result }
-        private func record(_ s: String) { lock.withLock { calls.append(s) } }
-        func version(reply: @escaping @Sendable (String) -> Void) { reply("fake") }
-        func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-            record("clean:\(target)")
-            reply(result)
-        }
-        func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-            record("vault:\(volumeUUID)")
-            reply(result)
-        }
-        func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
-            record("forget:\(target)")
-            reply(result)
-        }
-    }
-
-    /// A connection that hands out a chosen proxy, or fails through the error handler, and records the order
-    /// of the calls that matter. `invalidate()` also fires the stored error handler, after a reply too. That
-    /// second call is synthetic: a real connection calls exactly one handler (NSXPCConnection.h, measured by the
-    /// helper-security review of deliverable 4). It stands in for a violated contract, which is what
-    /// `ResumeOnce` exists to survive.
-    private final class ProxyConnection: NSXPCConnection, @unchecked Sendable {
-        let lock = NSLock()
-        var events: [String] = []
-        let proxy: Any
-        let failure: (any Error)?
-        var handler: ((any Error) -> Void)?
-        init(proxy: Any, failure: (any Error)? = nil) {
-            self.proxy = proxy
-            self.failure = failure
-            super.init()
-        }
-        private func record(_ s: String) { lock.withLock { events.append(s) } }
-        override func setCodeSigningRequirement(_ requirement: String) { record("requirement") }
-        override func resume() { record("resume") }
-        override func invalidate() {
-            record("invalidate")
-            handler?(NSError(domain: NSCocoaErrorDomain, code: NSXPCConnectionInvalid))
-        }
-        // The SDK's handler is not `@Sendable`; the override must match it exactly.
-        override func remoteObjectProxyWithErrorHandler(_ handler: @escaping (any Error) -> Void) -> Any {
-            record("proxy")
-            self.handler = handler
-            if let failure { handler(failure) }
-            return proxy
-        }
-    }
-
     func testAVerbIsSentAfterTheRequirementAndTheConnectionIsInvalidatedAfterTheReply() async throws {
         let daemon = FakeDaemon(result: HelperResult(ok: true, message: "created"))
         let connection = ProxyConnection(proxy: daemon)
@@ -397,5 +343,35 @@ final class HelperClientTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? HelperClient.Failure, .unexpectedProxy)
         }
+    }
+
+    // MARK: - launchd's side, through `Daemon` (registration never runs live before M5, #30)
+
+    func testRegistrationRemovalAndSettingsReachLaunchdOnlyThroughTheDaemonSeam() async throws {
+        let launchd = RecordingLaunchd(status: .requiresApproval)
+        let client = HelperClient(team: goodTeam, makeConnection: { _ in ProxyConnection(proxy: NSObject()) }, daemon: launchd.daemon)
+        XCTAssertEqual(client.serviceStatus(), .requiresApproval)
+        try client.register()
+        client.openApprovalSettings()
+        try await client.unregister()
+        XCTAssertEqual(launchd.calls, ["register", "settings", "unregister"])
+    }
+
+    func testAThrowingRegistrationOrRemovalReachesTheCaller() async {
+        struct Refused: Error {}
+        let launchd = RecordingLaunchd(status: .notRegistered, registerError: Refused(), unregisterError: Refused())
+        let client = HelperClient(team: goodTeam, makeConnection: { _ in ProxyConnection(proxy: NSObject()) }, daemon: launchd.daemon)
+        XCTAssertThrowsError(try client.register())
+        do {
+            try await client.unregister()
+            XCTFail("a refused removal must throw")
+        } catch {}
+        XCTAssertEqual(launchd.calls, ["register", "unregister"])
+    }
+
+    /// The two failures a caller cannot see past say so: a broken connection may still have acted.
+    func testTheConnectionFailuresSayWhatTheCallerCanStillKnow() {
+        XCTAssertTrue(HelperClient.Failure.connectionFailed("interrupted").description.contains("Whether it acted is unknown"))
+        XCTAssertTrue(HelperClient.Failure.unexpectedProxy.description.contains("Refusing to use it"))
     }
 }

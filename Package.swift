@@ -96,9 +96,14 @@ let package = Package(
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Links the app and the CLI too (ADR-0008): their code is tested in process, with fakes for everything
+        // outside it, and has coverage rows. The helper's executable is not linked; its logic is
+        // `XCodeVaultHelperCore`.
         .testTarget(
             name: "XCodeVaultCoreTests",
-            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore", "XCodeVaultHelperClient"],
+            dependencies: [
+                "XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore", "XCodeVaultHelperClient", "XCodeVault", "xcodevaultctl",
+            ],
             resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

@@ -88,6 +88,23 @@ public struct HelperClient: Sendable {
     /// `makeConnection`, so tests can say what a signed build would answer.
     let runningTeam: @Sendable () -> String?
 
+    /// launchd's side of the helper as one value, so a test sees every call and none reaches Background Task
+    /// Management or opens System Settings: registration, approval and removal never run live before M5 (#30).
+    /// Internal, like `makeConnection`: the public initialiser installs `.live` and nothing else can.
+    struct Daemon: Sendable {
+        let status: @Sendable () -> SMAppService.Status
+        let register: @Sendable () throws -> Void
+        let unregister: @Sendable () async throws -> Void
+        let openSettings: @Sendable () -> Void
+
+        static let live = Daemon(
+            status: { SMAppService.daemon(plistName: HelperIdentity.plistName).status },
+            register: { try SMAppService.daemon(plistName: HelperIdentity.plistName).register() },
+            unregister: { try await SMAppService.daemon(plistName: HelperIdentity.plistName).unregister() },
+            openSettings: { SMAppService.openSystemSettingsLoginItems() })
+    }
+    let daemon: Daemon
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -97,16 +114,18 @@ public struct HelperClient: Sendable {
         }
         self.bundleURL = Bundle.main.bundleURL
         self.runningTeam = HelperClient.teamOfRunningCode
+        self.daemon = .live
     }
 
     init(
         team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
-        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode
+        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live
     ) {
         self.team = team
         self.makeConnection = makeConnection
         self.bundleURL = bundleURL
         self.runningTeam = runningTeam
+        self.daemon = daemon
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -178,7 +197,7 @@ public struct HelperClient: Sendable {
     /// code-signing requirement set before `resume()` in `connect()` — on its replies; see there. A caller
     /// that reads `.enabled` as a reason to skip that has removed the peer validation entirely.
     public func serviceStatus() -> SMAppService.Status {
-        SMAppService.daemon(plistName: HelperIdentity.plistName).status
+        daemon.status()
     }
 
     /// Whether this build carries a team ID the peer requirement can be built from. An availability hint for
@@ -226,18 +245,18 @@ public struct HelperClient: Sendable {
     /// Registers the daemon. For a daemon this lands in "requires approval": the user approves it in System
     /// Settings ▸ General ▸ Login Items & Extensions, with administrator authentication.
     public func register() throws {
-        try SMAppService.daemon(plistName: HelperIdentity.plistName).register()
+        try daemon.register()
     }
 
     /// Removes the registration, so no stale Background Task Management entry outlives the user's intent
     /// (SECURITY_MODEL.md, Registration).
     public func unregister() async throws {
-        try await SMAppService.daemon(plistName: HelperIdentity.plistName).unregister()
+        try await daemon.unregister()
     }
 
     /// Opens System Settings at Login Items & Extensions, where the user approves the helper.
-    public static func openApprovalSettings() {
-        SMAppService.openSystemSettingsLoginItems()
+    public func openApprovalSettings() {
+        daemon.openSettings()
     }
 
     // MARK: - Verbs (never run live, #30)

@@ -64,9 +64,10 @@ jobs:
       # `sonar.sources`. No server-side value has been observed yet — this is the first run that
       # imports one.
       #
-      # The gap is structural: the XCTest bundle links the libraries and not the executables, so
+      # The gap was structural: the XCTest bundle linked the libraries and not the executables, so
       # 1,074 of ~9,400 source lines (`XCodeVault` 326, `xcodevaultctl` 712, `XCodeVaultHelper` 36)
-      # produce no coverage rows at all and cannot, by this pipeline.
+      # produced no coverage rows at all. **Since 2026-09-28 (ADR-0008) the bundle also links the app
+      # and the CLI**, so their files have rows and tests; only the helper's `main.swift` still has none.
       #
       # **Measured on 2026-09-20, where this comment used to say it would be.** SonarQube counts a
       # file absent from the report as UNCOVERED, not as having nothing to cover. On `48bae6f`, this

@@ -109,5 +109,13 @@ final class PermissionsReportTests: XCTestCase {
         XCTAssertEqual(Set(FullDiskAccessState.allCases.map(\.why)).count, FullDiskAccessState.allCases.count)
         XCTAssertEqual(Set(HelperState.allCases.map(\.why)).count, HelperState.allCases.count)
         XCTAssertEqual(Set(HelperState.allCases.map(\.displayName)).count, HelperState.allCases.count)
+        XCTAssertEqual(Set(HelperState.allCases.map(\.nextStep)).count, HelperState.allCases.count)
+    }
+
+    /// The next step names the button the app shows in that state, and none where the app shows none.
+    func testTheHelperNextStepNamesTheAppsOwnButton() {
+        XCTAssertTrue(HelperState.notInstalled.nextStep.contains("install it ahead of time"))
+        XCTAssertTrue(HelperState.enabled.nextStep.contains("uninstall it"))
+        XCTAssertFalse(HelperState.unavailableInThisBuild.nextStep.contains("Permissions section"))
     }
 }
