@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-27. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-09-28. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -16,13 +16,14 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
-  one commit each. **2 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
+  one commit each. **3 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
   ADR-0007, and the `SECURITY_MODEL.md` correction (the daemon's Full Disk Access is unmeasured, not
   "not needed"); then the Permissions model in Core, `xcodevaultctl permissions` (in cli-smoke), and
-  the `vault-dir:<uuid>` finding carrying the structured action. Next: the GUI Permissions section and
-  the Full Disk Access prompt. The helper flow is **pending — needs a signed build** (#30);
-  `COMPATIBILITY_MATRIX.md` "Pending — added 2026-09-27" lists it, and the plan's deliverable 4 opens
-  with what the deliverable 2 reviews carried to it.
+  the `vault-dir:<uuid>` finding carrying the structured action; then the GUI Permissions section, Full
+  Disk Access asked for when a scan is refused, ad hoc hardened-runtime signing for builds without a
+  Developer ID, and the app's tools kept to the `xcode-select`ed Xcode. Next: the helper flow, **pending
+  — needs a signed build** (#30); `COMPATIBILITY_MATRIX.md` "Pending — added 2026-09-27" lists it, and
+  the plan's deliverable 4 opens with what the deliverable 2 and 3 reviews carried to it.
 - Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
   publication are closed; `gh issue list` is the live queue and `git log` records which commit
   closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
@@ -2418,3 +2419,89 @@ Where the plan's text claimed something that does not exist yet, the code says l
 - `doctor` prints "privileged action:", not "in the app:"; no button exists before deliverable 4.
 - The Full Disk Access next step is keyed to `scan`'s existing `[partial: unreadable entries]` mark.
 - The helper texts say a signed build is required, not that none exists.
+
+## 2026-09-28 — user-first permissions, deliverable 3 of 4: Full Disk Access, asked for when a scan is refused
+
+The scan now tells a privacy refusal from an ordinary one. `DiskUsage.privacyRefusalCount` counts the
+unreadable entries refused with `EPERM`, the errno TCC returns (H15), and `ScanSummary` sums it over the
+items the totals count. `unreadable` and `lowerBound` are unchanged. `EPERM` is not TCC's alone — the
+migration-safety reviewer's `sandbox-exec` probe produced the same `FTS_DNR` with `EPERM` — which is why the
+prompt stops once the grant is known to be present.
+
+In the app:
+- The Overview says "Some folders could not be read" with **Open Settings** only when that count is
+  non-zero and the grant is not known to be present. A scan that counts no refusal asks for nothing.
+- A Permissions section shows Full Disk Access and the helper — state, why, next step — from the same
+  `PermissionsReport` as `xcodevaultctl permissions`. **Open Settings** opens the exact pane; coming back
+  re-checks and rescans once.
+- Both decisions are in Core (`PermissionPrompts.shouldAskForFullDiskAccess`,
+  `FullDiskAccessState.offersOpenSettings`) and tested; the view decides nothing. The app links the helper
+  client for read-only state; nothing calls `connect()`.
+- The tools the app starts work inside its grant — the same rule that let a granted terminal's commands do
+  what they could not without it (H15). So the app's scan runs nothing from the Xcode bundles it discovers:
+  a bundle is accepted on its Info.plist alone, from /Applications or ~/Applications. And before any tool
+  runs, `GrantedToolEnvironment` removes `DEVELOPER_DIR`, `TOOLCHAINS` and `SDKROOT` and fixes `PATH`, so
+  `xcrun` resolves through the system's `xcode-select` choice and its own cache. The CLI keeps its caller's
+  environment.
+
+`bundle-app.sh` without `--sign` now signs ad hoc, inside-out, with the hardened runtime. Measured on
+macOS 26.7 (25G229): the app and the CLI carry `flags=0x10002(adhoc,runtime)` and no entitlements, and
+`codesign --verify --deep --strict` passes. SwiftPM's own output is ad hoc with no runtime flag and with
+`get-task-allow`; a probe dylib named in `DYLD_INSERT_LIBRARIES` ran in SwiftPM's CLI and not in the bundled
+one. The app was not launched.
+
+Measured for the environment, 2026-09-28, one machine:
+- `xcrun` runs a tool it does not find as a developer tool from `PATH`; without the tool in `PATH` it
+  reports "not a developer tool or in PATH".
+- `xcrun`'s cache (`xcrun_db`, owned by the user) answered for a tool under a `PATH` that no longer contained
+  it. Switching it off made each lookup take 9 to 18 s instead of 0.05 s, and `TMPDIR` does not move it.
+- `ProcessInfo`'s environment reflects `setenv`/`unsetenv` made after its first read, and a child inherits
+  the change whether started with no environment or with `ProcessInfo`'s merged.
+- The probe dylib did not load into Xcode's `xcodebuild` (library validation), directly or through `xcrun`.
+
+Also here: the doctor's orphaned-dyld remediation says to delete from a terminal that has Full Disk
+Access, as H15 measured. It was promised in deliverable 2 and missed there.
+
+Measured once, in a process without Full Disk Access: `DiskUsage.measure` of H15's indicator folder counts
+its one unreadable entry as a privacy refusal. Full suite: 508 tests, 0 failures, 0 skipped.
+
+Twenty mutants over three rounds, each measured on that round's frozen snapshot in a separate worktree:
+nineteen applied and killed by the expected test, among them one for each of the `EACCES` test's two
+positive controls and one for each F3 pin. The twentieth, removing the `FTS_DNR` increment, survives by
+construction; it is the gap declared below.
+
+Reviews, three rounds; every finding was checked against the code or measured before it was fixed.
+- **Helper security, round 1.** The app now asks for Full Disk Access, and no build it could ship in had
+  the hardened runtime, so code injected into a granted app would run with its grant. Fixed with the
+  reviewer's option A, the ad hoc signing above. The footer's first sentence was unmeasured and is gone.
+- **Helper security, round 2 — the one that mattered most.** The hardened runtime covers the app, not
+  what it starts: the scan ran `xcodebuild` and `simctl` from any folder named `Xcode*.app` whose Info.plist
+  said so, and inherited the variables that steer `xcrun`. Fixed as above; measuring the fix found the
+  `PATH` fallback and the cache, and only the first is closed.
+- **Migration safety, round 1.** Four pins were missing: the summary is a sum, the lower bound does not
+  depend on the count, one refusal is enough to ask, and the `EACCES` test shows which branch recorded the
+  entry. The count was `permissionDeniedCount`; "Permission denied" is `strerror(EACCES)`, the one errno it
+  excludes. A pre-existing comment said a Codable default kept old reports decodable; the reviewer
+  measured `keyNotFound`, and the comment says so now.
+- **Migration safety, round 2: approved**, with three notes taken: no claim about every first run, a
+  test that the dyld advice names Full Disk Access, and the advice citing E6c's check.
+- **A test caught me once more.** My first doctor wording quoted H15's `sudo rm -rf`; the test that
+  forbids `rm -rf` in that remediation failed on it.
+- **Round 3: both approved.** Helper security's note — `setenv` is not thread-safe, and the pin
+  covers `init()` but not `AppModel`'s initializer, which runs first — is carried to deliverable 4,
+  plan item (9). Migration safety's — the guide said the app starts "only" the selected Xcode's
+  tools, which the trusted cache contradicts — is fixed in the wording.
+
+Declared gaps:
+- The GUI has not been run on screen: opening a window needs the operator's OK.
+- Whether macOS applies a new grant to the running app without a relaunch is unmeasured; the guide says to
+  relaunch if macOS asks. Whether a rebuild needs the grant again is unmeasured.
+- `xcrun`'s cache stays trusted by the app, as by every developer tool; whoever controls that file
+  controls what `xcrun` runs inside the grant.
+- The CLI's capability detection still runs `xcodebuild` and `simctl` from every `Xcode*.app` it finds —
+  inside the terminal's grant when there is one. It predates this work.
+- The `FTS_DNR` increment has one real measurement and no unit test; the `fts_open` failure branch has
+  none. A test under `sandbox-exec` (deprecated) would need a test-only executable; declined for now.
+- `refreshPermissions()` runs on the main actor; its latency is unmeasured.
+- Coming back from System Settings during the first scan starts a second, overlapping scan. Both only
+  read; the result shown is whichever ends last. Carried to deliverable 4, plan item (7).

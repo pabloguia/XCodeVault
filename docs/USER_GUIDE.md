@@ -9,22 +9,29 @@ Every read command accepts `--json`.
 ## Permissions: which, when, why, and how the app asks
 
 By design ([ADR-0007](adr/0007-permissions-asked-at-need.md)), XCodeVault asks for a permission only
-at the moment an action needs it; the last column of the table says what this build does. The first
-run asks for nothing: it scans, shows, and changes nothing. XCodeVault never asks for your password
+at the moment an action needs it; the last column of the table says what this build does. Nothing is
+asked for up front: the first run scans, shows, and changes nothing, and asks for Full Disk Access only
+if that scan was refused. XCodeVault never asks for your password
 itself, never runs `sudo`, and never opens a root shell. Where macOS allows it, asking means one
 system prompt, not a command for you to paste.
 
 | Permission | Asked for when | Why | How XCodeVault asks | In this build |
 |---|---|---|---|---|
-| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it; the app's prompt is planned |
+| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it. The app asks when a scan was refused, and its Permissions section shows the state (built and unit-tested; not yet exercised on screen) |
 | **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available: it needs a signed build (issue #30). `vault init`, and then `doctor`, print the command for the vault folder; the dyld cache is listed, never cleaned |
 
-Two details that are easy to get wrong:
+Three details that are easy to get wrong:
 
 - **Full Disk Access is granted per app.** For `xcodevaultctl`, macOS decides by the app you run it
   from — usually your terminal — so that is the one to switch on: H15 recorded a grant to one
   terminal app that did not reach a process started another way. For `XCodeVault.app` itself this
   is unmeasured: no signed build has been made.
+- **The tools an app starts work inside its grant** — the same rule that makes your terminal's grant
+  reach the commands you run in it (H15). `XCodeVault.app` starts system tools, and the developer tools
+  `xcrun` resolves for the Xcode chosen with `xcode-select` — through `xcrun`'s own per-user cache, which
+  it trusts as every developer tool does. It runs nothing from other copies of Xcode it finds, and
+  ignores `DEVELOPER_DIR`, `TOOLCHAINS` and `SDKROOT`. `xcodevaultctl` keeps your environment: it is
+  your terminal's grant, and your choice.
 - **Whether the helper itself needs Full Disk Access is unmeasured.** Emptying the dyld cache needed
   root *with* Full Disk Access when it was measured from a terminal (H15). The helper runs as a
   launchd daemon, which is a different context, and it has never run live (issue #30).
@@ -39,15 +46,14 @@ The app shows the same numbers and runs the same checks as the command line. Res
 
 | Section | What it shows | What it changes | How to undo |
 |---|---|---|---|
-| Overview | Internal disk used by developer tooling; how much is cleanable or relocatable; warnings; doctor issues of error severity or worse | Nothing | — |
+| Overview | Internal disk used by developer tooling; how much is cleanable or relocatable; warnings; doctor issues of error severity or worse; when a scan was refused by macOS privacy protection, **Open Settings** for Full Disk Access | Nothing | — |
 | Storage | Every storage category present on this Mac, with size, outcome, strategy and path; symlinks and mount points flagged | Nothing | — |
 | Doctor | Unsafe or broken setups, with the proposed fix where there is one | Nothing: doctor proposes, it never applies a fix | — |
 | Clean | The cleanup plan — regenerable data only, largest first, every category labelled experimental. Select rows, then **Delete selected…**; the confirmation shows the exact count | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are listed, never deleted here; the **Needs** column says what they lack | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
 | Volumes | Mounted volumes, whether each qualifies as a vault, and the state of registered vault volumes | Nothing; registering a vault is `xcodevaultctl vault init` | — |
 | Runtimes | Installed simulator runtimes | Nothing | — |
 | Journal | The last 100 journal entries | Nothing | — |
-
-A **Permissions** section with these two rows is planned (see `STATUS.md`).
+| Permissions | The Full Disk Access and helper states, each with one sentence of why: **Open Settings** for Full Disk Access; for the helper, where the manual route is while this build cannot reach it | Nothing by itself. **Open Settings** opens System Settings; when you come back, the app checks again and rescans — if macOS asks you to quit and reopen XCodeVault, do so | Switch the permission off in System Settings |
 
 ## The command line
 

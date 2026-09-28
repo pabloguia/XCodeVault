@@ -66,8 +66,8 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 > Status: specification. Each item says which deliverable of
 > `docs/superpowers/plans/2026-09-27-user-first-permissions.md` ships it; until then it is planned.
 
-The rule: the first run asks for nothing, and a permission is asked for only when an action needs
-it. Wherever macOS allows it, asking means one system prompt; the GUI never hands the user a Terminal
+The rule: nothing is asked for up front, and a permission is asked for only when an action needs
+it — for Full Disk Access, a scan that was refused, which can be the first. Wherever macOS allows it, asking means one system prompt; the GUI never hands the user a Terminal
 command as the primary route. The client never runs a root shell (`osascript … with administrator
 privileges`, `AuthorizationExecuteWithPrivileges`, spawned `sudo`): the helper's allowlisted verbs
 are the only privileged path.
@@ -77,11 +77,11 @@ are the only privileged path.
   awaitingApproval | enabled`), each with one sentence of why and one next step. `--json` shape:
   `{"fullDiskAccess": {"state", "why", "nextStep"}, "helper": {"state", "why", "nextStep"}}`.
   `clean`'s tag for a root row points to it.
-- **GUI Permissions section** (deliverable 3; buttons for the helper in deliverable 4): two rows —
+- **GUI Permissions section** (shipped 2026-09-28, not yet exercised on screen; buttons for the helper in deliverable 4): two rows —
   Full Disk Access and the helper — each with a status, one sentence of why, and one button:
   **Open Settings** for Full Disk Access; **Install…** or **Uninstall…** for the helper. When the app
   becomes active after the user returns from System Settings, it re-checks and rescans.
-- **Full Disk Access at need** (deliverable 3): the Overview says "Some folders could not be read"
+- **Full Disk Access at need** (shipped 2026-09-28, not yet exercised on screen): the Overview says "Some folders could not be read"
   with **Open Settings** only when a scan reports folders refused with `EPERM`, and only while the
   grant is not known to be present.
 - **The helper at need** (deliverable 4): choosing a root action opens a sheet with one sentence of

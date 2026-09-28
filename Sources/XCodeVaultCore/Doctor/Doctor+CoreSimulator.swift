@@ -251,12 +251,15 @@ extension Doctor {
                         + "stayed gone, because nothing rebuilds a cache for an absent runtime. "
                         + "First confirm the runtime is really gone: `simctl runtime list` cannot see a runtime bundled inside an older Xcode, so if any "
                         + "Xcode on this Mac ships \(dirName), this cache is live and deleting it costs you a rebuild for nothing. "
-                        + "Then, if you want to run the probe that is still open — root deletion is UNVERIFIED, and was refused on that Inbox file despite "
-                        + "the same absence of SIP markers — inspect first: `P=\(q); sudo ls -la \"$P\"`. Delete as a separate command: "
+                        + "Then delete it as root from a terminal that has Full Disk Access: in this tree root was refused with Operation not "
+                        + "permitted without the grant and succeeded with it (H15: root deleting a whole build directory under `Caches/dyld`, "
+                        + "2026-09-25, one machine). Inspect first: `P=\(q); sudo ls -la \"$P\"`. Delete as a separate command: "
                         + "`sudo rm -f \"$P\"/dyld_sim_shared_cache_* \"$P\"/update_dyld_sim_shared_cache-std*.txt && sudo rmdir \"$P\"`. "
                         + "`rmdir` refuses if anything unexpected is inside. Copy `update_dyld_sim_shared_cache-stderr.txt` out first — that glob deletes it, "
-                        + "and it is the diagnostic worth keeping. If the delete is refused with Operation not permitted, that is the more interesting "
-                        + "outcome, not a failure: it would make this a second path where root is blocked with no BSD flag and no rootless.conf entry.",
+                        + "and it is the diagnostic worth keeping. If the delete is still refused with Operation not permitted, check that terminal's "
+                        + "Full Disk Access first — it was the whole of the refusal H15 measured here: System Settings ▸ Privacy & Security ▸ "
+                        + "Full Disk Access; `xcodevaultctl permissions`, run in that terminal, reports it (the same check E6c's harness "
+                        + "recorded from the granted terminal).",
                     evidence: "docs/research/FINDINGS-2026-09-05.md §F10"))
         }
 

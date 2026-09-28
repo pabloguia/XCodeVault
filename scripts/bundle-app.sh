@@ -1,16 +1,17 @@
 #!/bin/bash
 # Assembles XCodeVault.app from SwiftPM build products (ADR-0003: SwiftPM is the build system of
-# record; the .app is script-assembled). Optionally signs inside-out with Developer ID.
+# record; the .app is script-assembled). Signs inside-out: with Developer ID when `--sign` is given,
+# otherwise ad hoc with the hardened runtime.
 #
 # Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper]
 #
 # `--with-helper` is off by default, and deliberately. Nothing in the shipped code connects to the
-# privileged helper — the CLI links the client for read-only state and never calls `connect()`; the
-# app does not link it — so bundling it, together with its LaunchDaemon plist, offered the user a root
+# privileged helper — the CLI and the app link the client for read-only state and neither calls
+# `connect()` — so bundling it, together with its LaunchDaemon plist, offered the user a root
 # Mach service in the global bootstrap namespace in exchange for no functionality at all. That is
 # attack surface with no benefit, and it was reachable because the cask told people to enable it.
 # Bundle it when a shipped binary calls `connect()`; linking the client for read-only state, as the
-# CLI does, is not that.
+# CLI and the app do, is not that.
 #
 # **Gate on this flag, not a backlog.** These are known and deliberately unfixed while nothing can
 # reach the helper; every one of them becomes live the moment this flag is used in a release:
@@ -31,12 +32,14 @@ if [ -n "$SIGN" ] && [ -z "$TEAM" ]; then TEAM=$(echo "$SIGN" | sed -E 's/.*\(([
 
 cd "$ROOT"
 HELPER_SRC=Sources/XCodeVaultHelper/main.swift
-# The client needs the same substitution as the daemon (issue #30). The CLI links it since the
-# 2026-09-27 permissions work (`xcodevaultctl permissions` reports whether the team ID is usable), so
-# in a signed build this substitution is what makes that report true. Nothing yet opens a connection to
-# the helper from a shipped binary. What it prevents is the shape the protocol called "a requirement
-# written down, not a property held": a client whose team ID is still the placeholder refuses every
-# connection, which is fail-closed but inert — the daemon installed and nothing able to talk to it.
+# The client needs the same substitution as the daemon (issue #30). The CLI and the app link it since
+# the 2026-09-27 permissions work: `xcodevaultctl permissions` and the app's Permissions section report
+# the helper as "not available in this build" while the team ID is still the placeholder, so in a
+# signed build this substitution is what lets that report say anything else. Nothing yet opens a
+# connection to the helper from a shipped binary. What it prevents is the shape the protocol called "a
+# requirement written down, not a property held": a client whose team ID is still the placeholder
+# refuses every connection, which is fail-closed but inert — the daemon installed and nothing able to
+# talk to it.
 # `HelperClientTests` asserts this script still names the file; the check after the sed below is held
 # by review, not by a test.
 CLIENT_SRC=Sources/XCodeVaultHelperClient/HelperClient.swift
@@ -106,6 +109,17 @@ if [ -n "$SIGN" ]; then
   codesign --force --options runtime --timestamp --sign "$SIGN" "$APP"
   codesign --verify --deep --strict --verbose=2 "$APP"
 else
-  echo "note: unsigned bundle; the helper refuses connections without a team id (by design)."
+  # No Developer ID: sign ad hoc, inside-out, with the hardened runtime. The app asks the user for Full
+  # Disk Access (deliverable 3 of the 2026-09-27 permissions plan), and code injected into a granted app
+  # would run with its grant: the premise of the helper-security review of 2026-09-28, not measured here.
+  # Measured that day on macOS 26.7: a dylib named in DYLD_INSERT_LIBRARIES loaded into SwiftPM's own CLI
+  # output (ad hoc, no runtime flag, get-task-allow) and was ignored by the CLI as signed here. The app is
+  # signed the same way; it was not launched. Ad hoc carries no team ID, so the helper still refuses every
+  # connection, by design; and a rebuild changes the code hash, so it may need the grant again (unmeasured).
+  [ "$WITH_HELPER" = 1 ] && codesign --force --options runtime --identifier com.xcodevault.helper --sign - "$APP/Contents/MacOS/xcodevault-helper"
+  codesign --force --options runtime --identifier com.xcodevault.xcodevaultctl --sign - "$APP/Contents/MacOS/xcodevaultctl"
+  codesign --force --options runtime --sign - "$APP"
+  codesign --verify --deep --strict --verbose=2 "$APP"
+  echo "note: ad hoc signed with the hardened runtime; the helper refuses connections without a team id (by design)."
 fi
 echo "built $APP"

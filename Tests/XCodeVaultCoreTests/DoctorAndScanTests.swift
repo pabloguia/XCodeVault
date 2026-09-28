@@ -1043,6 +1043,16 @@ final class OrphanedDyldCacheTests: XCTestCase {
         XCTAssertTrue(r.contains("'\(root)/"), "the path must be single-quoted in every command: \(r)")
     }
 
+    /// Root's delete here was refused without Full Disk Access and succeeded with it (H15), so advice that
+    /// omits the grant sends the user into that refusal. The sentence went missing once already: promised
+    /// for deliverable 2 of the permissions plan, shipped in deliverable 3.
+    func testTheRemediationSendsTheDeleteToATerminalWithFullDiskAccess() throws {
+        let root = try makeTree(["\(hostBuild)/\(tvOSid).23L470"])
+        let r = try XCTUnwrap(check(root, runtimes: [runtime(iOSid, build: "23F77")]).first?.remediation)
+        XCTAssertTrue(r.contains("from a terminal that has Full Disk Access"), r)
+        XCTAssertTrue(r.contains("xcodevaultctl permissions"), r)
+    }
+
     /// The wiring into `diagnose`. The earlier version of this test asserted the *absence* of a
     /// finding on a report that could not produce one anyway — it passed with the `diagnose` call
     /// deleted. This one fails if the rule is not called.

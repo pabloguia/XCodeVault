@@ -155,6 +155,7 @@ public struct Scanner: Sendable {
             guard c.isBreakdownOf == nil else { continue }
             let bytes = item.allocatedBytes
             if item.usage?.isLowerBound == true { s.lowerBound = true }
+            s.privacyRefusalCount += item.usage?.privacyRefusalCount ?? 0
             if item.onBootVolume { s.internalDeveloperBytes += bytes }
             if c.isRelocatable { s.relocatableBytes += bytes }
             if c.isCleanable { s.cleanableBytes += bytes }

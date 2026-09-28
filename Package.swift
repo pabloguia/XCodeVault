@@ -58,8 +58,9 @@ let package = Package(
         //
         // The CLI depends on it for read-only state only (`xcodevaultctl permissions`: launchd's status,
         // whether the team ID is usable, whether the daemon is bundled). Nothing in the CLI calls
-        // `connect()`. Wiring it to the app is deliverables 3 and 4 of the 2026-09-27 permissions plan;
-        // a live connection stays gated on a signed bundle (issue #30).
+        // `connect()`. The app links it for the same read-only state (its Permissions section); deliverable 4
+        // of the 2026-09-27 permissions plan adds registration and the verb calls; a live connection stays
+        // gated on a signed bundle (issue #30).
         .target(
             name: "XCodeVaultHelperClient",
             dependencies: ["XCodeVaultHelperProtocol"],
@@ -83,7 +84,7 @@ let package = Package(
         // SwiftUI app — a projection of XCodeVaultCore; bundled by scripts/bundle-app.sh.
         .executableTarget(
             name: "XCodeVault",
-            dependencies: ["XCodeVaultCore", "XCodeVaultHelperProtocol"],
+            dependencies: ["XCodeVaultCore", "XCodeVaultHelperClient", "XCodeVaultHelperProtocol"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(

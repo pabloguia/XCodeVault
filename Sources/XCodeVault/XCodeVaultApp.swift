@@ -1,11 +1,21 @@
+import AppKit
+import Combine
 import SwiftUI
 import XCodeVaultCore
+import XCodeVaultHelperClient
 
 /// The GUI is a projection of XCodeVaultCore: every number and action here comes from the same
 /// Scanner / Doctor / CleanPlanner / VaultVerifier the CLI uses (ADR-0003).
 @main
 struct XCodeVaultApp: App {
     @State private var model = AppModel()
+
+    /// Before any tool runs: once the user grants Full Disk Access, every tool the app starts works inside
+    /// that grant, so what `xcrun` resolves must not come from this process's inherited environment.
+    init() {
+        GrantedToolEnvironment.applyToThisProcess()
+    }
+
     var body: some Scene {
         WindowGroup("XCodeVault") {
             MainView(model: model)
@@ -34,12 +44,41 @@ final class AppModel {
     var isScanning = false
     var lastError: String?
     var lastCleanResult: CleanResult?
+    var fullDiskAccess: FullDiskAccessState = .unknown
+    var helperState: HelperState = .unavailableInThisBuild
+    /// Set when the app sends the user to System Settings, so coming back re-checks and rescans once, not on
+    /// every activation — a scan measures sizes, it is not free.
+    var returningFromSettings = false
+
+    /// Both checks are cheap and read-only: one `open(2)` of H15's indicator, and `SMAppService`'s status.
+    /// Nothing here connects to the helper.
+    func refreshPermissions() {
+        fullDiskAccess = FullDiskAccessProbe().state()
+        let client = HelperClient()
+        helperState = HelperState(status: client.serviceStatus(), teamIDIsUsable: client.hasUsableTeamID, daemonIsBundled: client.bundlesDaemon)
+    }
+
+    /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
+    func openFullDiskAccessSettings() {
+        guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
+        returningFromSettings = true
+        NSWorkspace.shared.open(url)
+    }
+
+    func appDidBecomeActive() async {
+        guard returningFromSettings else { return }
+        returningFromSettings = false
+        await refresh()
+    }
 
     func refresh() async {
+        refreshPermissions()
         isScanning = true; lastError = nil
         let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
             () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
-            let report = XCodeVaultCore.Scanner().scan()
+            // No capability detection: it runs `xcodebuild` and `simctl` from every bundle that calls itself
+            // Xcode in /Applications or ~/Applications, inside the app's grant. Nothing in the app reads it.
+            let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
             let doctor = Doctor()
             let findings = doctor.diagnoseAll(report: report)
             let checks = (try? VaultVerifier().checkAll()) ?? []
@@ -63,7 +102,8 @@ final class AppModel {
 }
 
 enum SidebarSection: String, CaseIterable, Identifiable {
-    case overview = "Overview", storage = "Storage", doctor = "Doctor", clean = "Clean", volumes = "Volumes", runtimes = "Runtimes", journal = "Journal"
+    case overview = "Overview", storage = "Storage", doctor = "Doctor", clean = "Clean", volumes = "Volumes", runtimes = "Runtimes",
+        journal = "Journal", permissions = "Permissions"
     var id: String { rawValue }
     var symbol: String {
         switch self {
@@ -74,6 +114,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .volumes: "externaldrive";
         case .runtimes: "iphone";
         case .journal: "list.bullet.rectangle"
+        case .permissions: "lock.shield"
         }
     }
 }
@@ -89,14 +130,20 @@ struct MainView: View {
             Group {
                 if let r = model.report {
                     switch section {
-                    case .overview: OverviewView(report: r, findings: model.findings)
+                    case .overview:
+                        OverviewView(
+                            report: r, findings: model.findings, fullDiskAccess: model.fullDiskAccess,
+                            openSettings: { model.openFullDiskAccessSettings() })
                     case .storage: StorageView(report: r)
                     case .doctor: DoctorView(findings: model.findings)
                     case .clean: CleanView(model: model)
                     case .volumes: VolumesView(report: r, checks: model.vaultChecks)
                     case .runtimes: RuntimesView(report: r)
                     case .journal: JournalView(entries: model.journal)
+                    case .permissions: PermissionsView(model: model)
                     }
+                } else if section == .permissions {
+                    PermissionsView(model: model)  // needs no scan
                 } else {
                     ContentUnavailableView(
                         "Scanning…", systemImage: "magnifyingglass",
@@ -123,11 +170,16 @@ struct MainView: View {
         } message: {
             Text(model.lastError ?? "")
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.appDidBecomeActive() }
+        }
     }
 }
 
 struct OverviewView: View {
     let report: ScanReport; let findings: [Finding]
+    let fullDiskAccess: FullDiskAccessState
+    let openSettings: @MainActor () -> Void
     var body: some View {
         let s = report.summary
         ScrollView {
@@ -144,6 +196,16 @@ struct OverviewView: View {
                     row("Must remain local", s.mustRemainLocalBytes, nil)
                     row("Reclaimable from the boot volume", s.estimatedInternalSavingsBytes, "via recommended actions")
                     row("  with verified strategies only", s.verifiedSavingsBytes, "the rest is experimental")
+                }
+                if PermissionPrompts.shouldAskForFullDiskAccess(privacyRefusalCount: s.privacyRefusalCount, state: fullDiskAccess) {
+                    GroupBox {
+                        HStack {
+                            Label("Some folders could not be read", systemImage: "lock")
+                            Spacer()
+                            Button("Open Settings", action: openSettings)
+                        }
+                        Text(PrivilegeRequirement.appFullDiskAccess.why).font(.callout).foregroundStyle(.secondary)
+                    }
                 }
                 if !report.warnings.isEmpty {
                     GroupBox("Before you act") {
@@ -337,5 +399,34 @@ struct JournalView: View {
                 TableColumn("Summary") { Text($0.summary) }
             }
         }
+    }
+}
+
+/// Spec §3: two rows, each with a status, one sentence of why, and one control. The texts come from
+/// `PermissionsReport`, the same the CLI prints; this view decides nothing.
+struct PermissionsView: View {
+    @Bindable var model: AppModel
+    var body: some View {
+        let report = PermissionsReport(fullDiskAccess: model.fullDiskAccess, helper: model.helperState)
+        Form {
+            Section("Full Disk Access") {
+                LabeledContent("Status", value: report.fullDiskAccess.state.displayName)
+                Text(report.fullDiskAccess.why).font(.callout)
+                if model.fullDiskAccess.offersOpenSettings {
+                    Button("Open Settings") { model.openFullDiskAccessSettings() }
+                }
+            }
+            Section("Privileged helper") {
+                LabeledContent("Status", value: report.helper.state.displayName)
+                Text(report.helper.why).font(.callout)
+                Text(report.helper.nextStep).font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Text("XCodeVault never runs a shell and never asks for your password itself.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .task { model.refreshPermissions() }
     }
 }

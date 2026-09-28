@@ -17,9 +17,11 @@ public struct StorageItem: Sendable, Codable, Equatable, Identifiable {
     /// does not know. This flag means "do not rely on `isMountPoint` being `false` here" — and a
     /// planner deciding whether to delete has to treat it exactly as it treats `isMountPoint`.
     ///
-    /// Defaulted so that decoding a report written before this field existed keeps working, and
-    /// so that the many test fixtures constructing `StorageItem` by hand did not all have to
-    /// assert a value for a question they are not about.
+    /// Defaulted so that the many test fixtures constructing `StorageItem` by hand did not all have
+    /// to assert a value for a question they are not about. The default does NOT make a report
+    /// written before this field existed decodable: the synthesized decoder still requires the key
+    /// (measured by the migration-safety review of 2026-09-28), and nothing decodes a stored report
+    /// today. The same holds for every defaulted field in this file.
     public var mountStateUndetermined: Bool = false
     public var usage: DiskUsage?
     /// Where the bytes physically are (mount point of the filesystem serving the path).
@@ -43,6 +45,12 @@ public struct ScanSummary: Sendable, Codable, Equatable {
     public var verifiedSavingsBytes: UInt64 = 0
     public var runtimeImageBytes: UInt64 = 0  // from simctl sizeBytes
     public var lowerBound: Bool = false  // some paths unreadable
+    /// Unreadable entries refused with `EPERM`, summed over the items the totals count (existing, not a
+    /// symlink, not a breakdown). `EPERM` is the errno macOS privacy protection (TCC) returns (H15); other
+    /// policy layers can return it too, which is why the app stops asking once the grant is known to be
+    /// present. Non-zero is what lets the app ask for Full Disk Access (ADR-0007); `lowerBound` does not
+    /// depend on it.
+    public var privacyRefusalCount: Int = 0
 }
 
 extension StorageItem {

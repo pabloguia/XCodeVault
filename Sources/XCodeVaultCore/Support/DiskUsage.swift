@@ -20,11 +20,21 @@ public struct DiskUsage: Sendable, Equatable, Codable {
     public var skippedMountPoints: [String]
     /// Paths that could not be read (permission denied etc.). Non-empty means the total is a lower bound.
     public var unreadable: [String]
+    /// How many of `unreadable` were refused with `EPERM`, the errno macOS privacy protection (TCC) returns
+    /// (H15) — as opposed to `EACCES`, which is ordinary permission bits. Other policy layers can return
+    /// `EPERM` too (a `sandbox-exec` profile did, measured 2026-09-28), which is why the app stops asking
+    /// once the grant is known to be present. The app asks for Full Disk Access only when a scan reports one
+    /// of these (ADR-0007). It only counts; `unreadable` and `isLowerBound` are exactly what they were.
+    public var privacyRefusalCount: Int = 0
 
     public static let zero = DiskUsage(
         allocatedBytes: 0, logicalBytes: 0, fileCount: 0, directoryCount: 0, symlinkCount: 0, skippedMountPoints: [], unreadable: [])
 
     public var isLowerBound: Bool { !unreadable.isEmpty }
+
+    /// `EPERM`, and only it, is the privacy refusal. Separate so the rule is testable: no in-process unit
+    /// test can make macOS refuse a read with `EPERM` on demand (a subprocess under a sandbox profile can).
+    static func isPrivacyRefusal(_ code: Int32) -> Bool { code == EPERM }
 
     /// Measures `path`. Returns nil if the path does not exist.
     public static func measure(_ path: String) -> DiskUsage? {
@@ -41,6 +51,7 @@ public struct DiskUsage: Sendable, Equatable, Codable {
         defer { free(cPath) }
         var argv: [UnsafeMutablePointer<CChar>?] = [cPath, nil]
         guard let fts = fts_open(&argv, FTS_PHYSICAL | FTS_XDEV | FTS_NOCHDIR, nil) else {
+            if DiskUsage.isPrivacyRefusal(errno) { usage.privacyRefusalCount += 1 }
             usage.unreadable.append(path)
             return usage
         }
@@ -90,6 +101,7 @@ public struct DiskUsage: Sendable, Equatable, Codable {
                 if let sp = ent.pointee.fts_statp { usage.allocatedBytes += UInt64(sp.pointee.st_blocks) * 512 }
                 usage.symlinkCount += 1
             case FTS_DNR, FTS_ERR, FTS_NS:
+                if DiskUsage.isPrivacyRefusal(ent.pointee.fts_errno) { usage.privacyRefusalCount += 1 }
                 usage.unreadable.append(entPath)
             default:
                 continue

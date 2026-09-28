@@ -1802,6 +1802,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 One commit. Reviews: **helper-security-reviewer** (the app target now links `XCodeVaultHelperClient` for read-only state) **and** **migration-safety-reviewer** (`DiskUsage` feeds `CleanPlanner` and migration verification).
 
+> **Executed 2026-09-28.** The reviews renamed `permissionDeniedCount` to `privacyRefusalCount` ("Permission
+> denied" is `EACCES`, the one errno it excludes) and reworded it: `EPERM` is the errno TCC returns, not TCC's
+> alone. They added four test pins, removed the footer's unmeasured first sentence, and had `bundle-app.sh` sign
+> builds without a Developer ID ad hoc with the hardened runtime, because the app now asks for Full Disk Access.
+> A third round found that the tools the app starts share its grant: the app now runs nothing from the Xcode
+> bundles it discovers (`Scanner(detectXcodeCapabilities: false)`), and `GrantedToolEnvironment` removes
+> `DEVELOPER_DIR`, `TOOLCHAINS` and `SDKROOT` and fixes `PATH` before any tool runs. `xcrun`'s own cache stays
+> trusted, as every developer tool trusts it: switching it off measured 9 to 18 s per lookup.
+> The committed files are authoritative.
+
 ### Task 3.1: The scan records privacy refusals
 
 **Files:**
@@ -2210,6 +2220,20 @@ One commit. Reviews: **helper-security-reviewer** (HelperClient registration and
 > or they appear in a build where `register()` cannot succeed. Read that team from the running code's own
 > signature (`SecCodeCopySelf` and its signing information), not from the substituted constant; and keep
 > it a button-visibility hint — it never becomes, or replaces, the peer requirement `connect()` sets.
+> (6) `bundle-app.sh`'s "Gate on this flag" list is partly stale — the helper has an audit log
+> (`HelperAudit.swift`) and checks that `ATTR_VOL_UUID` was returned — so re-check each item against the
+> code before `--with-helper` is ever used (helper-security review of deliverable 3).
+> (7) Coming back from System Settings while the first scan runs starts a second, overlapping one:
+> `appDidBecomeActive()` calls `refresh()` without checking `isScanning`, and the result shown is whichever
+> scan ends last. Both only read. This deliverable adds more buttons that start work in `AppModel`; make
+> "never two scans; one more after the running one when asked meanwhile" a rule in Core with tests, and
+> have both paths use it (helper-security review of deliverable 3, advisory A2).
+> (8) `bundle-app.sh` without `--sign` now signs ad hoc, `--with-helper` builds included, so (5)'s gate — the
+> running code signed by the team — is what keeps `register()` away from those builds (same review, round 2).
+> (9) `GrantedToolEnvironment.applyToThisProcess()` runs in `XCodeVaultApp.init()`, after the `model` property's
+> initializer, and `setenv` is not thread-safe against `getenv`. `AppModel` must keep starting nothing when it
+> is created; if this deliverable changes that, move the call first and extend `AppGrantedToolWiringTests`
+> (same review, round 3).
 
 ### Task 4.1: `HelperClient` — registration and one-message XPC calls
 
