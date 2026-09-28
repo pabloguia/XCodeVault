@@ -35,6 +35,26 @@ final class HelperContractTests: XCTestCase {
         XCTAssertNotEqual(VaultDirectory.name, ".")
     }
 
+    /// Core names the dyld cache path for Full Disk Access (`PrivilegeRequirement`); the helper owns the
+    /// path it will actually empty (`HelperCleanupTarget`). Neither module sees the other, so this is the
+    /// one place the two can be held equal.
+    func testTheDyldCachePathIsTheOneTheHelperEmpties() {
+        XCTAssertEqual(PrivilegeRequirement.coreSimulatorDyldCachePath, HelperCleanupTarget.coreSimulatorDyldCache.path)
+    }
+
+    /// `VaultDirectoryRefusal.helperAccepts` decides where `doctor` offers the helper's vault-folder action; the
+    /// helper decides where it acts, with a guard inside `createVaultDirectory` that no test can call. A text
+    /// check, because the guard is inline: if the helper's shape rule changes, this fails and names the mirror
+    /// to update, rather than `doctor` offering an action the helper refuses (or hiding one it would take).
+    func testTheVaultFolderActionMirrorsTheHelpersMountPointGuard() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let service = try String(contentsOf: root.appendingPathComponent("Sources/XCodeVaultHelperCore/HelperService.swift"), encoding: .utf8)
+        XCTAssertEqual(
+            service.components(separatedBy: #"guard mp.hasPrefix("/Volumes/"), mp.split(separator: "/").count == 2 else {"#).count - 1, 1,
+            "the helper's mount-point guard changed; update VaultDirectoryRefusal.helperAccepts to match")
+        XCTAssertTrue(service.contains("guard UUID(uuidString: volumeUUID) != nil"), "the helper's UUID guard changed; update helperAccepts")
+    }
+
     /// The helper and the rest of the product carry their version separately — `HelperIdentity`
     /// lives in the XPC contract module, which by design cannot see `XCodeVaultCore` — so "the
     /// version" has two sources of truth and nothing reconciled them. That matters because the

@@ -16,8 +16,8 @@ system prompt, not a command for you to paste.
 
 | Permission | Asked for when | Why | How XCodeVault asks | In this build |
 |---|---|---|---|---|
-| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | Planned (see `STATUS.md`) |
-| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available: it needs a signed build (issue #30). The vault folder is created with the command `vault init` prints; the dyld cache is listed, never cleaned |
+| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it; the app's prompt is planned |
+| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available: it needs a signed build (issue #30). `vault init`, and then `doctor`, print the command for the vault folder; the dyld cache is listed, never cleaned |
 
 Two details that are easy to get wrong:
 
@@ -62,6 +62,7 @@ These never change anything.
 | `report` | `scan` plus doctor findings, with your home folder, account name, volume names and volume UUIDs redacted — made to paste into an issue |
 | `doctor` | Unsafe or broken setups, with the proposed fix where there is one; exits 2 when one is an error or worse |
 | `compatibility` | Every category with its strategy, evidence status and privilege level |
+| `permissions` | The Full Disk Access state and the helper state, each with why and one next step. Changes nothing |
 | `volumes` | Mounted volumes and whether each qualifies as a vault |
 | `xcode list` | Installed Xcodes and what each supports |
 | `runtime list` | Installed runtimes |

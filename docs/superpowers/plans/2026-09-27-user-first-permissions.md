@@ -2194,6 +2194,23 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 One commit. Reviews: **helper-security-reviewer** (HelperClient registration and XPC calls, the app's use of them, `bundle-app.sh`, `public-surface.sh`) **and** **migration-safety-reviewer** (the runner that creates the vault folder and empties the dyld cache, its journal, its in-use refusal). In every build this machine can produce, all of it renders as "Not available in this build".
 
+> **Carried from the deliverable 2 reviews (2026-09-28).** (1) `HelperClient.Failure.notRegistered`
+> says "Run the app once to install it", which ADR-0007 rules out; nothing throws it yet — reword it
+> before this deliverable starts throwing it. (2) The vault-folder action is attached only where
+> `VaultDirectoryRefusal.helperAccepts` holds (`/Volumes/<name>`, a parseable UUID); the button follows
+> `finding.action`, never re-derives it. (3) Started through the cask's symlink, the CLI's
+> `Bundle.main` is the link's directory, so `permissions` reports "not available" for a build that has
+> the helper (`COMPATIBILITY_MATRIX.md`, pending row of 2026-09-28) — the M5 cask work decides the fix.
+> (4) `vault init`'s own refusal still prints `sudo install -d`, which creates missing parents and follows
+> a symlink at the final name; it is printed while the drive is connected, but `doctor` now uses
+> `mkdir … && chown -h …` (no `-p`, no `-m`) for exactly those reasons — reword `vault init`'s advice
+> the same way. (5) `HelperIdentity.isUsableTeamID` checks the format only, so an unsigned
+> `bundle-app.sh --team … --with-helper` build passes `hasUsableTeamID` and reads as "not installed":
+> the gate for this deliverable's buttons must also require the running code to be signed by that team,
+> or they appear in a build where `register()` cannot succeed. Read that team from the running code's own
+> signature (`SecCodeCopySelf` and its signing information), not from the substituted constant; and keep
+> it a button-visibility hint — it never becomes, or replaces, the peer requirement `connect()` sets.
+
 ### Task 4.1: `HelperClient` — registration and one-message XPC calls
 
 **Files:**

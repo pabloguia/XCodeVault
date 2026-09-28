@@ -38,8 +38,9 @@ struct Clean: ParsableCommand {
         if global.json { print(try JSONOutput.encode(Output(plan: plan, result: result))); return }
         print("Cleanup plan (\(plan.actions.count) action(s), \(ByteCount.format(plan.totalBytes))):")
         for a in plan.actions {
+            let needs = a.privilegeRequirement.map { "[\($0.label) — see `xcodevaultctl permissions`] " } ?? ""
             print(
-                "  \(TextRendererPad.pad(ByteCount.format(a.bytes), 10)) \(TextRendererPad.pad(a.categoryName, 34)) \(a.privilegeRequirement.map { "[\($0)] " } ?? "")\(a.isExperimental ? "(exp.) " : "")\(a.path)"
+                "  \(TextRendererPad.pad(ByteCount.format(a.bytes), 10)) \(TextRendererPad.pad(a.categoryName, 34)) \(needs)\(a.isExperimental ? "(exp.) " : "")\(a.path)"
             )
         }
         for s in plan.skipped { print("  skipped: \(s)") }

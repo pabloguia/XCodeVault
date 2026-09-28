@@ -16,11 +16,13 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
-  one commit each. **1 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
+  one commit each. **2 of 4 done:** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
   ADR-0007, and the `SECURITY_MODEL.md` correction (the daemon's Full Disk Access is unmeasured, not
-  "not needed"). Next: the Permissions model in Core and `xcodevaultctl permissions`. The helper
-  flow is **pending — needs a signed build** (#30); `COMPATIBILITY_MATRIX.md` "Pending — added
-  2026-09-27" lists it.
+  "not needed"); then the Permissions model in Core, `xcodevaultctl permissions` (in cli-smoke), and
+  the `vault-dir:<uuid>` finding carrying the structured action. Next: the GUI Permissions section and
+  the Full Disk Access prompt. The helper flow is **pending — needs a signed build** (#30);
+  `COMPATIBILITY_MATRIX.md` "Pending — added 2026-09-27" lists it, and the plan's deliverable 4 opens
+  with what the deliverable 2 reviews carried to it.
 - Post-publication issue backlog: **empty as of 2026-09-19.** All 20 issues opened after
   publication are closed; `gh issue list` is the live queue and `git log` records which commit
   closed what, each naming its issues. The last two (#24 split-brain cleanup, #26 offload volume
@@ -2355,3 +2357,64 @@ expected test: the label removed from `runtime export`; from `externalize`'s abs
 discussion still saying "Experimental:"; from the nested `vault init`; the Runtime Library rated
 `.verified` in the catalog; and the instrument made to read the whole file, which only the `runtime
 delete` control catches.
+
+## 2026-09-28 — user-first permissions, deliverable 2 of 4: one model, one command
+
+Core gained the spec's single source of truth, in `Sources/XCodeVaultCore/Permissions/`:
+- `FullDiskAccessProbe` — H15's indicator: open `TCC.db` read-only and read nothing; only `EPERM` means
+  not granted.
+- `HelperState` — from `SMAppService.Status`, the team-ID rule, and whether the daemon's plist is in
+  the bundle (operator decision 2). A status nobody has seen is never "enabled".
+- `PrivilegeRequirement` — a942c02's rule moved here. `clean`'s tag and the GUI's Needs column use it,
+  and the tag points to `permissions`.
+- `PrivilegedAction`.
+
+`xcodevaultctl permissions [--json]` reports both states, with why and one next step each, and runs
+in cli-smoke in `preflight.sh` and CI. The CLI links `XCodeVaultHelperClient` for read-only state;
+nothing calls `connect()`. `vault init` journals a permission refusal of the default vault folder, and
+`doctor` turns the latest one per volume into `vault-dir:<uuid>`, the only finding that carries an
+action. The printed command stays beside it.
+
+Measured in this agent's process: `permissions` answers Full Disk Access `notGranted` and helper
+`unavailableInThisBuild`. The operator's terminal was not measured. Full suite: 494 tests, 0 failures,
+0 skipped. Twenty mutants, each applied and killed by the expected test, measured on the frozen
+snapshots in a separate worktree: the plan's five, plus the plist's location, POSIX permission errors
+only, and thirteen that pin the review fixes below. The five measured on the first snapshot have code
+and tests unchanged since.
+
+Both reviews returned REQUEST CHANGES before approving; every finding was checked against the code or
+measured before it was fixed.
+- **Helper security.** `bundle-app.sh`'s "Bundle it when a client exists" read as met once the CLI
+  linked the client, and the helper's release condition is what keeps five known daemon bugs out of a
+  release. It now says "when a shipped binary calls `connect()`".
+- **Measured by the reviewer and reproduced here:** started through a symlink — what the cask's `binary`
+  stanza installs — the CLI's `Bundle.main` is the link's directory, so `permissions` would call a build
+  that has the helper "not available". It fails closed, and is a pending row in `COMPATIBILITY_MATRIX.md`.
+- **Migration safety.** Three properties were untested: the refusal matched to its volume by UUID, the
+  command naming the vault folder rather than the drive's top folder, and the journal's `try?`. All are
+  pinned now.
+- **The serious one.** `install -d` creates missing parents (`man install`). Run after the drive was
+  ejected, the command `doctor` printed would have created the drive's mount point as a root-owned
+  folder on the internal disk — a shadow `/Volumes/<name>`, and the drive back at "<name> 1". `doctor`
+  now prints `mkdir … && chown -h …`, which fails instead; no `-m`, whose path-based `chmod` would follow
+  a symlink swapped in during the run (round 3; per FreeBSD's `mkdir.c`, not traced here).
+- **Also.** The finding requires the drive still to qualify and the folder to be absent by `ENOENT` alone,
+  and carries the action only where the helper accepts the mount point (`/Volumes/<name>`).
+  `HelperContractTests` holds that mirror to the helper's own guard.
+- **Round 2 found one more.** The seam that lets tests use `/Volumes` paths left its production default
+  untested. It is pinned now.
+
+Declared gaps:
+- A signed CLI through the cask's symlink is unmeasured.
+- The rule does not re-check the mount point and UUID at the instant it reports; the helper re-resolves
+  the UUID before it acts.
+- An abandoned vault-folder attempt keeps an `.info` finding while its drive is mounted.
+- `vault init`'s own advice still prints `install -d`; it is carried to deliverable 4, which rewords it
+  the same way.
+- Whether `doctor`'s `lstat` inside an external drive makes the GUI ask for removable-volume access is
+  unmeasured.
+
+Where the plan's text claimed something that does not exist yet, the code says less:
+- `doctor` prints "privileged action:", not "in the app:"; no button exists before deliverable 4.
+- The Full Disk Access next step is keyed to `scan`'s existing `[partial: unreadable entries]` mark.
+- The helper texts say a signed build is required, not that none exists.

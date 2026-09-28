@@ -60,6 +60,18 @@ public struct HelperClient: Sendable {
     /// worse than stating none.
     let makeConnection: @Sendable (String) -> NSXPCConnection
 
+    /// This build's bundle, where `SMAppService.daemon` looks for the plist. `Bundle.main.bundleURL` in
+    /// production; a temporary directory in tests. Internal, like `makeConnection`.
+    ///
+    /// **For `xcodevaultctl` this is the `.app` only when it is started from `Contents/MacOS`.** Started
+    /// through a symlink — which is what the cask's `binary` stanza installs — it is the link's directory,
+    /// so `bundlesDaemon` answers `false` and `permissions` reports "not available in this build" even for a
+    /// build that has the helper (measured 2026-09-28 on an unsigned binary: real path → the `.app`, plist
+    /// found; symlink, by path or `PATH` → the link's directory, not found). That fails closed. The
+    /// helper-security review also measured the invoker's environment (`CFProcessPath`) redirecting it:
+    /// what this points at is chosen by whoever runs the CLI — a hint, never a gate.
+    let bundleURL: URL
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -67,11 +79,13 @@ public struct HelperClient: Sendable {
             // namespace rather than a per-user agent of the same name.
             NSXPCConnection(machServiceName: name, options: .privileged)
         }
+        self.bundleURL = Bundle.main.bundleURL
     }
 
-    init(team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection) {
+    init(team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL) {
         self.team = team
         self.makeConnection = makeConnection
+        self.bundleURL = bundleURL
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -135,5 +149,18 @@ public struct HelperClient: Sendable {
     /// `.enabled` as a reason to skip that has removed the peer validation entirely.
     public func serviceStatus() -> SMAppService.Status {
         SMAppService.daemon(plistName: HelperIdentity.plistName).status
+    }
+
+    /// Whether this build carries a team ID the peer requirement can be built from. An availability hint for
+    /// the UI (spec §2); `connect()` enforces the same condition itself and does not rely on this.
+    public var hasUsableTeamID: Bool { HelperIdentity.isUsableTeamID(team) }
+
+    /// Whether the daemon's launchd plist ships in this bundle, where `SMAppService.daemon` looks for it —
+    /// `bundleURL` says what "this bundle" is for a CLI started through a symlink.
+    /// `scripts/bundle-app.sh` puts it there only with `--with-helper`, and a build without it gives
+    /// `register()` nothing to register — so the UI must not offer to (ADR-0007; operator decision
+    /// 2026-09-27). A hint, like `serviceStatus()`: it says nothing about who holds the Mach name.
+    public var bundlesDaemon: Bool {
+        FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("Contents/Library/LaunchDaemons/\(HelperIdentity.plistName)").path)
     }
 }

@@ -239,7 +239,7 @@ struct CleanView: View {
                     TableColumn("Size") { Text(ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
                     TableColumn("Category") { Text($0.categoryName + ($0.isExperimental ? " (experimental)" : "")) }
                     TableColumn("Path") { Text($0.path).font(.system(.body, design: .monospaced)) }
-                    TableColumn("Needs") { Text($0.privilegeRequirement ?? "") }
+                    TableColumn("Needs") { Text($0.privilegeRequirement?.label ?? "") }
                 }
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
                 ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }

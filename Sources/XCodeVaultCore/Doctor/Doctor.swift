@@ -21,6 +21,10 @@ public struct Finding: Sendable, Codable, Equatable, Identifiable {
     /// What the user (or a future `doctor --fix`) would do. Doctor never executes it.
     public var remediation: String?
     public var evidence: String?
+    /// A privileged step a client may offer as a button once the helper can run (spec §2). `remediation` stays
+    /// the text fallback and is always set when this is. Doctor never executes it. `nil` on every finding but
+    /// `vault-dir:<uuid>`.
+    public var action: PrivilegedAction? = nil
 }
 
 /// Read-only diagnostics per docs/product/UX_AND_CLI.md §Doctor. Proposes; never executes.

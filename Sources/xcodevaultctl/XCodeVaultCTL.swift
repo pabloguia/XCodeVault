@@ -8,7 +8,7 @@ struct XCodeVaultCTL: ParsableCommand {
         commandName: "xcodevaultctl",
         abstract: "Honest accounting and safe relocation of Apple developer tooling storage.",
         discussion: """
-            Read commands (scan, status, report, doctor, xcode, runtime list, volumes, journal, compatibility) \
+            Read commands (scan, status, report, doctor, xcode, runtime list, volumes, journal, compatibility, permissions) \
             are always safe and never change anything. Every read command supports --json.
 
             Strategies marked "(exp.)" / experimental have not met the Definition of Done in \
@@ -19,7 +19,7 @@ struct XCodeVaultCTL: ParsableCommand {
             """,
         version: XCodeVaultVersion.current,
         subcommands: [
-            Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self,
+            Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self, PermissionsCommand.self,
             Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self,
         ],
         defaultSubcommand: Status.self)

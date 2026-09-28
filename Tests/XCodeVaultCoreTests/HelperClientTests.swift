@@ -243,4 +243,21 @@ final class HelperClientTests: XCTestCase {
             "expected a not-installed status, got \(status)")
     }
 
+    // MARK: - Build hints for the permissions model (spec §2)
+
+    func testTheTeamIDHintFollowsTheSameRuleAsConnect() {
+        XCTAssertFalse(HelperClient().hasUsableTeamID, "the placeholder build must not look usable")
+        XCTAssertTrue(HelperClient(team: goodTeam, makeConnection: { _ in NSXPCConnection() }).hasUsableTeamID)  // positive control
+    }
+
+    func testTheDaemonCountsAsBundledOnlyWhenItsPlistIsWhereSMAppServiceLooks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("xcv-bundle-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let client = HelperClient(team: goodTeam, makeConnection: { _ in NSXPCConnection() }, bundleURL: root)
+        XCTAssertFalse(client.bundlesDaemon, "no plist, no daemon")
+        let dir = root.appendingPathComponent("Contents/Library/LaunchDaemons")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir.appendingPathComponent(HelperIdentity.plistName).path, contents: Data())
+        XCTAssertTrue(client.bundlesDaemon, "the plist in Contents/Library/LaunchDaemons")
+    }
 }

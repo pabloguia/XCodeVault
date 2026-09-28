@@ -855,8 +855,9 @@ final class XcodeLocationsTests: XCTestCase {
     }
 }
 
-/// `privilegeRequirement` is the one text the CLI tag, the GUI column and the executor's refusal
-/// share. What is pinned is which actions get the Full Disk Access requirement, not its wording.
+/// `privilegeRequirement` is the one requirement the CLI tag, the GUI column and the executor's refusal
+/// share, and its text now comes from `PrivilegeRequirement` (spec §2). What is pinned is which actions
+/// get which requirement, not the wording — except "unmeasured", which the spec pins.
 final class PrivilegeRequirementTests: XCTestCase {
     private func action(_ path: String, root: Bool, category: String = "x") -> CleanAction {
         CleanAction(categoryID: category, categoryName: "X", path: path, bytes: 1, isExperimental: true, risk: .low, requiresRoot: root, notes: [])
@@ -864,24 +865,32 @@ final class PrivilegeRequirementTests: XCTestCase {
 
     func testOnlyRootActionsCarryARequirement() {
         XCTAssertNil(action("/Library/Developer/CoreSimulator/Caches/dyld", root: false).privilegeRequirement)
-        XCTAssertNotNil(action("/Library/Developer/CommandLineTools", root: true).privilegeRequirement)
+        XCTAssertEqual(action("/Library/Developer/CommandLineTools", root: true).privilegeRequirement, .helper)
     }
 
-    func testFullDiskAccessIsNamedForTheDyldCacheOnly() throws {
+    func testFullDiskAccessIsNamedForTheDyldCacheOnly() {
         for path in ["/Library/Developer/CoreSimulator/Caches/dyld", "/Library/Developer/CoreSimulator/Caches/dyld/25G229"] {
-            let inside = try XCTUnwrap(action(path, root: true).privilegeRequirement)
-            XCTAssertTrue(inside.contains("Full Disk Access"), path)
+            XCTAssertEqual(action(path, root: true).privilegeRequirement, .helperWithFullDiskAccess, path)
         }
         // H15's `rm` was measured on this one path; a sibling that merely shares the prefix string, or another
-        // root path, must not inherit a requirement nobody measured for it.
-        // The Inbox is inside the hierarchy but its refusal was never re-tested with the grant (F1).
+        // root path, must not inherit a requirement nobody measured for it. The Inbox is inside the hierarchy
+        // but its refusal was never re-tested with the grant (F1).
         for path in [
             "/Library/Developer/CoreSimulatorX/Caches", "/Library/Developer/CommandLineTools",
             "/Library/Developer/CoreSimulator/Caches/dyldX", "/Library/Developer/CoreSimulator/Cryptex/Images/Inbox",
         ] {
-            let other = try XCTUnwrap(action(path, root: true).privilegeRequirement)
-            XCTAssertFalse(other.contains("Full Disk Access"), path)
+            XCTAssertEqual(action(path, root: true).privilegeRequirement, .helper, path)
         }
+    }
+
+    func testTheDaemonsFullDiskAccessIsSaidToBeUnmeasured() {
+        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.label.contains("unmeasured"))
+        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.why.contains("unmeasured"))
+    }
+
+    func testEveryRequirementHasItsOwnText() {
+        XCTAssertEqual(Set(PrivilegeRequirement.allCases.map(\.label)).count, PrivilegeRequirement.allCases.count)
+        XCTAssertEqual(Set(PrivilegeRequirement.allCases.map(\.why)).count, PrivilegeRequirement.allCases.count)
     }
 
     func testExecutorRefusesARootActionWithoutTouchingIt() throws {

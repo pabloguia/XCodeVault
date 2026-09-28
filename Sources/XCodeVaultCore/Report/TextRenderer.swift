@@ -80,8 +80,19 @@ public enum TextRenderer {
             o += "  \(f.detail)\n"
             if let p = f.path { o += "  path: \(p)\n" }
             if let r = f.remediation { o += "  → \(r)\n" }
+            if let a = f.action { o += "  privileged action: \(a.title) — needs the privileged helper; see `xcodevaultctl permissions`\n" }
             if let e = f.evidence { o += "  evidence: \(e)\n" }
         }
+        return o
+    }
+
+    public static func permissions(_ r: PermissionsReport) -> String {
+        var o = "Full Disk Access: \(r.fullDiskAccess.state.displayName)\n"
+        o += "  why:  \(r.fullDiskAccess.why)\n"
+        o += "  next: \(r.fullDiskAccess.nextStep)\n"
+        o += "Privileged helper: \(r.helper.state.displayName)\n"
+        o += "  why:  \(r.helper.why)\n"
+        o += "  next: \(r.helper.nextStep)\n"
         return o
     }
 

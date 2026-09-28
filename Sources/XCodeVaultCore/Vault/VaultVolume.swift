@@ -161,6 +161,16 @@ public struct VaultRegistry: Sendable {
         }
 
         do { try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch {
+            // Journalled for `doctor`, which offers the helper's `createVaultDirectory` as an action — but only
+            // for the failure that verb is meant for: the default folder, refused for lack of permission. The helper
+            // can only ever create the default name, so a custom `--directory` stays the user's to create.
+            // `try?` for the reason the writability branch below gives: a journal failure must not replace
+            // the real error, which is the one the user can act on.
+            if rel == VaultVolume.directoryName, VaultDirectoryRefusal.isPermissionRefusal(error) {
+                _ = try? journal.record(
+                    kind: .migration, state: .failed, summary: "vault folder could not be created (permission): \(dir)", paths: [dir],
+                    detail: [VaultDirectoryRefusal.reasonKey: VaultDirectoryRefusal.reason, VaultDirectoryRefusal.volumeUUIDKey: uuid])
+            }
             throw VaultError(
                 "Cannot create \(dir): \(error.localizedDescription)\n" + OwnershipAdvice.createVaultDirectory(dir))
         }
@@ -274,5 +284,51 @@ public struct VaultVerifier: Sendable {
         let c = check(v)
         guard c.isUsable, let mp = c.currentMountPoint else { throw VaultError("Vault volume \(v.volumeName) is \(c.state.rawValue): \(c.detail)") }
         return (v, v.vaultDirectory(atMountPoint: mp))
+    }
+}
+
+/// The journal record `VaultRegistry.register` leaves when it cannot create the default vault folder for
+/// lack of permission, which `Doctor.checkUncreatableVaultDirectories` reads back. Writer and reader take
+/// the keys from here so they cannot disagree about them.
+///
+/// A lone `.failed` record, like the writability refusal's: nothing was started, so there is nothing for
+/// `interrupted()` to report, and with no `.planned` line `leftoverPartialCopies()` does not match it either.
+enum VaultDirectoryRefusal {
+    static let reasonKey = "reason"
+    static let reason = "vaultDirectoryNotCreatable"
+    static let volumeUUIDKey = "volumeUUID"
+
+    static func matches(_ e: JournalEntry) -> Bool {
+        e.kind == .migration && e.state == .failed && e.detail[reasonKey] == reason
+    }
+
+    /// Whether `createDirectory` failed for lack of permission — the failure the helper's verb is meant for.
+    /// `EPERM` is included, and on `mkdir` it can also be macOS privacy protection (H15); whether the daemon
+    /// is subject to that there is unmeasured (#30). A read-only volume, a full disk or a name collision is
+    /// not a permission refusal, and must not be offered the verb.
+    static func isPermissionRefusal(_ error: Error) -> Bool {
+        let e = error as NSError
+        if e.domain == NSCocoaErrorDomain, e.code == CocoaError.fileWriteNoPermission.rawValue { return true }
+        if e.domain == NSPOSIXErrorDomain, e.code == Int(EACCES) || e.code == Int(EPERM) { return true }
+        if let underlying = e.userInfo[NSUnderlyingErrorKey] as? Error { return isPermissionRefusal(underlying) }
+        return false
+    }
+
+    /// What `lstat` says about the vault folder. `absent` is `ENOENT` and nothing else: a folder that cannot
+    /// be looked at (`EACCES`, `EIO`) may exist, and the finding must not offer to create one that does.
+    enum FolderState { case absent, present, unknown }
+
+    static func folderState(_ path: String) -> FolderState {
+        var st = stat()
+        if lstat(path, &st) == 0 { return .present }
+        return errno == ENOENT ? .absent : .unknown
+    }
+
+    /// The shape `HelperService.createVaultDirectory` accepts: a drive mounted directly under `/Volumes`, and
+    /// a UUID it can parse. It mirrors the helper's own guard, which this module cannot see;
+    /// `HelperContractTests` holds the helper's source to the same expression. Elsewhere the helper refuses,
+    /// so the action is not offered there (ADR-0007: a button that cannot work is never shown).
+    static func helperAccepts(mountPoint mp: String, volumeUUID: String) -> Bool {
+        mp.hasPrefix("/Volumes/") && mp.split(separator: "/").count == 2 && UUID(uuidString: volumeUUID) != nil
     }
 }

@@ -6,6 +6,7 @@ extension Doctor {
     public func diagnoseVault(report: ScanReport, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal()) -> [Finding] {
         var f: [Finding] = []
         f += checkVaultVolumes(registry: registry, volumes: report.volumes)
+        f += checkUncreatableVaultDirectories(registry: registry, journal: journal, volumes: report.volumes)
         f += checkShadowVolumesDirectories(volumes: report.volumes)
         f += checkInterruptedMigrations(journal: journal)
         f += checkLeftoverPartialCopies(journal: journal)
@@ -71,6 +72,61 @@ extension Doctor {
                     evidence: nil)
             }
         }
+    }
+
+    /// The one finding that carries a privileged action (spec §2; operator decision 2026-09-27): a
+    /// `vault init` that could not create the default vault folder for lack of permission — usually because
+    /// the drive's top folder belongs to root, which is normal once ownership is enabled (F5).
+    /// `VaultRegistry.register` journals that refusal; this turns the latest one per volume into a finding
+    /// while it is still actionable.
+    ///
+    /// Actionable means all four: the volume is mounted (the helper resolves it by UUID and refuses
+    /// otherwise), it still qualifies (a drive remounted read-only, or with ownership off, fails every route),
+    /// it is not registered (a registered vault has its folder), and the folder is absent — `ENOENT`, not a
+    /// folder that merely could not be looked at (the helper's verb creates it and will not adopt one someone
+    /// else owns). The action is attached only where the helper would accept the mount point. An attempt the
+    /// user abandoned keeps this `.info` finding while that drive is mounted — stated, rather than hidden by an
+    /// expiry. Not re-checked here: that the mount point is still a mount point of that UUID at this instant;
+    /// the scan's volume list is the evidence, and the helper re-resolves the UUID itself before it acts.
+    ///
+    /// `folderState` is injectable so the rule can be tested with `/Volumes/<name>` mount points without
+    /// touching `/Volumes`; the default is the real `lstat`.
+    func checkUncreatableVaultDirectories(
+        registry: VaultRegistry, journal: Journal, volumes: [Volume],
+        folderState: (String) -> VaultDirectoryRefusal.FolderState = VaultDirectoryRefusal.folderState
+    ) -> [Finding] {
+        // An unreadable journal is already reported by the `journal-unreadable:*` findings.
+        guard let entries = try? journal.entries() else { return [] }
+        // An unreadable registry reads as "nothing registered", which can only add this finding, never hide
+        // one; `vault-registry-unreadable` says why.
+        let registered = Set(((try? registry.volumes()) ?? []).map { $0.volumeUUID.uppercased() })
+        var refused: Set<String> = []
+        for e in entries where VaultDirectoryRefusal.matches(e) {
+            if let uuid = e.detail[VaultDirectoryRefusal.volumeUUIDKey] { refused.insert(uuid.uppercased()) }
+        }
+        var out: [Finding] = []
+        for uuid in refused.sorted() where !registered.contains(uuid) {
+            guard let v = volumes.first(where: { $0.volumeUUID?.uppercased() == uuid }), let mp = v.mountPoint, let volumeUUID = v.volumeUUID
+            else { continue }
+            guard VolumeQualification.evaluate(v).verdict != .unsuitable else { continue }
+            let dir = mp + "/" + VaultVolume.directoryName
+            guard folderState(dir) == .absent else { continue }
+            let helperAccepts = VaultDirectoryRefusal.helperAccepts(mountPoint: mp, volumeUUID: volumeUUID)
+            out.append(
+                Finding(
+                    id: "vault-dir:\(uuid)", severity: .info, title: "The vault folder could not be created on \(v.volumeName)",
+                    detail: "`vault init` could not create \(dir) for lack of permission — usually because the drive's top folder belongs "
+                        + "to root, which is normal once ownership is enabled on an external drive. The privileged helper is designed to "
+                        + "create this folder on a drive mounted directly under /Volumes and hand it to you; it has not run live yet and "
+                        + "needs a signed build (see `xcodevaultctl permissions`).",
+                    path: dir,
+                    remediation: "With \(v.volumeName) connected, create it once, owned by you:\n"
+                        + "  \(OwnershipAdvice.createVaultDirectoryInPlaceCommand(dir))\n"
+                        + "then run `xcodevaultctl vault init \(OwnershipAdvice.shellQuoted(mp))` again.",
+                    evidence: "journal: `vault init` refused for permission",
+                    action: helperAccepts ? .createVaultDirectory(volumeUUID: volumeUUID) : nil))
+        }
+        return out
     }
 
     /// Any directory under /Volumes that is not a mount point but contains files is data written

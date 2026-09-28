@@ -33,6 +33,29 @@ public enum OwnershipAdvice {
         "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    /// The one-time privileged command alone, as `vault init`'s refusal prints it through
+    /// `createVaultDirectory(_:)`, at the moment the drive is known to be connected.
+    public static func createVaultDirectoryCommand(_ dir: String) -> String {
+        let (user, group) = currentUserAndGroup()
+        return "sudo install -d -o \(shellQuoted(user)) -g \(shellQuoted(group)) -m 755 \(shellQuoted(dir))"
+    }
+
+    /// The same step for a folder directly under a mounted drive's top folder, as `doctor` prints it at any
+    /// later time. `mkdir` rather than `install -d`, which creates missing parent directories (`man
+    /// install`): run after the drive was ejected, `install -d` would create the drive's mount point as a
+    /// root-owned folder on the internal disk — the shadow directory disconnect safety exists to prevent,
+    /// and the drive would mount at "<name> 1" next time. `mkdir` fails there instead. Found by the
+    /// migration-safety review of 2026-09-28. `chown -h` because the two commands are separate: a symlink
+    /// swapped in at that name between them is changed itself rather than followed (helper-security review,
+    /// same day). No `-m`: FreeBSD's `mkdir.c`, which macOS's derives from, then `chmod`s the new path, which
+    /// follows a symlink swapped in during the run; without it the mode comes from the umask — 0755 under
+    /// sudo's default, stricter only if the user's own umask is. The helper's own verb works through file
+    /// descriptors and has none of these gaps.
+    public static func createVaultDirectoryInPlaceCommand(_ dir: String) -> String {
+        let (user, group) = currentUserAndGroup()
+        return "sudo mkdir \(shellQuoted(dir)) && sudo chown -h \(shellQuoted(user)):\(shellQuoted(group)) \(shellQuoted(dir))"
+    }
+
     /// The one-time privileged step that creates the vault directory already owned by the user.
     ///
     /// `install -d` rather than `mkdir` + `chown` because it is one idempotent command that also
@@ -44,12 +67,11 @@ public enum OwnershipAdvice {
     /// levels stay `root:wheel`. That is harmless for writes inside the leaf, and deliberate: only
     /// the vault directory is handed over, never the volume root.
     public static func createVaultDirectory(_ dir: String) -> String {
-        let (user, group) = currentUserAndGroup()
         return """
             The volume root is root-owned (that is normal, and it is what enabling ownership buys you).
             Create the vault directory once, as yourself, with:
 
-              sudo install -d -o \(shellQuoted(user)) -g \(shellQuoted(group)) -m 755 \(shellQuoted(dir))
+              \(createVaultDirectoryCommand(dir))
 
             Then re-run this command. Nothing after this step needs sudo: everything inside the vault
             will be yours. XCodeVault will not run this for you — read it, then run it if you agree.

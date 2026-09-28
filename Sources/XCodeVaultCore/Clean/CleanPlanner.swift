@@ -18,19 +18,12 @@ public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
     public var requiresRoot: Bool
     public var notes: [String]
 
-    /// What a root action still lacks, in one place so the CLI tag, the GUI column and the
-    /// executor's refusal cannot drift apart. For the dyld cache root alone is not the requirement.
-    /// In its hierarchy the root refusals re-tested (`mkdir`, `rm`, `mount_apfs`) were
-    /// the calling process lacking Full Disk Access, and the same commands succeeded as root once the
-    /// terminal had it (H15), `rm` on this very path. The Inbox refusal (F1) was never re-tested that
-    /// way, so the Full Disk Access text is scoped to the path it was measured on, not the hierarchy. Whether the privileged helper — a launchd daemon, a different TCC
-    /// context from a granted terminal — would have that access is unmeasured, and the helper has
-    /// never run live, so neither text promises that installing it makes the action executable.
-    public var privilegeRequirement: String? {
+    /// What a root action still lacks, in one place so the CLI tag, the GUI column and the executor's
+    /// refusal cannot drift apart. The rule and its text live in `PrivilegeRequirement` (spec §2), which
+    /// scopes Full Disk Access to the path H15 measured; this says only which actions have one.
+    public var privilegeRequirement: PrivilegeRequirement? {
         guard requiresRoot else { return nil }
-        let dyld = "/Library/Developer/CoreSimulator/Caches/dyld"
-        if path == dyld || path.hasPrefix(dyld + "/") { return "root with Full Disk Access — not executable yet" }
-        return "root — not executable yet"
+        return PrivilegeRequirement.forRootPath(path)
     }
 }
 
@@ -311,7 +304,9 @@ public struct CleanExecutor: Sendable {
     }
 
     func preflight(_ a: CleanAction) throws {
-        if let needs = a.privilegeRequirement { throw CleanError("\(a.path) needs \(needs)") }
+        if let needs = a.privilegeRequirement {
+            throw CleanError("\(a.path) needs \(needs.label). `clean` never runs root actions; see `xcodevaultctl permissions`.")
+        }
         var st = stat()
         guard lstat(a.path, &st) == 0 else { throw CleanError("\(a.path) no longer exists") }
         guard (st.st_mode & S_IFMT) != S_IFLNK else { throw CleanError("\(a.path) is a symlink — refusing") }

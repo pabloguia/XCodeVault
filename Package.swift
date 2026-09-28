@@ -56,8 +56,10 @@ let package = Package(
         // reach the daemon's own logic, and giving it `XCodeVaultHelperCore` would let a caller
         // execute the verbs in-process and mistake that for having exercised the boundary.
         //
-        // Nothing in `Sources/` depends on it yet (issue #30). It is built and tested because the
-        // test target depends on it; wiring it to the app is M4, gated on a signed bundle.
+        // The CLI depends on it for read-only state only (`xcodevaultctl permissions`: launchd's status,
+        // whether the team ID is usable, whether the daemon is bundled). Nothing in the CLI calls
+        // `connect()`. Wiring it to the app is deliverables 3 and 4 of the 2026-09-27 permissions plan;
+        // a live connection stays gated on a signed bundle (issue #30).
         .target(
             name: "XCodeVaultHelperClient",
             dependencies: ["XCodeVaultHelperProtocol"],
@@ -88,6 +90,7 @@ let package = Package(
             name: "xcodevaultctl",
             dependencies: [
                 "XCodeVaultCore",
+                "XCodeVaultHelperClient",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]

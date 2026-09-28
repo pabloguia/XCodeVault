@@ -5,10 +5,12 @@
 # Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper]
 #
 # `--with-helper` is off by default, and deliberately. Nothing in the shipped code connects to the
-# privileged helper — no NSXPCConnection anywhere in the app or the CLI — so bundling it, together
-# with its LaunchDaemon plist, offered the user a root Mach service in the global bootstrap
-# namespace in exchange for no functionality at all. That is attack surface with no benefit, and it
-# was reachable because the cask told people to enable it. Bundle it when a client exists.
+# privileged helper — the CLI links the client for read-only state and never calls `connect()`; the
+# app does not link it — so bundling it, together with its LaunchDaemon plist, offered the user a root
+# Mach service in the global bootstrap namespace in exchange for no functionality at all. That is
+# attack surface with no benefit, and it was reachable because the cask told people to enable it.
+# Bundle it when a shipped binary calls `connect()`; linking the client for read-only state, as the
+# CLI does, is not that.
 #
 # **Gate on this flag, not a backlog.** These are known and deliberately unfixed while nothing can
 # reach the helper; every one of them becomes live the moment this flag is used in a release:
@@ -29,13 +31,14 @@ if [ -n "$SIGN" ] && [ -z "$TEAM" ]; then TEAM=$(echo "$SIGN" | sed -E 's/.*\(([
 
 cd "$ROOT"
 HELPER_SRC=Sources/XCodeVaultHelper/main.swift
-# The client needs the same substitution as the daemon (issue #30). Stated in the tense it belongs
-# in: no signed build has ever shipped this client — nothing in `Sources/` depends on
-# `XCodeVaultHelperClient` and `BUILD_PRODUCTS` does not include it — so this is forward-looking,
-# not a repair. What it prevents is the shape the protocol called "a requirement written down, not a
-# property held": a client whose team ID is still the placeholder refuses every connection, which is
-# fail-closed but inert — the daemon installed and nothing able to talk to it.
-# `HelperClientTests` asserts this script still names the file and still asserts its own sed.
+# The client needs the same substitution as the daemon (issue #30). The CLI links it since the
+# 2026-09-27 permissions work (`xcodevaultctl permissions` reports whether the team ID is usable), so
+# in a signed build this substitution is what makes that report true. Nothing yet opens a connection to
+# the helper from a shipped binary. What it prevents is the shape the protocol called "a requirement
+# written down, not a property held": a client whose team ID is still the placeholder refuses every
+# connection, which is fail-closed but inert — the daemon installed and nothing able to talk to it.
+# `HelperClientTests` asserts this script still names the file; the check after the sed below is held
+# by review, not by a test.
 CLIENT_SRC=Sources/XCodeVaultHelperClient/HelperClient.swift
 TEAM_SRCS=("$HELPER_SRC" "$CLIENT_SRC")
 if [ -n "$TEAM" ]; then

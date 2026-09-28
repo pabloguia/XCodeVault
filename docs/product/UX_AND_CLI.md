@@ -38,7 +38,7 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 
 - Read-only (all `--json`): `scan`, `status`, `report`, `doctor`, `xcode list`,
   `runtime list`, `runtime library --dir`, `volumes`, `compatibility`, `locations show`,
-  `journal`, `vault status`, `migration status`, `bench <dir>`.
+  `journal`, `vault status`, `migration status`, `permissions`, `bench <dir>`.
 - Changing (each journaled except `vault forget`, which only edits the registry; dry-run/plan by
   default where meaningful):
   `clean [--category …] [--apply] [--trash] [--force]`,
@@ -72,7 +72,7 @@ command as the primary route. The client never runs a root shell (`osascript …
 privileges`, `AuthorizationExecuteWithPrivileges`, spawned `sudo`): the helper's allowlisted verbs
 are the only privileged path.
 
-- **`xcodevaultctl permissions [--json]`** (read-only, deliverable 2): the Full Disk Access state
+- **`xcodevaultctl permissions [--json]`** (read-only; shipped 2026-09-28): the Full Disk Access state
   (`granted | notGranted | unknown`) and the helper state (`unavailableInThisBuild | notInstalled |
   awaitingApproval | enabled`), each with one sentence of why and one next step. `--json` shape:
   `{"fullDiskAccess": {"state", "why", "nextStep"}, "helper": {"state", "why", "nextStep"}}`.
