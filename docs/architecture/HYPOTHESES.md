@@ -1946,3 +1946,19 @@ inspection mode…") records the caches rebuilt within eight minutes of E13b's r
 bound — on first use after the update, with `dyld/`'s mtime at the time that run woke `simctl`; a
 log query over the window then found nothing, and who removed the old tree is not established. That
 makes "first use on a new host build" a candidate trigger, not a finding.
+
+**Later the same day (2026-09-27, ~20:55 local), read-only, still unplanned.** `Caches/dyld` was
+still 0 entries with its mtime at 2026-09-25 19:19. Two instruments, read separately:
+- CoreSimulator's own `SimUsageTracker` keys (`defaults read com.apple.CoreSimulator`, the
+  operator's domain) recorded iOS 26.5 last used at 17:47 UTC that day and watchOS 26.5 at 05:06 UTC.
+  So the runtimes were in use after the listener stopped, and the cache stayed empty through it.
+- A `log show --info --last 3d` over the persisted store, matching "shared cache",
+  "dyld_shared_cache" or "DYLDSharedCache", returned 96 × the same "Unable to use dyld shared cache"
+  line (all for iOS 26.5), one unrelated spindump line, and **no** creation request or "Skipping
+  automatic" decline. Its count is **not** comparable with the stream's 545. It is a different
+  instrument over a different window, and it returned no watchOS lines where the stream had 73. The
+  persisted store evidently keeps less than the stream saw, so its silence on the two decisive
+  messages is weaker than the stream's.
+
+Limits: the tracker says a runtime was used, not by whom or how, so this cannot be counted as
+interactive use. These are the agent's own commands and are not in an evidence file.
