@@ -50,10 +50,10 @@ public struct VaultSentinel: Sendable, Codable, Equatable {
 /// states: nothing that depends on the volume may run.
 public enum VaultVolumeState: String, Sendable, Codable {
     case verified  // mounted at a real mount point, UUID and sentinel match
-    case absent  // nothing mounted at the last mount point and the volume is not mounted elsewhere
+    case absent  // not mounted anywhere, nothing mounted at the last mount point, and no folder seen there holding a file (not proof that none is)
     case movedMountPoint  // mounted, verified, but at a different path than last time (e.g. "Name 1")
     case foreign  // something is mounted at the path but UUID/sentinel do not match
-    case ambiguous  // not mounted, but the last mount point exists as a local directory with content (shadow data)
+    case ambiguous  // not mounted, but the last mount point exists as a local directory with content (shadow data), or one that could not be read in full
     case sentinelMissing  // right UUID but our sentinel is gone (reformatted? restored from backup?)
 }
 
@@ -61,7 +61,7 @@ public struct VaultVolumeCheck: Sendable, Codable, Equatable {
     public var volume: VaultVolume
     public var state: VaultVolumeState
     public var currentMountPoint: String?
-    public var shadowBytes: UInt64?  // bytes found at the local path when ambiguous
+    public var shadowBytes: UInt64?  // bytes found at the local path when ambiguous; nil when it could not be read in full, so no size is known
     public var detail: String
     public var isUsable: Bool { state == .verified || state == .movedMountPoint }
 }
@@ -255,12 +255,30 @@ public struct VaultVerifier: Sendable {
                 volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
                 detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
         }
-        // 3. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data.
+        // 3. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data. A
+        //    directory found there that could not be read in full is not known to be empty, so it is ambiguous too, not
+        //    "not connected" (rule 6; migration-safety review, 2026-09-28), and what could be read is not given as its
+        //    size. Not every "could not tell" reaches this branch: a path that cannot be looked up, a file and a symlink
+        //    still read as absent (KNOWN-ISSUES-AT-PUBLICATION.md, "Fixed 2026-09-28: a folder the verifier could not read").
         var isDir: ObjCBool = false
         if FileManager.default.fileExists(atPath: v.lastMountPoint, isDirectory: &isDir), isDir.boolValue {
             let usage = DiskUsage.measure(v.lastMountPoint)
             let bytes = usage?.allocatedBytes ?? 0
             let files = usage?.fileCount ?? 0
+            if let usage, usage.isLowerBound {
+                let first = usage.unreadable.first.map { ", the first \($0)" } ?? ""
+                let unread = "\(usage.unreadable.count) path(s) could not be read\(first)"
+                let detail: String
+                // Files seen are shadow data for certain; with nothing seen, there may be none. Either way no size.
+                if files > 0 {
+                    detail =
+                        "\(v.lastMountPoint) exists as a local directory holding at least \(files) file(s), \(ByteCount.format(bytes)), written while the volume was absent (shadow data), and it could not be read in full (\(unread)), so it may hold more. Refusing to proceed until reconciled."
+                } else {
+                    detail =
+                        "\(v.lastMountPoint) exists as a local directory that could not be read in full (\(unread)), so shadow data written while the volume was absent cannot be ruled out. Refusing to proceed until it has been inspected."
+                }
+                return VaultVolumeCheck(volume: v, state: .ambiguous, currentMountPoint: nil, shadowBytes: nil, detail: detail)
+            }
             if files > 0 {
                 return VaultVolumeCheck(
                     volume: v, state: .ambiguous, currentMountPoint: nil, shadowBytes: bytes,

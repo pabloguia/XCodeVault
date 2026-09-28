@@ -2688,3 +2688,91 @@ Declared gaps:
   when presented in a window, so their contents are not reached.
 - The server's figure for this push is the one that counts, and it arrives after this commit: the local figure
   is an estimate.
+
+The server's figures for e0bf3cb, read once after the push (Sonar run 36418531798): `sonar-verify: ok — … 7112
+lines (floor 4000); coverage 81.3% (floor 60%); quality gate OK`, the converter reported 57 files, 5791/7117 lines
+(81.4%), and the scanner imported coverage for 57 files. CI (run 36418531787) passed on `macos-15` and `macos-26`.
+
+## 2026-09-28 — Disconnect safety: a folder the verifier cannot read no longer reads as "not connected"
+
+Found by the migration-safety review of 2026-09-28, outside the change it was reviewing. For a registered vault
+volume that is not mounted, with nothing mounted at its last mount point, `VaultVerifier.check` chose between
+`.absent` ("not connected") and `.ambiguous` (shadow data) by measuring the folder there and testing
+`fileCount > 0`. A folder this process cannot read goes into `DiskUsage.unreadable` with no file counted, so it
+read as "not connected", and shadow data inside it was never reported (rule 6). Both states refuse (`isUsable`),
+so nothing was deleted; the report was missing. On `main` since M3 (dc5d9c4, 2026-09-06), which the public tag
+`pre-review-2026-09-17` contains; no release.
+
+What changed:
+- A folder found at the last mount point that could not be read in full (`usage.isLowerBound`) is `.ambiguous`,
+  with `shadowBytes` nil. The detail says how many paths could not be read and names the first. When files were
+  seen, it says the folder holds at least that many; when none were, that shadow data cannot be ruled out. The
+  branch runs before the file count, so a partial count is never given as the size of what is there.
+- `doctor` titles that finding "Possible shadow data at …: it could not be read in full" and asks for it to be
+  inspected as a user who can read it, not deleted unread. Its id and severity (critical) are unchanged, and so
+  is the finding for a folder read in full. Critical means `doctor` exits 2, as it already did for shadow data;
+  what is new is that an unreadable folder reaches it.
+- Docs:
+  - `KNOWN-ISSUES-AT-PUBLICATION.md` has a "Fixed 2026-09-28" section, with what is still open.
+  - H3 in `HYPOTHESES.md`, and `MIGRATION_ENGINE.md`, say that the proposed root-owned `0500` mount-point
+    defense would now read as possible shadow data while the drive is away.
+  - The user guide's FAQ gives both titles.
+
+Measured on this machine:
+- **Red first.** On the unfixed code the three new `VaultTests`, as first written, failed: 12 run, 3 failed, 8
+  assertions. The whole-folder case read `("absent") is not equal to ("ambiguous") - Volume Drive (U-locked) is
+  not connected.` Against the final tests, deleting the fix fails 10 assertions (mutant A1 below).
+- **Build and suite.** At f7a087b, before the review round: `swift build -Xswiftc -warnings-as-errors` exited 0
+  with no warnings, and the full `swift test` Executed 581 tests, 0 failures, none skipped (578 before). The
+  review round then changed the detail's wording and the no-size remediation; after it, `VaultTests` ran 12, with
+  0 failures.
+- **End to end.** The fixed `xcodevaultctl vault status`, run against a scratch registry with the home redirected
+  (the real registry's SHA-256 was the same before and after):
+  - a folder at mode `000`: AMBIGUOUS, with no `shadowBytes`;
+  - readable and empty: ABSENT;
+  - readable with a file: AMBIGUOUS, 4096 bytes;
+  - a symlink to a folder holding a file, a regular file, and a folder holding a file under a parent that cannot
+    be searched: ABSENT, all three. These are still open.
+- **Mutants.** Five at 4e86fc4, then seven at 41939f1, the code after the review round. Each was proven applied,
+  killed, restored byte for byte, and the class re-run green after it; the gold tree was green before the first.
+  At 41939f1:
+  - the fix deleted, and a size given for what could not be read: all three new tests;
+  - only the folder itself counted as unreadable, files seen winning over the unreadable part, and files seen
+    worded as if there were none: the subfolder test;
+  - the doctor's old title, and its old remediation for a folder nobody could read: the doctor test.
+
+Review: `migration-safety-reviewer`, round 1 at 4e86fc4. The code was approved as written, with REQUEST CHANGES
+for the text:
+- Three claims the code does not meet.
+- Two cases missing from what is still open: the regular file and the unsearchable parent, which the reviewer
+  measured.
+- A check for earlier builds that would have missed the subfolder case.
+
+It also recommended the wording for files seen and found a test comment that said the opposite of what happens
+as root. Its notes: the remediation for a folder nobody can read, a comment in the migration engine, the public
+tag, and the second behaviour change. All taken.
+
+Round 2 at 9bcec15: APPROVE. There, the preflight passed its 11 gates, and the full suite executed 581 tests with
+0 failures. The round's five notes were wording and recording, taken here without a third round:
+- the scope of the reviewer's judgement in the gaps below;
+- two follow-ups to record;
+- "not directly under `/Volumes`" instead of "outside" it;
+- a comment pointing at a heading that occurs twice;
+- the date of the red figure.
+
+The tree committed differs from 9bcec15 only by those notes; its own preflight is in the commit message.
+
+Declared gaps, still open (details in `KNOWN-ISSUES-AT-PUBLICATION.md`):
+- Three more ways the verifier reads "could not tell" as "not connected", measured: a parent it cannot search, a
+  regular file, and a symlink at the last mount point.
+- `checkShadowVolumesDirectories` makes the same decision the same way (by reading).
+- By reading: the registry and journal existence checks, a `/Volumes` that cannot be listed, and the app's "None
+  registered." for a registry it cannot read.
+- Nothing acknowledges the new finding: it stays critical for as long as the drive is away. The reviewer judges
+  this the right direction. It applies to a custom mount point the user cannot list, for example a root-owned
+  `0700` or `0500` one. A root-owned `0755` mount point that is empty still reads as absent.
+- The title says "Possible shadow data" even when files were seen. Putting "at least" and a size there needs a
+  new field in `VaultVolumeCheck`.
+- A folder that vanishes, or answers an I/O error, between the existence check and the measurement reads as
+  "not connected". By reading; only a race.
+- The GUI's Volumes section shows AMBIGUOUS in red with the detail. Known by reading; not run on screen.

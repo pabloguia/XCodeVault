@@ -78,6 +78,16 @@ exercised, to avoid touching the global `IDECustomDerivedDataLocation` default w
 was running concurrently) and the `VaultVerifier` sentinel-file check (no vault was pointed at
 the probe path). Gate: E6, E7.
 
+**The defense and the verifier, 2026-09-28.** `VaultVerifier` now reads an unmounted vault's last
+mount point as `.ambiguous`, not `.absent`, when it finds a folder there that it cannot read in
+full: that folder is not known to be empty (rule 6). Measured on a user-owned folder at mode `000`
+(`VaultTests`). A mount point directly under `/Volumes` is found whenever it exists: `/Volumes` is
+searchable (`root:wheel`, mode `0755` on this machine). A root-owned `0500` mount point there gives
+the user no read permission, as the measured folder did, so with the drive away this defense would
+make `doctor` report possible shadow data, as critical, until the drive returns. That follows from the code; it was not run with a root-owned directory. If the defense
+ships, the mount point has to stay listable by the user (for example `0555`, which E7 did not
+test), or the verifier has to recognise it.
+
 ## H4 — Official Apple mechanisms cover more than assumed
 
 **Status: verified end-to-end for the Runtime Library workflow (E8, 2026-09-06 export +

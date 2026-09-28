@@ -166,6 +166,108 @@ final class VaultTests: XCTestCase {
         _ = vol
     }
 
+    // MARK: - A last mount point that could not be read (rule 6; migration-safety review, 2026-09-28)
+    //
+    // Until 2026-09-28 the verifier counted the files it could see at an unmounted volume's last mount point and read
+    // none as "not connected", so shadow data in a folder this process cannot read was never reported. Nothing was
+    // deleted either way (`.absent` is not usable); what was missing was the report.
+
+    /// A volume that is not mounted, with nothing mounted at its last path: only the folder there decides.
+    private func unmountedVerifier(_ t: TempDir) -> VaultVerifier {
+        VaultVerifier(
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] }, isMountPoint: { _ in false })
+    }
+
+    /// The whole folder refused. The control is the same folder readable and empty, which is `.absent`.
+    func testAnUnreadableFolderAtTheLastMountPointIsAmbiguousNotAbsent() throws {
+        let t = TempDir()
+        let lastMountPoint = t.dir("Drive")
+        let vault = VaultVolume(volumeUUID: "U-locked", volumeName: "Drive", lastMountPoint: lastMountPoint, registeredAt: Date(), sentinelID: "s")
+        let verifier = unmountedVerifier(t)
+        try verifier.registry.save([vault])
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lastMountPoint)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lastMountPoint) }
+        // Precondition: the read really is refused here. As root it would not be: the folder would read as empty, and the
+        // assertions below would fail without saying anything about the verifier.
+        try XCTSkipIf(DiskUsage.measure(lastMountPoint)?.isLowerBound != true, "this environment can read a 0o000 directory (running as root?)")
+
+        let locked = verifier.check(vault)
+        XCTAssertEqual(locked.state, .ambiguous, locked.detail)
+        XCTAssertFalse(locked.isUsable)
+        XCTAssertNil(locked.shadowBytes, "nothing in it could be read, so there is no size to give")
+        XCTAssertTrue(locked.detail.contains("could not be read"), locked.detail)
+        XCTAssertThrowsError(try verifier.resolveUsable("U-locked")) { XCTAssertTrue("\($0)".contains("is ambiguous"), "\($0)") }
+
+        // Control: the same folder, readable and empty.
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lastMountPoint)
+        XCTAssertEqual(verifier.check(vault).state, .absent)
+    }
+
+    /// The folder opens but one inside it does not. Two rows: nothing else in it, where shadow data cannot be ruled out,
+    /// and a readable file beside it, where it is certain but the size found is only what could be read and is not given
+    /// as the size of what is there. The control is the same tree readable: the file is then ordinary shadow data, with
+    /// its size.
+    func testAFolderThatCouldNotBeReadInFullIsAmbiguousWithoutASize() throws {
+        let t = TempDir()
+        let lastMountPoint = t.dir("Drive")
+        let inside = t.dir("Drive/XCodeVault")
+        let vault = VaultVolume(volumeUUID: "U-part", volumeName: "Drive", lastMountPoint: lastMountPoint, registeredAt: Date(), sentinelID: "s")
+        let verifier = unmountedVerifier(t)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: inside)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: inside) }
+        let measured = DiskUsage.measure(lastMountPoint)
+        try XCTSkipIf(measured?.isLowerBound != true, "this environment can read a 0o000 directory (running as root?)")
+        XCTAssertEqual(measured?.unreadable, [inside], "the folder itself opened; only the one inside it was refused")
+
+        let nothingElse = verifier.check(vault)
+        XCTAssertEqual(nothingElse.state, .ambiguous, nothingElse.detail)
+        XCTAssertNil(nothingElse.shadowBytes)
+        XCTAssertTrue(nothingElse.detail.contains(inside), "the detail names what could not be read: \(nothingElse.detail)")
+        XCTAssertTrue(nothingElse.detail.contains("cannot be ruled out"), nothingElse.detail)
+
+        t.file("Drive/stray.o", bytes: 4096)
+        let withAFile = verifier.check(vault)
+        XCTAssertEqual(withAFile.state, .ambiguous)
+        XCTAssertNil(withAFile.shadowBytes, "what could be read is a lower bound, not the size of what is there")
+        XCTAssertTrue(withAFile.detail.contains("could not be read"), withAFile.detail)
+        XCTAssertTrue(withAFile.detail.contains("at least 1 file(s)"), "files were seen, so it says so: \(withAFile.detail)")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: inside)
+        let readable = verifier.check(vault)
+        XCTAssertEqual(readable.state, .ambiguous)
+        XCTAssertNotNil(readable.shadowBytes)
+        XCTAssertFalse(readable.detail.contains("could not be read"), readable.detail)
+    }
+
+    /// The doctor's finding for a folder it could not read gives no size, does not say shadow data was found, and does
+    /// not suggest deleting it. The control is a readable folder with a file, whose title and remediation are as before.
+    func testTheDoctorGivesNoSizeForAFolderItCouldNotRead() throws {
+        let t = TempDir()
+        let lastMountPoint = t.dir("Drive")
+        let registry = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        try registry.save([VaultVolume(volumeUUID: "U-doc", volumeName: "Drive", lastMountPoint: lastMountPoint, registeredAt: Date(), sentinelID: "s")])
+        func shadowFinding() throws -> Finding {
+            try XCTUnwrap(Doctor().checkVaultVolumes(registry: registry, volumes: []).first { $0.id == "vault-shadow:U-doc" })
+        }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: lastMountPoint)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lastMountPoint) }
+        try XCTSkipIf(DiskUsage.measure(lastMountPoint)?.isLowerBound != true, "this environment can read a 0o000 directory (running as root?)")
+        let locked = try shadowFinding()
+        XCTAssertEqual(locked.severity, .critical, "a refusal state, like any other shadow-data finding")
+        XCTAssertTrue(locked.title.hasPrefix("Possible shadow data at \(lastMountPoint)"), locked.title)
+        XCTAssertTrue(locked.title.contains("could not be read"), locked.title)
+        XCTAssertTrue(locked.remediation?.contains("not an empty one") == true, locked.remediation ?? "no remediation")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lastMountPoint)
+        t.file("Drive/stray.o", bytes: 4096)
+        let readable = try shadowFinding()
+        XCTAssertTrue(readable.title.hasPrefix("Shadow data at \(lastMountPoint) ("), readable.title)
+        XCTAssertTrue(readable.remediation?.contains("if it only contains regenerable data") == true, readable.remediation ?? "no remediation")
+    }
+
     func testRegisterWithRelativeDirectoryAndRegistryBackCompat() throws {
         let t = TempDir()
         let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))

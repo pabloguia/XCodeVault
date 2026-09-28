@@ -95,7 +95,9 @@ state, until the point where cleanup has been explicitly confirmed by the user.
 - **Shadow-data defense (unverified, ours):** keep the unmounted mount point root-owned,
   mode `0500`, `chflags uchg`, so stray daemon writes fail loudly rather than silently
   succeeding. Validate with E7 before shipping — it may crash Xcode in a worse way than
-  the problem it prevents. A LaunchDaemon `WatchPaths` tripwire on the mount point is
+  the problem it prevents. As written it also conflicts with the verifier, which since
+  2026-09-28 reads an unmounted mount point it cannot list as possible shadow data; see
+  H3 before adopting it. A LaunchDaemon `WatchPaths` tripwire on the mount point is
   the low-risk complement.
 - **Breakage in this domain is silent and delayed** — the published failures surface
   weeks later, after an Xcode point release, by which time the user has forgotten the

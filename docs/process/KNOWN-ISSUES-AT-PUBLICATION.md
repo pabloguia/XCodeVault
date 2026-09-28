@@ -188,6 +188,47 @@ which first shows launchd's path is readable. No tag contains 9557b3d and there 
 so the exposure is builds from public `main` in that window; what a user should check is in the user
 guide's FAQ.
 
+## Fixed 2026-09-28: a folder the verifier could not read at a vault's last mount point read as "not connected" (on `main` since 2026-09-06)
+
+For a vault volume that is not mounted, `VaultVerifier` chooses between "not connected" (`.absent`)
+and possible shadow data (`.ambiguous`) by measuring the folder left at the volume's last mount
+point. It counted the files it could see there, and a folder it could not read showed none, so the
+answer was "not connected": shadow data in a folder this process cannot read was never reported.
+The same count got a second case wrong: a readable file beside an unreadable part was `.ambiguous`,
+with what could be read given as the size. Neither state lets anything act on the vault, so nothing
+was deleted; what was missing was the report rule 6 asks for. Found by the migration-safety review
+of 2026-09-28, outside the change it was reviewing.
+
+Fixed: a folder found there that could not be read in full is `.ambiguous` with no size given, and
+`doctor` titles it "Possible shadow data at …: it could not be read in full" and asks for it to be
+inspected, not deleted. Pinned by three tests in `VaultTests`, each with a readable control. The
+rule dates from M3 (dc5d9c4, 2026-09-06), which the public tag `pre-review-2026-09-17` contains;
+there has been no release. On an earlier build, a vault reported as not connected can be checked by
+listing its last mount point recursively, `ls -laR '<lastMountPoint>'` (`vault status --json` shows
+it as `lastMountPoint`): any "Permission denied" or "Operation not permitted" is what this missed.
+
+Still open: the same "could not tell" read as "not connected" elsewhere. The first three were
+measured 2026-09-28 with `vault status` against a scratch registry, by the migration-safety reviewer
+and again by the author:
+- A folder, with a file in it, under a parent this process cannot search: `fileExists` answers false,
+  as for a missing path. Only a last mount point not directly under `/Volumes` can meet this, since
+  `/Volumes` itself is searchable (`root:wheel`, mode `0755` on this machine).
+  `VaultDirectoryRefusal.folderState`, in the same file, already reads `lstat` three ways, which is
+  the shape of a fix.
+- A folder that vanishes, or answers an I/O error, between the existence check and the measurement
+  reads as "not connected" (`DiskUsage.measure` returns nil and counts as no file). By reading; only
+  a race.
+- A regular file at the last mount point: only a directory is examined.
+- A symlink at the last mount point: the verifier follows it to see a directory, then measures the
+  link itself, which holds no file.
+- `doctor`'s check for plain directories under `/Volumes` (`checkShadowVolumesDirectories`) counts
+  files the same way, so it skips a folder it cannot read, and it skips a regular file. By reading;
+  what `DiskUsage.measure` returns for such a folder is what the new tests measured.
+- By reading, not measured (the same review): `VaultRegistry.volumes()` and `Journal.read()` test
+  existence with `fileExists`, so an unsearchable `~/Library/Application Support/XCodeVault` would
+  read as nothing registered and no journal; the `/Volumes` check returns nothing when `/Volumes`
+  cannot be listed; and the app shows "None registered." when the registry cannot be read.
+
 ## Compatibility
 
 Every claim in `docs/architecture/COMPATIBILITY_MATRIX.md` was measured on one Mac, one

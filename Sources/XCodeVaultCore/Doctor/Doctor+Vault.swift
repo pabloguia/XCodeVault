@@ -56,13 +56,23 @@ extension Doctor {
                     detail: c.detail, path: c.volume.lastMountPoint,
                     remediation: "Do not write to it as if it were the vault. Eject the foreign volume, connect the real one, re-run doctor.", evidence: nil)
             case .ambiguous:
+                // `shadowBytes` is nil when the folder could not be read in full (`VaultVerifier.check`). There is then no
+                // size to give and nobody has seen all of it, so the title says it could not be read instead of printing a
+                // size, and the remediation does not suggest deleting it: the same rule as an unreadable device set in `Doctor.swift`.
+                let title: String
+                let remediation: String
+                if let bytes = c.shadowBytes {
+                    title = "Shadow data at \(c.volume.lastMountPoint) (\(ByteCount.format(bytes)))"
+                    remediation =
+                        "Reconciliation needed before the volume is mounted here again (mounting over it hides the data and it keeps consuming the internal disk). Inspect the directory; if it only contains regenerable data, delete it; otherwise merge it manually. XCodeVault never auto-resolves this."
+                } else {
+                    title = "Possible shadow data at \(c.volume.lastMountPoint): it could not be read in full"
+                    remediation =
+                        "Inspect it as a user who can read it, before the volume is mounted here again (mounting over it hides whatever it holds). Do not delete it unread: a folder that could not be read is not an empty one. XCodeVault never auto-resolves this."
+                }
                 return Finding(
-                    id: "vault-shadow:\(c.volume.volumeUUID)", severity: .critical,
-                    title: "Shadow data at \(c.volume.lastMountPoint) (\(ByteCount.format(c.shadowBytes ?? 0)))",
-                    detail: c.detail, path: c.volume.lastMountPoint,
-                    remediation:
-                        "Reconciliation needed before the volume is mounted here again (mounting over it hides the data and it keeps consuming the internal disk). Inspect the directory; if it only contains regenerable data, delete it; otherwise merge it manually. XCodeVault never auto-resolves this.",
-                    evidence: "H3 / research F6")
+                    id: "vault-shadow:\(c.volume.volumeUUID)", severity: .critical, title: title,
+                    detail: c.detail, path: c.volume.lastMountPoint, remediation: remediation, evidence: "H3 / research F6")
             case .sentinelMissing:
                 return Finding(
                     id: "vault-sentinel:\(c.volume.volumeUUID)", severity: .error, title: "Vault sentinel missing on \(c.volume.volumeName)",

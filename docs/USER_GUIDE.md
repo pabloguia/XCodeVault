@@ -117,6 +117,11 @@ was never touched. A physical unplug has not been measured yet (H3). `doctor` re
 disconnection leaves behind:
 
 - **Vault volume … is not connected** — connect it before using `externalize` or `restore`.
+- **Shadow data at …** — the drive is not connected, and a folder with files in it sits where it
+  was last mounted. **Possible shadow data at …: it could not be read in full** means XCodeVault
+  could not read all of that folder, so it cannot tell what is in it: inspect it as a user who can
+  read it, and do not delete it unread. Either way, reconcile it before reconnecting the drive;
+  until then XCodeVault refuses to act on that vault.
 - **A plain directory under `/Volumes`** — something wrote into `/Volumes/<name>` while the drive
   was away. macOS will mount the drive as `<name> 1` next time, and paths into `/Volumes/<name>`
   will point at the local copy. Reconcile it before reconnecting; XCodeVault never resolves this by

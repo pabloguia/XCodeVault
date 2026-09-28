@@ -103,8 +103,9 @@ public struct MigrationEngine: Sendable {
     // comparison and the sentinel match (`VaultVolume.swift:223`, `:230`, `:148-161`), which fail
     // closed on every degradation — see the comment at `VaultVolume.swift:141-147`, which says so
     // in terms. What `isMountPoint` decides is which *non-usable* diagnosis an absent volume gets:
-    // `.foreign`, or the shadow-data measurement returning `.ambiguous` with `shadowBytes`. Both
-    // refuse. Stubbing it degrades the report rule 6 asks for, not the refusal.
+    // `.foreign`, or the shadow-data measurement returning `.ambiguous`, with `shadowBytes` when the
+    // folder could be read in full. Both refuse. Stubbing it degrades the report rule 6 asks for, not
+    // the refusal.
     public let runner: CommandRunning
     public let journal: Journal
     public let verifier: VaultVerifier
