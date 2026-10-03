@@ -67,4 +67,44 @@ final class OverviewCardsTests: XCTestCase {
         XCTAssertEqual(overview.cards.map(\.bytes), [0, 0, 0])
         XCTAssertEqual(overview.reclaimableBytes, 0)
     }
+
+    // MARK: - What each card says (review I1): decided here, not in the view
+
+    private func card(bytes: UInt64, verified: UInt64, lowerBound: Bool = false) -> OverviewCards.Card {
+        var s = SavingsSummary()
+        s.parkExternally.optionBytes = bytes
+        s.parkExternally.verifiedOptionBytes = verified
+        s.isLowerBound = lowerBound
+        return OverviewCards.make(savings: s).cards[1]
+    }
+
+    func testAZeroCardSaysNothingFound() {
+        let c = card(bytes: 0, verified: 0)
+        XCTAssertEqual(c.amount, .none)
+        XCTAssertEqual(c.verified, .none)
+    }
+
+    func testALowerBoundSaysAtLeastEvenAtZero() {
+        XCTAssertEqual(card(bytes: 0, verified: 0, lowerBound: true).amount, .atLeast(0))
+        XCTAssertEqual(card(bytes: 0, verified: 0, lowerBound: true).verified, .none)
+        XCTAssertEqual(card(bytes: 500, verified: 200, lowerBound: true).amount, .atLeast(500))
+        XCTAssertEqual(card(bytes: 500, verified: 200).amount, .upTo(500))
+    }
+
+    func testAFullyVerifiedCardDropsTheShare() {
+        XCTAssertEqual(card(bytes: 500, verified: 500).verified, .all)
+    }
+
+    func testAPartlyVerifiedCardShowsItsShare() {
+        XCTAssertEqual(card(bytes: 500, verified: 200).verified, .share(200))
+        XCTAssertEqual(card(bytes: 500, verified: 0).verified, .share(0))
+    }
+
+    func testTheTotalIsAHeadlineNeverNothing() {
+        XCTAssertEqual(OverviewCards.make(savings: SavingsSummary()).total, .upTo(0))
+        XCTAssertEqual(OverviewCards.make(savings: savings).total, .upTo(701))
+        var s = savings
+        s.isLowerBound = true
+        XCTAssertEqual(OverviewCards.make(savings: s).total, .atLeast(701))
+    }
 }

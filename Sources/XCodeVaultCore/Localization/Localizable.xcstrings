@@ -2131,6 +2131,74 @@
         }
       }
     },
+    "app.overview.bar.a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Internal disk"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Disco interno"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "内蔵ディスク"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Disco interno"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "内置磁盘"
+          }
+        }
+      }
+    },
+    "app.overview.bar.caption" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The bar counts each item once, under its main option. The cards below overlap, because an item can have more than one option."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "La barra cuenta cada elemento una vez, en su opción principal. Las tarjetas de abajo se solapan, porque un elemento puede tener más de una opción."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "バーは各項目を主な方法の下で一度だけ数えます。1つの項目に複数の方法がありうるため、下のカードは重なります。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A barra conta cada item uma vez, na sua opção principal. Os cartões abaixo se sobrepõem, porque um item pode ter mais de uma opção."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "条形图将每个项目只计一次，归入其主要选项。下方的卡片会有重叠，因为一个项目可能有多个选项。"
+          }
+        }
+      }
+    },
     "app.overview.bar.clamped" : {
       "localizations" : {
         "en" : {
@@ -2365,6 +2433,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "查看"
+          }
+        }
+      }
+    },
+    "app.overview.card.review.a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Revisar: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "確認：%@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Revisar: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "查看：%@"
           }
         }
       }

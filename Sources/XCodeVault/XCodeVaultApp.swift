@@ -70,6 +70,7 @@ final class AppModel {
     func refreshPermissions() {
         fullDiskAccess = environment.fullDiskAccess()
         helperState = environment.helper.state()
+        updateAccessBanner()
     }
 
     /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
@@ -107,6 +108,7 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             self.journal = journal.suffix(100).reversed()
+            updateAccessBanner()
         } while scanGate.scanEnded()
     }
 
@@ -198,10 +200,16 @@ final class AppModel {
     }
 
     /// The Overview's one access banner: the first `AccessChecklist` row that holds back something the scan measured
-    /// (`AccessChecklist.banner`, in Core and tested). Nil before the first scan.
-    var accessBanner: AccessChecklist.Row? {
-        guard let report else { return nil }
-        return AccessChecklist.banner(
+    /// (`AccessChecklist.banner`, in Core and tested). Nil before the first scan. Stored, not computed: the plan rows it
+    /// reads are re-planned only when the scan or the permissions change, never per redraw.
+    private(set) var accessBanner: AccessChecklist.Row?
+
+    private func updateAccessBanner() {
+        guard let report else {
+            accessBanner = nil
+            return
+        }
+        accessBanner = AccessChecklist.banner(
             fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings,
             plan: SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate), privacyRefusalCount: report.summary.privacyRefusalCount)
     }

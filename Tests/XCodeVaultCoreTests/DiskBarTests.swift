@@ -58,4 +58,16 @@ final class DiskBarTests: XCTestCase {
         XCTAssertEqual(bar.segments.map(\.kind), [.bucket(.deleteAndRegenerate)])
         XCTAssertTrue(bar.isClamped)
     }
+
+    /// Review I2/M4: the legend lists the buckets as the cards do; the bar keeps its own order.
+    func testTheLegendFollowsTheCardOrder() {
+        let bar = DiskBar(host: host(free: 100, total: 1000), savings: savings(run: 10, park: 20, delete: 30, keep: 40))
+        XCTAssertEqual(
+            bar.legend.map(\.kind),
+            [.bucket(.deleteAndRegenerate), .bucket(.parkExternally), .bucket(.runFromExternal), .bucket(.keepLocal), .otherData, .free])
+        XCTAssertEqual(bar.legend.map(\.bytes), [30, 20, 10, 40, 800, 100])
+        let sparse = DiskBar(host: host(free: 0, total: 500), savings: savings(park: 50))
+        XCTAssertEqual(sparse.legend.map(\.kind), [.bucket(.parkExternally), .otherData], "empty segments stay out")
+        XCTAssertEqual(Set(DiskBar.legendOrder).count, 6)
+    }
 }

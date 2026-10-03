@@ -375,6 +375,20 @@ extension L10nCatalog {
                 "ja": "スキャン",
                 "zh-Hans": "扫描",
             ],
+            "app.overview.bar.a11y": [
+                "en": "Internal disk",
+                "pt-BR": "Disco interno",
+                "es": "Disco interno",
+                "ja": "内蔵ディスク",
+                "zh-Hans": "内置磁盘",
+            ],
+            "app.overview.bar.caption": [
+                "en": "The bar counts each item once, under its main option. The cards below overlap, because an item can have more than one option.",
+                "pt-BR": "A barra conta cada item uma vez, na sua opção principal. Os cartões abaixo se sobrepõem, porque um item pode ter mais de uma opção.",
+                "es": "La barra cuenta cada elemento una vez, en su opción principal. Las tarjetas de abajo se solapan, porque un elemento puede tener más de una opción.",
+                "ja": "バーは各項目を主な方法の下で一度だけ数えます。1つの項目に複数の方法がありうるため、下のカードは重なります。",
+                "zh-Hans": "条形图将每个项目只计一次，归入其主要选项。下方的卡片会有重叠，因为一个项目可能有多个选项。",
+            ],
             "app.overview.bar.clamped": [
                 "en": "Measured at different moments: the bar is approximate.",
                 "pt-BR": "Medido em momentos diferentes: a barra é aproximada.",
@@ -423,6 +437,13 @@ extension L10nCatalog {
                 "es": "Revisar",
                 "ja": "確認",
                 "zh-Hans": "查看",
+            ],
+            "app.overview.card.review.a11y": [
+                "en": "Review: %@",
+                "pt-BR": "Revisar: %@",
+                "es": "Revisar: %@",
+                "ja": "確認：%@",
+                "zh-Hans": "查看：%@",
             ],
             "app.overview.doctor.issue": [
                 "en": "%1$@: %2$@",

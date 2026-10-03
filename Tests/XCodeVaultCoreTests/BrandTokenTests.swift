@@ -128,4 +128,26 @@ final class BrandTokenTests: XCTestCase {
             XCTAssertEqual(try luminance(inDark), try luminance(token), accuracy: 0.001, bucket.rawValue)
         }
     }
+
+    /// Review M8: Increase Contrast's appearances follow their base — the light variant in high-contrast light, the token in
+    /// high-contrast dark — and still clear 3:1 on the surfaces those appearances resolve.
+    func testTheHighContrastAppearancesResolveToTheirBaseAndClearThreeToOne() throws {
+        let cases: [(NSAppearance.Name, KeyPath<SavingsBucket, String>)] = [
+            (.accessibilityHighContrastAqua, \.lightColorHex), (.accessibilityHighContrastDarkAqua, \.darkColorHex),
+        ]
+        var checked = 0
+        for (appearance, variant) in cases {
+            XCTAssertNotNil(NSAppearance(named: appearance), appearance.rawValue)
+            for bucket in SavingsBucket.allCases {
+                let (color, surfaces) = resolved(bucket.nsColor, on: appearance)
+                let expected = try XCTUnwrap(NSColor(Color(hex: bucket[keyPath: variant])).usingColorSpace(.sRGB))
+                XCTAssertEqual(try luminance(color), try luminance(expected), accuracy: 0.001, "\(bucket.rawValue) \(appearance.rawValue)")
+                for (name, surface) in surfaces {
+                    XCTAssertGreaterThanOrEqual(try contrast(color, surface), 3, "\(bucket.rawValue) on \(name), \(appearance.rawValue)")
+                    checked += 1
+                }
+            }
+        }
+        XCTAssertEqual(checked, 2 * SavingsBucket.allCases.count * 2)
+    }
 }

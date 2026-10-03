@@ -59,12 +59,12 @@ struct OverviewView: View {
     private func savings(_ overview: OverviewCards) -> some View {
         HStack(alignment: .top, spacing: 12) {
             ForEach(overview.cards, id: \.bucket) { card in
-                OverviewCardView(card: card, isLowerBound: overview.isLowerBound) { review(card.bucket) }
+                OverviewCardView(card: card) { review(card.bucket) }
             }
         }
         .fixedSize(horizontal: false, vertical: true)  // one height for the three cards
         VStack(alignment: .leading, spacing: 4) {
-            Text.l10n(L10n.tr("app.overview.total", Self.amount(overview.reclaimableBytes, lowerBound: overview.isLowerBound))).bold()
+            Text.l10n(L10n.tr("app.overview.total", Self.text(overview.total))).bold()
             Text.l10n(L10n.tr("savings.alternativesNote")).font(.callout).foregroundStyle(.secondary)
             if report.summary.runtimeImageBytes > 0 {
                 // The runtime `.dmg` store is not a catalog category yet (S3 C5): its own line, as `scan` prints it.
@@ -74,10 +74,13 @@ struct OverviewView: View {
         }
     }
 
-    /// "up to X", or "at least X" when something counted could not be fully read.
-    static func amount(_ bytes: UInt64, lowerBound: Bool) -> String {
-        let formatted = ByteCount.format(bytes)
-        return lowerBound ? L10n.tr("savings.atLeast", formatted) : L10n.tr("savings.upTo", formatted)
+    /// The words for an `OverviewCards.Amount`, which Core decided.
+    static func text(_ amount: OverviewCards.Amount) -> String {
+        switch amount {
+        case .none: L10n.tr("app.overview.card.nothing")
+        case .upTo(let bytes): L10n.tr("savings.upTo", ByteCount.format(bytes))
+        case .atLeast(let bytes): L10n.tr("savings.atLeast", ByteCount.format(bytes))
+        }
     }
 }
 
@@ -85,25 +88,24 @@ struct OverviewView: View {
 /// undo, and **Review**.
 struct OverviewCardView: View {
     let card: OverviewCards.Card
-    let isLowerBound: Bool
     let review: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                BucketSymbol(bucket: card.bucket).font(.title3)
+                BucketSymbol(bucket: card.bucket, decorative: true).font(.title3)
                 Text.l10n(card.isPermanent ? L10n.tr("savings.permanent.title") : L10n.tr("savings.temporary.title"))
                     .font(.caption).bold().foregroundStyle(.secondary)
             }
             Text(verbatim: card.bucket.localizedTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
-            if card.bytes == 0 && !isLowerBound {
-                Text.l10n(L10n.tr("app.overview.card.nothing")).font(.title3).foregroundStyle(.secondary)
-            } else {
-                Text(verbatim: OverviewView.amount(card.bytes, lowerBound: isLowerBound)).font(.title2).bold().monospacedDigit()
-                Text.l10n(
-                    card.verifiedBytes >= card.bytes
-                        ? L10n.tr("app.overview.card.allVerified") : L10n.tr("savings.verifiedShare", ByteCount.format(card.verifiedBytes))
-                ).font(.caption).foregroundStyle(.secondary)
+            switch card.amount {
+            case .none: Text(verbatim: OverviewView.text(card.amount)).font(.title3).foregroundStyle(.secondary)
+            case .upTo, .atLeast: Text(verbatim: OverviewView.text(card.amount)).font(.title2).bold().monospacedDigit()
+            }
+            switch card.verified {
+            case .all: Text.l10n(L10n.tr("app.overview.card.allVerified")).font(.caption).foregroundStyle(.secondary)
+            case .share(let bytes): Text.l10n(L10n.tr("savings.verifiedShare", ByteCount.format(bytes))).font(.caption).foregroundStyle(.secondary)
+            case .none: EmptyView()
             }
             if let lossy = card.losesUserDataBytes {
                 // The Temporary headline is not all recoverable (S3 review): what deleting loses for good, on the card.
@@ -117,6 +119,8 @@ struct OverviewCardView: View {
             Text(verbatim: card.bucket.localizedUndoCost).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(L10n.tr("app.overview.card.review"), action: review)
+                // Three cards, three buttons: VoiceOver hears which bucket each one reviews.
+                .accessibilityLabel(Text(verbatim: L10n.tr("app.overview.card.review.a11y", card.bucket.localizedTitle)))
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -149,25 +153,30 @@ struct DiskBarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 5))
             // The legend says the same thing in words.
             .accessibilityHidden(true)
-            HStack(spacing: 14) {
-                ForEach(Array(bar.segments.enumerated()), id: \.offset) { _, segment in legendItem(segment) }
+            // The bar counts each item once, the cards every option: say so, or the same title shows two numbers.
+            Text.l10n(L10n.tr("app.overview.bar.caption")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // Wraps into as many columns as fit instead of truncating at narrow widths; in the cards' order.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 14, alignment: .leading)], alignment: .leading, spacing: 6) {
+                ForEach(Array(bar.legend.enumerated()), id: \.offset) { _, segment in legendItem(segment) }
             }
             .font(.caption)
             if bar.isClamped {
                 Text.l10n(L10n.tr("app.overview.bar.clamped")).font(.caption2).foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(verbatim: L10n.tr("app.overview.bar.a11y")))
     }
 
     private func legendItem(_ segment: DiskBar.Segment) -> some View {
         HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10).accessibilityHidden(true)
             switch segment.kind {
-            case .bucket(let bucket): BucketSymbol(bucket: bucket)
+            case .bucket(let bucket): BucketSymbol(bucket: bucket, decorative: true)
             case .otherData: Image(systemName: "doc.on.doc").foregroundStyle(.secondary).accessibilityHidden(true)
             case .free: Image(systemName: "circle.dashed").foregroundStyle(.secondary).accessibilityHidden(true)
             }
-            Text(verbatim: Self.title(segment.kind))
+            Text(verbatim: Self.title(segment.kind)).fixedSize(horizontal: false, vertical: true)
             Text(verbatim: ByteCount.format(segment.bytes)).monospacedDigit().foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)

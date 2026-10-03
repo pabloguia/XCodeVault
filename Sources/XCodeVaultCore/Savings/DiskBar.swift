@@ -37,6 +37,16 @@ public struct DiskBar: Sendable, Equatable {
         isClamped = accounted > total
     }
 
+    /// The legend's order: the buckets as the Overview's cards list them (delete, park, run externally), then keeping,
+    /// other data and free — so a legend item sits in the same order as the card with its title. The bar keeps
+    /// `bucketOrder`.
+    public static let legendOrder: [Kind] = OverviewCards.buckets.map { .bucket($0) } + [.bucket(.keepLocal), .otherData, .free]
+
+    /// The non-empty segments in `legendOrder`.
+    public var legend: [Segment] {
+        DiskBar.legendOrder.compactMap { kind in segments.first { $0.kind == kind } }
+    }
+
     public static func segments(host: HostEnvironment, savings: SavingsSummary) -> [Segment] {
         DiskBar(host: host, savings: savings).segments
     }

@@ -173,12 +173,20 @@ struct BucketPlaceholderView: View {
     }
 }
 
-/// A bucket's S5 symbol in its color, labelled with its localized title for VoiceOver: never color alone.
+/// A bucket's S5 symbol in its color, labelled with its localized title for VoiceOver: never color alone. `decorative`
+/// where the title is already the next text, so VoiceOver does not say it twice.
 struct BucketSymbol: View {
     let bucket: SavingsBucket
+    var decorative = false
     var body: some View {
-        Image(systemName: bucket.symbolName)
-            .foregroundStyle(bucket.color)
-            .accessibilityLabel(Text(verbatim: bucket.localizedTitle))
+        if decorative {
+            image.accessibilityHidden(true)
+        } else {
+            image.accessibilityLabel(Text(verbatim: bucket.localizedTitle))
+        }
+    }
+
+    private var image: some View {
+        Image(systemName: bucket.symbolName).foregroundStyle(bucket.color)
     }
 }
