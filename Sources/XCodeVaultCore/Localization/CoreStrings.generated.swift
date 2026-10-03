@@ -531,25 +531,6 @@ extension L10nCatalog {
             ],
         ],
         plurals: [
-            "savings.categoryCount": [
-                "en": [
-                    "one": "%lld category",
-                    "other": "%lld categories",
-                ],
-                "pt-BR": [
-                    "one": "%lld categoria",
-                    "other": "%lld categorias",
-                ],
-                "es": [
-                    "one": "%lld categoría",
-                    "other": "%lld categorías",
-                ],
-                "ja": [
-                    "other": "%lld 個のカテゴリ",
-                ],
-                "zh-Hans": [
-                    "other": "%lld 个类别",
-                ],
-            ],
+            :
         ])
 }

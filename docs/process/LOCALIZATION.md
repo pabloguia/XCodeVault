@@ -77,8 +77,8 @@ changes its state to `translated`. `scripts/l10n.sh check` prints the remaining 
 
 Localized (S2, S3): the savings vocabulary, the command abstracts and group names, the root help
 discussion, the savings and `plan` output, and the `status` footer. Still English in every language: the
-per-command discussions, the examples (they are commands), doctor findings (including the byte sizes inside
-them: `ByteCount.english`), warnings, error messages and the older output lines. `--json` and `report` are
+per-command discussions, the examples (they are commands), doctor findings, vault checks, scan and volume warnings, plan notes and error messages (all of them format bytes with
+`ByteCount.english`, so an English sentence never carries another language's number format) and the older output lines. `--json` and `report` are
 always English. The app (S4) moves its text into the catalog as it is rewritten; each remaining English
 string moves when its text is next edited.
 

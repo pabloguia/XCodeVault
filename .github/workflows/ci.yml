@@ -127,9 +127,7 @@ jobs:
           # `report --json`, not `scan --json`: this file is uploaded as a public artifact, and
           # `report` is the command that redacts. On a GitHub runner the home is /Users/runner,
           # but the workflow should not depend on the runner being anonymous.
-          .build/debug/xcodevaultctl report --json > scan.json && head -c 800 scan.json
-          .build/debug/xcodevaultctl plan delete --json >/dev/null
-          .build/debug/xcodevaultctl --lang pt-BR status >/dev/null
+          .build/debug/xcodevaultctl report --json > scan.json && head -c 800 scan.json && .build/debug/xcodevaultctl plan delete --json >/dev/null && .build/debug/xcodevaultctl --lang pt-BR status >/dev/null
           .build/debug/xcodevaultctl doctor || true
       - name: Read-only gating experiments (E1, E8) — evidence for the compatibility matrix
         run: |

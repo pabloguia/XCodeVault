@@ -209,7 +209,7 @@ public struct MigrationEngine: Sendable {
         let usage = DiskUsage.measure(source) ?? .zero
         let free = MountStatus.space(at: vaultDir)?.free ?? 0
         guard free > usage.allocatedBytes + 1_000_000_000 else {
-            throw MigrationError("Vault has \(ByteCount.format(free)) free; need \(ByteCount.format(usage.allocatedBytes)) plus headroom.")
+            throw MigrationError("Vault has \(ByteCount.english(free)) free; need \(ByteCount.english(usage.allocatedBytes)) plus headroom.")
         }
         var warnings: [String] = []
         if c.regenerability == .nonRegenerable {
@@ -255,7 +255,7 @@ public struct MigrationEngine: Sendable {
         let usage = DiskUsage.measure(source) ?? .zero
         let free = MountStatus.space(at: parent)?.free ?? 0
         guard free > usage.allocatedBytes + 1_000_000_000 else {
-            throw MigrationError("Only \(ByteCount.format(free)) free at \(parent); need \(ByteCount.format(usage.allocatedBytes)) plus headroom.")
+            throw MigrationError("Only \(ByteCount.english(free)) free at \(parent); need \(ByteCount.english(usage.allocatedBytes)) plus headroom.")
         }
         return MigrationPlan(
             operationID: UUID().uuidString, direction: .restore, categoryID: c.id, source: source, destination: destination,

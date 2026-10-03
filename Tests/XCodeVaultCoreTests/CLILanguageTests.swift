@@ -85,6 +85,30 @@ final class CLILanguageTests: XCTestCase {
         }
     }
 
+    func testTheShadowVaultCheckIsTheSameInEveryLanguage() throws {
+        // The critical `vault-shadow:*` finding copies its detail from `VaultVerifier.check`, so the check is what must not localize.
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xcv-shadow-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data().write(to: dir.appendingPathComponent("leftover"))
+        let volume = VaultVolume(
+            volumeUUID: "U-1", volumeName: "Vault", lastMountPoint: dir.path, registeredAt: Date(timeIntervalSince1970: 0), sentinelID: "s")
+        let registry = VaultRegistry(url: dir.appendingPathComponent("none/volumes.json"))
+        func encoded() throws -> String {
+            let check = VaultVerifier(registry: registry, mountedVolumes: { [] }, isMountPoint: { _ in false }).check(volume)
+            XCTAssertEqual(check.state, .ambiguous)
+            return try JSONOutput.encode(check)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let english = try encoded()
+        XCTAssertTrue(english.contains("0 bytes"), english)
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let other = try encoded()
+            XCTAssertEqual(other, english, locale)
+        }
+    }
+
     func testPermissionsJSONIsTheSameInEveryLanguage() throws {
         // `permissions --json` encodes the `PermissionsReport` that `PermissionsCommand.report` builds; its texts are
         // taken when it is built, so it is built under each locale for every state it can report.

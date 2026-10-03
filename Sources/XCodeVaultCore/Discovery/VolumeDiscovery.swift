@@ -45,7 +45,7 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
                 "Ownership is ignored on this volume (noowners). Enable it with `diskutil enableOwnership` — CoreSimulator/Xcode data has mixed root/user ownership."
             )
         }
-        if v.freeBytes < minimumFreeBytes { warnings.append("Only \(ByteCount.format(v.freeBytes)) free; simulator runtimes are 5–25 GB each.") }
+        if v.freeBytes < minimumFreeBytes { warnings.append("Only \(ByteCount.english(v.freeBytes)) free; simulator runtimes are 5–25 GB each.") }
         if v.isDiskImage { warnings.append("This is a disk image, not a physical device; fine for experiments, not a durable destination.") }
         if v.busProtocol == "USB" {
             warnings.append("USB-attached: expect much lower 4K random IOPS than internal storage; DerivedData workloads are IOPS-bound (research F9).")

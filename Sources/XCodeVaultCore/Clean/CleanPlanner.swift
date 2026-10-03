@@ -139,7 +139,7 @@ public struct CleanPlanner: Sendable {
         for (id, bytes) in declined.sorted(by: { $0.value > $1.value }) {
             guard let c = StorageCatalog.category(id), let why = c.notes.first else { continue }
             let firstSentence = (why.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? why) + "."
-            skipped.append("\(c.name) — \(ByteCount.format(bytes)), not offered: \(firstSentence) Run `xcodevaultctl doctor` for the full reason.")
+            skipped.append("\(c.name) — \(ByteCount.english(bytes)), not offered: \(firstSentence) Run `xcodevaultctl doctor` for the full reason.")
         }
         actions.sort { $0.bytes > $1.bytes }
         return CleanPlan(actions: actions, skipped: skipped, warnings: warnings)

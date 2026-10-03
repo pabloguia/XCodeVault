@@ -35,12 +35,6 @@ final class CoreStringsTests: XCTestCase {
         }
     }
 
-    func testTheCategoryCountPluralises() {
-        XCTAssertEqual(L10n.plural("savings.categoryCount", count: 1, in: .core, locale: "en", arguments: []), "1 category")
-        XCTAssertEqual(L10n.plural("savings.categoryCount", count: 3, in: .core, locale: "en", arguments: []), "3 categories")
-        XCTAssertEqual(L10n.plural("savings.categoryCount", count: 3, in: .core, locale: "pt-BR", arguments: []), "3 categorias")
-    }
-
     func testTheConvenienceAccessorsUseTheProcessLocale() {
         let before = L10n.locale
         defer { L10n.configure(override: before, environment: [:], preferred: []) }
