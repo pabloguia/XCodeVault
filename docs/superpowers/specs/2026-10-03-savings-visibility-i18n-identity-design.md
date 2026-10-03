@@ -117,6 +117,27 @@ Per bucket, over items on the boot volume, breakdowns skipped (same rule as toda
 Headlines: **Temporary: up to X** (delete ∪ park), **Permanent: up to Y** (run from external),
 **Total reclaimable: up to Z** (union), each with its verified share.
 
+### 3.4 Amendment (2026-10-03, after the S1 whole-branch review)
+
+The review found two promises the first cut got wrong; these rulings replace the conflicting text above.
+
+- **Experimental is decided per option, not per category.** `isExperimental` on a category describes its
+  *recommended* strategy, and `.appleManaged` categories are never experimental by that definition, so a
+  runtime's *park* (via `runtime offload`, labelled EXPERIMENTAL in the CLI) was counted as verified. An
+  option is verified only when the category's `evidenceStatus == .verified` **and** the option is not a
+  named park command. Every "verified" number counts only verified options.
+- **Options can apply to new data only.** Archives' run-from-external (`locations set-archives`) moves where
+  *new* archives go; existing archives are only parked. Such an option is listed but contributes no bytes:
+  `primaryBucket` is the most durable option that applies to existing data, and the permanent headline
+  counts only those.
+- **`SavingsOption` carries the per-option facts** S3/S4 render: `bucket`, `isExperimental`,
+  `appliesToExistingData`, and `losesUserData` (a delete of `.userRecreatable` data — simulator devices
+  lose their app data and do not come back by themselves). Privilege is **not** on the option: the clean
+  planner already carries it per action (`CleanAction.privilegeRequirement`), and a second copy would drift.
+- **JSON names** are the implemented ones, not §3.3's draft names: `optionBytes`, `primaryBytes`,
+  `verifiedOptionBytes`; `temporaryBytes`, `permanentBytes`, `reclaimableBytes` and their `verified…`
+  counterparts, all **stored** (encoded), so `--json` carries all three headlines; `isLowerBound`.
+
 ## 4. S2 — Localization
 
 ### 4.1 Mechanism
