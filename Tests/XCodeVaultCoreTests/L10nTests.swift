@@ -97,10 +97,31 @@ final class L10nTests: XCTestCase {
 
     func testConfigureSetsTheProcessLocale() {
         let before = L10n.locale
-        defer { L10n.configure(override: before, preferred: []) }
-        L10n.configure(override: "zh-CN", preferred: [])
+        defer { L10n.configure(override: before, environment: [:], preferred: []) }
+        L10n.configure(override: "zh-CN", environment: [:], preferred: [])
         XCTAssertEqual(L10n.locale, "zh-Hans")
-        L10n.configure(override: nil, preferred: ["es-AR"])
+        L10n.configure(override: nil, environment: [:], preferred: ["es-AR"])
         XCTAssertEqual(L10n.locale, "es")
+    }
+
+    func testTheEnvironmentComesAfterTheOverrideAndBeforePreferences() {
+        let before = L10n.locale
+        defer { L10n.configure(override: before, environment: [:], preferred: []) }
+        let env = ["XCODEVAULT_LANG": "es"]
+        L10n.configure(override: "ja", environment: env, preferred: ["pt-BR"])
+        XCTAssertEqual(L10n.locale, "ja")
+        L10n.configure(override: nil, environment: env, preferred: ["pt-BR"])
+        XCTAssertEqual(L10n.locale, "es")
+        L10n.configure(override: "fr", environment: env, preferred: ["pt-BR"])
+        XCTAssertEqual(L10n.locale, "es")
+    }
+
+    func testATemplateWithTooFewArgumentsFallsBackInsteadOfCrashing() {
+        let c = L10nCatalog(
+            strings: ["x": ["en": "A %@", "pt-BR": "B %@ %@"], "y": ["en": "%@ %@"], "z": ["en": "100%% %@"]],
+            plurals: [:])
+        XCTAssertEqual(L10n.string("x", in: c, locale: "pt-BR", arguments: ["1"]), "A 1")
+        XCTAssertEqual(L10n.string("y", in: c, locale: "en", arguments: ["1"]), "%@ %@")
+        XCTAssertEqual(L10n.string("z", in: c, locale: "en", arguments: ["1"]), "100% 1")
     }
 }

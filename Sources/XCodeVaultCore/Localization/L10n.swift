@@ -19,15 +19,22 @@ public enum L10n {
     public static let baseLocale = "en"
 
     private static let state = LocaleState(
-        resolve(override: ProcessInfo.processInfo.environment["XCODEVAULT_LANG"], preferred: Locale.preferredLanguages))
+        resolve(
+            override: nil,
+            preferred: [ProcessInfo.processInfo.environment["XCODEVAULT_LANG"]].compactMap { $0 } + Locale.preferredLanguages))
 
     /// The locale every `tr`/`plural` without an explicit locale uses.
     public static var locale: String { state.value }
 
     /// Called once by the CLI before parsing (with `--lang`) and available to tests. The app does not call
     /// it: the initial value already follows the user's language preferences.
-    public static func configure(override: String?, preferred: [String] = Locale.preferredLanguages) {
-        state.value = resolve(override: override, preferred: preferred)
+    /// Order: `--lang` override, then `XCODEVAULT_LANG`, then the system preferences, then English.
+    public static func configure(
+        override: String?,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        preferred: [String] = Locale.preferredLanguages
+    ) {
+        state.value = resolve(override: override, preferred: [environment["XCODEVAULT_LANG"]].compactMap { $0 } + preferred)
     }
 
     /// First supported match among the override and then the preferences; `en` when none matches. An
@@ -62,7 +69,7 @@ public enum L10n {
     public static func string(_ key: String, in catalog: L10nCatalog, locale: String, arguments: [CVarArg]) -> String {
         let entry = catalog.strings[key]
         guard let template = entry?[locale] ?? entry?[baseLocale] else { return key }
-        return format(template, locale: locale, arguments: arguments)
+        return format(template, fallback: entry?[baseLocale], locale: locale, arguments: arguments)
     }
 
     /// The plural form of `key` for `count`; the count is the first format argument (`%lld`).
@@ -72,7 +79,7 @@ public enum L10n {
         guard let table = forms[chosenLocale] else { return key }
         let category = pluralCategory(locale: chosenLocale, count: count)
         guard let template = table[category] ?? table["other"] else { return key }
-        return format(template, locale: chosenLocale, arguments: [count] + arguments)
+        return format(template, fallback: forms[baseLocale]?[category] ?? forms[baseLocale]?["other"], locale: chosenLocale, arguments: [count] + arguments)
     }
 
     /// CLDR cardinal categories for integers in the shipped languages. A new language adds its rule here
@@ -110,8 +117,23 @@ public enum L10n {
         return (language, remaining)
     }
 
-    private static func format(_ template: String, locale: String, arguments: [CVarArg]) -> String {
-        arguments.isEmpty ? template : String(format: template, locale: Locale(identifier: locale), arguments: arguments)
+    /// Formats only when there are arguments and the template does not ask for more than were given
+    /// (`String(format:)` would read invalid memory). Too few: the English template if it fits, else the raw template.
+    private static func format(_ template: String, fallback: String?, locale: String, arguments: [CVarArg]) -> String {
+        if arguments.isEmpty { return template }
+        if specifierCount(template) <= arguments.count {
+            return String(format: template, locale: Locale(identifier: locale), arguments: arguments)
+        }
+        if let fallback, specifierCount(fallback) <= arguments.count {
+            return String(format: fallback, locale: Locale(identifier: baseLocale), arguments: arguments)
+        }
+        return template
+    }
+
+    private static func specifierCount(_ template: String) -> Int {
+        let stripped = template.replacingOccurrences(of: "%%", with: "")
+        guard let regex = try? NSRegularExpression(pattern: #"%(?:[0-9]+\$)?(lld|ld|d|@|f|s)"#) else { return Int.max }
+        return regex.numberOfMatches(in: stripped, range: NSRange(stripped.startIndex..., in: stripped))
     }
 }
 
