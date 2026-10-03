@@ -37,11 +37,14 @@ public enum TextRenderer {
 
     /// The status, then the savings; the per-item table only with `details`. Warnings are safety information
     /// and are always printed.
-    public static func scan(_ r: ScanReport, details: Bool = false) -> String {
+    public static func scan(_ r: ScanReport, details: Bool = false, colors: Bool = false) -> String {
         var o = status(r)
         // Without sizes every amount would be zero, which reads as "nothing to reclaim" rather than "not measured".
         let measured = r.sizesMeasured
-        o += "\n" + (measured ? savings(r.savings, runtimeImageBytes: r.summary.runtimeImageBytes) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
+        o +=
+            "\n"
+            + (measured
+                ? savings(r.savings, runtimeImageBytes: r.summary.runtimeImageBytes, colors: colors) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
         if details {
             o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
             o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
@@ -113,7 +116,9 @@ public enum TextRenderer {
     /// remainder and the next command. Every column is padded by display width, so wide scripts stay aligned.
     /// Under the delete row, the part that does not come back (simulator devices); after the stay-local row, the
     /// runtime images simctl measured (`runtimeImageBytes`, from `ScanSummary`), which no catalog category counts yet.
-    public static func savings(_ s: SavingsSummary, runtimeImageBytes: UInt64) -> String {
+    /// With `colors`, each bucket title is wrapped in its 24-bit color after the row is padded, so the codes never
+    /// count toward width. For a terminal only: records (`report`, `--json`) and pipes never pass it.
+    public static func savings(_ s: SavingsSummary, runtimeImageBytes: UInt64, colors: Bool = false) -> String {
         func headline(_ bytes: UInt64) -> String {
             let amount = ByteCount.format(bytes)
             return s.isLowerBound ? L10n.tr("savings.atLeast", amount) : L10n.tr("savings.upTo", amount)
@@ -126,9 +131,11 @@ public enum TextRenderer {
             var note: String = ""
             /// An indented line printed right under this row, outside the aligned columns.
             var detail: String?
+            /// The bucket whose title this row's label ends with, when it is one that gets a color.
+            var bucket: SavingsBucket?
         }
         func bucketRow(_ b: SavingsBucket) -> Row {
-            Row(label: "    " + b.localizedTitle, amount: option(s[b].optionBytes), note: b.localizedUndoCost)
+            Row(label: "    " + b.localizedTitle, amount: option(s[b].optionBytes), note: b.localizedUndoCost, bucket: b)
         }
         func verified(_ bytes: UInt64) -> String { "(" + L10n.tr("savings.verifiedShare", ByteCount.format(bytes)) + ")" }
 
@@ -142,13 +149,17 @@ public enum TextRenderer {
             bucketRow(.runFromExternal),
             Row(label: "  " + L10n.tr("savings.total.title"), amount: headline(s.reclaimableBytes)),
         ]
-        let keep = Row(label: "  " + SavingsBucket.keepLocal.localizedTitle, amount: option(s.keepLocal.primaryBytes))
+        let keep = Row(label: "  " + SavingsBucket.keepLocal.localizedTitle, amount: option(s.keepLocal.primaryBytes), bucket: .keepLocal)
         let all = rows + [keep]
         let labelWidth = all.map { displayWidth($0.label) }.max() ?? 0
         let amountWidth = all.map { displayWidth($0.amount) }.max() ?? 0
         func render(_ r: Row) -> String {
             let amount = String(repeating: " ", count: amountWidth - displayWidth(r.amount)) + r.amount
-            let line = padDisplay(r.label, labelWidth) + "  " + amount
+            var label = padDisplay(r.label, labelWidth)
+            if colors, let b = r.bucket, let range = label.range(of: b.localizedTitle) {
+                label.replaceSubrange(range, with: ansi(b.colorHex) + b.localizedTitle + "\u{1B}[0m")
+            }
+            let line = label + "  " + amount
             return r.note.isEmpty ? line : line + "   " + r.note
         }
         var out = [L10n.tr("cli.savings.heading")]
@@ -163,6 +174,13 @@ public enum TextRenderer {
         }
         out.append(L10n.tr("cli.savings.next", "xcodevaultctl plan delete | park | external"))
         return out.joined(separator: "\n")
+    }
+
+    /// 24-bit foreground escape for `#RRGGBB`; empty for anything else, so a bad hex costs the color and nothing more.
+    static func ansi(_ hex: String) -> String {
+        let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard h.count == 6, let v = UInt32(h, radix: 16) else { return "" }
+        return "\u{1B}[38;2;\((v >> 16) & 0xFF);\((v >> 8) & 0xFF);\(v & 0xFF)m"
     }
 
     /// Terminal columns a string occupies: East Asian wide and fullwidth scalars take two, combining marks none.

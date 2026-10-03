@@ -120,4 +120,51 @@ final class SavingsTextTests: XCTestCase {
         XCTAssertEqual(TextRenderer.displayWidth("外部"), 4)
         XCTAssertEqual(TextRenderer.displayWidth("—"), 1)
     }
+
+    // MARK: colors (S5): bucket titles only, on a terminal only
+
+    private let esc = "\u{1B}"
+
+    func testNoColorsMeansNoEscapeByte() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        XCTAssertFalse(TextRenderer.savings(summary(), runtimeImageBytes: 1).contains(esc))
+        XCTAssertEqual(TextRenderer.savings(summary(), runtimeImageBytes: 1), TextRenderer.savings(summary(), runtimeImageBytes: 1, colors: false))
+    }
+
+    func testColorsWrapEveryBucketTitleInItsOwnColor() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true)
+        XCTAssertTrue(out.contains(esc))
+        for b in [SavingsBucket.deleteAndRegenerate, .parkExternally, .runFromExternal, .keepLocal] {
+            let hex = b.colorHex.dropFirst()
+            let rgb = stride(from: 0, to: 6, by: 2).map { i -> String in
+                let a = hex.index(hex.startIndex, offsetBy: i)
+                return String(Int(hex[a..<hex.index(a, offsetBy: 2)], radix: 16) ?? -1)
+            }
+            let wrapped = "\(esc)[38;2;\(rgb.joined(separator: ";"))m\(b.localizedTitle)\(esc)[0m"
+            XCTAssertTrue(out.contains(wrapped), "\(b): \(wrapped) in\n\(out)")
+        }
+        // Headlines and amounts stay uncolored: only the four titles carry a color.
+        XCTAssertEqual(out.components(separatedBy: "\(esc)[38;2;").count - 1, 4)
+    }
+
+    func testStrippingTheCodesLeavesThePlainBlock() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let colored = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true)
+        let stripped = colored.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
+        XCTAssertEqual(stripped, TextRenderer.savings(summary(), runtimeImageBytes: 0))
+    }
+
+    func testAmountsAreStillAlignedInJapaneseWithColorsOn() {
+        L10n.configure(override: "ja", environment: [:], preferred: [])
+        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true).split(separator: "\n").map(String.init)
+        let rows = [lines[2], lines[3], lines[5]].map { $0.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression) }
+        let widths = rows.map { row -> Int in
+            let amounts = [30_100_000_000, 12_200_000_000, 8_000_000_000].map { ByteCount.format(UInt64($0)) }
+            guard let a = amounts.first(where: { row.contains($0) }), let r = row.range(of: a) else { return -1 }
+            return TextRenderer.displayWidth(String(row[..<r.upperBound]))
+        }
+        XCTAssertFalse(widths.contains(-1), rows.joined(separator: "\n"))
+        XCTAssertEqual(Set(widths).count, 1, "\(widths)")
+    }
 }

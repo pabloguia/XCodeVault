@@ -63,6 +63,14 @@ struct XCodeVaultCTL: ParsableCommand {
     }
 }
 
+extension XCodeVaultCTL {
+    /// Color only for a person at a terminal: not piped, not under NO_COLOR (no-color.org), not a dumb terminal.
+    /// `report` and `--json` are records and never ask.
+    static func wantsColor(environment: [String: String], isTTY: Bool) -> Bool {
+        isTTY && environment["NO_COLOR"] == nil && environment["TERM"] != "dumb"
+    }
+}
+
 struct GlobalOptions: ParsableArguments {
     @Flag(name: .long, help: "Emit machine-readable JSON instead of text.")
     var json = false
@@ -99,7 +107,11 @@ struct Scan: ParsableCommand {
     var details = false
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: !noSizes).scan()
-        try emit(report, json: global.json) { TextRenderer.scan(report, details: details) }
+        try emit(report, json: global.json) {
+            TextRenderer.scan(
+                report, details: details,
+                colors: !global.json && XCodeVaultCTL.wantsColor(environment: ProcessInfo.processInfo.environment, isTTY: isatty(STDOUT_FILENO) != 0))
+        }
     }
 }
 
