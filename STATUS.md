@@ -46,12 +46,22 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 - **Savings visibility, i18n and identity** — spec `docs/superpowers/specs/2026-10-03-savings-visibility-i18n-identity-design.md`.
   S1 (savings model in Core), S2 (localization) and S3 (CLI: savings-first `scan`/`status`, `plan`,
   `--lang`, grouped help) done — non-English strings need native review (docs/process/LOCALIZATION.md);
-  S4 (GUI) pending; S5 (identity: logo, app icon, bucket tokens, CLI colors, `docs/brand/BRAND.md`) done. In the translated help, ArgumentParser's own
+  S4 (GUI: savings-first sidebar, Overview cards and disk bar, Delete/Park/Run-externally views with **Copy Command**,
+  the Access checklist, the Details screens; branch `feat/gui-savings`, follow-ups below) done; S5 (identity: logo, app icon, bucket tokens, CLI colors, `docs/brand/BRAND.md`) done. In the translated help, ArgumentParser's own
   headers (OVERVIEW, USAGE, OPTIONS, SUBCOMMANDS, and "<GROUP> SUBCOMMANDS") stay English — the library
   prints them and offers no hook — and Japanese help wraps only at spaces, so a long Japanese abstract runs
   past the column width instead of breaking mid-phrase.
 
 ## Blocked / pending — manual (ask the user)
+
+- **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) the Delete table's grouped rows have never been seen
+  in a real window — off-screen snapshots cannot draw `NSTableView` rows (nor a `List`'s, so Health is also unseen) —
+  a manual look at the running app is scheduled before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
+  are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
+  catalog's English in every language (S4 Task 2) — localizing them needs display names in the catalog; (4) the
+  generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
+  (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further; (5) the runtime
+  `.dmg` gap below is still open: the Overview and Simulators show those bytes on their own, outside the totals.
 
 - **Runtime images outside the savings model.** Runtime images stored as
   `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` (Intel / pre-MobileAsset layout, measured
@@ -3134,3 +3144,14 @@ as `true`, so the two did not collide. Rather than chase spellings, quoted and c
 
 **Not measured:** the workflow itself. Nothing signs or notarizes until the first tag, and only the run shows
 whether the keychain import, `notarytool` with the API key and `attest-build-provenance` work as written.
+
+## 2026-10-03 — S4 GUI done (spec `docs/superpowers/specs/2026-10-03-savings-visibility-i18n-identity-design.md` §6)
+
+Plan `docs/superpowers/plans/2026-10-03-s4-gui.md`, six tasks on `feat/gui-savings`: the savings-first sidebar
+(Save space / Details), the Overview's disk bar and three cards, the Delete, Park and Run-externally views (the app
+copies commands and runs none of them; Delete's semantics unchanged), the Access checklist asked for where it matters,
+and the Details screens renamed (Health, History, Drives, Simulators — now with runtimes and devices with sizes — and
+Storage with a Bucket column). The legacy `ScanSummary` savings numbers are gone from the app (a test greps for them).
+User docs: `docs/USER_GUIDE.md` § The app; spec: `docs/product/UX_AND_CLI.md` § GUI. The snapshot tests now return
+instead of skipping without `XCV_SNAPSHOTS=1`: the no-skips gate holds the suite to zero skipped tests, and the two
+earlier snapshot tests would have failed it. Follow-ups are in "Blocked / pending" above.

@@ -17,8 +17,8 @@ system prompt, not a command for you to paste.
 
 | Permission | Asked for when | Why | How XCodeVault asks | In this build |
 |---|---|---|---|---|
-| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it. The app asks when a scan was refused, and its Permissions section shows the state (built and unit-tested; not yet exercised on screen) |
-| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache (experimental) | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available in any build made today: it needs a signed build that includes the helper (issue #30), and it has never run live. Until then the app says "Not available in this build" and shows the manual route where there is one: `vault init` and `doctor` print the command for the vault folder; the dyld cache stays listed, not cleaned |
+| **Full Disk Access** | A scan could not read some folders because macOS privacy protection refused it | Those folders' sizes are missing from the totals until it is granted | It opens System Settings ▸ Privacy & Security ▸ Full Disk Access. You switch it on; when you come back, the app notices and scans again. Code cannot grant this permission, so the app never tries | `xcodevaultctl permissions` reports it. The app asks when a scan was refused, and its Access screen shows the state (built and unit-tested; not yet exercised on screen) |
+| **Privileged helper** — a background item that runs as root | You choose an action that needs root: creating the vault folder on a drive whose top folder belongs to root, or emptying the CoreSimulator dyld cache (experimental) | Those paths belong to root. The helper can do only a fixed list of actions, on paths it resolves itself | A one-sentence sheet with **Allow**. macOS then asks you to approve the helper once, in System Settings ▸ General ▸ Login Items & Extensions, with an administrator password — macOS's prompt, not XCodeVault's | Not available in any build made today: it needs a signed build that includes the helper (issue #30), and it has never run live. Until then the app's helper row says "Not in this build" and shows what to do instead: the signed release, or the manual route where there is one: `vault init` and `doctor` print the command for the vault folder; the dyld cache stays listed, not cleaned |
 
 Three details that are easy to get wrong:
 
@@ -43,18 +43,63 @@ this of XCodeVault has not been observed or measured.
 
 ## The app
 
-The app shows the same numbers and runs the same checks as the command line. Rescan with ⌘R.
+The app shows the same numbers and runs the same checks as the command line, in the language macOS uses for it
+(English, Brazilian Portuguese, Spanish, Japanese or Simplified Chinese; every translation except English is still
+awaiting native review). Rescan with ⌘R. The sidebar has two groups: **Save space** — what you can reclaim, and how —
+and **Details** — everything the scan, the doctor and the journal recorded.
 
-| Section | What it shows | What it changes | How to undo |
+### Save space
+
+**Overview** draws the internal disk as one bar: other data, developer data split by the way each item can be
+reclaimed, and free space. Under it are three cards, one per way of reclaiming space, each with an "up to" amount, how
+much of it uses verified strategies, what it promises, what undoing it costs, and **Review**, which opens that way's
+view. The cards are alternatives for the same files — DerivedData, for example, can be deleted *or* moved — so they
+overlap; the total under them counts each file once. The bar counts each item once too, under its main option.
+Simulator runtime images that `simctl` measured but the catalog does not count yet are on their own line. The Overview
+also shows at most one access row (see [How access is asked for](#how-access-is-asked-for)), scan warnings, and doctor
+findings of error severity or worse.
+
+What each way costs to undo:
+
+| Way | What it frees | Cost to undo | In the app |
 |---|---|---|---|
-| Overview | Internal disk used by developer tooling; how much is cleanable or relocatable; warnings; doctor issues of error severity or worse; when a scan was refused by macOS privacy protection, **Open Settings** for Full Disk Access | Nothing | — |
-| Storage | Every storage category present on this Mac, with size, outcome, strategy and path; symlinks and mount points flagged | Nothing | — |
-| Doctor | Unsafe or broken setups, with the proposed fix where there is one. A finding that the privileged helper can fix — the vault folder a drive refused — also has a button, or "Not available in this build." while this build cannot reach the helper | Nothing by itself: doctor proposes, it never applies a fix. The button, where there is one, creates the vault folder through the helper | Remove the folder it created, if you no longer want it |
-| Clean | The cleanup plan — regenerable data only, largest first, every category labelled experimental. Select rows, then **Delete selected…**; the confirmation shows the exact count | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete selected…**; the **Needs** column says what they lack. The CoreSimulator dyld cache (*experimental*) has its own button, which needs the privileged helper and a confirmation | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
-| Volumes | Mounted volumes, whether each qualifies as a vault, and the state of registered vault volumes | Nothing; registering a vault is `xcodevaultctl vault init` | — |
-| Runtimes | Installed simulator runtimes | Nothing | — |
-| Journal | The last 100 journal entries | Nothing | — |
-| Permissions | The Full Disk Access and helper states, each with why and one control: **Open Settings** for Full Disk Access; **Install…** or **Uninstall…** for the helper — or, while this build cannot reach it, the manual route | Nothing by itself. **Open Settings** opens System Settings; when you come back, the app checks again and rescans — if macOS asks you to quit and reopen XCodeVault, do so. **Install…** registers the helper and opens Login Items & Extensions, where you approve it; **Uninstall…** removes the registration. Both need a signed build that includes the helper, and none exists yet | Switch the permission off in System Settings; for the helper, **Uninstall…** |
+| **Delete — comes back on demand** (Temporary) | Space now; it grows back as Xcode rebuilds or downloads it again | Rebuild or re-download time. Simulator devices are the exception: deleting one deletes its apps and their data, and they do not come back | **Delete** deletes the rows you select (see below) |
+| **Park on an external drive** (Temporary) | Space until you bring it back: a verified copy waits on your vault drive | Copy it back when you need it — no download | **Park** shows the commands; the app runs none of them |
+| **Run from an external drive** (Permanent) | Space for good: the data lives on the external drive and stops growing on this Mac | Nothing to download, but the drive must be connected while you work | **Run externally** shows the commands; the app runs none of them |
+
+Everything that stays on this Mac — Archives among it, which nothing here ever offers to delete — is counted in the
+bar, never in a card.
+
+| View | What it shows | What it changes | How to undo |
+|---|---|---|---|
+| Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its markers (*experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…**; the confirmation shows the exact count. Below the table: the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command**, and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted from the app: **Copy Command** puts the command on the clipboard, and you run it | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
+| Park | The categories that can be parked, each with its size, markers, the command and **Copy Command**, and the vault drive's state: none registered, not connected, connected but not usable, or ready | Nothing. **Copy Command** copies the command; you run it in Terminal, where it shows what it would do before doing it unless it is marked *acts immediately* | — |
+| Run externally | The categories that can run from an external drive, with the same rows | Nothing; as Park | — |
+
+### Details
+
+| Screen | What it shows | What it changes |
+|---|---|---|
+| Storage | Every storage item the scan found, largest first: size, the way of reclaiming it is counted under (its symbol and name), category, outcome, strategy and path; symlinks and mount points flagged | Nothing |
+| Simulators | The installed simulator runtimes, largest first, with their total; the simulator devices with the size of their data, the runtime each one runs, and their total | Nothing: runtimes and devices are deleted with `simctl` and `xcodebuild`, whose commands the Delete view lists |
+| Drives | Mounted volumes, whether each qualifies as a vault, and the state of registered vault volumes | Nothing; registering a vault is `xcodevaultctl vault init` |
+| Health | The doctor's findings, with the proposed fix where there is one. A finding that the privileged helper can fix — the vault folder a drive refused — also has its control | Nothing by itself: the doctor proposes, it never applies a fix. The control, where it is a button, creates the vault folder through the helper; remove the folder if you no longer want it |
+| History | The last 100 journal entries, newest first | Nothing |
+| Access | One row per permission — Full Disk Access and the privileged helper — each with its state as a symbol and a word, one sentence of why, and one button | See below |
+
+### How access is asked for
+
+Access is asked for where it matters, and in one place you can always open: the **Access** screen. The Overview shows
+the one row that holds back something the scan measured — Full Disk Access when folders could not be read, the helper
+when rows only root can delete wait on it — and the Delete view shows the helper's row above its table when a row in it
+needs root. Each row has one button: **Open Full Disk Access Settings** (or **Check again** when the check could not
+tell), and **Install the Helper…** or **Approve in System Settings…** for the helper; once the helper is enabled, Access
+offers **Uninstall…**, with a confirmation. **Open Full Disk Access Settings** opens System Settings; when you come back,
+the app checks again and rescans — if macOS asks you to quit and reopen XCodeVault, do so. **Install the Helper…**
+registers the helper and opens Login Items & Extensions, where you approve it. In a build that cannot reach the helper —
+every build made today — its row says "Not in this build" and, instead of a button, what to do: use the signed release,
+or run the manual step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints. To undo, switch the permission
+off in System Settings; for the helper, **Uninstall…**.
 
 ## The command line
 
@@ -148,9 +193,9 @@ Because the data is regenerable, which is why it was offered for cleaning:
 
 ### Why is this greyed out, or why is there no button?
 
-- **Delete selected… is disabled**: no row that `clean` may delete is selected. Rows that need root
-  do not count; the **Needs** column says what they lack.
-- **A row says it needs root, or "Not available in this build"**: XCodeVault's only route to root is
+- **Delete Selected… is disabled**: no row that `clean` may delete is selected. Rows that need root
+  do not count; their marker in the **Markers** column says what they lack.
+- **A row says it needs root, or the helper says "Not in this build"**: XCodeVault's only route to root is
   its privileged helper, and this build cannot reach it — no build made today can (see
   [Permissions](#permissions-which-when-why-and-how-the-app-asks)). The app never shows a button that
   cannot work: it shows the manual route instead, where one exists. With a build that can reach the
