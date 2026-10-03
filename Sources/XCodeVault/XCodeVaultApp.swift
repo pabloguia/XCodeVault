@@ -216,6 +216,13 @@ final class AppModel {
     /// helper is not enabled.
     private(set) var deleteAccessRow: AccessChecklist.Row?
 
+    /// Whether the Delete view's dyld control shows its "what to do instead" text: not when `deleteAccessRow` above the
+    /// table already says it (`AccessChecklist.controlShowsGuidance`). The action and its confirmation are unchanged.
+    var deleteControlShowsGuidance: Bool { AccessChecklist.controlShowsGuidance(helper: helperState, besides: deleteAccessRow) }
+
+    /// Whether the Access view offers **Uninstall…** under `row` (`AccessChecklist.offersUninstall`).
+    func offersUninstall(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.offersUninstall(row, helper: helperState) }
+
     private func updateAccessBanner() {
         guard let report else {
             accessBanner = nil
@@ -281,128 +288,13 @@ final class AppModel {
     }
 }
 
-struct StorageView: View {
-    let report: ScanReport
-    var body: some View {
-        let items = report.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
-        Table(items) {
-            // Category names and outcomes are the catalog's English: StorageCategory data, not app text (S4 Task 2).
-            TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.allocatedBytes)).monospacedDigit() }.width(90)
-            TableColumn(L10n.tr("app.column.category")) { Text(verbatim: report.category(for: $0)?.name ?? $0.categoryID) }
-            TableColumn(L10n.tr("app.column.outcome")) { Text(verbatim: report.category(for: $0)?.outcomeLabel ?? "") }
-            TableColumn(L10n.tr("app.column.strategy")) { it in
-                let c = report.category(for: it)
-                Text(verbatim: AppText.name(c?.recommendedStrategy.rawValue ?? "", experimental: c?.isExperimental ?? false))
-            }
-            TableColumn(L10n.tr("app.column.path")) { it in
-                let marks =
-                    (it.isSymlink ? "  " + L10n.tr("app.storage.symlink") : "") + (it.isMountPoint ? "  " + L10n.tr("app.storage.mountPoint") : "")
-                    + (it.mountStateUndetermined ? "  " + L10n.tr("app.storage.mountStateUnreadable") : "")
-                Text(verbatim: it.path + marks).font(.system(.body, design: .monospaced))
-            }
-        }
-    }
-}
-
-struct DoctorView: View {
-    @Bindable var model: AppModel
-    var body: some View {
-        if model.findings.isEmpty {
-            ContentUnavailableView(L10n.tr("app.doctor.empty"), systemImage: "checkmark.seal")
-        } else {
-            List(model.findings) { f in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(verbatim: AppText.severity(f.severity)).font(.caption).bold().foregroundStyle(
-                            f.severity >= .error ? .red : (f.severity == .warning ? .orange : .secondary));
-                        Text(verbatim: f.title).bold()
-                    }
-                    Text(verbatim: f.detail).font(.callout)
-                    if let p = f.path { Text(verbatim: p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
-                    if let r = f.remediation { Text(verbatim: "→ " + r).font(.callout) }
-                    // The finding carries the action; the button never re-derives it (carried note 2).
-                    if let action = f.action {
-                        PrivilegedActionControlView(action: action, state: model.helperState) { model.request(action) }
-                    }
-                    if let e = f.evidence { Text.l10n(L10n.tr("app.doctor.evidence", e)).font(.caption2).foregroundStyle(.secondary) }
-                }.padding(.vertical, 4)
-            }
-        }
-    }
-}
-
-struct VolumesView: View {
-    let report: ScanReport; let checks: [VaultVolumeCheck]
-    var body: some View {
-        List {
-            Section(L10n.tr("app.volumes.mounted")) {
-                ForEach(report.volumes) { v in
-                    let q = VolumeQualification.evaluate(v)
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(verbatim: v.volumeName).bold(); Text(verbatim: v.filesystemPersonality); Text(verbatim: v.busProtocol)
-                            Text(verbatim: v.isInternal ? L10n.tr("app.volumes.internal") : L10n.tr("app.volumes.external"))
-                            Spacer(); Text.l10n(L10n.tr("app.volumes.free", ByteCount.format(v.freeBytes))).monospacedDigit()
-                        }
-                        Text(verbatim: v.isBootVolume ? L10n.tr("app.volumes.bootVolume") : AppText.verdict(q.verdict)).font(.caption)
-                            .foregroundStyle(.secondary)
-                        ForEach(q.blockers, id: \.self) { Text(verbatim: "✗ " + $0).font(.caption).foregroundStyle(.red) }
-                        ForEach(q.warnings, id: \.self) { Text(verbatim: "! " + $0).font(.caption).foregroundStyle(.orange) }
-                    }
-                }
-            }
-            Section(L10n.tr("app.volumes.vaults")) {
-                if checks.isEmpty { Text.l10n(L10n.tr("app.volumes.vaults.none")).foregroundStyle(.secondary) }
-                ForEach(checks, id: \.volume.volumeUUID) { c in
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(verbatim: AppText.vaultState(c.state)).bold().foregroundStyle(c.isUsable ? .green : .red); Text(verbatim: c.volume.volumeName)
-                        }; Text(verbatim: c.detail).font(.caption)
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct RuntimesView: View {
-    let report: ScanReport
-    var body: some View {
-        Table(report.runtimes) {
-            TableColumn(L10n.tr("app.column.platform")) { Text(verbatim: $0.platformName) }
-            TableColumn(L10n.tr("app.column.version")) { Text(verbatim: ($0.version ?? "?") + " (" + ($0.build ?? "?") + ")") }
-            TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state ?? "?") }
-            TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.sizeBytes ?? 0)).monospacedDigit() }
-            TableColumn(L10n.tr("app.column.mounted")) { Text(verbatim: $0.isMounted ? L10n.tr("app.value.yes") : L10n.tr("app.value.no")) }
-            TableColumn(L10n.tr("app.column.image")) { Text(verbatim: $0.path ?? "").font(.system(.caption, design: .monospaced)) }
-        }
-    }
-}
-
-struct JournalView: View {
-    let entries: [JournalEntry]
-    var body: some View {
-        if entries.isEmpty {
-            ContentUnavailableView(
-                L10n.tr("app.journal.empty.title"), systemImage: "list.bullet.rectangle", description: Text.l10n(L10n.tr("app.journal.empty.detail")))
-        } else {
-            Table(entries) {
-                // Kind, state and summary are the journal's own record: never translated (docs/process/LOCALIZATION.md).
-                TableColumn(L10n.tr("app.column.sequence")) { Text(verbatim: String($0.sequence)) }.width(40)
-                TableColumn(L10n.tr("app.column.when")) { Text(verbatim: AppText.date($0.timestamp)) }
-                TableColumn(L10n.tr("app.column.kind")) { Text(verbatim: $0.kind.rawValue) }
-                TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state.rawValue) }
-                TableColumn(L10n.tr("app.column.summary")) { Text(verbatim: $0.summary) }
-            }
-        }
-    }
-}
-
 /// What stands next to a root action. `HelperState.actionControl` decides; this only renders it, and never
 /// renders a button for a build that cannot reach the helper.
 struct PrivilegedActionControlView: View {
     let action: PrivilegedAction
     let state: HelperState
+    /// False where an access row on the same screen already gives the guidance (`AccessChecklist.controlShowsGuidance`).
+    var showsGuidance = true
     let perform: @MainActor () -> Void
     var body: some View {
         switch state.actionControl {
@@ -410,7 +302,9 @@ struct PrivilegedActionControlView: View {
         case .requestHelper: Button(action.title(in: L10n.locale) + "…", action: perform)
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
-            Text.l10n(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
+            if showsGuidance {
+                InlineCodeText(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

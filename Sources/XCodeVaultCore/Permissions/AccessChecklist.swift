@@ -138,6 +138,21 @@ public enum AccessChecklist {
         return helperRow(helper, rootOnlyBytes: root.reduce(UInt64(0)) { $0 + $1.bytes })
     }
 
+    /// Whether a root action's own control (`PrivilegedActionControlView`) shows its "what to do instead" text. Only in a
+    /// build that cannot reach the helper is there such text; it is left out when `shownRow` — the access row already on
+    /// screen above the control — gives the same guidance, so it is never said twice. The action and its confirmation are
+    /// not affected: in that build the control has no button either way.
+    public static func controlShowsGuidance(helper: HelperState, besides shownRow: Row?) -> Bool {
+        guard helper.actionControl == .notAvailableInThisBuild else { return true }
+        return shownRow?.actionKey != Key.helperActionSignedReleaseOrCLI
+    }
+
+    /// Whether the Access view offers **Uninstall…** under `row`: the helper's row, once it is enabled
+    /// (`HelperState.rowButton`). The uninstall still asks for confirmation.
+    public static func offersUninstall(_ row: Row, helper: HelperState) -> Bool {
+        row.need == .privilegedHelper && helper.rowButton == .uninstall
+    }
+
     static func fullDiskAccessRow(_ state: FullDiskAccessState, savings: SavingsSummary, refusals: Int) -> Row {
         switch state {
         case .granted:

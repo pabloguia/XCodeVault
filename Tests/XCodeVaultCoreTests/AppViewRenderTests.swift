@@ -92,13 +92,13 @@ final class AppViewRenderTests: XCTestCase {
         render(MainView(model: scanned))
     }
 
-    func testTheDoctorRendersAFindingThatCarriesAnAction() async {
+    func testHealthRendersAFindingThatCarriesAnAction() async {
         let t = TempDir()
         let finding = Finding(
             id: "vault-dir:U", severity: .info, title: "The vault folder could not be created on Drive", detail: "detail",
             path: "/Volumes/Drive/XCodeVault", remediation: "sudo mkdir …", evidence: "journal", action: .createVaultDirectory(volumeUUID: "U"))
         for state in HelperState.allCases {
-            render(DoctorView(model: await scannedModel(state, survey: sampleSurvey(findings: [finding]), journal: t)))
+            render(HealthView(model: await scannedModel(state, survey: sampleSurvey(findings: [finding]), journal: t)))
         }
     }
 
@@ -145,6 +145,30 @@ final class AppViewRenderTests: XCTestCase {
             render(InlineCodeText(L10n.tr("cli.plan.note.rootOnly")))
         }
         XCTAssertEqual(rendered, L10n.supportedLocales.count * checks.count)
+    }
+
+    /// The Details screens (S4 Task 6) over a scan with runtimes, devices, drives, a vault, findings and history, and over an
+    /// empty one, in every language; the whole window on each of them too.
+    func testTheDetailsRenderInEveryLanguage() async {
+        let t = TempDir()
+        var rendered = 0
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            for survey in [detailSampleSurvey(), sampleSurvey()] {
+                let model = await scannedModel(.unavailableInThisBuild, survey: survey, journal: t)
+                render(StorageView(report: survey.0))
+                render(SimulatorsView(report: survey.0))
+                render(DrivesView(report: survey.0, checks: survey.2))
+                render(HealthView(model: model))
+                render(HistoryView(entries: model.journal))
+                for section in SidebarSection.details {
+                    model.section = section
+                    render(MainView(model: model))
+                }
+                rendered += 1
+            }
+        }
+        XCTAssertEqual(rendered, L10n.supportedLocales.count * 2)
     }
 
     func testAccessRendersEveryCombination() async {
@@ -205,15 +229,15 @@ final class AppViewRenderTests: XCTestCase {
             render(MainView(model: model))
             render(OverviewView(report: survey.0, findings: [finding], access: model.accessBanner))
             render(StorageView(report: survey.0))
-            render(DoctorView(model: model))
+            render(HealthView(model: model))
             render(DeleteView(model: model))
-            render(VolumesView(report: survey.0, checks: []))
-            render(RuntimesView(report: survey.0))
-            render(JournalView(entries: []))
+            render(DrivesView(report: survey.0, checks: []))
+            render(SimulatorsView(report: survey.0))
+            render(HistoryView(entries: []))
             let entry = JournalEntry(
                 id: "op", sequence: 1, timestamp: Date(timeIntervalSince1970: 1_800_000_000), kind: .clean, state: .completed, summary: "s", paths: [],
                 bytes: nil, detail: [:], toolVersion: "t")
-            render(JournalView(entries: [entry]))
+            render(HistoryView(entries: [entry]))
             render(AccessView(model: model))
             for row in model.accessRows { render(AccessRowView(row: row) { _ in }) }
             for state in HelperState.allCases { render(PrivilegedActionControlView(action: .emptyCoreSimulatorDyldCache, state: state) {}) }

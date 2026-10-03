@@ -270,7 +270,10 @@ struct DeleteView: View {
                         Text(verbatim: ByteCount.format(a.bytes)).monospacedDigit().foregroundStyle(.secondary)
                         Spacer()
                         if let action = a.privilegedAction {
-                            PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }
+                            // Its guidance is left out when the access row above the table already gives it.
+                            PrivilegedActionControlView(action: action, state: model.helperState, showsGuidance: model.deleteControlShowsGuidance) {
+                                confirmPrivileged = a
+                            }
                         }
                     }
                 }

@@ -61,7 +61,7 @@ struct AccessView: View {
             ForEach(model.accessRows, id: \.need) { row in
                 Section {
                     AccessRowView(row: row) { model.handle($0) }
-                    if row.need == .privilegedHelper, model.helperState.rowButton == .uninstall {
+                    if model.offersUninstall(row) {
                         Button(L10n.tr("app.permissions.uninstallEllipsis")) { confirmUninstall = true }
                     }
                 }

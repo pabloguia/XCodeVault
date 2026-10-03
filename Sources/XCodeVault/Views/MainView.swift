@@ -139,8 +139,10 @@ struct MainView: View {
         ForEach(sections) { s in Label(s.title, systemImage: s.symbol).tag(s) }
     }
 
+    /// The selected section's screen. Internal, not private, so the review snapshots can draw a screen on its own: inside the
+    /// split view, off screen, some are not drawn.
     @ViewBuilder
-    private func detail(_ r: ScanReport) -> some View {
+    func detail(_ r: ScanReport) -> some View {
         switch model.section {
         case .overview:
             OverviewView(report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) })
@@ -148,10 +150,10 @@ struct MainView: View {
         case .park: PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { model.copyCommand($0) }
         case .runExternally: PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) }
         case .storage: StorageView(report: r)
-        case .simulators: RuntimesView(report: r)
-        case .drives: VolumesView(report: r, checks: model.vaultChecks)
-        case .health: DoctorView(model: model)
-        case .history: JournalView(entries: model.journal)
+        case .simulators: SimulatorsView(report: r)
+        case .drives: DrivesView(report: r, checks: model.vaultChecks)
+        case .health: HealthView(model: model)
+        case .history: HistoryView(entries: model.journal)
         case .access: AccessView(model: model)
         }
     }
