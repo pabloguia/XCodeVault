@@ -59,6 +59,11 @@ final class SwitchableHelper: PrivilegedHelper, @unchecked Sendable {
     var urls: [URL] = []
 }
 
+/// What the model put on the pasteboard (`AppEnvironment.copy`), in order.
+@MainActor final class CopiedStrings {
+    var strings: [String] = []
+}
+
 struct Refusal: Error, CustomStringConvertible {
     let description: String
 }
@@ -66,7 +71,7 @@ struct Refusal: Error, CustomStringConvertible {
 /// A small, fixed survey: a report whose summary can count privacy refusals, an optional finding and clean plan.
 func sampleSurvey(
     refusals: Int = 0, findings: [Finding] = [], actions: [CleanAction] = [], savings: SavingsSummary = SavingsSummary(), runtimeImageBytes: UInt64 = 0,
-    sizesMeasured: Bool = true, free: UInt64 = 100_000_000_000
+    sizesMeasured: Bool = true, free: UInt64 = 100_000_000_000, items: [StorageItem] = [], devices: [SimulatorDevice] = [], checks: [VaultVolumeCheck] = []
 ) -> AppModel.Survey {
     let host = HostEnvironment(
         macOSVersion: "26.6", macOSBuild: "25G83", architecture: "arm64", homeDirectory: "/Users/tester",
@@ -75,11 +80,11 @@ func sampleSurvey(
     summary.privacyRefusalCount = refusals
     summary.runtimeImageBytes = runtimeImageBytes
     var report = ScanReport(
-        generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: [], devices: [], volumes: [],
-        items: [], summary: summary, warnings: [])
+        generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: [], devices: devices, volumes: [],
+        items: items, summary: summary, warnings: [])
     report.savings = savings
     report.sizesMeasured = sizesMeasured
-    return (report, findings, [], CleanPlan(actions: actions, skipped: [], warnings: []), [])
+    return (report, findings, checks, CleanPlan(actions: actions, skipped: [], warnings: []), [])
 }
 
 /// Savings shaped like a working developer Mac: every bucket non-empty, part of each experimental, simulator devices in
@@ -115,7 +120,7 @@ func sampleSavings(lowerBound: Bool = false) -> SavingsSummary {
 @MainActor
 func makeModel(
     _ helper: any PrivilegedHelper, journal: TempDir, fullDiskAccess: FullDiskAccessState = .granted,
-    survey: AppModel.Survey = sampleSurvey(), maxPolls: Int = 10_000, opened: OpenedURLs = OpenedURLs(),
+    survey: AppModel.Survey = sampleSurvey(), maxPolls: Int = 10_000, opened: OpenedURLs = OpenedURLs(), copied: CopiedStrings = CopiedStrings(),
     clean: @escaping @Sendable (CleanPlan, Bool) throws -> CleanResult = { _, _ in CleanResult(deleted: [], failedPairs: []) }
 ) -> AppModel {
     let journalURL = URL(fileURLWithPath: journal.path + "/j.jsonl")
@@ -126,7 +131,7 @@ func makeModel(
             runner: {
                 PrivilegedActionRunner(helper: $0, journal: Journal(url: journalURL), isXcodeRunning: { false }, isSimulatorWorkRunning: { false })
             },
-            clean: clean, open: { url in opened.urls.append(url) }))
+            clean: clean, open: { url in opened.urls.append(url) }, copy: { copied.strings.append($0) }))
 }
 
 /// Waits for `condition`, failing after `timeout`. The model starts unstructured tasks; this is how a test sees

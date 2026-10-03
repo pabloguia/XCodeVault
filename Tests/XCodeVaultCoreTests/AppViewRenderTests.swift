@@ -74,12 +74,13 @@ final class AppViewRenderTests: XCTestCase {
 
     func testTheMainViewRendersEverySection() async {
         let t = TempDir()
-        let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: sampleSurvey(refusals: 2, savings: sampleSavings()), journal: t)
-        for section in SidebarSection.allCases {
-            model.section = section
-            render(MainView(model: model))
+        for survey in [sampleSurvey(refusals: 2, savings: sampleSavings()), bucketSampleSurvey()] {
+            let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: survey, journal: t)
+            for section in SidebarSection.allCases {
+                model.section = section
+                render(MainView(model: model))
+            }
         }
-        for bucket in [SavingsBucket.parkExternally, .runFromExternal] { render(BucketPlaceholderView(bucket: bucket)) }
     }
 
     func testTheMainViewRendersLoadingScannedAndWaitingForApproval() async {
@@ -101,7 +102,7 @@ final class AppViewRenderTests: XCTestCase {
         }
     }
 
-    func testCleanRendersTheRowThatNeedsTheHelper() async {
+    func testDeleteRendersTheRowThatNeedsTheHelper() async {
         let t = TempDir()
         let dyld = CleanAction(
             categoryID: "coreSimulatorSystemCaches", categoryName: "CoreSimulator dyld caches", path: PrivilegeRequirement.coreSimulatorDyldCachePath,
@@ -110,8 +111,35 @@ final class AppViewRenderTests: XCTestCase {
             categoryID: "derivedData", categoryName: "DerivedData", path: "/Users/tester/Library/Developer/Xcode/DerivedData", bytes: 500,
             isExperimental: true, risk: .low, requiresRoot: false, notes: [])
         for state in HelperState.allCases {
-            render(CleanView(model: await scannedModel(state, survey: sampleSurvey(actions: [dyld, derived]), journal: t)))
+            render(DeleteView(model: await scannedModel(state, survey: sampleSurvey(actions: [dyld, derived]), journal: t)))
         }
+    }
+
+    /// The bucket views (S4 Task 4) in every language: Delete with groups, the root row and the other-tool rows; Park in
+    /// each vault state; Run externally; and both plans empty.
+    func testTheBucketViewsRenderInEveryLanguage() async {
+        let t = TempDir()
+        let v = VaultVolume(volumeUUID: "U", volumeName: "Drive", lastMountPoint: "/Volumes/Drive", registeredAt: Date(), sentinelID: "s")
+        let checks: [[VaultVolumeCheck]] = [
+            [], [VaultVolumeCheck(volume: v, state: .absent, currentMountPoint: nil, shadowBytes: nil, detail: "")],
+            [VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: "/Volumes/Drive", shadowBytes: nil, detail: "")],
+        ]
+        var rendered = 0
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            for check in checks {
+                let model = await scannedModel(.notInstalled, survey: bucketSampleSurvey(checks: check), journal: t)
+                XCTAssertFalse(model.deleteList?.groups.isEmpty ?? true)
+                render(DeleteView(model: model))
+                render(PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { model.copyCommand($0) })
+                render(PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) })
+                rendered += 1
+            }
+            render(PlanView(bucket: .parkExternally, rows: [], vault: .noVault) { _ in })
+            render(PlanView(bucket: .runFromExternal, rows: [], vault: nil) { _ in })
+            render(InlineCodeText(L10n.tr("cli.plan.note.rootOnly")))
+        }
+        XCTAssertEqual(rendered, L10n.supportedLocales.count * checks.count)
     }
 
     func testPermissionsRendersEveryCombination() async {
@@ -150,7 +178,7 @@ final class AppViewRenderTests: XCTestCase {
             render(OverviewView(report: survey.0, findings: [finding], access: model.accessBanner))
             render(StorageView(report: survey.0))
             render(DoctorView(model: model))
-            render(CleanView(model: model))
+            render(DeleteView(model: model))
             render(VolumesView(report: survey.0, checks: []))
             render(RuntimesView(report: survey.0))
             render(JournalView(entries: []))

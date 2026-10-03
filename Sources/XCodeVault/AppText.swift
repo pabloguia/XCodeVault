@@ -50,6 +50,25 @@ enum AppText {
         }
     }
 
+    /// The Delete view's cost-to-undo column, from the category's regenerability (`DeleteList.Group.undo`).
+    static func undoCost(_ regenerability: Regenerability) -> String {
+        switch regenerability {
+        case .regenerable: L10n.tr("app.delete.undo.regenerable")
+        case .redownloadable: L10n.tr("app.delete.undo.redownloadable")
+        case .userRecreatable: L10n.tr("app.delete.undo.userRecreatable")
+        case .nonRegenerable: L10n.tr("app.delete.undo.nonRegenerable")
+        }
+    }
+
+    /// Park's vault line (`VaultStatus.make`).
+    static func vaultStatus(_ status: VaultStatus) -> String {
+        switch status {
+        case .noVault: L10n.tr("app.plan.vault.none")
+        case .offline: L10n.tr("app.plan.vault.offline")
+        case .ready(let name): L10n.tr("app.plan.vault.ready", name)
+        }
+    }
+
     /// A date in the app's language.
     static func date(_ date: Date) -> String {
         date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: L10n.locale)))

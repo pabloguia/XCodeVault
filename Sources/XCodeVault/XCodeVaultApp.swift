@@ -109,6 +109,7 @@ final class AppModel {
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             self.journal = journal.suffix(100).reversed()
             updateAccessBanner()
+            updateBucketViews()
         } while scanGate.scanEnded()
     }
 
@@ -225,6 +226,32 @@ final class AppModel {
         }
     }
 
+    // MARK: - The bucket views (S4 Task 4)
+
+    /// Park's and Run externally's rows: `SavingsPlanner.rows` for the scan, in its order. Stored like `accessBanner`:
+    /// planned once per scan, never per redraw.
+    private(set) var planRows: [SavingsBucket: [SavingsPlanRow]] = [:]
+    /// The Delete view's list: the clean plan by category, and the rows another tool deletes (`DeleteList.make`).
+    private(set) var deleteList: DeleteList?
+    /// Park's vault line.
+    var vaultStatus: VaultStatus { VaultStatus.make(vaultChecks) }
+
+    func rows(for bucket: SavingsBucket) -> [SavingsPlanRow] { planRows[bucket] ?? [] }
+
+    private func updateBucketViews() {
+        guard let report else {
+            planRows = [:]
+            deleteList = nil
+            return
+        }
+        let buckets: [SavingsBucket] = [.parkExternally, .runFromExternal]
+        planRows = Dictionary(uniqueKeysWithValues: buckets.map { ($0, SavingsPlanner.rows(report: report, bucket: $0)) })
+        deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
+    }
+
+    /// **Copy command**: exactly the row's command, never a variant of it. The app runs none of these (spec §6.4).
+    func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
+
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
@@ -283,93 +310,6 @@ struct DoctorView: View {
                     if let e = f.evidence { Text.l10n(L10n.tr("app.doctor.evidence", e)).font(.caption2).foregroundStyle(.secondary) }
                 }.padding(.vertical, 4)
             }
-        }
-    }
-}
-
-struct CleanView: View {
-    @Bindable var model: AppModel
-    @State private var selection = Set<String>()
-    @State private var confirm = false
-    @State private var useTrash = true
-    /// The root row whose own button was pressed, waiting on its destructive confirmation.
-    @State private var confirmPrivileged: CleanAction?
-
-    /// The rows that will actually be deleted: selected, and not root-owned. Rows needing root are
-    /// listed and selectable but never acted on by **Delete selected…** (`CleanAction.privilegeRequirement`
-    /// says what they lack); the dyld cache has its own button, through the privileged helper.
-    ///
-    /// This is a single definition on purpose. The confirmation dialog used to title itself with
-    /// `selection.count` while the delete acted on this filtered set, so selecting one root-owned
-    /// row alongside two ordinary ones asked "Delete 3 item(s) permanently?" and deleted two. The
-    /// count in a destructive confirmation is the last thing a user reads before agreeing to it.
-    private func deletable(in plan: CleanPlan) -> [CleanAction] {
-        plan.actions.filter { selection.contains($0.id) && !$0.requiresRoot }
-    }
-
-    var body: some View {
-        if let plan = model.cleanPlan {
-            VStack(alignment: .leading) {
-                Table(plan.actions, selection: $selection) {
-                    TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
-                    TableColumn(L10n.tr("app.column.category")) { Text(verbatim: AppText.name($0.categoryName, experimental: $0.isExperimental)) }
-                    TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.path).font(.system(.body, design: .monospaced)) }
-                    TableColumn(L10n.tr("app.column.needs")) { Text(verbatim: $0.privilegeRequirement?.label(in: L10n.locale) ?? "") }
-                }
-                ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
-                ForEach(plan.skipped, id: \.self) { Text.l10n(L10n.tr("app.clean.skipped", $0)).font(.caption).foregroundStyle(.secondary) }
-                let privileged = plan.actions.filter { $0.privilegedAction != nil }
-                if !privileged.isEmpty {
-                    GroupBox(L10n.tr("app.clean.privileged.title")) {
-                        ForEach(privileged) { a in
-                            HStack {
-                                Text(verbatim: AppText.name(a.categoryName, experimental: true) + " — " + ByteCount.format(a.bytes))
-                                Spacer()
-                                if let action = a.privilegedAction {
-                                    PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }
-                                }
-                            }
-                        }
-                    }
-                }
-                HStack {
-                    let chosen = deletable(in: plan)
-                    Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
-                    // The CLI has --trash; without this the GUI was strictly more destructive than
-                    // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
-                    Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash)
-                    Spacer()
-                    Button(L10n.tr("app.clean.deleteSelected")) { confirm = true }.disabled(chosen.isEmpty)
-                }.padding()
-            }
-            .confirmationDialog(
-                useTrash
-                    ? L10n.plural("app.clean.confirm.trash", count: deletable(in: plan).count)
-                    : L10n.plural("app.clean.confirm.delete", count: deletable(in: plan).count),
-                isPresented: $confirm
-            ) {
-                Button(useTrash ? L10n.tr("app.clean.action.moveToTrash") : L10n.tr("app.clean.action.delete"), role: .destructive) {
-                    Task {
-                        await model.applyClean(actions: deletable(in: plan), useTrash: useTrash)
-                        selection = []
-                    }
-                }
-            } message: {
-                Text.l10n(L10n.tr("app.clean.confirm.message"))
-            }
-            .confirmationDialog(
-                confirmPrivileged?.privilegedAction?.title(in: L10n.locale) ?? "",
-                isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
-                presenting: confirmPrivileged
-            ) { a in
-                Button(L10n.tr("app.clean.privileged.empty", ByteCount.format(a.bytes)), role: .destructive) {
-                    if let action = a.privilegedAction { model.request(action) }
-                }
-            } message: { _ in
-                Text.l10n(L10n.tr("app.clean.privileged.message"))
-            }
-        } else {
-            ProgressView()
         }
     }
 }

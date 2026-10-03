@@ -144,31 +144,15 @@ struct MainView: View {
         switch model.section {
         case .overview:
             OverviewView(report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) })
-        case .delete: CleanView(model: model)  // Task 4 turns this into the Delete view.
-        case .park: BucketPlaceholderView(bucket: .parkExternally)
-        case .runExternally: BucketPlaceholderView(bucket: .runFromExternal)
+        case .delete: DeleteView(model: model)
+        case .park: PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { model.copyCommand($0) }
+        case .runExternally: PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) }
         case .storage: StorageView(report: r)
         case .simulators: RuntimesView(report: r)
         case .drives: VolumesView(report: r, checks: model.vaultChecks)
         case .health: DoctorView(model: model)
         case .history: JournalView(entries: model.journal)
         case .access: PermissionsView(model: model)
-        }
-    }
-}
-
-/// Park and Run externally until their plans arrive (S4 Task 4): what the bucket promises and what undoing it costs.
-struct BucketPlaceholderView: View {
-    let bucket: SavingsBucket
-    var body: some View {
-        ContentUnavailableView {
-            Label {
-                Text(verbatim: bucket.localizedTitle)
-            } icon: {
-                BucketSymbol(bucket: bucket)
-            }
-        } description: {
-            Text(verbatim: bucket.localizedPromise + " " + bucket.localizedUndoCost)
         }
     }
 }
