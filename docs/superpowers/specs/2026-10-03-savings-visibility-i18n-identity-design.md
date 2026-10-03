@@ -213,6 +213,20 @@ gains `CFBundleLocalizations` for the five. No `InfoPlist.strings`: the app's na
   "Background" line in the discussion; "experimental" stays in every abstract that has it (rule 10).
 - Exit codes and `--json` unchanged except for the added `savings` object.
 
+### 5.1 Amendment (2026-10-03, writing the S3 plan)
+
+- **`status` keeps no cache.** The CLI promises that read commands "never change anything"; writing a
+  last-scan file from `scan` would break that promise for a convenience. `status` stays fast and ends with
+  "Measure what you can reclaim: `xcodevaultctl scan`" plus the one access line when one applies.
+- **Help localization scope for S3:** abstracts, group names, the root discussion and every line of the
+  new savings output are localized. Per-command `discussion:` paragraphs and `EXAMPLES` stay English this
+  round (examples are commands; the long discussions are technical prose best translated with review).
+- **Rule 10 in help is checked on the rendered help, per locale**, not on source literals: the test target
+  links the CLI (ADR-0008), so the test reads `<Command>.configuration.abstract` under each locale and
+  requires the localized experimental label. The label is one key, `cli.label.experimental`, prefixed by
+  one helper, so it cannot be dropped in one language.
+- **Byte counts follow `L10n.locale`.** A run in English prints `10.37 GB` on any machine.
+
 ## 6. S4 — GUI
 
 ### 6.1 Navigation
