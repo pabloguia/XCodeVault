@@ -94,11 +94,37 @@ final class SavingsPlannerTests: XCTestCase {
         var r = report()
         r.items += [item("simulatorDevices", 50), item("simulatorRuntimeAssets", 4000)]
         let del = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate), bucket: .deleteAndRegenerate)
-        XCTAssertTrue(del.contains("Each command below shows what it would do first"))
+        XCTAssertFalse(del.contains("Each command below shows what it would do first"))
         XCTAssertTrue(del.contains("deletes the apps' data"))
         XCTAssertTrue(del.contains("Shut the device down first; its apps and their data are deleted."))
         let park = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .parkExternally), bucket: .parkExternally)
-        XCTAssertTrue(park.contains("experimental"))
+        let runtimeLine = park.split(separator: "\n").first { $0.contains("Simulator runtime images") }
+        XCTAssertTrue(runtimeLine?.contains("experimental") == true, "the runtime park row carries its own marker")
         XCTAssertTrue(park.contains("the original is removed only in a second, explicit step."))
+    }
+
+    func testRowsWithoutAPreviewSayTheyActImmediately() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("simulatorDevices", 50), item("simulatorRuntimeAssets", 4000), item("runtimeLibrary", 9)]
+        let previews = ["xcodevaultctl clean", "xcodevaultctl runtime delete", "xcodevaultctl runtime offload", "xcodevaultctl externalize"]
+        let immediatePairs = [
+            "simulatorDevices/deleteAndRegenerate", "derivedData/runFromExternal", "archives/runFromExternal", "runtimeLibrary/runFromExternal",
+        ]
+        var seen = 0
+        for bucket in SavingsBucket.allCases where bucket != .keepLocal {
+            let rows = SavingsPlanner.rows(report: r, bucket: bucket)
+            let text = SavingsPlanner.render(rows: rows, bucket: bucket)
+            XCTAssertFalse(text.contains("Each command below shows what it would do first"))
+            let lines = text.split(separator: "\n").map(String.init)
+            for row in rows {
+                guard let line = lines.first(where: { $0.hasPrefix("  \(row.categoryName)") }) else { return XCTFail("no line for \(row.categoryID)") }
+                let immediate = immediatePairs.contains("\(row.categoryID)/\(bucket.rawValue)")
+                if immediate { seen += 1 }
+                XCTAssertEqual(line.contains("acts immediately"), immediate, "\(row.categoryID)/\(bucket)")
+                if previews.contains(where: row.command.hasPrefix) { XCTAssertFalse(line.contains("acts immediately"), row.command) }
+            }
+        }
+        XCTAssertEqual(seen, 4, "all four pairs exist in the fixture")
     }
 }

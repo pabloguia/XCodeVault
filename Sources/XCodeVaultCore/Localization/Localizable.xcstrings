@@ -69,6 +69,40 @@
         }
       }
     },
+    "cli.plan.marker.actsImmediately" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "acts immediately"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "actúa de inmediato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "すぐに実行されます"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "age imediatamente"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "立即生效"
+          }
+        }
+      }
+    },
     "cli.plan.marker.experimental" : {
       "localizations" : {
         "en" : {
@@ -269,40 +303,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "请先关闭该设备；其中的应用及其数据会被删除。"
-          }
-        }
-      }
-    },
-    "cli.plan.previewNote" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Each command below shows what it would do first, and tells you how to confirm."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Cada comando de abajo muestra primero lo que haría y te dice cómo confirmar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "以下の各コマンドは、まず実行内容を表示し、確定の方法を案内します。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Cada comando abaixo mostra primeiro o que faria e diz como confirmar."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "下面每条命令都会先显示它将执行的操作，并告诉你如何确认。"
           }
         }
       }

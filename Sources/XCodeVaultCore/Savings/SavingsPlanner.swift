@@ -53,6 +53,11 @@ public enum SavingsPlanner {
         }
     }
 
+    /// Commands with no preview of their own: they apply (or download) the moment they are run.
+    static let actsImmediately: Set<String> = [
+        "simulatorDevices/deleteAndRegenerate", "derivedData/runFromExternal", "archives/runFromExternal", "runtimeLibrary/runFromExternal",
+    ]
+
     /// A one-line caveat the user needs before running the row's command. Text only, never in JSON.
     static func note(categoryID: String, bucket: SavingsBucket) -> String? {
         switch (bucket, categoryID) {
@@ -65,12 +70,13 @@ public enum SavingsPlanner {
 
     /// The plan as text, in the chosen language: the bucket's title, promise and undo cost, then one entry per row.
     public static func render(rows: [SavingsPlanRow], bucket: SavingsBucket) -> String {
-        var o = "\(bucket.localizedTitle)\n\(bucket.localizedPromise)\n\(bucket.localizedUndoCost)\n\(L10n.tr("cli.plan.previewNote"))\n\n"
+        var o = "\(bucket.localizedTitle)\n\(bucket.localizedPromise)\n\(bucket.localizedUndoCost)\n\n"
         guard !rows.isEmpty else { return o + L10n.tr("cli.plan.empty") + "\n" }
         for r in rows {
             var markers: [String] = []
             if r.option.isExperimental { markers.append(L10n.tr("cli.plan.marker.experimental")) }
             if r.option.losesUserData { markers.append(L10n.tr("cli.plan.marker.losesUserData")) }
+            if actsImmediately.contains("\(r.categoryID)/\(bucket.rawValue)") { markers.append(L10n.tr("cli.plan.marker.actsImmediately")) }
             if !r.option.appliesToExistingData { markers.append(L10n.tr("cli.plan.marker.newDataOnly")) }
             let size = r.option.appliesToExistingData ? "  " + ByteCount.format(r.bytes) : ""
             o += "  \(r.categoryName)\(size)" + (markers.isEmpty ? "" : "  (" + markers.joined(separator: ", ") + ")") + "\n      \(r.command)\n"

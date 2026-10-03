@@ -18,6 +18,13 @@ extension L10nCatalog {
                 "ja": "この Mac にはこの方法を使えるものがありません。",
                 "zh-Hans": "此 Mac 上没有可用此方式的内容。",
             ],
+            "cli.plan.marker.actsImmediately": [
+                "en": "acts immediately",
+                "pt-BR": "age imediatamente",
+                "es": "actúa de inmediato",
+                "ja": "すぐに実行されます",
+                "zh-Hans": "立即生效",
+            ],
             "cli.plan.marker.experimental": [
                 "en": "experimental",
                 "pt-BR": "experimental",
@@ -59,13 +66,6 @@ extension L10nCatalog {
                 "es": "Apaga primero el dispositivo; sus apps y sus datos se eliminan.",
                 "ja": "先にデバイスをシャットダウンしてください。アプリとそのデータは削除されます。",
                 "zh-Hans": "请先关闭该设备；其中的应用及其数据会被删除。",
-            ],
-            "cli.plan.previewNote": [
-                "en": "Each command below shows what it would do first, and tells you how to confirm.",
-                "pt-BR": "Cada comando abaixo mostra primeiro o que faria e diz como confirmar.",
-                "es": "Cada comando de abajo muestra primero lo que haría y te dice cómo confirmar.",
-                "ja": "以下の各コマンドは、まず実行内容を表示し、確定の方法を案内します。",
-                "zh-Hans": "下面每条命令都会先显示它将执行的操作，并告诉你如何确认。",
             ],
             "cli.savings.heading": [
                 "en": "What you can reclaim on this Mac",
