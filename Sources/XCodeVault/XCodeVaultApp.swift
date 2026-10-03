@@ -46,7 +46,11 @@ final class AppModel {
     /// Everything outside the process; `.live` in the app (`AppEnvironment`).
     let environment: AppEnvironment
 
-    init(environment: AppEnvironment = .live) { self.environment = environment }
+    /// Calls nothing outside the process: the checklist starts from the states below until `refreshPermissions()`.
+    init(environment: AppEnvironment = .live) {
+        self.environment = environment
+        updateAccessBanner()
+    }
 
     var report: ScanReport?
     var findings: [Finding] = []
@@ -108,8 +112,9 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             self.journal = journal.suffix(100).reversed()
-            updateAccessBanner()
+            // The bucket views first: the Delete view's access row reads their list.
             updateBucketViews()
+            updateAccessBanner()
         } while scanGate.scanEnded()
     }
 
@@ -138,7 +143,7 @@ final class AppModel {
         }
     }
 
-    /// **Allow** in the sheet (with the action) and **Install…** in Permissions (without one).
+    /// **Allow** in the sheet (with the action) and the helper row's button in Access (without one).
     ///
     /// One wait at a time: a second request replaces the running wait instead of adding one, which would run its
     /// own action whenever the helper came up (migration-safety and helper-security reviews of deliverable 4).
@@ -204,15 +209,27 @@ final class AppModel {
     /// (`AccessChecklist.banner`, in Core and tested). Nil before the first scan. Stored, not computed: the plan rows it
     /// reads are re-planned only when the scan or the permissions change, never per redraw.
     private(set) var accessBanner: AccessChecklist.Row?
+    /// The Access view's checklist (`AccessChecklist.rows`): one row per need. Before the first scan there is nothing
+    /// measured to hold back, so the rows give the general reasons.
+    private(set) var accessRows: [AccessChecklist.Row] = []
+    /// The helper row above the Delete table (`AccessChecklist.deleteRow`): nil unless the list has a root-only row and the
+    /// helper is not enabled.
+    private(set) var deleteAccessRow: AccessChecklist.Row?
 
     private func updateAccessBanner() {
         guard let report else {
             accessBanner = nil
+            deleteAccessRow = nil
+            accessRows = AccessChecklist.rows(fullDiskAccess: fullDiskAccess, helper: helperState, savings: SavingsSummary(), plan: [])
             return
         }
+        let plan = SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate)
+        let refusals = report.summary.privacyRefusalCount
+        accessRows = AccessChecklist.rows(
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals)
         accessBanner = AccessChecklist.banner(
-            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings,
-            plan: SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate), privacyRefusalCount: report.summary.privacyRefusalCount)
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals)
+        deleteAccessRow = deleteList.flatMap { AccessChecklist.deleteRow(helper: helperState, list: $0) }
     }
 
     /// A checklist row's button: the existing flows only (ADR-0007) — the Settings pane, a re-check of the probe, the
@@ -377,46 +394,6 @@ struct JournalView: View {
                 TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state.rawValue) }
                 TableColumn(L10n.tr("app.column.summary")) { Text(verbatim: $0.summary) }
             }
-        }
-    }
-}
-
-/// Spec §3: two rows, each with a status, one sentence of why, and one control. The texts come from the `perm.*`
-/// keys `xcodevaultctl permissions` prints, in the app's language; this view decides nothing.
-struct PermissionsView: View {
-    @Bindable var model: AppModel
-    @State private var confirmUninstall = false
-    var body: some View {
-        let locale = L10n.locale
-        let access = model.fullDiskAccess, helper = model.helperState
-        Form {
-            Section(L10n.tr("perm.fda.title")) {
-                LabeledContent(L10n.tr("app.permissions.status"), value: access.displayName(in: locale))
-                Text(verbatim: access.why(in: locale)).font(.callout)
-                if access.offersOpenSettings {
-                    Button(L10n.tr("app.action.openSettings")) { model.openFullDiskAccessSettings() }
-                }
-            }
-            Section(L10n.tr("perm.helper.title")) {
-                LabeledContent(L10n.tr("app.permissions.status"), value: helper.displayName(in: locale))
-                Text(verbatim: helper.why(in: locale)).font(.callout)
-                switch helper.rowButton {
-                case .install: Button(L10n.tr("app.permissions.install")) { model.installHelper(then: nil) }
-                case .uninstall: Button(L10n.tr("app.permissions.uninstallEllipsis")) { confirmUninstall = true }
-                case .none: Text(verbatim: helper.nextStep(in: locale)).font(.callout).foregroundStyle(.secondary)
-                }
-            }
-            Section {
-                Text.l10n(L10n.tr("app.permissions.footer"))
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .task { model.refreshPermissions() }
-        .confirmationDialog(L10n.tr("app.permissions.uninstall.confirm"), isPresented: $confirmUninstall) {
-            Button(L10n.tr("app.permissions.uninstall"), role: .destructive) { Task { await model.uninstallHelper() } }
-        } message: {
-            Text.l10n(L10n.tr("app.permissions.uninstall.message"))
         }
     }
 }

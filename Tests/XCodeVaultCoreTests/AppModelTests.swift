@@ -509,3 +509,82 @@ extension AppModelTests {
         model.stopWaitingForApproval()
     }
 }
+
+// MARK: - Access, asked for where it matters (S4 Task 5)
+
+extension AppModelTests {
+    func testTheAccessRowsAreTheChecklistsAndTheBannerIsTheFirstBlockingOne() async {
+        let t = TempDir()
+        let survey = sampleSurvey(refusals: 2, savings: sampleSavings(lowerBound: true))
+        let helper = SwitchableHelper(.notInstalled)
+        let model = makeModel(helper, journal: t, fullDiskAccess: .notGranted, survey: survey)
+        XCTAssertEqual(model.accessRows.map(\.need), [.fullDiskAccess, .privilegedHelper], "the Access view has its rows before any scan")
+        XCTAssertNil(model.accessBanner)
+        await model.refresh()
+        let expected = AccessChecklist.rows(
+            fullDiskAccess: .notGranted, helper: .notInstalled, savings: survey.0.savings,
+            plan: SavingsPlanner.rows(report: survey.0, bucket: .deleteAndRegenerate), privacyRefusalCount: 2)
+        XCTAssertEqual(model.accessRows, expected)
+        XCTAssertEqual(model.accessBanner, expected[0], "the first blocking row, and only that one")
+        // The checklist follows the permissions without a rescan.
+        helper.current = .enabled
+        model.refreshPermissions()
+        XCTAssertEqual(model.accessRows.last?.state, .granted, "re-read through the environment")
+    }
+
+    func testTheDeleteViewAsksForTheHelperOnlyWhenARootRowWaitsOnIt() async {
+        let t = TempDir()
+        let rootBytes = bucketSampleActions().filter(\.requiresRoot).reduce(UInt64(0)) { $0 + $1.bytes }
+        for state in [HelperState.notInstalled, .awaitingApproval, .unavailableInThisBuild] {
+            let model = makeModel(SwitchableHelper(state), journal: t, survey: bucketSampleSurvey())
+            XCTAssertNil(model.deleteAccessRow, "no scan, no row")
+            await model.refresh()
+            XCTAssertEqual(model.deleteAccessRow?.need, .privilegedHelper, "\(state)")
+            XCTAssertEqual(model.deleteAccessRow?.blocksBytes, rootBytes, "\(state)")
+            XCTAssertEqual(model.deleteAccessRow, model.deleteList.flatMap { AccessChecklist.deleteRow(helper: state, list: $0) })
+        }
+        // Hidden once the helper is enabled: the row follows the permissions, without a rescan.
+        let helper = SwitchableHelper(.notInstalled)
+        let model = makeModel(helper, journal: t, survey: bucketSampleSurvey())
+        await model.refresh()
+        XCTAssertNotNil(model.deleteAccessRow)
+        helper.current = .enabled
+        model.refreshPermissions()
+        XCTAssertNil(model.deleteAccessRow, "enabled: nothing to ask for")
+        let enabled = makeModel(SwitchableHelper(.enabled), journal: t, survey: bucketSampleSurvey())
+        await enabled.refresh()
+        XCTAssertNil(enabled.deleteAccessRow)
+        // Hidden when nothing listed needs root.
+        let derived = CleanAction(
+            categoryID: "derivedData", categoryName: "DerivedData", path: "/Users/tester/Library/Developer/Xcode/DerivedData", bytes: 500,
+            isExperimental: true, risk: .low, requiresRoot: false, notes: [])
+        let noRoot = makeModel(SwitchableHelper(.notInstalled), journal: t, survey: sampleSurvey(actions: [derived]))
+        await noRoot.refresh()
+        XCTAssertNil(noRoot.deleteAccessRow)
+    }
+
+    /// Every button an access row can show, in the Access view, the banner and above Delete, goes to the flows that were
+    /// there before (`handle(_:)`); none of them is new.
+    func testEveryAccessRowButtonRoutesToTheExistingFlows() async throws {
+        let t = TempDir()
+        let opened = OpenedURLs()
+        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, fullDiskAccess: .notGranted, survey: bucketSampleSurvey(), opened: opened)
+        await model.refresh()
+        let actions = (model.accessRows + [model.deleteAccessRow, model.accessBanner].compactMap { $0 }).compactMap(\.action)
+        XCTAssertEqual(Set(actions), [.openFullDiskAccessSettings, .installHelper])
+        model.handle(.openFullDiskAccessSettings)
+        XCTAssertEqual(opened.urls.map(\.absoluteString), [FullDiskAccessProbe.settingsURL])
+        XCTAssertNil(model.helperProgress)
+        model.handle(try XCTUnwrap(model.deleteAccessRow?.action))
+        XCTAssertNotNil(model.helperProgress, "Delete's row starts the same SMAppService approval as Access")
+        model.stopWaitingForApproval()
+        XCTAssertNil(model.helperProgress)
+        // Unavailable in this build: guidance, which starts nothing.
+        let unavailable = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: bucketSampleSurvey())
+        await unavailable.refresh()
+        XCTAssertEqual(unavailable.deleteAccessRow?.action, .guidanceOnly)
+        unavailable.handle(.guidanceOnly)
+        XCTAssertNil(unavailable.helperProgress)
+        XCTAssertNil(unavailable.lastError)
+    }
+}

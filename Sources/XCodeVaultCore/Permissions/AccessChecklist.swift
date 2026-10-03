@@ -45,9 +45,36 @@ public enum AccessChecklist {
         public let blocksBytes: UInt64?
         /// Folders the scan could not read because privacy protection refused them (`ScanSummary.privacyRefusalCount`).
         public let blocksFolders: Int?
+
+        /// The need's name: the titles `xcodevaultctl permissions` prints.
+        public var titleKey: String { need == .fullDiskAccess ? Key.fdaTitle : Key.helperTitle }
+
+        /// The row's status word, shown beside a symbol (never color alone).
+        public var statusKey: String {
+            switch (need, state) {
+            case (.fullDiskAccess, .granted): Key.fdaStatusGranted
+            case (.fullDiskAccess, .unknown): Key.fdaStatusUnknown
+            // Full Disk Access has no approval step and is in every build: only "missing" is left.
+            case (.fullDiskAccess, _): Key.fdaStatusMissing
+            case (.privilegedHelper, .granted): Key.helperStatusEnabled
+            case (.privilegedHelper, .awaitingApproval): Key.helperStatusAwaitingApproval
+            case (.privilegedHelper, .unavailableInThisBuild): Key.helperStatusUnavailable
+            // The helper's probe always tells: `unknown` does not arise, and reads as not installed.
+            case (.privilegedHelper, _): Key.helperStatusMissing
+            }
+        }
     }
 
     public enum Key {
+        public static let fdaTitle = "perm.fda.title"
+        public static let helperTitle = "perm.helper.title"
+        public static let fdaStatusGranted = "app.access.status.fda.granted"
+        public static let fdaStatusMissing = "app.access.status.fda.missing"
+        public static let fdaStatusUnknown = "app.access.status.fda.unknown"
+        public static let helperStatusEnabled = "app.access.status.helper.enabled"
+        public static let helperStatusMissing = "app.access.status.helper.missing"
+        public static let helperStatusAwaitingApproval = "app.access.status.helper.awaitingApproval"
+        public static let helperStatusUnavailable = "app.access.status.helper.unavailable"
         public static let fdaWhyGranted = "app.access.fda.why.granted"
         /// Takes `blocksFolders`.
         public static let fdaWhyUnreadableFolders = "app.access.fda.why.unreadableFolders"
@@ -70,7 +97,9 @@ public enum AccessChecklist {
     public static let allKeys: [String] = [
         Key.fdaWhyGranted, Key.fdaWhyUnreadableFolders, Key.fdaWhyUnreadable, Key.fdaWhyProtected, Key.fdaWhyUnknown,
         Key.fdaActionOpenSettings, Key.fdaActionRecheck, Key.helperWhyEnabled, Key.helperWhyRootOnlyBytes, Key.helperWhyRootActions,
-        Key.helperActionInstall, Key.helperActionApprove, Key.helperActionSignedReleaseOrCLI,
+        Key.helperActionInstall, Key.helperActionApprove, Key.helperActionSignedReleaseOrCLI, Key.fdaTitle, Key.helperTitle, Key.fdaStatusGranted,
+        Key.fdaStatusMissing, Key.fdaStatusUnknown, Key.helperStatusEnabled, Key.helperStatusMissing, Key.helperStatusAwaitingApproval,
+        Key.helperStatusUnavailable,
     ]
 
     /// - Parameters:
@@ -100,6 +129,15 @@ public enum AccessChecklist {
         }
     }
 
+    /// The helper row the Delete view shows above its table (spec §6.3, "contextual"): when the list it shows has a
+    /// root-only row and the helper is not enabled. Its bytes are those root rows', so the sentence matches the table.
+    /// Nil when the helper is enabled or nothing listed needs root: the Access view still has the row.
+    public static func deleteRow(helper: HelperState, list: DeleteList) -> Row? {
+        let root = list.groups.flatMap(\.actions).filter(\.requiresRoot)
+        guard helper != .enabled, !root.isEmpty else { return nil }
+        return helperRow(helper, rootOnlyBytes: root.reduce(UInt64(0)) { $0 + $1.bytes })
+    }
+
     static func fullDiskAccessRow(_ state: FullDiskAccessState, savings: SavingsSummary, refusals: Int) -> Row {
         switch state {
         case .granted:
@@ -119,6 +157,10 @@ public enum AccessChecklist {
 
     static func helperRow(_ state: HelperState, plan: [SavingsPlanRow]) -> Row {
         let rootOnly = plan.filter { $0.option.bucket == .deleteAndRegenerate && $0.noteIDs.contains("rootOnly") }.reduce(UInt64(0)) { $0 + $1.bytes }
+        return helperRow(state, rootOnlyBytes: rootOnly)
+    }
+
+    static func helperRow(_ state: HelperState, rootOnlyBytes rootOnly: UInt64) -> Row {
         let why = rootOnly > 0 ? Key.helperWhyRootOnlyBytes : Key.helperWhyRootActions
         let blocks = rootOnly > 0 ? rootOnly : nil
         return switch state {

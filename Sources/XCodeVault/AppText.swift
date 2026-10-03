@@ -93,6 +93,15 @@ enum AppText {
         case K.helperActionInstall: return L10n.tr("app.access.helper.action.install")
         case K.helperActionApprove: return L10n.tr("app.access.helper.action.approve")
         case K.helperActionSignedReleaseOrCLI: return L10n.tr("app.access.helper.action.signedReleaseOrCLI")
+        case K.fdaTitle: return L10n.tr("perm.fda.title")
+        case K.helperTitle: return L10n.tr("perm.helper.title")
+        case K.fdaStatusGranted: return L10n.tr("app.access.status.fda.granted")
+        case K.fdaStatusMissing: return L10n.tr("app.access.status.fda.missing")
+        case K.fdaStatusUnknown: return L10n.tr("app.access.status.fda.unknown")
+        case K.helperStatusEnabled: return L10n.tr("app.access.status.helper.enabled")
+        case K.helperStatusMissing: return L10n.tr("app.access.status.helper.missing")
+        case K.helperStatusAwaitingApproval: return L10n.tr("app.access.status.helper.awaitingApproval")
+        case K.helperStatusUnavailable: return L10n.tr("app.access.status.helper.unavailable")
         default: return key
         }
     }

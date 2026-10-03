@@ -5,7 +5,7 @@ import XCTest
 @testable import XCodeVault
 @testable import XCodeVaultCore
 
-/// Off-screen PNGs of Delete, Park and Run externally for a visual review, written to `$TMPDIR/xcv-snapshots/` — never
+/// Off-screen PNGs of Delete, Park, Run externally and Access for a visual review, written to `$TMPDIR/xcv-snapshots/` — never
 /// the repository. Runs only with `XCV_SNAPSHOTS=1`; nothing here is an assertion about how they look. No window: an
 /// `NSHostingView` drawn into a bitmap, like `OverviewSnapshotTests`.
 @MainActor
@@ -28,7 +28,13 @@ final class BucketSnapshotTests: XCTestCase {
         let model = makeModel(SwitchableHelper(.notInstalled), journal: t, survey: survey)
         await model.refresh()
         // Delete at the window's minimum (960×620) less the toolbar; the plans at the review size.
+        // Access with both needs missing and folders refused: every part of a row shows.
+        var refused = survey
+        refused.0.summary.privacyRefusalCount = 4
+        let access = makeModel(SwitchableHelper(.notInstalled), journal: t, fullDiskAccess: .notGranted, survey: refused)
+        await access.refresh()
         let views: [(String, AnyView, NSSize)] = [
+            ("access", AnyView(AccessView(model: access)), NSSize(width: 960, height: 568)),
             ("delete", AnyView(DeleteView(model: model)), NSSize(width: 960, height: 568)),
             (
                 "park", AnyView(PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { _ in }),
@@ -53,7 +59,7 @@ final class BucketSnapshotTests: XCTestCase {
             try png.write(to: url)
             written.append(url.path)
         }
-        XCTAssertEqual(written.count, 3)
+        XCTAssertEqual(written.count, 4)
         print("snapshots:\n" + written.joined(separator: "\n"))
     }
 }

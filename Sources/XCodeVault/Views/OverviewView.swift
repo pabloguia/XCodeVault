@@ -22,7 +22,7 @@ struct OverviewView: View {
                         "app.overview.host", report.host.macOSVersion, report.host.architecture, ByteCount.format(report.host.dataVolumeFreeBytes),
                         ByteCount.format(report.host.dataVolumeTotalBytes))
                 ).font(.headline)
-                if let access { AccessBannerView(row: access, act: act) }
+                if let access { GroupBox { AccessRowView(row: access, act: act) } }
                 if report.sizesMeasured {
                     DiskBarView(bar: DiskBar(host: report.host, savings: report.savings))
                     savings(OverviewCards.make(savings: report.savings))
@@ -196,36 +196,6 @@ struct DiskBarView: View {
         case .bucket(let bucket): bucket.color
         case .otherData: Color(nsColor: .systemGray).opacity(0.55)
         case .free: Color(nsColor: .quaternaryLabelColor)
-        }
-    }
-}
-
-/// The one access row the Overview shows: what it holds back, and its one button (or what to do instead).
-struct AccessBannerView: View {
-    let row: AccessChecklist.Row
-    let act: @MainActor (AccessChecklist.Action) -> Void
-
-    var body: some View {
-        GroupBox {
-            HStack(alignment: .firstTextBaseline) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text.l10n(row.need == .fullDiskAccess ? L10n.tr("perm.fda.title") : L10n.tr("perm.helper.title")).bold()
-                        Text(verbatim: AppText.access(row.whyKey, bytes: row.blocksBytes, folders: row.blocksFolders)).font(.callout)
-                    }
-                } icon: {
-                    Image(systemName: "lock")
-                }
-                Spacer()
-                if let key = row.actionKey, let action = row.action {
-                    let text = AppText.access(key, bytes: row.blocksBytes, folders: row.blocksFolders)
-                    if action == .guidanceOnly {
-                        Text(verbatim: text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: 280, alignment: .trailing)
-                    } else {
-                        Button(text) { act(action) }
-                    }
-                }
-            }
         }
     }
 }

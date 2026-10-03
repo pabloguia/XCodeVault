@@ -88,7 +88,7 @@ final class AppTextCoverageTests: XCTestCase {
     // MARK: - The Access checklist's keys (Task 1)
 
     func testEveryAccessChecklistKeyIsInTheCatalogInEveryLanguage() {
-        XCTAssertEqual(AccessChecklist.allKeys.count, 13)
+        XCTAssertEqual(AccessChecklist.allKeys.count, 22)
         for key in AccessChecklist.allKeys {
             let byLocale = L10nCatalog.core.strings[key] ?? L10nCatalog.core.plurals[key]?.mapValues { $0["other"] ?? "" }
             for locale in L10n.supportedLocales {
@@ -125,6 +125,15 @@ final class AppTextCoverageTests: XCTestCase {
         // Hedged like `perm.helper.next.unavailableInThisBuild`: not every action has a manual route.
         XCTAssertTrue(guidance.contains("where there is a manual route"), guidance)
         XCTAssertTrue(guidance.contains("`xcodevaultctl doctor`") && guidance.contains("`xcodevaultctl vault init`"), guidance)
+    }
+
+    /// The helper's status in a build without it never stands alone: its row's action says what to do instead (spec §6.3).
+    func testTheUnavailableStatusComesWithWhatToDoInstead() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let row = AccessChecklist.rows(fullDiskAccess: .granted, helper: .unavailableInThisBuild, savings: SavingsSummary(), plan: [])[1]
+        XCTAssertEqual(AppText.access(row.statusKey, bytes: nil, folders: nil), "Not in this build")
+        XCTAssertEqual(row.actionKey, AccessChecklist.Key.helperActionSignedReleaseOrCLI)
+        XCTAssertEqual(AppText.access(row.titleKey, bytes: nil, folders: nil), "Privileged helper")
     }
 
     // MARK: - Permission texts shared by the app and `xcodevaultctl permissions`

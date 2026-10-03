@@ -180,4 +180,73 @@ final class AccessChecklistTests: XCTestCase {
     func testAtMostOneBannerAndFullDiskAccessComesFirst() {
         XCTAssertEqual(banner(.notGranted, .notInstalled, refusals: 1)?.need, .fullDiskAccess)
     }
+
+    /// The Overview shows the first blocking row only: with both needs holding something back, the helper's row is not it.
+    func testTheBannerIsOnlyTheFirstBlockingRow() {
+        let all = rows(.notGranted, .notInstalled, refusals: 1)
+        let b = banner(.notGranted, .notInstalled, refusals: 1)
+        XCTAssertEqual(b, all[0])
+        XCTAssertNotNil(all[1].blocksBytes, "the helper holds bytes back too")
+        XCTAssertEqual(banner(.granted, .notInstalled, refusals: 1), all[1], "with Full Disk Access granted, the helper's turn")
+    }
+
+    // MARK: - Titles and status words (S4 Task 5)
+
+    func testEveryRowHasItsTitleAndAStatusWordPerState() {
+        var statuses: [AccessChecklist.Need: Set<String>] = [:]
+        for fda in FullDiskAccessState.allCases {
+            for helper in HelperState.allCases {
+                for r in rows(fda, helper) {
+                    XCTAssertTrue(AccessChecklist.allKeys.contains(r.titleKey), r.titleKey)
+                    XCTAssertTrue(AccessChecklist.allKeys.contains(r.statusKey), r.statusKey)
+                    statuses[r.need, default: []].insert(r.statusKey)
+                }
+            }
+        }
+        XCTAssertEqual(rows(.granted, .enabled).map(\.titleKey), ["perm.fda.title", "perm.helper.title"])
+        // One word per state the need can be in: FDA granted / missing / unknown; the helper's four.
+        XCTAssertEqual(statuses[.fullDiskAccess]?.count, FullDiskAccessState.allCases.count)
+        XCTAssertEqual(statuses[.privilegedHelper]?.count, HelperState.allCases.count)
+        XCTAssertEqual(rows(.granted, .unavailableInThisBuild)[1].statusKey, "app.access.status.helper.unavailable")
+        XCTAssertEqual(rows(.unknown, .enabled)[0].statusKey, "app.access.status.fda.unknown")
+    }
+
+    // MARK: - The Delete view's contextual row (S4 Task 5)
+
+    private func deleteList(rootBytes: [UInt64]) -> DeleteList {
+        func action(_ path: String, _ bytes: UInt64, root: Bool) -> CleanAction {
+            CleanAction(
+                categoryID: root ? "coreSimulatorSystemCaches" : "derivedData", categoryName: "c", path: path, bytes: bytes, isExperimental: true,
+                risk: .low, requiresRoot: root, notes: [])
+        }
+        var groups = [DeleteList.Group(categoryID: "derivedData", categoryName: "DerivedData", actions: [action("/d", 9000, root: false)], undo: .regenerable)]
+        if !rootBytes.isEmpty {
+            let actions = rootBytes.enumerated().map { action("/r\($0.offset)", $0.element, root: true) }
+            groups.append(DeleteList.Group(categoryID: "coreSimulatorSystemCaches", categoryName: "dyld", actions: actions, undo: .regenerable))
+        }
+        return DeleteList(groups: groups, otherTools: [])
+    }
+
+    func testDeleteShowsTheHelperRowWhenARootRowIsListedAndTheHelperIsNotEnabled() {
+        let list = deleteList(rootBytes: [3000, 500])
+        for state in [HelperState.notInstalled, .awaitingApproval, .unavailableInThisBuild] {
+            let r = AccessChecklist.deleteRow(helper: state, list: list)
+            XCTAssertEqual(r?.need, .privilegedHelper, "\(state)")
+            XCTAssertEqual(r?.blocksBytes, 3500, "the listed root rows' bytes: \(state)")
+            XCTAssertEqual(r?.whyKey, AccessChecklist.Key.helperWhyRootOnlyBytes)
+            // The same row the checklist has for that state, but for its bytes.
+            XCTAssertEqual(r?.action, rows(.granted, state)[1].action, "\(state)")
+            XCTAssertEqual(r?.actionKey, rows(.granted, state)[1].actionKey, "\(state)")
+        }
+        XCTAssertEqual(AccessChecklist.deleteRow(helper: .unavailableInThisBuild, list: list)?.action, .guidanceOnly)
+    }
+
+    func testDeleteHidesTheHelperRowWhenEnabledOrWhenNothingNeedsRoot() {
+        XCTAssertNil(AccessChecklist.deleteRow(helper: .enabled, list: deleteList(rootBytes: [3000])))
+        for state in HelperState.allCases {
+            XCTAssertNil(AccessChecklist.deleteRow(helper: state, list: deleteList(rootBytes: [])), "\(state)")
+        }
+        // A root row of zero bytes still needs the helper; the sentence is then the general one.
+        XCTAssertEqual(AccessChecklist.deleteRow(helper: .notInstalled, list: deleteList(rootBytes: [0]))?.whyKey, AccessChecklist.Key.helperWhyRootActions)
+    }
 }

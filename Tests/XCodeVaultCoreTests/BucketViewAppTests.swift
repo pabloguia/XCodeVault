@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 
@@ -108,5 +109,13 @@ final class BucketViewAppTests: XCTestCase {
             ]))
         await ready.refresh()
         XCTAssertEqual(ready.vaultStatus, .ready(volumeName: "Drive"))
+    }
+
+    /// One status symbol per state, each a real SF Symbol: a state is told by symbol and word, never by color (S4 Task 5).
+    func testEveryAccessStateHasItsOwnSymbol() {
+        let states: [AccessChecklist.State] = [.granted, .missing, .awaitingApproval, .unknown, .unavailableInThisBuild]
+        let symbols = states.map(AccessRowView.symbol)
+        XCTAssertEqual(Set(symbols).count, states.count)
+        for symbol in symbols { XCTAssertNotNil(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), symbol) }
     }
 }

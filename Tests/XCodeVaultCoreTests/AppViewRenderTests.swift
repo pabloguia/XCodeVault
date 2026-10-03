@@ -112,6 +112,10 @@ final class AppViewRenderTests: XCTestCase {
             isExperimental: true, risk: .low, requiresRoot: false, notes: [])
         for state in HelperState.allCases {
             render(DeleteView(model: await scannedModel(state, survey: sampleSurvey(actions: [dyld, derived]), journal: t)))
+            // With and without Delete's access row: shown for a root row and a helper that is not enabled.
+            let model = await scannedModel(state, survey: bucketSampleSurvey(), journal: t)
+            XCTAssertEqual(model.deleteAccessRow == nil, state == .enabled, "\(state)")
+            render(DeleteView(model: model))
         }
     }
 
@@ -143,13 +147,36 @@ final class AppViewRenderTests: XCTestCase {
         XCTAssertEqual(rendered, L10n.supportedLocales.count * checks.count)
     }
 
-    func testPermissionsRendersEveryCombination() async {
+    func testAccessRendersEveryCombination() async {
         let t = TempDir()
+        render(AccessView(model: makeModel(SwitchableHelper(.notInstalled), journal: t)))  // before any scan
         for state in HelperState.allCases {
             for access in FullDiskAccessState.allCases {
-                render(PermissionsView(model: await scannedModel(state, fullDiskAccess: access, journal: t)))
+                render(AccessView(model: await scannedModel(state, fullDiskAccess: access, journal: t)))
             }
         }
+    }
+
+    /// Every row the checklist can produce, alone (the banner and Delete's row are this view), in every language (S4 Task 5).
+    func testEveryAccessRowRendersInEveryLanguage() {
+        var rows: [AccessChecklist.Row] = []
+        for fda in FullDiskAccessState.allCases {
+            for helper in HelperState.allCases {
+                for refusals in [0, 3] {
+                    rows += AccessChecklist.rows(
+                        fullDiskAccess: fda, helper: helper, savings: sampleSavings(lowerBound: refusals > 0), plan: [], privacyRefusalCount: refusals)
+                }
+            }
+        }
+        var rendered = 0
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            for row in rows {
+                render(AccessRowView(row: row) { _ in })
+                rendered += 1
+            }
+        }
+        XCTAssertEqual(rendered, L10n.supportedLocales.count * rows.count)
     }
 
     func testTheHelperSheetRendersWithAndWithoutAChosenAction() async {
@@ -187,7 +214,8 @@ final class AppViewRenderTests: XCTestCase {
                 id: "op", sequence: 1, timestamp: Date(timeIntervalSince1970: 1_800_000_000), kind: .clean, state: .completed, summary: "s", paths: [],
                 bytes: nil, detail: [:], toolVersion: "t")
             render(JournalView(entries: [entry]))
-            render(PermissionsView(model: model))
+            render(AccessView(model: model))
+            for row in model.accessRows { render(AccessRowView(row: row) { _ in }) }
             for state in HelperState.allCases { render(PrivilegedActionControlView(action: .emptyCoreSimulatorDyldCache, state: state) {}) }
             render(HelperRequestSheet(model: model))
             model.pendingPrivilegedAction = .emptyCoreSimulatorDyldCache

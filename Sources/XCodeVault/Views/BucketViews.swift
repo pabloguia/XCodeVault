@@ -75,6 +75,8 @@ struct PlanRowView: View {
     let copy: @MainActor () -> Void
     /// A moment of "Copied" after the button, said to VoiceOver too: feedback only, it decides nothing.
     @State private var copied = false
+    /// Counts the clicks: each one restarts the moment (`.task(id:)` cancels the previous wait), and nothing outlives the view.
+    @State private var copies = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -93,11 +95,8 @@ struct PlanRowView: View {
                 Button {
                     copy()
                     copied = true
+                    copies += 1
                     AccessibilityNotification.Announcement(L10n.tr("app.plan.copied")).post()
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        copied = false
-                    }
                 } label: {
                     Label(
                         copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copyCommand"),
@@ -105,6 +104,11 @@ struct PlanRowView: View {
                 }
                 // Several rows, several buttons: VoiceOver hears whose command each one copies.
                 .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
+                .task(id: copies) {
+                    guard copies > 0 else { return }
+                    do { try await Task.sleep(for: .seconds(2)) } catch { return }  // cancelled: a newer click, or the view went away
+                    copied = false
+                }
             }
             ForEach(Array(row.localizedNotes.enumerated()), id: \.offset) { _, note in
                 InlineCodeText(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -175,6 +179,11 @@ struct DeleteView: View {
         if let plan = model.cleanPlan, let list = model.deleteList {
             VStack(alignment: .leading, spacing: 10) {
                 BucketHeaderView(bucket: .deleteAndRegenerate).padding([.horizontal, .top])
+                // Asked for where it matters (spec §6.3): the helper's row, when a listed row needs root and the helper is
+                // not enabled (`AppModel.deleteAccessRow`, from `AccessChecklist.deleteRow`).
+                if let access = model.deleteAccessRow {
+                    GroupBox { AccessRowView(row: access) { model.handle($0) } }.padding(.horizontal)
+                }
                 // A floor for the table, and the rest in a capped scroll: at the window's minimum (960×620) the lower block
                 // can be taller than the window, and it must never squeeze the table away or be clipped unreachable.
                 table(list).frame(minHeight: 200)
@@ -245,15 +254,20 @@ struct DeleteView: View {
         }
     }
 
-    /// The dyld-cache row, as today (Task 5 replaces it with the Access row).
+    /// The root rows the helper can act on (the dyld cache): name, the experimental badge in the words every other badge
+    /// uses (rule 10), size, and its own button, with the same confirmation as before. What the helper is and how to get
+    /// it is the access row above the table, not repeated here.
     @ViewBuilder
     private func privileged(_ plan: CleanPlan) -> some View {
         let privileged = plan.actions.filter { $0.privilegedAction != nil }
         if !privileged.isEmpty {
-            GroupBox(L10n.tr("app.clean.privileged.title")) {
+            GroupBox {
                 ForEach(privileged) { a in
-                    HStack {
-                        Text(verbatim: AppText.name(a.categoryName, experimental: true) + " — " + ByteCount.format(a.bytes))
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(verbatim: a.categoryName).bold()
+                        // The helper's dyld verb is experimental wherever it appears (`app.clean.privileged.message`).
+                        MarkerBadges(markers: [.experimental])
+                        Text(verbatim: ByteCount.format(a.bytes)).monospacedDigit().foregroundStyle(.secondary)
                         Spacer()
                         if let action = a.privilegedAction {
                             PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }

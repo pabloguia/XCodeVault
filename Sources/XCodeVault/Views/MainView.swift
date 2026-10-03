@@ -79,7 +79,7 @@ struct MainView: View {
                 if let r = model.report {
                     detail(r)
                 } else if model.section == .access {
-                    PermissionsView(model: model)  // needs no scan
+                    AccessView(model: model)  // needs no scan
                 } else {
                     ContentUnavailableView(
                         L10n.tr("app.scanning.title"), systemImage: "magnifyingglass",
@@ -152,7 +152,7 @@ struct MainView: View {
         case .drives: VolumesView(report: r, checks: model.vaultChecks)
         case .health: DoctorView(model: model)
         case .history: JournalView(entries: model.journal)
-        case .access: PermissionsView(model: model)
+        case .access: AccessView(model: model)
         }
     }
 }
