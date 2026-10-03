@@ -25,6 +25,10 @@ jobs:
       - name: Toolchain
         run: |
           sw_vers; uname -m; xcodebuild -version; swift --version
+      - name: Localization (catalogs compiled, complete, placeholders match)
+        # The stand-alone CLI carries its languages compiled in (spec 2026-10-03 §4.1); a catalog edited
+        # without regenerating would ship stale text, and a missing locale would silently fall back to English.
+        run: bash scripts/l10n.sh check && bash scripts/test-l10n.sh
       - name: Build
         # `set -o pipefail` is load-bearing: without it the pipeline reports tail's status, so a
         # failing build would pass CI silently. This workflow has never executed (ADR-0005), so

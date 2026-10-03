@@ -57,6 +57,7 @@ bootstrap, allowlisted verbs; every change needs the helper-security review) · 
 `scripts/helper-invariants.sh` / `scripts/check-doc-mirror.sh` (the two controls that run in CI) ·
 `scripts/preflight.sh` (runs every CI gate locally, in CI's order — run it before pushing; three of
 the four gates passing is not "the gates passed") ·
+`scripts/l10n.sh` (String Catalogs → compiled tables; `check` is a CI gate; see `docs/process/LOCALIZATION.md`) ·
 `packaging/homebrew/` · `.github/workflows/ci.yml` (macos-15 + macos-26) ·
 `.github/workflows/sonar.yml` + `sonar-project.properties` + `scripts/sonar-verify.sh` (SonarQube
 Cloud; a separate workflow because it needs a secret and so cannot run under `preflight.sh`. The
