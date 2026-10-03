@@ -282,3 +282,18 @@ Sidebar, two groups:
 2. Translations for `ja` and `zh-Hans` ship marked `needs_review` until a native speaker reviews them.
    Acceptable?
 3. Park / Run-externally execution in the GUI deferred to a follow-up spec (§6.4). Acceptable?
+
+## 10. Carried into the S3/S4 plans (from the S1 and S2 reviews)
+
+- Stop rendering `ScanSummary.verifiedSavingsBytes` (GUI Overview, `scan` text): it uses the category-level experimental
+  flag and counts the runtime park as verified. Render `SavingsSummary` instead; mark the legacy field as legacy.
+- `--json` stays English: localize at render time only, keep ids/English in `Codable` models; byte-identity tests across
+  locales for `permissions`, `doctor` and the savings object.
+- Format numbers and byte counts with `Locale(identifier: L10n.locale)`, not the machine locale (today `--lang zh-Hans-HK`
+  still prints `10,37 GB` from a pt-BR machine).
+- Tests that assert English text call `L10n.configure(override: "en", environment: [:], preferred: [])` first.
+- Bound positional indices in the runtime guard (`%3$@` with one argument); align its counting of a repeated positional
+  index with the checker.
+- Consider generated typed accessors (`L10n.Savings.upTo(_:)`) or call-site argument counting in `check`; warn on unused keys.
+- Measure the generated table's compile time at ~200 keys (`-Xfrontend -warn-long-expression-type-checking=200`).
+- SwiftUI: `Text(verbatim: L10n.tr(...))`; seed the app's locale from `Bundle.main.preferredLocalizations`.
