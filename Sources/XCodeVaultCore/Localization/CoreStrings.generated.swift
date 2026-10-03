@@ -361,6 +361,13 @@ extension L10nCatalog {
                 "ja": "先にインストーラを書き出してください: `xcodevaultctl runtime export <platform> --to <dir>`。",
                 "zh-Hans": "先导出其安装器：`xcodevaultctl runtime export <platform> --to <dir>`。",
             ],
+            "cli.plan.note.rootOnly": [
+                "en": "`clean` lists this for accounting and never deletes it; it needs root with Full Disk Access — the app\'s privileged helper (experimental).",
+                "pt-BR": "O `clean` lista isto só para contabilizar e nunca o apaga; é preciso root com Acesso Total ao Disco — o auxiliar privilegiado do app (experimental).",
+                "es": "`clean` lo muestra solo para contabilizarlo y nunca lo borra; hace falta root con Acceso total al disco: el asistente privilegiado de la app (experimental).",
+                "ja": "`clean` はこれを集計のために表示するだけで、削除はしません。削除にはフルディスクアクセスを持つ root、つまりアプリの特権ヘルパー（実験的）が必要です。",
+                "zh-Hans": "`clean` 只为统计列出此项，从不删除；删除需要具有“完全磁盘访问权限”的 root，即应用的特权辅助程序（实验性）。",
+            ],
             "cli.plan.note.runtimeSizes": [
                 "en": "The size shown counts only the MobileAsset store; `xcodevaultctl runtime list` shows each runtime\'s real size.",
                 "pt-BR": "O tamanho mostrado conta só o armazenamento MobileAsset; `xcodevaultctl runtime list` mostra o tamanho real de cada runtime.",

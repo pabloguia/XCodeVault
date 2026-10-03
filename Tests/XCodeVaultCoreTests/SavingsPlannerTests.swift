@@ -202,6 +202,39 @@ final class SavingsPlannerTests: XCTestCase {
         XCTAssertEqual(SavingsPlanner.rows(report: r, bucket: .runFromExternal).first { $0.categoryID == "archives" }?.bytes, 0)
     }
 
+    /// `clean` lists root-only categories for accounting and never deletes them (CleanPlanner; migration-safety review F1),
+    /// so their row says so and is not ranked among the previews that act.
+    func testRootOnlyCleanRowsSayCleanNeverDeletesThemAndSortLast() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("coreSimulatorSystemCaches", 7_640_000_000), item("simulatorRuntimeAssets", 4000)]
+        let rows = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate)
+        let dyld = rows.first { $0.categoryID == "coreSimulatorSystemCaches" }
+        XCTAssertEqual(dyld?.noteIDs, ["rootOnly"])
+        // The runtime row's command is `runtime delete` (simctl), not `clean`: the note would be false there.
+        XCTAssertEqual(rows.first { $0.categoryID == "simulatorRuntimeAssets" }?.noteIDs, ["runtimeSizes"])
+        let ids = rows.map(\.categoryID)
+        XCTAssertEqual(ids, ["simulatorRuntimeAssets", "derivedData", "xcodeCaches", "coreSimulatorSystemCaches"], "largest, yet after the previews")
+        let text = SavingsPlanner.render(rows: rows, bucket: .deleteAndRegenerate)
+        let lines = text.split(separator: "\n").map(String.init)
+        guard let row = lines.firstIndex(where: { $0.hasPrefix("  CoreSimulator system dyld caches") }) else { return XCTFail(text) }
+        XCTAssertEqual(lines[row + 1], "      xcodevaultctl clean --category coreSimulatorSystemCaches")
+        XCTAssertTrue(lines[row + 2].contains("`clean` lists this for accounting and never deletes it"), text)
+    }
+
+    /// An unreadable item measures 0 because nothing could be read: unknown, not empty, so its row stays.
+    func testALowerBoundZeroByteRowIsKept() {
+        var r = report()
+        var usage = DiskUsage.zero
+        usage.unreadable = ["/fixture/deviceLogs/x"]
+        r.items.append(
+            StorageItem(
+                categoryID: "deviceLogs", path: "/fixture/deviceLogs", exists: true, isSymlink: false, symlinkTarget: nil, isMountPoint: false,
+                usage: usage, volumeMountPoint: nil, onBootVolume: true))
+        XCTAssertTrue(usage.isLowerBound)
+        XCTAssertEqual(SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate).first { $0.categoryID == "deviceLogs" }?.bytes, 0)
+    }
+
     func testRowsCarryTheirNoteIDsInEnglishWhateverTheLanguage() {
         var r = report()
         r.items += [item("simulatorDevices", 50)]

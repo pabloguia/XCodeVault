@@ -1817,6 +1817,40 @@
         }
       }
     },
+    "cli.plan.note.rootOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "`clean` lists this for accounting and never deletes it; it needs root with Full Disk Access — the app's privileged helper (experimental)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "`clean` lo muestra solo para contabilizarlo y nunca lo borra; hace falta root con Acceso total al disco: el asistente privilegiado de la app (experimental)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "`clean` はこれを集計のために表示するだけで、削除はしません。削除にはフルディスクアクセスを持つ root、つまりアプリの特権ヘルパー（実験的）が必要です。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O `clean` lista isto só para contabilizar e nunca o apaga; é preciso root com Acesso Total ao Disco — o auxiliar privilegiado do app (experimental)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "`clean` 只为统计列出此项，从不删除；删除需要具有“完全磁盘访问权限”的 root，即应用的特权辅助程序（实验性）。"
+          }
+        }
+      }
+    },
     "cli.plan.note.runtimeSizes" : {
       "localizations" : {
         "en" : {

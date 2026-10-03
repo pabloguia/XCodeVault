@@ -75,6 +75,10 @@ final class CLILanguageTests: XCTestCase {
             StorageItem(
                 categoryID: "simulatorDevices", path: "/fixture/simulatorDevices", exists: true, isSymlink: false, symlinkTarget: nil,
                 isMountPoint: false, usage: usage, volumeMountPoint: nil, onBootVolume: true))
+        report.items.append(
+            StorageItem(
+                categoryID: "coreSimulatorSystemCaches", path: "/fixture/dyld", exists: true, isSymlink: false, symlinkTarget: nil,
+                isMountPoint: false, usage: usage, volumeMountPoint: nil, onBootVolume: true))
         func encoded() throws -> (doctor: String, plans: [String]) {
             let findings = Doctor().diagnoseAll(report: report, registry: VaultRegistry(url: missing))
             let plans = try SavingsBucket.allCases.map { try JSONOutput.encode(SavingsPlanner.rows(report: report, bucket: $0)) }
@@ -88,6 +92,8 @@ final class CLILanguageTests: XCTestCase {
         let devicesJSON = try JSONOutput.encode(devices)
         XCTAssertTrue(devicesJSON.contains("\"actsImmediately\" : true"), devicesJSON)
         XCTAssertTrue(devicesJSON.contains("\"simctlDelete\""), devicesJSON)
+        let dyld = try XCTUnwrap(SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate).first { $0.categoryID == "coreSimulatorSystemCaches" })
+        XCTAssertTrue(try JSONOutput.encode(dyld).contains("\"rootOnly\""))
         for locale in L10n.supportedLocales {
             L10n.configure(override: locale, environment: [:], preferred: [])
             let other = try encoded()

@@ -16,7 +16,7 @@ public struct SavingsPlanRow: Sendable, Codable, Equatable {
     /// The command has no preview of its own: it applies (or downloads) the moment it is run.
     public let actsImmediately: Bool
     /// The caveats the user needs before running the command, in the order to read them (spec §5: the order to run
-    /// them in). Stable English ids: `archivesPark`, `derivedDataExternal`, `simctlDelete`, `exportFirst`, `runtimeSizes`.
+    /// them in). Stable English ids: `archivesPark`, `derivedDataExternal`, `simctlDelete`, `exportFirst`, `runtimeSizes`, `rootOnly`.
     public let noteIDs: [String]
 
     /// The command names a single item, so a row of several items is several commands.
@@ -33,9 +33,11 @@ public enum SavingsPlanner {
     public static func rows(report: ScanReport, bucket: SavingsBucket) -> [SavingsPlanRow] {
         var bytesByCategory: [String: UInt64] = [:]
         var itemsByCategory: [String: Int] = [:]
+        var lowerBound: Set<String> = []
         for (item, c) in SavingsCalculator.countedItems(report.items, category: StorageCatalog.category) {
             bytesByCategory[c.id, default: 0] += item.allocatedBytes
             itemsByCategory[c.id, default: 0] += 1
+            if item.usage?.isLowerBound == true { lowerBound.insert(c.id) }
         }
         var rows: [SavingsPlanRow] = []
         for c in StorageCatalog.all {
@@ -43,15 +45,16 @@ public enum SavingsPlanner {
                 continue
             }
             let bytes = option.appliesToExistingData ? (bytesByCategory[c.id] ?? 0) : 0
-            guard bytes > 0 || !option.appliesToExistingData else { continue }
+            // An unreadable item measures 0 because nothing could be read: unknown, not empty, so its row stays.
+            guard bytes > 0 || !option.appliesToExistingData || lowerBound.contains(c.id) else { continue }
             rows.append(
                 SavingsPlanRow(
                     categoryID: c.id, categoryName: c.name, bytes: bytes, option: option, command: command,
                     itemCount: itemCount(categoryID: c.id, report: report, counted: itemsByCategory[c.id] ?? 0),
-                    actsImmediately: actsImmediately(categoryID: c.id, bucket: bucket), noteIDs: noteIDs(categoryID: c.id, bucket: bucket)))
+                    actsImmediately: actsImmediately(categoryID: c.id, bucket: bucket), noteIDs: noteIDs(category: c, bucket: bucket)))
         }
         func group(_ r: SavingsPlanRow) -> Int {
-            if r.actsImmediately || r.option.losesUserData { return 2 }
+            if r.actsImmediately || r.option.losesUserData || r.noteIDs.contains("rootOnly") { return 2 }
             return r.option.isExperimental ? 1 : 0
         }
         return rows.sorted { a, b in
@@ -95,9 +98,14 @@ public enum SavingsPlanner {
         }
     }
 
-    /// The caveats for a row, as ids, in reading order.
-    static func noteIDs(categoryID: String, bucket: SavingsBucket) -> [String] {
-        switch (bucket, categoryID) {
+    /// The caveats for a row, as ids, in reading order. `rootOnly`: `clean` lists a root-only category for accounting and
+    /// never deletes it (CleanPlanner), so the row says what would (migration-safety review F1). Only for the `clean`
+    /// rows: the runtime row is root-owned too, but `runtime delete` goes through simctl, which does delete it.
+    static func noteIDs(category c: StorageCategory, bucket: SavingsBucket) -> [String] {
+        if bucket == .deleteAndRegenerate && c.privilege == .root && command(categoryID: c.id, bucket: bucket)?.hasPrefix("xcodevaultctl clean ") == true {
+            return ["rootOnly"]
+        }
+        return switch (bucket, c.id) {
         case (.parkExternally, "archives"): ["archivesPark"]
         case (.runFromExternal, "derivedData"): ["derivedDataExternal"]
         case (.deleteAndRegenerate, "simulatorDevices"): ["simctlDelete"]
@@ -115,6 +123,7 @@ public enum SavingsPlanner {
         case "simctlDelete": L10n.tr("cli.plan.note.simctlDelete")
         case "exportFirst": L10n.tr("cli.plan.note.exportFirst")
         case "runtimeSizes": L10n.tr("cli.plan.note.runtimeSizes")
+        case "rootOnly": L10n.tr("cli.plan.note.rootOnly")
         default: nil
         }
     }
