@@ -35,41 +35,42 @@ public enum TextRenderer {
         return o
     }
 
-    public static func scan(_ r: ScanReport) -> String {
+    /// The status, then the savings; the per-item table only with `details`. Warnings are safety information
+    /// and are always printed.
+    public static func scan(_ r: ScanReport, details: Bool = false) -> String {
         var o = status(r)
-        o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
-        o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
-        let items = r.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
-        for it in items {
-            guard let c = r.category(for: it) else { continue }
-            let label = c.isExperimental ? c.recommendedStrategy.rawValue + " (exp.)" : c.recommendedStrategy.rawValue
-            let extra =
-                it.isSymlink
-                ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
-                : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
-                    + (it.onBootVolume ? "" : "  [not on boot volume]")
-                    + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
-                    // Without this the rows stop adding up to the Summary and nothing says why: a
-                    // breakdown row's bytes are already inside its parent's row, and are counted
-                    // once, there. Naming the parent is what keeps the reader from adding them.
-                    + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
-            o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
+        o += "\n" + savings(r.savings)
+        if details {
+            o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
+            o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
+            let items = r.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
+            for it in items {
+                guard let c = r.category(for: it) else { continue }
+                let label = c.isExperimental ? c.recommendedStrategy.rawValue + " (exp.)" : c.recommendedStrategy.rawValue
+                let extra =
+                    it.isSymlink
+                    ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
+                    : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
+                        + (it.onBootVolume ? "" : "  [not on boot volume]")
+                        + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
+                        // Without this the rows stop adding up to the Summary and nothing says why: a
+                        // breakdown row's bytes are already inside its parent's row, and are counted
+                        // once, there. Naming the parent is what keeps the reader from adding them.
+                        + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
+                o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
+            }
         }
-        let s = r.summary
-        o += "\nSummary:\n"
-        o += "  Internal developer storage found:   \(ByteCount.format(s.internalDeveloperBytes))\(s.lowerBound ? " (lower bound)" : "")\n"
-        o +=
-            "    of which simulator runtime images: \(ByteCount.format(s.runtimeImageBytes))  (delete with `simctl runtime delete`, keep installers externally)\n"
-        o += "  Safely cleanable:                   \(ByteCount.format(s.cleanableBytes))\n"
-        o += "  Relocatable (supported mechanisms): \(ByteCount.format(s.relocatableBytes))\n"
-        o += "  Cold-storage eligible:              \(ByteCount.format(s.coldStorageEligibleBytes))\n"
-        o += "  Apple-managed (info only):          \(ByteCount.format(s.appleManagedBytes))\n"
-        o += "  Must remain local:                  \(ByteCount.format(s.mustRemainLocalBytes))\n"
-        o += "  Reclaimable from the boot volume:   \(ByteCount.format(s.estimatedInternalSavingsBytes))  via recommended cleanup/relocation\n"
-        o += "    with verified strategies only:    \(ByteCount.format(s.verifiedSavingsBytes))  (the rest is labeled experimental — see `compatibility`)\n"
         if !r.warnings.isEmpty {
+            if !o.hasSuffix("\n") { o += "\n" }
             o += "\nWarnings:\n"; for w in r.warnings { o += "  ! \(w)\n" }
         }
+        return o
+    }
+
+    /// What `status` ends with: the next step, and why a measurement may be incomplete.
+    public static func statusFooter(fullDiskAccess: FullDiskAccessState) -> String {
+        var o = "\n" + L10n.tr("cli.status.measureHint", "xcodevaultctl scan") + "\n"
+        if fullDiskAccess == .notGranted { o += L10n.tr("cli.status.fdaHint", "xcodevaultctl permissions") + "\n" }
         return o
     }
 

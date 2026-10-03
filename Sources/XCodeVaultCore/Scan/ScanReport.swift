@@ -40,8 +40,10 @@ public struct ScanSummary: Sendable, Codable, Equatable {
     public var appleManagedBytes: UInt64 = 0
     public var mustRemainLocalBytes: UInt64 = 0
     /// Bytes on the boot volume that a recommended cleanup/relocation action would free (each item counted once).
+    /// Legacy: category-level experimental flag (counts Apple-managed runtimes as verified). Kept for JSON compatibility; render `ScanReport.savings`.
     public var estimatedInternalSavingsBytes: UInt64 = 0
     /// The subset of `estimatedInternalSavingsBytes` whose strategy is verified (not experimental).
+    /// Legacy: category-level experimental flag (counts Apple-managed runtimes as verified). Kept for JSON compatibility; render `ScanReport.savings`.
     public var verifiedSavingsBytes: UInt64 = 0
     public var runtimeImageBytes: UInt64 = 0  // from simctl sizeBytes
     public var lowerBound: Bool = false  // some paths unreadable

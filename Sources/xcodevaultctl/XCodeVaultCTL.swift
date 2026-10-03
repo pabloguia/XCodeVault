@@ -79,9 +79,11 @@ struct Scan: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     @Flag(name: .long, help: "Skip size measurement (fast inventory only).")
     var noSizes = false
+    @Flag(name: .long, help: "Also list every storage category found, with its size and path.")
+    var details = false
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: !noSizes).scan()
-        try emit(report, json: global.json) { TextRenderer.scan(report) }
+        try emit(report, json: global.json) { TextRenderer.scan(report, details: details) }
     }
 }
 
@@ -90,7 +92,9 @@ struct Status: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: false).scan()
-        try emit(report, json: global.json) { TextRenderer.status(report) }
+        try emit(report, json: global.json) {
+            TextRenderer.status(report) + TextRenderer.statusFooter(fullDiskAccess: FullDiskAccessProbe().state())
+        }
     }
 }
 

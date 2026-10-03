@@ -81,6 +81,20 @@ extension L10nCatalog {
                 "ja": "次へ: %@",
                 "zh-Hans": "下一步：%@",
             ],
+            "cli.status.fdaHint": [
+                "en": "Full Disk Access is not granted to this terminal, so some folders cannot be measured. Details: %@",
+                "pt-BR": "Este terminal não tem Acesso Total ao Disco, então algumas pastas não podem ser medidas. Detalhes: %@",
+                "es": "Este terminal no tiene Acceso total al disco, por lo que algunas carpetas no se pueden medir. Detalles: %@",
+                "ja": "このターミナルにはフルディスクアクセスが許可されていないため、一部のフォルダは測定できません。詳細: %@",
+                "zh-Hans": "此终端未获得“完全磁盘访问权限”,因此部分文件夹无法测量。详情:%@",
+            ],
+            "cli.status.measureHint": [
+                "en": "Measure what you can reclaim: %@",
+                "pt-BR": "Meça o que você pode recuperar: %@",
+                "es": "Mide lo que puedes recuperar: %@",
+                "ja": "回収できる容量を測定する: %@",
+                "zh-Hans": "测量可回收的空间:%@",
+            ],
             "savings.alternativesNote": [
                 "en": "The options are alternatives for the same files; the total counts each file once.",
                 "pt-BR": "As opções são alternativas para os mesmos arquivos; o total conta cada arquivo uma vez.",
