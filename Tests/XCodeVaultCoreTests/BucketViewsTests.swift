@@ -47,6 +47,33 @@ final class BucketViewsTests: XCTestCase {
         XCTAssertFalse(planned.groups.isEmpty, "the control category is listed")
     }
 
+    /// Review I2 / LOW-2: the view fails closed on its own. Devices and runtimes (another tool's), and an id the catalog
+    /// does not know, never become deletable rows, whatever a plan carries; the other-tool rows still list devices.
+    func testAForgedPlanCannotMakeDevicesRuntimesOrUnknownCategoriesDeletable() {
+        let r = report([item("simulatorDevices", 6_000), item("simulatorRuntimeAssets", 4_000)], devices: [device("A")])
+        let forged = CleanPlan(
+            actions: [
+                action("simulatorDevices", 6_000), action("simulatorRuntimeAssets", 4_000), action("noSuchCategory", 5_000),
+                action("derivedData", 100),
+            ], skipped: [], warnings: [])
+        let list = DeleteList.make(plan: forged, report: r)
+        XCTAssertEqual(list.groups.map(\.categoryID), ["derivedData"])
+        XCTAssertEqual(list.deletable(selected: Set(forged.actions.map(\.id))).map(\.categoryID), ["derivedData"])
+        XCTAssertNil(list.undo(of: action("noSuchCategory", 5_000)), "no default undo cost for an unknown id")
+        XCTAssertEqual(Set(list.otherTools.map(\.categoryID)), ["simulatorDevices", "simulatorRuntimeAssets"])
+        // The planner agrees: neither devices nor runtimes are ever in a clean plan.
+        let planned = CleanPlanner(home: "/nonexistent").plan(report: r, granular: false)
+        XCTAssertFalse(planned.actions.contains { ["simulatorDevices", "simulatorRuntimeAssets"].contains($0.categoryID) })
+    }
+
+    /// LOW-1: after a rescan only rows still listed stay selected.
+    func testARescanKeepsOnlyTheSelectedRowsStillListed() {
+        let a = action("derivedData", 100, path: "/d/a"), b = action("derivedData", 50, path: "/d/b")
+        let list = DeleteList.make(plan: CleanPlan(actions: [a], skipped: [], warnings: []), report: report([]))
+        XCTAssertEqual(list.retained([a.id, b.id, "/gone"]), [a.id])
+        XCTAssertEqual(list.retained([]), [])
+    }
+
     /// Simulator devices go through `simctl`: the clean planner never plans them, and the list shows them with that
     /// command and the data-loss marker, outside the deletable groups.
     func testSimulatorDevicesAreListedWithSimctlAndAreNotDeletableHere() {
@@ -122,8 +149,58 @@ final class BucketViewsTests: XCTestCase {
             return VaultVolumeCheck(volume: v, state: state, currentMountPoint: nil, shadowBytes: nil, detail: "")
         }
         XCTAssertEqual(VaultStatus.make([]), .noVault)
-        XCTAssertEqual(VaultStatus.make([check("A", .absent), check("B", .foreign)]), .offline)
+        XCTAssertEqual(VaultStatus.make([check("A", .absent)]), .offline)
+        XCTAssertEqual(VaultStatus.make([check("A", .absent), check("B", .foreign)]), .needsAttention(volumeName: "B"))
+        XCTAssertEqual(VaultStatus.make([check("C", .sentinelMissing)]), .needsAttention(volumeName: "C"))
         XCTAssertEqual(VaultStatus.make([check("A", .absent), check("B", .movedMountPoint), check("C", .verified)]), .ready(volumeName: "B"))
+    }
+
+    /// M6: the intro quotes the "acts immediately" marker; in every language it must be that marker's own words.
+    func testThePlanIntroQuotesTheActsImmediatelyMarkerInEveryLanguage() {
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            XCTAssertTrue(L10n.tr("app.plan.intro").contains(SavingsMarker.actsImmediately.localizedText), locale)
+        }
+    }
+
+    /// M1: the CLI's `plan` text, whole, for a fixed report in English — markers, their order, separators, parentheses
+    /// and notes — so moving the markers to `SavingsMarker` cannot change a byte unnoticed.
+    func testThePlanTextIsPinnedInEnglish() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let gb: UInt64 = 1_000_000_000
+        let r = report(
+            [
+                item("derivedData", 10 * gb), item("simulatorDevices", 3 * gb), item("simulatorRuntimeAssets", 40 * gb), item("archives", 2 * gb),
+                item("runtimeLibrary", 5 * gb),
+            ], devices: [device("A"), device("B")])
+        func f(_ bytes: UInt64) -> String { ByteCount.format(bytes) }
+        let delete = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate), bucket: .deleteAndRegenerate)
+        XCTAssertEqual(
+            delete,
+            "Delete — comes back on demand\n"
+                + "Freed now; it grows back as Xcode rebuilds it or downloads it again.\n"
+                + "Rebuild or re-download time.\n\n"
+                + "  Simulator runtime images (MobileAsset store)  \(f(40 * gb))\n"
+                + "      xcodevaultctl runtime delete <identifier> --dry-run\n"
+                + "      The size shown counts only the MobileAsset store; `xcodevaultctl runtime list` shows each runtime's real size.\n"
+                + "  DerivedData  \(f(10 * gb))  (experimental)\n"
+                + "      xcodevaultctl clean --category derivedData\n"
+                + "  Simulator devices  \(f(3 * gb))  (experimental, deletes the apps' data, acts immediately, 2 items; one per command)\n"
+                + "      xcrun simctl delete <udid>\n"
+                + "      Shut the device down first; its apps and their data are deleted.\n")
+        let run = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .runFromExternal), bucket: .runFromExternal)
+        XCTAssertEqual(
+            run,
+            "Run from an external drive\n"
+                + "Freed for good: it lives on the external drive and stops growing on this Mac.\n"
+                + "Nothing to download; the drive must be connected while you work.\n\n"
+                + "  Runtime Library (external installers)  \(f(5 * gb))  (experimental)\n"
+                + "      xcodevaultctl runtime export <platform> --to <dir> --preflight\n"
+                + "  DerivedData  \(f(10 * gb))  (experimental, acts immediately)\n"
+                + "      xcodevaultctl locations set-derived-data <dir>\n"
+                + "      Existing DerivedData stays where it is; `xcodevaultctl clean --category derivedData` reclaims it.\n"
+                + "  Archives  (experimental, acts immediately, new data only)\n"
+                + "      xcodevaultctl locations set-archives <dir>\n")
     }
 
     // MARK: - Backticks

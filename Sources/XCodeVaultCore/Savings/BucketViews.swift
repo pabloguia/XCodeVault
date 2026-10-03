@@ -67,23 +67,25 @@ public struct DeleteList: Sendable, Equatable {
     /// The delete-bucket rows that go through another tool, in `SavingsPlanner.rows` order.
     public let otherTools: [SavingsPlanRow]
 
-    /// Archives, and anything else the catalog calls non-regenerable, never reach the list (CLAUDE.md rule 5). The
-    /// clean planner already never plans them; this is the view's own guard, so a plan built elsewhere cannot show them.
+    /// The view's own guards, on top of the clean planner's, so a plan built elsewhere cannot widen what is deletable:
+    /// a group needs a catalog category that `clean` deletes through the filesystem (`isDeletableHere`), which keeps
+    /// out Archives and everything non-regenerable (CLAUDE.md rule 5), devices and runtimes (another tool's), and ids the
+    /// catalog does not know (fails closed). The other-tool rows are the planner's, with rule 5 applied again.
     public static func make(plan: CleanPlan, report: ScanReport) -> DeleteList {
         var byCategory: [String: [CleanAction]] = [:]
         var order: [String] = []
-        for action in plan.actions where isListable(action.categoryID) {
+        for action in plan.actions where isDeletableHere(action.categoryID) {
             if byCategory[action.categoryID] == nil { order.append(action.categoryID) }
             byCategory[action.categoryID, default: []].append(action)
         }
         let groups = order.compactMap { id -> Group? in
-            guard let actions = byCategory[id], let first = actions.first else { return nil }
-            let undo = StorageCatalog.category(id)?.regenerability ?? .regenerable
-            return Group(categoryID: id, categoryName: first.categoryName, actions: actions, undo: undo)
+            // The undo cost is the catalog's; there is no default, and `isDeletableHere` already required the category.
+            guard let actions = byCategory[id], let first = actions.first, let category = StorageCatalog.category(id) else { return nil }
+            return Group(categoryID: id, categoryName: first.categoryName, actions: actions, undo: category.regenerability)
         }
         .sorted { a, b in a.bytes != b.bytes ? a.bytes > b.bytes : a.categoryName < b.categoryName }
         let other = SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate).filter {
-            !$0.command.hasPrefix("xcodevaultctl clean ") && isListable($0.categoryID)
+            !$0.command.hasPrefix("xcodevaultctl clean ") && isOfferedForDeletion($0.categoryID)
         }
         return DeleteList(groups: groups, otherTools: other)
     }
@@ -98,8 +100,23 @@ public struct DeleteList: Sendable, Equatable {
     /// The cost to undo deleting `action`: its group's. Nil for an action the list does not show.
     public func undo(of action: CleanAction) -> Regenerability? { groups.first { $0.categoryID == action.categoryID }?.undo }
 
-    static func isListable(_ categoryID: String) -> Bool {
-        categoryID != "archives" && StorageCatalog.category(categoryID)?.regenerability != .nonRegenerable
+    /// Re-applies a rescan to a selection: only rows still listed stay selected, so a path that comes back later is not
+    /// silently selected again (migration-safety review LOW-1).
+    public func retained(_ selection: Set<String>) -> Set<String> {
+        selection.intersection(groups.flatMap(\.actions).map(\.id))
+    }
+
+    /// `clean` deletes this category through the filesystem: the catalog knows it, allows `.safeCleanup`, names no
+    /// Apple tool for it, and it is not non-regenerable. The clean planner's rule, restated as the view's guard.
+    static func isDeletableHere(_ categoryID: String) -> Bool {
+        guard isOfferedForDeletion(categoryID), let c = StorageCatalog.category(categoryID) else { return false }
+        return c.allowedStrategies.contains(.safeCleanup) && c.cleanupCommand == nil
+    }
+
+    /// Rule 5 on its own: a known category that is neither Archives nor non-regenerable. Unknown ids fail closed.
+    static func isOfferedForDeletion(_ categoryID: String) -> Bool {
+        guard categoryID != "archives", let c = StorageCatalog.category(categoryID) else { return false }
+        return c.regenerability != .nonRegenerable
     }
 
     /// The markers of one action: experimental, deletes the apps' data, and what a root-owned row lacks.
@@ -112,16 +129,20 @@ public struct DeleteList: Sendable, Equatable {
     }
 }
 
-/// The vault line of the Park view, from `VaultVerifier`'s checks: none registered, none usable, or the first usable one.
+/// The vault line of the Park view, from `VaultVerifier`'s checks: none registered, the first usable one, one that is
+/// there but not usable, or every one unplugged.
 public enum VaultStatus: Sendable, Equatable {
     case noVault
-    /// Registered, but no registered vault is usable now (unplugged, or a state `doctor` explains).
+    /// Every registered vault is absent: unplugged.
     case offline
+    /// Not absent, not usable (foreign, ambiguous, sentinel missing): connecting it again will not help; `doctor` says why.
+    case needsAttention(volumeName: String)
     case ready(volumeName: String)
 
     public static func make(_ checks: [VaultVolumeCheck]) -> VaultStatus {
         if checks.isEmpty { return .noVault }
         if let usable = checks.first(where: \.isUsable) { return .ready(volumeName: usable.volume.volumeName) }
+        if let odd = checks.first(where: { $0.state != .absent }) { return .needsAttention(volumeName: odd.volume.volumeName) }
         return .offline
     }
 }

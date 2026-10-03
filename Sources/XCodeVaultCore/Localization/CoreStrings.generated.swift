@@ -305,6 +305,13 @@ extension L10nCatalog {
                 "ja": "元に戻すコスト",
                 "zh-Hans": "撤销的代价",
             ],
+            "app.delete.group.header": [
+                "en": "%@ — %@",
+                "pt-BR": "%@ — %@",
+                "es": "%@ — %@",
+                "ja": "%@ — %@",
+                "zh-Hans": "%@ — %@",
+            ],
             "app.delete.otherTools.detail": [
                 "en": "These are never deleted from this list. Copy a command and run it in Terminal; simulator devices lose their apps and the apps\' data.",
                 "pt-BR": "Estes nunca são apagados por esta lista. Copie um comando e execute-o no Terminal; os dispositivos do simulador perdem os apps e os dados dos apps.",
@@ -592,6 +599,13 @@ extension L10nCatalog {
                 "ja": "アンインストール…",
                 "zh-Hans": "卸载…",
             ],
+            "app.plan.copied": [
+                "en": "Copied",
+                "pt-BR": "Copiado",
+                "es": "Copiado",
+                "ja": "コピーしました",
+                "zh-Hans": "已拷贝",
+            ],
             "app.plan.copyCommand": [
                 "en": "Copy Command",
                 "pt-BR": "Copiar Comando",
@@ -613,6 +627,13 @@ extension L10nCatalog {
                 "ja": "XCodeVault はこれらをアプリから実行しません。コマンドをコピーしてターミナルで実行してください。「すぐに実行されます」と表示されたもの以外は、実行前に何をするかを表示します。",
                 "zh-Hans": "XCodeVault 不会在 App 中运行这些命令。请拷贝命令并在“终端”中运行：除标有“立即生效”的命令外，每条命令都会先显示将要执行的操作。",
             ],
+            "app.plan.vault.attention": [
+                "en": "Your vault on %@ is connected but not usable; `xcodevaultctl doctor` says what is wrong.",
+                "pt-BR": "Seu disco-cofre em %@ está conectado, mas não pode ser usado; `xcodevaultctl doctor` diz o que está errado.",
+                "es": "Tu vault en %@ está conectado pero no se puede usar; `xcodevaultctl doctor` indica qué falla.",
+                "ja": "%@ の vault は接続されていますが使用できません。`xcodevaultctl doctor` が原因を示します。",
+                "zh-Hans": "%@ 上的 vault 已连接但无法使用；`xcodevaultctl doctor` 会说明问题所在。",
+            ],
             "app.plan.vault.none": [
                 "en": "No vault is registered. Register an external drive first: `xcodevaultctl vault init /Volumes/<name>`",
                 "pt-BR": "Nenhum disco-cofre registrado. Registre primeiro um disco externo: `xcodevaultctl vault init /Volumes/<name>`",
@@ -621,11 +642,11 @@ extension L10nCatalog {
                 "zh-Hans": "尚未注册 vault。请先注册一个外置磁盘：`xcodevaultctl vault init /Volumes/<name>`",
             ],
             "app.plan.vault.offline": [
-                "en": "Your vault is not ready: connect its drive, then rescan. If it stays this way, `xcodevaultctl doctor` says why.",
-                "pt-BR": "Seu disco-cofre não está pronto: conecte o disco e verifique de novo. Se continuar assim, `xcodevaultctl doctor` diz o motivo.",
-                "es": "Tu vault no está listo: conecta su disco y vuelve a analizar. Si sigue así, `xcodevaultctl doctor` indica el motivo.",
-                "ja": "vault の準備ができていません。ドライブを接続してから再スキャンしてください。それでも変わらない場合は `xcodevaultctl doctor` が理由を示します。",
-                "zh-Hans": "你的 vault 尚未就绪：请连接其磁盘，然后重新扫描。如果仍然如此，`xcodevaultctl doctor` 会说明原因。",
+                "en": "Your vault drive is not connected: connect it, then rescan.",
+                "pt-BR": "O disco do seu disco-cofre não está conectado: conecte-o e verifique de novo.",
+                "es": "El disco de tu vault no está conectado: conéctalo y vuelve a analizar.",
+                "ja": "vault のドライブが接続されていません。接続してから再スキャンしてください。",
+                "zh-Hans": "你的 vault 磁盘未连接：请连接后重新扫描。",
             ],
             "app.plan.vault.ready": [
                 "en": "Vault ready on %@.",
@@ -1792,6 +1813,26 @@ extension L10nCatalog {
                 ],
                 "zh-Hans": [
                     "other": "已选 %lld 项 · %@",
+                ],
+            ],
+            "app.delete.skipped.title": [
+                "en": [
+                    "one": "%lld item not offered or skipped",
+                    "other": "%lld items not offered or skipped",
+                ],
+                "pt-BR": [
+                    "one": "%lld item não oferecido ou ignorado",
+                    "other": "%lld itens não oferecidos ou ignorados",
+                ],
+                "es": [
+                    "one": "%lld elemento no ofrecido u omitido",
+                    "other": "%lld elementos no ofrecidos u omitidos",
+                ],
+                "ja": [
+                    "other": "提示されない・スキップされた項目 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 项未提供或已跳过",
                 ],
             ],
             "app.overview.doctor.issues": [

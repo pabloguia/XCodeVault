@@ -101,5 +101,12 @@ final class BucketViewAppTests: XCTestCase {
             survey: bucketSampleSurvey(checks: [VaultVolumeCheck(volume: v, state: .absent, currentMountPoint: nil, shadowBytes: nil, detail: "")]))
         await offline.refresh()
         XCTAssertEqual(offline.vaultStatus, .offline)
+        let ready = makeModel(
+            SwitchableHelper(.notInstalled), journal: t,
+            survey: bucketSampleSurvey(checks: [
+                VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: "/Volumes/Drive", shadowBytes: nil, detail: "")
+            ]))
+        await ready.refresh()
+        XCTAssertEqual(ready.vaultStatus, .ready(volumeName: "Drive"))
     }
 }

@@ -1791,6 +1791,40 @@
         }
       }
     },
+    "app.delete.group.header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ — %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ — %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ — %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ — %@"
+          }
+        }
+      }
+    },
     "app.delete.otherTools.detail" : {
       "localizations" : {
         "en" : {
@@ -1855,6 +1889,88 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "用其他工具删除"
+          }
+        }
+      }
+    },
+    "app.delete.skipped.title" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item not offered or skipped"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items not offered or skipped"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld elemento no ofrecido u omitido"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld elementos no ofrecidos u omitidos"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "提示されない・スキップされた項目 %lld 件"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld item não oferecido ou ignorado"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld itens não oferecidos ou ignorados"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld 项未提供或已跳过"
+                }
+              }
+            }
           }
         }
       }
@@ -3267,6 +3383,40 @@
         }
       }
     },
+    "app.plan.copied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "コピーしました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已拷贝"
+          }
+        }
+      }
+    },
     "app.plan.copyCommand" : {
       "localizations" : {
         "en" : {
@@ -3369,6 +3519,40 @@
         }
       }
     },
+    "app.plan.vault.attention" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your vault on %@ is connected but not usable; `xcodevaultctl doctor` says what is wrong."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Tu vault en %@ está conectado pero no se puede usar; `xcodevaultctl doctor` indica qué falla."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ の vault は接続されていますが使用できません。`xcodevaultctl doctor` が原因を示します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Seu disco-cofre em %@ está conectado, mas não pode ser usado; `xcodevaultctl doctor` diz o que está errado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ 上的 vault 已连接但无法使用；`xcodevaultctl doctor` 会说明问题所在。"
+          }
+        }
+      }
+    },
     "app.plan.vault.none" : {
       "localizations" : {
         "en" : {
@@ -3408,31 +3592,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your vault is not ready: connect its drive, then rescan. If it stays this way, `xcodevaultctl doctor` says why."
+            "value" : "Your vault drive is not connected: connect it, then rescan."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tu vault no está listo: conecta su disco y vuelve a analizar. Si sigue así, `xcodevaultctl doctor` indica el motivo."
+            "value" : "El disco de tu vault no está conectado: conéctalo y vuelve a analizar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "vault の準備ができていません。ドライブを接続してから再スキャンしてください。それでも変わらない場合は `xcodevaultctl doctor` が理由を示します。"
+            "value" : "vault のドライブが接続されていません。接続してから再スキャンしてください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Seu disco-cofre não está pronto: conecte o disco e verifique de novo. Se continuar assim, `xcodevaultctl doctor` diz o motivo."
+            "value" : "O disco do seu disco-cofre não está conectado: conecte-o e verifique de novo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "你的 vault 尚未就绪：请连接其磁盘，然后重新扫描。如果仍然如此，`xcodevaultctl doctor` 会说明原因。"
+            "value" : "你的 vault 磁盘未连接：请连接后重新扫描。"
           }
         }
       }

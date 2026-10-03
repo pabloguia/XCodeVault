@@ -21,18 +21,29 @@ final class BucketSnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         L10n.configure(override: "en", environment: [:], preferred: [])
         let t = TempDir()
-        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, survey: bucketSampleSurvey())
+        // Many skipped lines and warnings, as on a real Mac, to show the lower block at the window's minimum size.
+        var survey = bucketSampleSurvey()
+        survey.3.skipped = (1...8).map { "Category \($0): managed by Apple's tool, not deleted through the filesystem — use `xcrun simctl runtime`" }
+        survey.3.warnings = ["DerivedData is rebuilt on the next build; the first build of each project will be a full build."]
+        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, survey: survey)
         await model.refresh()
-        let views: [(String, AnyView)] = [
-            ("delete", AnyView(DeleteView(model: model))),
-            ("park", AnyView(PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { _ in })),
-            ("run", AnyView(PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { _ in })),
+        // Delete at the window's minimum (960×620) less the toolbar; the plans at the review size.
+        let views: [(String, AnyView, NSSize)] = [
+            ("delete", AnyView(DeleteView(model: model)), NSSize(width: 960, height: 568)),
+            (
+                "park", AnyView(PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { _ in }),
+                NSSize(width: 1000, height: 760)
+            ),
+            (
+                "run", AnyView(PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { _ in }),
+                NSSize(width: 1000, height: 760)
+            ),
         ]
         var written: [String] = []
-        for (name, view) in views {
+        for (name, view, size) in views {
             let host = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
             host.appearance = NSAppearance(named: .aqua)
-            host.frame = NSRect(x: 0, y: 0, width: 1000, height: 760)
+            host.frame = NSRect(origin: .zero, size: size)
             host.layoutSubtreeIfNeeded()
             XCTAssertNil(host.window)
             let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))

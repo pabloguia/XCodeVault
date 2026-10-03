@@ -65,6 +65,7 @@ enum AppText {
         switch status {
         case .noVault: L10n.tr("app.plan.vault.none")
         case .offline: L10n.tr("app.plan.vault.offline")
+        case .needsAttention(let name): L10n.tr("app.plan.vault.attention", name)
         case .ready(let name): L10n.tr("app.plan.vault.ready", name)
         }
     }

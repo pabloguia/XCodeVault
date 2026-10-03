@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import SwiftUI
 import XCodeVaultCore
@@ -72,6 +73,9 @@ struct InlineCodeText: View {
 struct PlanRowView: View {
     let row: SavingsPlanRow
     let copy: @MainActor () -> Void
+    /// A moment of "Copied" after the button, said to VoiceOver too: feedback only, it decides nothing.
+    @State private var copied = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -86,9 +90,21 @@ struct PlanRowView: View {
                 // A command is never translated (docs/process/LOCALIZATION.md).
                 Text(verbatim: row.command).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                 Spacer()
-                Button(L10n.tr("app.plan.copyCommand"), action: copy)
-                    // Several rows, several buttons: VoiceOver hears whose command each one copies.
-                    .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
+                Button {
+                    copy()
+                    copied = true
+                    AccessibilityNotification.Announcement(L10n.tr("app.plan.copied")).post()
+                    Task {
+                        try? await Task.sleep(for: .seconds(2))
+                        copied = false
+                    }
+                } label: {
+                    Label(
+                        copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copyCommand"),
+                        systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                // Several rows, several buttons: VoiceOver hears whose command each one copies.
+                .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
             }
             ForEach(Array(row.localizedNotes.enumerated()), id: \.offset) { _, note in
                 InlineCodeText(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -138,6 +154,7 @@ struct PlanView: View {
         switch status {
         case .noVault: "externaldrive.badge.plus"
         case .offline: "externaldrive.badge.xmark"
+        case .needsAttention: "externaldrive.badge.exclamationmark"
         case .ready: "externaldrive.badge.checkmark"
         }
     }
@@ -158,15 +175,25 @@ struct DeleteView: View {
         if let plan = model.cleanPlan, let list = model.deleteList {
             VStack(alignment: .leading, spacing: 10) {
                 BucketHeaderView(bucket: .deleteAndRegenerate).padding([.horizontal, .top])
-                table(list)
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
-                    ForEach(plan.skipped, id: \.self) { Text.l10n(L10n.tr("app.clean.skipped", $0)).font(.caption).foregroundStyle(.secondary) }
-                    privileged(plan)
-                    otherTools(list)
+                // A floor for the table, and the rest in a capped scroll: at the window's minimum (960×620) the lower block
+                // can be taller than the window, and it must never squeeze the table away or be clipped unreachable.
+                table(list).frame(minHeight: 200)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
+                        privileged(plan)
+                        otherTools(list)
+                        skipped(plan)
+                    }
+                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal)
+                .frame(maxHeight: 190)
                 footer(list)
+            }
+            .onChange(of: model.deleteList) { _, newList in
+                // A rescan keeps only the rows still listed selected (`DeleteList.retained`).
+                if let newList { selection = newList.retained(selection) } else { selection = [] }
             }
             .confirmationDialog(
                 useTrash
@@ -212,7 +239,7 @@ struct DeleteView: View {
                 Section {
                     ForEach(group.actions) { TableRow($0) }
                 } header: {
-                    Text(verbatim: group.categoryName + " — " + ByteCount.format(group.bytes))
+                    Text.l10n(L10n.tr("app.delete.group.header", group.categoryName, ByteCount.format(group.bytes)))
                 }
             }
         }
@@ -251,6 +278,23 @@ struct DeleteView: View {
                 }
             } label: {
                 Text.l10n(L10n.tr("app.delete.otherTools.title"))
+            }
+        }
+    }
+
+    /// What the planner did not offer, and why: one line each, folded away by default.
+    @ViewBuilder
+    private func skipped(_ plan: CleanPlan) -> some View {
+        if !plan.skipped.isEmpty {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(plan.skipped, id: \.self) {
+                        Text.l10n(L10n.tr("app.clean.skipped", $0)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Text.l10n(L10n.plural("app.delete.skipped.title", count: plan.skipped.count)).font(.callout)
             }
         }
     }

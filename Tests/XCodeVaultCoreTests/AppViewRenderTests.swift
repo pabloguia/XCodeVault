@@ -123,6 +123,7 @@ final class AppViewRenderTests: XCTestCase {
         let checks: [[VaultVolumeCheck]] = [
             [], [VaultVolumeCheck(volume: v, state: .absent, currentMountPoint: nil, shadowBytes: nil, detail: "")],
             [VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: "/Volumes/Drive", shadowBytes: nil, detail: "")],
+            [VaultVolumeCheck(volume: v, state: .foreign, currentMountPoint: "/Volumes/Drive", shadowBytes: nil, detail: "")],
         ]
         var rendered = 0
         for locale in L10n.supportedLocales {
