@@ -4,8 +4,9 @@ public enum ByteCount {
     public static func format(_ bytes: UInt64) -> String { format(Int64(clamping: bytes)) }
     public static func format(_ bytes: Int64) -> String { format(bytes, locale: L10n.locale) }
 
-    /// For prose that is English in every language — findings, vault checks, scan and volume warnings, plan notes, errors: the same bytes read
-    /// the same whatever the process locale (spec §4.3).
+    /// For Core's prose, which is English in every language — findings, vault checks, scan and volume warnings, `clean` and
+    /// migration plan and preflight messages, errors: the same bytes read the same whatever the process locale (spec §4.3).
+    /// Not for display text that is localized, such as the notes under an `xcodevaultctl plan` row: those use `format`.
     static func english(_ bytes: UInt64) -> String { english(Int64(clamping: bytes)) }
     static func english(_ bytes: Int64) -> String { format(bytes, locale: L10n.baseLocale) }
 

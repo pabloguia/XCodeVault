@@ -19,6 +19,8 @@ final class ScanTextTests: XCTestCase {
                 usage: usage, volumeMountPoint: nil, onBootVolume: true)
         ]
         r.savings = SavingsCalculator.summarize(items: r.items, category: StorageCatalog.category)
+        // `minimalReport` scans without measuring; this fixture's item has a size, as a measuring scan would give it.
+        r.sizesMeasured = true
         r.warnings = ["fixture warning"]
         return r
     }
@@ -29,6 +31,27 @@ final class ScanTextTests: XCTestCase {
         XCTAssertFalse(out.contains("Summary:"), out)
         XCTAssertFalse(out.contains("with verified strategies only"), out)
         XCTAssertTrue(out.hasPrefix(TextRenderer.status(report())), "status comes first")
+    }
+
+    /// `scan --no-sizes` measured nothing, so it has no savings to show; zeros would read as "nothing to reclaim"
+    /// (final S3 review, Important 4).
+    func testWithoutSizesTheSavingsBlockSaysTheyWereNotMeasured() {
+        var r = report()
+        r.sizesMeasured = false
+        let out = TextRenderer.scan(r)
+        XCTAssertTrue(out.contains("Sizes were not measured; run xcodevaultctl scan to see what you can reclaim."), out)
+        XCTAssertFalse(out.contains("What you can reclaim on this Mac"), out)
+        XCTAssertFalse(out.contains("Total reclaimable"), out)
+        let measured = TextRenderer.scan(report())
+        XCTAssertFalse(measured.contains("Sizes were not measured"), measured)
+        XCTAssertTrue(measured.contains("Total reclaimable"), measured)
+    }
+
+    func testScanPassesTheRuntimeImageBytesToTheSavingsBlock() {
+        var r = report()
+        XCTAssertFalse(TextRenderer.scan(r).contains("measured by simctl"))
+        r.summary.runtimeImageBytes = 15_840_000_000
+        XCTAssertTrue(TextRenderer.scan(r).contains("Simulator runtimes measured by simctl: \(ByteCount.format(UInt64(15_840_000_000)))"))
     }
 
     func testTheItemTableIsOnlyWithDetails() {

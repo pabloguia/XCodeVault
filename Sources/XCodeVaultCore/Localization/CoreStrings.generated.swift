@@ -47,11 +47,11 @@ extension L10nCatalog {
                 "zh-Hans": "显示操作日志（XCodeVault 做出的每项更改，以及任何中断的操作）。",
             ],
             "cli.cmd.locations.abstract": [
-                "en": "Xcode ▸ Settings ▸ Locations (DerivedData, Archives) — Apple\'s supported relocation.",
-                "pt-BR": "Xcode ▸ Ajustes ▸ Localizações (DerivedData, Archives) — a realocação suportada pela Apple.",
-                "es": "Xcode ▸ Ajustes ▸ Ubicaciones (DerivedData, Archives): la reubicación que Apple admite.",
-                "ja": "Xcode ▸ 設定 ▸ 場所（DerivedData、Archives）— Apple がサポートする移動方法。",
-                "zh-Hans": "Xcode ▸ 设置 ▸ 位置（DerivedData、Archives）— Apple 支持的迁移方式。",
+                "en": "Xcode ▸ Settings ▸ Locations (DerivedData, Archives, compilation cache): Apple\'s own setting; the setters here are experimental.",
+                "pt-BR": "Xcode ▸ Ajustes ▸ Localizações (DerivedData, Archives, cache de compilação): o ajuste da própria Apple; os comandos set daqui são experimentais.",
+                "es": "Xcode ▸ Ajustes ▸ Ubicaciones (DerivedData, Archives, caché de compilación): el ajuste propio de Apple; los comandos set de aquí son experimentales.",
+                "ja": "Xcode ▸ 設定 ▸ 場所（DerivedData、Archives、コンパイルキャッシュ）— Apple 自身の設定。ここでの set コマンドは実験的です。",
+                "zh-Hans": "Xcode ▸ 设置 ▸ 位置（DerivedData、Archives、编译缓存）— Apple 自己的设置；这里的 set 命令是实验性的。",
             ],
             "cli.cmd.locations.resetArchives.abstract": [
                 "en": "Restore Xcode\'s default Archives location.",
@@ -354,6 +354,20 @@ extension L10nCatalog {
                 "ja": "既存の DerivedData はそのまま残ります。`xcodevaultctl clean --category derivedData` で回収できます。",
                 "zh-Hans": "现有的 DerivedData 会保留在原处；可用 `xcodevaultctl clean --category derivedData` 回收。",
             ],
+            "cli.plan.note.exportFirst": [
+                "en": "First export its installer: `xcodevaultctl runtime export <platform> --to <dir>`.",
+                "pt-BR": "Primeiro exporte o instalador: `xcodevaultctl runtime export <platform> --to <dir>`.",
+                "es": "Primero exporta su instalador: `xcodevaultctl runtime export <platform> --to <dir>`.",
+                "ja": "先にインストーラを書き出してください: `xcodevaultctl runtime export <platform> --to <dir>`。",
+                "zh-Hans": "先导出其安装器：`xcodevaultctl runtime export <platform> --to <dir>`。",
+            ],
+            "cli.plan.note.runtimeSizes": [
+                "en": "The size shown counts only the MobileAsset store; `xcodevaultctl runtime list` shows each runtime\'s real size.",
+                "pt-BR": "O tamanho mostrado conta só o armazenamento MobileAsset; `xcodevaultctl runtime list` mostra o tamanho real de cada runtime.",
+                "es": "El tamaño mostrado cuenta solo el almacén MobileAsset; `xcodevaultctl runtime list` muestra el tamaño real de cada runtime.",
+                "ja": "表示されるサイズは MobileAsset ストアの分だけです。各ランタイムの実際のサイズは `xcodevaultctl runtime list` で確認できます。",
+                "zh-Hans": "显示的大小只计算 MobileAsset 存储；`xcodevaultctl runtime list` 会显示每个运行时的实际大小。",
+            ],
             "cli.plan.note.simctlDelete": [
                 "en": "Shut the device down first; its apps and their data are deleted.",
                 "pt-BR": "Desligue o dispositivo primeiro; seus apps e os dados deles são apagados.",
@@ -375,12 +389,33 @@ extension L10nCatalog {
                 "ja": "この Mac で回収できる容量",
                 "zh-Hans": "此 Mac 上可回收的空间",
             ],
+            "cli.savings.losesUserData": [
+                "en": "of which %@ deletes apps\' data and does not come back (simulator devices)",
+                "pt-BR": "dos quais %@ apagam dados de apps e não voltam (dispositivos do simulador)",
+                "es": "de los cuales %@ borran datos de apps y no vuelven (dispositivos del simulador)",
+                "ja": "うち %@ はアプリのデータを削除し、元に戻りません（シミュレータのデバイス）",
+                "zh-Hans": "其中 %@ 会删除应用数据且不会恢复（模拟器设备）",
+            ],
             "cli.savings.next": [
                 "en": "Next: %@",
                 "pt-BR": "Próximo: %@",
                 "es": "Siguiente: %@",
                 "ja": "次へ: %@",
                 "zh-Hans": "下一步：%@",
+            ],
+            "cli.savings.notMeasured": [
+                "en": "Sizes were not measured; run %@ to see what you can reclaim.",
+                "pt-BR": "Os tamanhos não foram medidos; execute %@ para ver o que você pode recuperar.",
+                "es": "No se midieron los tamaños; ejecuta %@ para ver lo que puedes recuperar.",
+                "ja": "サイズは測定されていません。回収できる容量を確認するには %@ を実行してください。",
+                "zh-Hans": "未测量大小；运行 %@ 查看可回收的空间。",
+            ],
+            "cli.savings.runtimesNote": [
+                "en": "Simulator runtimes measured by simctl: %@ — not in these totals yet; see %@",
+                "pt-BR": "Runtimes do simulador medidos pelo simctl: %@ — ainda fora destes totais; veja %@",
+                "es": "Runtimes del simulador medidos por simctl: %@ — aún no incluidos en estos totales; consulta %@",
+                "ja": "simctl が測定したシミュレータのランタイム: %@ — まだこの合計には含まれていません。%@ を参照してください",
+                "zh-Hans": "simctl 测得的模拟器运行时：%@ — 尚未计入这些总数；请参阅 %@",
             ],
             "cli.status.fdaHint": [
                 "en": "Full Disk Access is not granted to this terminal, so some folders cannot be measured. Details: %@",
@@ -531,6 +566,25 @@ extension L10nCatalog {
             ],
         ],
         plurals: [
-            :
+            "cli.plan.marker.perItem": [
+                "en": [
+                    "one": "%lld item; one per command",
+                    "other": "%lld items; one per command",
+                ],
+                "pt-BR": [
+                    "one": "%lld item; um por comando",
+                    "other": "%lld itens; um por comando",
+                ],
+                "es": [
+                    "one": "%lld elemento; uno por comando",
+                    "other": "%lld elementos; uno por comando",
+                ],
+                "ja": [
+                    "other": "%lld 項目、コマンドごとに 1 つ",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 项，每条命令一项",
+                ],
+            ],
         ])
 }

@@ -108,9 +108,8 @@ final class SavingsPlannerTests: XCTestCase {
         var r = report()
         r.items += [item("simulatorDevices", 50), item("simulatorRuntimeAssets", 4000), item("runtimeLibrary", 9)]
         let previews = ["xcodevaultctl clean", "xcodevaultctl runtime delete", "xcodevaultctl runtime offload", "xcodevaultctl externalize"]
-        let immediatePairs = [
-            "simulatorDevices/deleteAndRegenerate", "derivedData/runFromExternal", "archives/runFromExternal", "runtimeLibrary/runFromExternal",
-        ]
+        // `runtime export … --preflight` previews (final S3 review, G11), so the Runtime Library row no longer acts immediately.
+        let immediatePairs = ["simulatorDevices/deleteAndRegenerate", "derivedData/runFromExternal", "archives/runFromExternal"]
         var seen = 0
         for bucket in SavingsBucket.allCases where bucket != .keepLocal {
             let rows = SavingsPlanner.rows(report: r, bucket: bucket)
@@ -122,9 +121,79 @@ final class SavingsPlannerTests: XCTestCase {
                 let immediate = immediatePairs.contains("\(row.categoryID)/\(bucket.rawValue)")
                 if immediate { seen += 1 }
                 XCTAssertEqual(line.contains("acts immediately"), immediate, "\(row.categoryID)/\(bucket)")
+                XCTAssertEqual(row.actsImmediately, immediate, "the JSON carries the same fact: \(row.categoryID)/\(bucket)")
                 if previews.contains(where: row.command.hasPrefix) { XCTAssertFalse(line.contains("acts immediately"), row.command) }
             }
         }
-        XCTAssertEqual(seen, 4, "all four pairs exist in the fixture")
+        XCTAssertEqual(seen, 3, "all three pairs exist in the fixture")
+    }
+
+    /// Verified previews first, then experimental previews, then rows that act immediately or lose the user's data;
+    /// largest first within a group (final S3 review, Important 1). Pinned on a hand-built report.
+    func testRowsAreGroupedSafestFirstThenLargestFirst() {
+        var r = Fixtures.minimalReport()
+        r.items = [
+            item("derivedData", 1000), item("xcodeCaches", 30), item("simulatorRuntimeAssets", 400), item("simulatorDevices", 5000),
+            item("deviceLogs", 30),
+        ]
+        let ids = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate).map(\.categoryID)
+        // deviceLogs and xcodeCaches tie at 30: by name, "Device logs" before "Xcode caches".
+        XCTAssertEqual(ids, ["simulatorRuntimeAssets", "derivedData", "deviceLogs", "xcodeCaches", "simulatorDevices"])
+    }
+
+    func testRowsTakingOneItemPerCommandSayHowManyCommands() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("simulatorDevices", 50), item("simulatorDevices", 60), item("simulatorDevices", 70)]
+        let rows = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate)
+        XCTAssertEqual(rows.first { $0.categoryID == "simulatorDevices" }?.itemCount, 3)
+        let text = SavingsPlanner.render(rows: rows, bucket: .deleteAndRegenerate)
+        let devices = text.split(separator: "\n").first { $0.hasPrefix("  Simulator devices") }
+        XCTAssertTrue(devices?.contains("3 items; one per command") == true, text)
+        let derived = text.split(separator: "\n").first { $0.hasPrefix("  DerivedData") }
+        XCTAssertFalse(derived?.contains("one per command") ?? true, "`clean --category` takes the whole category: \(text)")
+        var one = report()
+        one.items += [item("simulatorDevices", 50)]
+        let single = SavingsPlanner.render(rows: SavingsPlanner.rows(report: one, bucket: .deleteAndRegenerate), bucket: .deleteAndRegenerate)
+        XCTAssertTrue(single.contains("1 item; one per command"), single)
+    }
+
+    func testRuntimeRowsSayTheSizeIsTheMobileAssetStoreAndParkSaysExportFirst() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("simulatorRuntimeAssets", 4000)]
+        let park = SavingsPlanner.rows(report: r, bucket: .parkExternally).first { $0.categoryID == "simulatorRuntimeAssets" }
+        XCTAssertEqual(park?.noteIDs, ["exportFirst", "runtimeSizes"])
+        let delete = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate).first { $0.categoryID == "simulatorRuntimeAssets" }
+        XCTAssertEqual(delete?.noteIDs, ["runtimeSizes"])
+        let text = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .parkExternally), bucket: .parkExternally)
+        let lines = text.split(separator: "\n").map(String.init)
+        guard let row = lines.firstIndex(where: { $0.hasPrefix("  Simulator runtime images") }) else { return XCTFail(text) }
+        XCTAssertTrue(lines[row + 1].contains("xcodevaultctl runtime offload"), text)
+        XCTAssertEqual(lines[row + 2], "      First export its installer: `xcodevaultctl runtime export <platform> --to <dir>`.")
+        XCTAssertTrue(lines[row + 3].contains("`xcodevaultctl runtime list` shows each runtime's real size"), text)
+    }
+
+    func testRowsWithNothingToReclaimAreHiddenUnlessTheyOnlyRedirectNewData() {
+        var r = report()
+        r.items += [item("deviceLogs", 0)]
+        XCTAssertFalse(SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate).contains { $0.categoryID == "deviceLogs" })
+        XCTAssertTrue(SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate).contains { $0.categoryID == "xcodeCaches" })
+        XCTAssertEqual(SavingsPlanner.rows(report: r, bucket: .runFromExternal).first { $0.categoryID == "archives" }?.bytes, 0)
+    }
+
+    func testRowsCarryTheirNoteIDsInEnglishWhateverTheLanguage() {
+        var r = report()
+        r.items += [item("simulatorDevices", 50)]
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            func notes(_ bucket: SavingsBucket, _ id: String) -> [String]? {
+                SavingsPlanner.rows(report: r, bucket: bucket).first { $0.categoryID == id }?.noteIDs
+            }
+            XCTAssertEqual(notes(.deleteAndRegenerate, "simulatorDevices"), ["simctlDelete"], locale)
+            XCTAssertEqual(notes(.runFromExternal, "derivedData"), ["derivedDataExternal"], locale)
+            XCTAssertEqual(notes(.parkExternally, "archives"), ["archivesPark"], locale)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
     }
 }

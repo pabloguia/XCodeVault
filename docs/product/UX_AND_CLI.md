@@ -43,8 +43,11 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   space — `status` (default), `scan`, `plan`, `report`; save space — `clean`, `locations`,
   `externalize`, `restore`, `runtime`; drives — `volumes`, `vault`, `bench`; recover — `migration`,
   `journal`; diagnose — `doctor`, `xcode`, `compatibility`, `permissions`.
-- Savings first: `scan` opens with what can be reclaimed — temporarily, and permanently — and ends with
-  the next step; `scan --details` adds the full item table. `status` closes with the same footer.
+- Savings first: `scan` opens with what can be reclaimed — temporarily, and permanently — and the savings
+  block ends with the next step, "Next: xcodevaultctl plan delete | park | external"; `scan --details` adds
+  the full item table after it. `scan --no-sizes` measures nothing, so it prints no savings, only how to get
+  them. `status` measures nothing either and ends with "Measure what you can reclaim: xcodevaultctl scan"
+  (and, when Full Disk Access is not granted, how to grant it).
   `plan <delete|park|external>` is read-only: it prints, per category, the command to run to reclaim
   space that one way (`<angle brackets>` are values the user supplies; the commands are never
   translated). Preview forms only; the rows that act immediately are marked.

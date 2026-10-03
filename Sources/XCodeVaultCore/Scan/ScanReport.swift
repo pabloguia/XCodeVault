@@ -79,6 +79,9 @@ public struct ScanReport: Sendable, Codable, Equatable {
     /// renderings read this. Defaulted for the fixtures that build reports by hand; like every defaulted
     /// field here, it does not make an older stored report decodable, and nothing decodes one.
     public var savings = SavingsSummary()
+    /// False for a scan that skipped measuring (`scan --no-sizes`): every byte count is then zero, not small.
+    /// Defaulted like `savings`, with the same caveat about older stored reports.
+    public var sizesMeasured = true
     public var warnings: [String]
 
     public func category(for item: StorageItem) -> StorageCategory? { StorageCatalog.category(item.categoryID) }

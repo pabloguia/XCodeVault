@@ -311,3 +311,7 @@ Sidebar, two groups:
 - Consider generated typed accessors (`L10n.Savings.upTo(_:)`) or call-site argument counting in `check`; warn on unused keys.
 - Measure the generated table's compile time at ~200 keys (`-Xfrontend -warn-long-expression-type-checking=200`).
 - SwiftUI: `Text(verbatim: L10n.tr(...))`; seed the app's locale from `Bundle.main.preferredLocalizations`.
+- Runtime images stored as `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` (Intel / pre-MobileAsset layout,
+  measured 2026-10-03: 15.84 GB here) are not a catalog category, so the savings model does not count them; `scan`
+  prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table) needing the evidence
+  and review of a catalog decision (from the S3 whole-branch review).

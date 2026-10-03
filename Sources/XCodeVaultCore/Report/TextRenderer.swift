@@ -39,7 +39,9 @@ public enum TextRenderer {
     /// and are always printed.
     public static func scan(_ r: ScanReport, details: Bool = false) -> String {
         var o = status(r)
-        o += "\n" + savings(r.savings)
+        // Without sizes every amount would be zero, which reads as "nothing to reclaim" rather than "not measured".
+        let measured = r.sizesMeasured
+        o += "\n" + (measured ? savings(r.savings, runtimeImageBytes: r.summary.runtimeImageBytes) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
         if details {
             o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
             o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
@@ -109,7 +111,9 @@ public enum TextRenderer {
 
     /// The savings block (spec 2026-10-03 §5): both headlines, each option with its undo cost, the stay-local
     /// remainder and the next command. Every column is padded by display width, so wide scripts stay aligned.
-    public static func savings(_ s: SavingsSummary) -> String {
+    /// Under the delete row, the part that does not come back (simulator devices); after the stay-local row, the
+    /// runtime images simctl measured (`runtimeImageBytes`, from `ScanSummary`), which no catalog category counts yet.
+    public static func savings(_ s: SavingsSummary, runtimeImageBytes: UInt64) -> String {
         func headline(_ bytes: UInt64) -> String {
             let amount = ByteCount.format(bytes)
             return s.isLowerBound ? L10n.tr("savings.atLeast", amount) : L10n.tr("savings.upTo", amount)
@@ -120,15 +124,19 @@ public enum TextRenderer {
             var label: String
             var amount: String
             var note: String = ""
+            /// An indented line printed right under this row, outside the aligned columns.
+            var detail: String?
         }
         func bucketRow(_ b: SavingsBucket) -> Row {
             Row(label: "    " + b.localizedTitle, amount: option(s[b].optionBytes), note: b.localizedUndoCost)
         }
         func verified(_ bytes: UInt64) -> String { "(" + L10n.tr("savings.verifiedShare", ByteCount.format(bytes)) + ")" }
 
+        var delete = bucketRow(.deleteAndRegenerate)
+        if s.deleteLosesUserDataBytes > 0 { delete.detail = "      " + L10n.tr("cli.savings.losesUserData", option(s.deleteLosesUserDataBytes)) }
         let rows: [Row] = [
             Row(label: "  " + L10n.tr("savings.temporary.title"), amount: headline(s.temporaryBytes), note: verified(s.verifiedTemporaryBytes)),
-            bucketRow(.deleteAndRegenerate),
+            delete,
             bucketRow(.parkExternally),
             Row(label: "  " + L10n.tr("savings.permanent.title"), amount: headline(s.permanentBytes), note: verified(s.verifiedPermanentBytes)),
             bucketRow(.runFromExternal),
@@ -144,9 +152,15 @@ public enum TextRenderer {
             return r.note.isEmpty ? line : line + "   " + r.note
         }
         var out = [L10n.tr("cli.savings.heading")]
-        out += rows.map(render)
+        for row in rows {
+            out.append(render(row))
+            if let detail = row.detail { out.append(detail) }
+        }
         out.append("  " + L10n.tr("savings.alternativesNote"))
         out.append(render(keep))
+        if runtimeImageBytes > 0 {
+            out.append("  " + L10n.tr("cli.savings.runtimesNote", ByteCount.format(runtimeImageBytes), "xcodevaultctl runtime list"))
+        }
         out.append(L10n.tr("cli.savings.next", "xcodevaultctl plan delete | park | external"))
         return out.joined(separator: "\n")
     }

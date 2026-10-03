@@ -1,6 +1,7 @@
 import Foundation
 
-/// One line of `xcodevaultctl plan`: a category, what it frees on the boot volume, and the command that does it.
+/// One line of `xcodevaultctl plan`: a category, what it frees on the boot volume, and the command that does it. Every
+/// fact the text shows is here too, so `plan --json` carries it; the ids in `noteIDs` are English and never translated.
 public struct SavingsPlanRow: Sendable, Codable, Equatable {
     public let categoryID: String
     public let categoryName: String
@@ -9,35 +10,57 @@ public struct SavingsPlanRow: Sendable, Codable, Equatable {
     public let option: SavingsOption
     /// The command the user runs; `<angle brackets>` are values they supply. Never translated.
     public let command: String
+    /// Counted items in the row. A command taking one `<udid>` or `<identifier>` is run once per item.
+    public let itemCount: Int
+    /// The command has no preview of its own: it applies (or downloads) the moment it is run.
+    public let actsImmediately: Bool
+    /// The caveats the user needs before running the command, in the order to read them (spec §5: the order to run
+    /// them in). Stable English ids: `archivesPark`, `derivedDataExternal`, `simctlDelete`, `exportFirst`, `runtimeSizes`.
+    public let noteIDs: [String]
+
+    /// The command names a single item, so a row of several items is several commands.
+    public var isPerItem: Bool { command.contains("<udid>") || command.contains("<identifier>") }
 }
 
 public enum SavingsPlanner {
-    /// One row per category offering `bucket`, largest first; categories whose option only redirects new data are
-    /// listed with 0 bytes. Counts the same items as `SavingsCalculator` (exists, not a symlink, on the boot volume,
-    /// not a breakdown). A category with nothing on this Mac is not listed, except for an option that only
-    /// redirects new data, which does not need existing data.
+    /// One row per category offering `bucket`. Counts the same items as `SavingsCalculator` (exists, not a symlink, on
+    /// the boot volume, not a breakdown). A row with nothing to reclaim is not listed, except for an option that only
+    /// redirects new data, which does not need existing data (listed with 0 bytes).
+    ///
+    /// Ordered safest first (final S3 review): verified previews, then experimental previews, then rows that act
+    /// immediately or lose the user's data; largest first within a group, ties by name.
     public static func rows(report: ScanReport, bucket: SavingsBucket) -> [SavingsPlanRow] {
         var bytesByCategory: [String: UInt64] = [:]
+        var itemsByCategory: [String: Int] = [:]
         for (item, c) in SavingsCalculator.countedItems(report.items, category: StorageCatalog.category) {
             bytesByCategory[c.id, default: 0] += item.allocatedBytes
+            itemsByCategory[c.id, default: 0] += 1
         }
         var rows: [SavingsPlanRow] = []
         for c in StorageCatalog.all {
             guard let option = c.savingsOptionDetails.first(where: { $0.bucket == bucket }), let command = command(categoryID: c.id, bucket: bucket) else {
                 continue
             }
-            let counted = bytesByCategory[c.id]
-            guard counted != nil || !option.appliesToExistingData else { continue }
+            let bytes = option.appliesToExistingData ? (bytesByCategory[c.id] ?? 0) : 0
+            guard bytes > 0 || !option.appliesToExistingData else { continue }
             rows.append(
                 SavingsPlanRow(
-                    categoryID: c.id, categoryName: c.name, bytes: option.appliesToExistingData ? (counted ?? 0) : 0, option: option, command: command))
+                    categoryID: c.id, categoryName: c.name, bytes: bytes, option: option, command: command, itemCount: itemsByCategory[c.id] ?? 0,
+                    actsImmediately: actsImmediately(categoryID: c.id, bucket: bucket), noteIDs: noteIDs(categoryID: c.id, bucket: bucket)))
         }
-        return rows.sorted { $0.bytes != $1.bytes ? $0.bytes > $1.bytes : $0.categoryName < $1.categoryName }
+        func group(_ r: SavingsPlanRow) -> Int {
+            if r.actsImmediately || r.option.losesUserData { return 2 }
+            return r.option.isExperimental ? 1 : 0
+        }
+        return rows.sorted { a, b in
+            if group(a) != group(b) { return group(a) < group(b) }
+            return a.bytes != b.bytes ? a.bytes > b.bytes : a.categoryName < b.categoryName
+        }
     }
 
     /// The command for a (category, bucket) pair; nil when the pair is not offered. Only the preview form of each
     /// command is ever listed (no `--apply`, `--yes` ...), so the command's own dry run or confirmation speaks at
-    /// the moment of decision. Every spelling was checked against the command's declaration in `Sources/xcodevaultctl` by hand: no test can import that target.
+    /// the moment of decision. Every `xcodevaultctl` spelling is parsed by the CLI itself in `PlanCommandParseTests`.
     public static func command(categoryID: String, bucket: SavingsBucket) -> String? {
         guard let c = StorageCatalog.category(categoryID), c.savingsOptions.contains(bucket) else { return nil }
         switch (bucket, categoryID) {
@@ -48,23 +71,40 @@ public enum SavingsPlanner {
         case (.parkExternally, "simulatorRuntimeAssets"): return "xcodevaultctl runtime offload <identifier> --library <dir>"
         case (.runFromExternal, "derivedData"): return "xcodevaultctl locations set-derived-data <dir>"
         case (.runFromExternal, "archives"): return "xcodevaultctl locations set-archives <dir>"
-        case (.runFromExternal, "runtimeLibrary"): return "xcodevaultctl runtime export <platform> --to <dir>"
+        case (.runFromExternal, "runtimeLibrary"): return "xcodevaultctl runtime export <platform> --to <dir> --preflight"
         default: return nil
         }
     }
 
-    /// Commands with no preview of their own: they apply (or download) the moment they are run.
-    static let actsImmediately: Set<String> = [
-        "simulatorDevices/deleteAndRegenerate", "derivedData/runFromExternal", "archives/runFromExternal", "runtimeLibrary/runFromExternal",
-    ]
-
-    /// A one-line caveat the user needs before running the row's command. Text only, never in JSON.
-    static func note(categoryID: String, bucket: SavingsBucket) -> String? {
+    /// Commands with no preview of their own: they apply the moment they are run.
+    static func actsImmediately(categoryID: String, bucket: SavingsBucket) -> Bool {
         switch (bucket, categoryID) {
-        case (.parkExternally, "archives"): return L10n.tr("cli.plan.note.archivesPark")
-        case (.runFromExternal, "derivedData"): return L10n.tr("cli.plan.note.derivedDataExternal")
-        case (.deleteAndRegenerate, "simulatorDevices"): return L10n.tr("cli.plan.note.simctlDelete")
-        default: return nil
+        case (.deleteAndRegenerate, "simulatorDevices"), (.runFromExternal, "derivedData"), (.runFromExternal, "archives"): true
+        default: false
+        }
+    }
+
+    /// The caveats for a row, as ids, in reading order.
+    static func noteIDs(categoryID: String, bucket: SavingsBucket) -> [String] {
+        switch (bucket, categoryID) {
+        case (.parkExternally, "archives"): ["archivesPark"]
+        case (.runFromExternal, "derivedData"): ["derivedDataExternal"]
+        case (.deleteAndRegenerate, "simulatorDevices"): ["simctlDelete"]
+        case (.parkExternally, "simulatorRuntimeAssets"): ["exportFirst", "runtimeSizes"]
+        case (.deleteAndRegenerate, "simulatorRuntimeAssets"): ["runtimeSizes"]
+        default: []
+        }
+    }
+
+    /// A note's text in the chosen language; nil for an id this build does not know.
+    static func noteText(_ id: String) -> String? {
+        switch id {
+        case "archivesPark": L10n.tr("cli.plan.note.archivesPark")
+        case "derivedDataExternal": L10n.tr("cli.plan.note.derivedDataExternal")
+        case "simctlDelete": L10n.tr("cli.plan.note.simctlDelete")
+        case "exportFirst": L10n.tr("cli.plan.note.exportFirst")
+        case "runtimeSizes": L10n.tr("cli.plan.note.runtimeSizes")
+        default: nil
         }
     }
 
@@ -76,11 +116,12 @@ public enum SavingsPlanner {
             var markers: [String] = []
             if r.option.isExperimental { markers.append(L10n.tr("cli.plan.marker.experimental")) }
             if r.option.losesUserData { markers.append(L10n.tr("cli.plan.marker.losesUserData")) }
-            if actsImmediately.contains("\(r.categoryID)/\(bucket.rawValue)") { markers.append(L10n.tr("cli.plan.marker.actsImmediately")) }
+            if r.actsImmediately { markers.append(L10n.tr("cli.plan.marker.actsImmediately")) }
             if !r.option.appliesToExistingData { markers.append(L10n.tr("cli.plan.marker.newDataOnly")) }
+            if r.isPerItem && r.itemCount > 0 { markers.append(L10n.plural("cli.plan.marker.perItem", count: r.itemCount)) }
             let size = r.option.appliesToExistingData ? "  " + ByteCount.format(r.bytes) : ""
             o += "  \(r.categoryName)\(size)" + (markers.isEmpty ? "" : "  (" + markers.joined(separator: ", ") + ")") + "\n      \(r.command)\n"
-            if let note = note(categoryID: r.categoryID, bucket: bucket) { o += "      \(note)\n" }
+            for note in r.noteIDs.compactMap(noteText) { o += "      \(note)\n" }
         }
         return o
     }

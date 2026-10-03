@@ -28,6 +28,9 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
     /// Bytes with a permanent option that applies to data already on disk. A union.
     public var permanentBytes: UInt64 = 0
     public var verifiedPermanentBytes: UInt64 = 0
+    /// The part of `deleteAndRegenerate.optionBytes` whose delete option loses data the user made (simulator devices):
+    /// deleted, it does not come back on demand.
+    public var deleteLosesUserDataBytes: UInt64 = 0
     /// Some counted item could not be fully read: every number above is "at least". Boot-volume items only,
     /// unlike `ScanSummary.lowerBound`, because only those are savings.
     public var isLowerBound = false
@@ -80,6 +83,7 @@ public enum SavingsCalculator {
             let options = c.savingsOptionDetails.filter(\.appliesToExistingData)
             for option in options {
                 s.add(bytes, to: option.bucket, primary: option.bucket == c.primaryBucket, verified: !option.isExperimental)
+                if option.bucket == .deleteAndRegenerate && option.losesUserData { s.deleteLosesUserDataBytes += bytes }
             }
             func union(_ buckets: Set<SavingsBucket>, _ total: inout UInt64, _ verified: inout UInt64) {
                 let matching = options.filter { buckets.contains($0.bucket) }

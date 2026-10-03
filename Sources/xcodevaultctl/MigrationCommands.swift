@@ -11,8 +11,8 @@ struct Externalize: ParsableCommand {
                 source without re-verification.
 
                 EXAMPLES:
-                  xcodevaultctl externalize --vault /Volumes/MyDrive         # plan only
-                  xcodevaultctl externalize --vault /Volumes/MyDrive --apply # keeps source
+                  xcodevaultctl externalize --vault <UUID from vault status>          # plan only
+                  xcodevaultctl externalize --vault <UUID from vault status> --apply  # keeps source
                 """)
     }
     @OptionGroup var global: GlobalOptions

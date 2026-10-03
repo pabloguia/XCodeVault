@@ -63,6 +63,13 @@ final class CLIHelpTests: XCTestCase {
         XCTAssertNil(help.range(of: english("cli.group.save"), options: .caseInsensitive), help)
     }
 
+    /// A mount point names a drive, not a vault: the examples show the identifier `vault status` prints.
+    func testTheExternalizeExamplesNameTheVaultByItsUUID() {
+        let discussion = Externalize.configuration.discussion
+        XCTAssertTrue(discussion.contains("--vault <UUID from vault status>"), discussion)
+        XCTAssertFalse(discussion.contains("/Volumes/MyDrive"), discussion)
+    }
+
     func testNoArgumentsStillRunsStatus() throws {
         XCTAssertTrue(try XCodeVaultCTL.parseAsRoot([]) is Status)
     }

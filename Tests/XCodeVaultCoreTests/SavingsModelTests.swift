@@ -200,6 +200,18 @@ final class SavingsSummaryTests: XCTestCase {
     func testAnUnknownCategoryIsSkippedNotCountedAsLocal() {
         XCTAssertEqual(summarize([item("noSuchCategory", 99)]), SavingsSummary())
     }
+
+    /// Simulator devices are deleted, not regenerated: the delete total carries the part that loses the user's data
+    /// (final S3 review, Important 1). Counted from the same items, so a breakdown or an off-boot device adds nothing.
+    func testTheDeleteTotalCarriesThePartThatLosesUserData() {
+        let s = summarize([
+            item("derivedData", 1000), item("simulatorDevices", 50), item("simulatorDevices", 20),
+            item("simulatorDeadContainers", 7), item("simulatorDevices", 9, onBoot: false),
+        ])
+        XCTAssertEqual(s.deleteAndRegenerate.optionBytes, 1070)
+        XCTAssertEqual(s.deleteLosesUserDataBytes, 70)
+        XCTAssertEqual(summarize([item("derivedData", 1000)]).deleteLosesUserDataBytes, 0)
+    }
 }
 
 final class ScanReportSavingsTests: XCTestCase {
@@ -214,6 +226,19 @@ final class ScanReportSavingsTests: XCTestCase {
         XCTAssertGreaterThan(report.summary.internalDeveloperBytes, 0)
         XCTAssertEqual(report.savings.runFromExternal.primaryBytes, report.summary.internalDeveloperBytes)
         XCTAssertEqual(report.savings, SavingsCalculator.summarize(items: report.items, category: StorageCatalog.category))
+    }
+
+    func testTheScannerRecordsWhetherItMeasuredSizes() {
+        let t = TempDir()
+        t.file("Library/Developer/Xcode/DerivedData/App-abc/Build/x", bytes: 8192)
+        func scan(measuring: Bool) -> ScanReport {
+            XCodeVaultCore.Scanner(
+                runner: FakeRunner(responses: [:]), home: t.path, catalog: [StorageCatalog.category("derivedData")!], measureSizes: measuring,
+                detectXcodeCapabilities: false
+            ).scan()
+        }
+        XCTAssertTrue(scan(measuring: true).sizesMeasured)
+        XCTAssertFalse(scan(measuring: false).sizesMeasured)
     }
 
     func testTheSavingsAreInTheJSON() throws {

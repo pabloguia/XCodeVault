@@ -54,6 +54,7 @@ public struct Scanner: Sendable {
             host: host, xcodes: xcodes, runtimes: runtimes, devices: devices, volumes: volumes,
             items: items, summary: summary, warnings: warnings)
         report.savings = savings
+        report.sizesMeasured = measureSizes
         return report
     }
 

@@ -117,4 +117,15 @@ final class CLIExperimentalLabelTests: XCTestCase {
             "no cleanable category is experimental any more: remove the label from clean, and this row")
         assertLabelled(Clean.self, because: "the cleanable categories")
     }
+
+    /// The `locations` group mixes Apple's own setting (`show`, the resets) with experimental setters, so its
+    /// abstract is not labelled as a whole; it says which part is experimental, in every language.
+    func testTheLocationsGroupSaysItsSettersAreExperimental() {
+        let word = ["en": "experimental", "pt-BR": "experimenta", "es": "experimenta", "ja": "実験的", "zh-Hans": "实验性"]
+        XCTAssertEqual(Set(word.keys), Set(L10n.supportedLocales), "a language was added: pin its word here")
+        for (locale, text) in abstracts(of: Locations.self) {
+            XCTAssertTrue(text.contains(word[locale] ?? "?"), "[\(locale)] `locations` does not say its setters are experimental: \(text)")
+            XCTAssertTrue(text.contains("DerivedData"), "[\(locale)] \(text)")
+        }
+    }
 }
