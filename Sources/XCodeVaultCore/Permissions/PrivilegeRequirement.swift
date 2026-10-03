@@ -24,25 +24,24 @@ public enum PrivilegeRequirement: String, Sendable, Codable, CaseIterable {
         return (path == dyld || path.hasPrefix(dyld + "/")) ? .helperWithFullDiskAccess : .helper
     }
 
-    /// The short tag for lists.
-    public var label: String {
+    /// The short tag for lists, in English (Core prose, the clean plan); a screen uses `label(in: L10n.locale)`.
+    public var label: String { label(in: L10n.baseLocale) }
+    /// One sentence of why, in English; a screen uses `why(in: L10n.locale)`.
+    public var why: String { why(in: L10n.baseLocale) }
+
+    public func label(in locale: String) -> String {
         switch self {
-        case .helper: return "root — privileged helper"
-        case .helperWithFullDiskAccess: return "root with Full Disk Access — privileged helper; its Full Disk Access is unmeasured"
-        case .appFullDiskAccess: return "Full Disk Access for XCodeVault"
+        case .helper: return L10n.tr("perm.requirement.helper.label", locale: locale)
+        case .helperWithFullDiskAccess: return L10n.tr("perm.requirement.helperWithFullDiskAccess.label", locale: locale)
+        case .appFullDiskAccess: return L10n.tr("perm.requirement.appFullDiskAccess.label", locale: locale)
         }
     }
 
-    /// One sentence of why.
-    public var why: String {
+    public func why(in locale: String) -> String {
         switch self {
-        case .helper:
-            return "This path belongs to root, and XCodeVault's only route to root is its privileged helper's fixed list of actions."
-        case .helperWithFullDiskAccess:
-            return "This path belongs to root inside a folder where root was refused without Full Disk Access (H15); "
-                + "whether the helper has that access is unmeasured until its first live run (#30)."
-        case .appFullDiskAccess:
-            return "macOS privacy protection stopped XCodeVault from reading some folders, so their sizes are missing from the totals."
+        case .helper: return L10n.tr("perm.requirement.helper.why", locale: locale)
+        case .helperWithFullDiskAccess: return L10n.tr("perm.requirement.helperWithFullDiskAccess.why", locale: locale)
+        case .appFullDiskAccess: return L10n.tr("perm.requirement.appFullDiskAccess.why", locale: locale)
         }
     }
 }
@@ -66,20 +65,24 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
     }
 
     /// The button's title. The cache's says experimental in the title itself (rule 10): the title is what the
-    /// helper's sheet and the confirmation lead with.
-    public var title: String {
+    /// helper's sheet and the confirmation lead with. The plain property is English: the journal records it.
+    public var title: String { title(in: L10n.baseLocale) }
+
+    public func title(in locale: String) -> String {
         switch self {
-        case .createVaultDirectory: return "Create the vault folder"
-        case .emptyCoreSimulatorDyldCache: return "Empty the CoreSimulator dyld cache (experimental)"
+        case .createVaultDirectory: return L10n.tr("perm.action.createVaultDirectory.title", locale: locale)
+        case .emptyCoreSimulatorDyldCache: return L10n.tr("perm.action.emptyCoreSimulatorDyldCache.title", locale: locale)
         }
     }
 
     /// What is left to do after the helper reports success, shown with its reply; nil when nothing is. The vault
     /// folder is only the step `vault init` could not take: registering the vault is still `vault init`'s, as the
     /// finding's own remediation says.
-    public var afterSuccess: String? {
+    public var afterSuccess: String? { afterSuccess(in: L10n.baseLocale) }
+
+    public func afterSuccess(in locale: String) -> String? {
         switch self {
-        case .createVaultDirectory: return "Now run `xcodevaultctl vault init` for that drive again to finish setting it up."
+        case .createVaultDirectory: return L10n.tr("perm.action.createVaultDirectory.afterSuccess", locale: locale)
         case .emptyCoreSimulatorDyldCache: return nil
         }
     }

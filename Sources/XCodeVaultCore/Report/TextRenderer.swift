@@ -93,13 +93,18 @@ public enum TextRenderer {
         return o
     }
 
+    /// In the process locale: the texts come from the same `perm.*` keys the app shows, not from the report's
+    /// English record (which `--json` encodes).
     public static func permissions(_ r: PermissionsReport) -> String {
-        var o = "Full Disk Access: \(r.fullDiskAccess.state.displayName)\n"
-        o += "  why:  \(r.fullDiskAccess.why)\n"
-        o += "  next: \(r.fullDiskAccess.nextStep)\n"
-        o += "Privileged helper: \(r.helper.state.displayName)\n"
-        o += "  why:  \(r.helper.why)\n"
-        o += "  next: \(r.helper.nextStep)\n"
+        let locale = L10n.locale
+        let why = L10n.tr("cli.permissions.why"), next = L10n.tr("cli.permissions.next")
+        let width = max(displayWidth(why), displayWidth(next))
+        var o = "\(L10n.tr("perm.fda.title")): \(r.fullDiskAccess.state.displayName(in: locale))\n"
+        o += "  \(padDisplay(why, width)) \(r.fullDiskAccess.state.why(in: locale))\n"
+        o += "  \(padDisplay(next, width)) \(r.fullDiskAccess.state.nextStep(in: locale))\n"
+        o += "\(L10n.tr("perm.helper.title")): \(r.helper.state.displayName(in: locale))\n"
+        o += "  \(padDisplay(why, width)) \(r.helper.state.why(in: locale))\n"
+        o += "  \(padDisplay(next, width)) \(r.helper.state.nextStep(in: locale))\n"
         return o
     }
 

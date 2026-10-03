@@ -11,6 +11,11 @@ import XCTest
 /// dialogs render only when presented in a window, so their contents are not reached.
 @MainActor
 final class AppViewRenderTests: XCTestCase {
+    nonisolated override func tearDown() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        super.tearDown()
+    }
+
     @discardableResult
     private func render<V: View>(_ view: V, file: StaticString = #filePath, line: UInt = #line) -> NSHostingView<V> {
         let host = NSHostingView(rootView: view)
@@ -89,5 +94,42 @@ final class AppViewRenderTests: XCTestCase {
         render(HelperRequestSheet(model: model))
         model.pendingPrivilegedAction = .emptyCoreSimulatorDyldCache
         render(HelperRequestSheet(model: model))
+    }
+
+    /// Every view, in each of the five languages (S4 Task 2): the strings come from the catalog, so a view that
+    /// formats one wrongly fails here rather than on a user's screen.
+    func testEveryViewRendersInEveryLanguage() async {
+        let t = TempDir()
+        let finding = Finding(
+            id: "vault-dir:U", severity: .error, title: "The vault folder could not be created on Drive", detail: "detail",
+            path: "/Volumes/Drive/XCodeVault", remediation: "sudo mkdir …", evidence: "journal", action: .createVaultDirectory(volumeUUID: "U"))
+        let dyld = CleanAction(
+            categoryID: "coreSimulatorSystemCaches", categoryName: "CoreSimulator dyld caches", path: PrivilegeRequirement.coreSimulatorDyldCachePath,
+            bytes: 1_000_000, isExperimental: true, risk: .low, requiresRoot: true, notes: [])
+        var rendered = 0
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let survey = sampleSurvey(refusals: 3, findings: [finding], actions: [dyld])
+            let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: survey, journal: t)
+            render(MainView(model: model))
+            render(OverviewView(report: survey.0, findings: [finding], fullDiskAccess: .notGranted) {})
+            render(StorageView(report: survey.0))
+            render(DoctorView(model: model))
+            render(CleanView(model: model))
+            render(VolumesView(report: survey.0, checks: []))
+            render(RuntimesView(report: survey.0))
+            render(JournalView(entries: []))
+            let entry = JournalEntry(
+                id: "op", sequence: 1, timestamp: Date(timeIntervalSince1970: 1_800_000_000), kind: .clean, state: .completed, summary: "s", paths: [],
+                bytes: nil, detail: [:], toolVersion: "t")
+            render(JournalView(entries: [entry]))
+            render(PermissionsView(model: model))
+            for state in HelperState.allCases { render(PrivilegedActionControlView(action: .emptyCoreSimulatorDyldCache, state: state) {}) }
+            render(HelperRequestSheet(model: model))
+            model.pendingPrivilegedAction = .emptyCoreSimulatorDyldCache
+            render(HelperRequestSheet(model: model))
+            rendered += 1
+        }
+        XCTAssertEqual(rendered, L10n.supportedLocales.count)
     }
 }

@@ -153,6 +153,12 @@ final class LiveHelperTests: XCTestCase {
 final class AppModelTests: XCTestCase {
     private let vault = PrivilegedAction.createVaultDirectory(volumeUUID: "U")
 
+    /// Some assertions read the model's English (docs/process/LOCALIZATION.md): the process locale follows the machine.
+    nonisolated override func setUp() {
+        super.setUp()
+        L10n.configure(override: "en", environment: [:], preferred: [])
+    }
+
     func testTheAppStartsFromTheLiveEnvironment() async throws {
         let live = AppModel().environment
         XCTAssertNil(live.survey, "the app runs the real scan")

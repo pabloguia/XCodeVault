@@ -1,5 +1,6 @@
 /// `xcodevaultctl permissions`: each permission's state, one sentence of why, and one next step. The
-/// texts live here so the CLI and the GUI say the same thing (spec §2, one source of truth).
+/// texts live in the catalog under `perm.*`, so the CLI and the GUI say the same thing (spec §2, one source of
+/// truth). The report itself is a record (`--json`): it keeps the English, whatever the process locale.
 public struct PermissionsReport: Sendable, Codable, Equatable {
     public struct FullDiskAccessEntry: Sendable, Codable, Equatable {
         public var state: FullDiskAccessState
@@ -17,82 +18,75 @@ public struct PermissionsReport: Sendable, Codable, Equatable {
     public var helper: HelperEntry
 
     public init(fullDiskAccess: FullDiskAccessState, helper: HelperState) {
-        self.fullDiskAccess = FullDiskAccessEntry(state: fullDiskAccess, why: fullDiskAccess.why, nextStep: fullDiskAccess.nextStep)
-        self.helper = HelperEntry(state: helper, why: helper.why, nextStep: helper.nextStep)
+        let en = L10n.baseLocale
+        self.fullDiskAccess = FullDiskAccessEntry(state: fullDiskAccess, why: fullDiskAccess.why(in: en), nextStep: fullDiskAccess.nextStep(in: en))
+        self.helper = HelperEntry(state: helper, why: helper.why(in: en), nextStep: helper.nextStep(in: en))
     }
 }
 
+/// The plain properties are English (records, `--json`, Core prose); a screen passes `L10n.locale` to the
+/// `(in:)` forms.
 extension FullDiskAccessState {
-    public var displayName: String {
+    public var displayName: String { displayName(in: L10n.baseLocale) }
+    public var why: String { why(in: L10n.baseLocale) }
+    public var nextStep: String { nextStep(in: L10n.baseLocale) }
+
+    public func displayName(in locale: String) -> String {
         switch self {
-        case .granted: return "granted"
-        case .notGranted: return "not granted"
-        case .unknown: return "unknown"
+        case .granted: return L10n.tr("perm.fda.state.granted", locale: locale)
+        case .notGranted: return L10n.tr("perm.fda.state.notGranted", locale: locale)
+        case .unknown: return L10n.tr("perm.fda.state.unknown", locale: locale)
         }
     }
 
-    public var why: String {
+    public func why(in locale: String) -> String {
         switch self {
-        case .granted:
-            return "This process can open the one file only Full Disk Access opens (H15's indicator; nothing is read from it)."
-        case .notGranted:
-            return "macOS refused this process the one file only Full Disk Access opens, so folders macOS protects cannot be measured."
-        case .unknown:
-            return "The check could not tell: the indicator file failed to open for a reason other than macOS privacy protection."
+        case .granted: return L10n.tr("perm.fda.why.granted", locale: locale)
+        case .notGranted: return L10n.tr("perm.fda.why.notGranted", locale: locale)
+        case .unknown: return L10n.tr("perm.fda.why.unknown", locale: locale)
         }
     }
 
     /// Conditional on `scan`'s own mark for a size it could not complete, because the grant matters only
     /// where something went unread; ADR-0007 asks at the moment of need, not before.
-    public var nextStep: String {
+    public func nextStep(in locale: String) -> String {
         switch self {
-        case .granted:
-            return "Nothing to do."
-        case .notGranted:
-            return "Only if `scan` marks a size [partial: unreadable entries]: System Settings ▸ Privacy & Security ▸ Full Disk Access, "
-                + "switch on the app you run XCodeVault from (XCodeVault.app, or your terminal for xcodevaultctl), then scan again. "
-                + FullDiskAccessProbe.settingsURL
-        case .unknown:
-            return "Nothing to do unless `scan` marks a size [partial: unreadable entries]; then grant Full Disk Access as for \"not granted\"."
+        case .granted: return L10n.tr("perm.fda.next.granted", locale: locale)
+        case .notGranted: return L10n.tr("perm.fda.next.notGranted", locale: locale, FullDiskAccessProbe.settingsURL)
+        case .unknown: return L10n.tr("perm.fda.next.unknown", locale: locale)
         }
     }
 }
 
 extension HelperState {
-    public var displayName: String {
+    public var displayName: String { displayName(in: L10n.baseLocale) }
+    public var why: String { why(in: L10n.baseLocale) }
+    public var nextStep: String { nextStep(in: L10n.baseLocale) }
+
+    public func displayName(in locale: String) -> String {
         switch self {
-        case .unavailableInThisBuild: return "not available in this build"
-        case .notInstalled: return "not installed"
-        case .awaitingApproval: return "waiting for approval"
-        case .enabled: return "enabled"
+        case .unavailableInThisBuild: return L10n.tr("perm.helper.state.unavailableInThisBuild", locale: locale)
+        case .notInstalled: return L10n.tr("perm.helper.state.notInstalled", locale: locale)
+        case .awaitingApproval: return L10n.tr("perm.helper.state.awaitingApproval", locale: locale)
+        case .enabled: return L10n.tr("perm.helper.state.enabled", locale: locale)
         }
     }
 
-    public var why: String {
+    public func why(in locale: String) -> String {
         switch self {
-        case .unavailableInThisBuild:
-            return "This build cannot reach the privileged helper: it is not signed by a usable Apple team, or the helper is not in it. "
-                + "That takes a signed build that includes the helper (issue #30)."
-        case .notInstalled:
-            return "The helper is not installed. Only actions that need root use it."
-        case .awaitingApproval:
-            return "The helper is registered, and macOS is waiting for an administrator to approve it."
-        case .enabled:
-            return "macOS reports the helper as enabled. That is an installation hint: every connection is still checked "
-                + "against the helper's code signature."
+        case .unavailableInThisBuild: return L10n.tr("perm.helper.why.unavailableInThisBuild", locale: locale)
+        case .notInstalled: return L10n.tr("perm.helper.why.notInstalled", locale: locale)
+        case .awaitingApproval: return L10n.tr("perm.helper.why.awaitingApproval", locale: locale)
+        case .enabled: return L10n.tr("perm.helper.why.enabled", locale: locale)
         }
     }
 
-    public var nextStep: String {
+    public func nextStep(in locale: String) -> String {
         switch self {
-        case .unavailableInThisBuild:
-            return "Actions that need root stay manual. Where there is a manual route, `doctor` or `vault init` prints it."
-        case .notInstalled:
-            return "Nothing to do until you choose an action that needs root; the app's Permissions section can also install it ahead of time."
-        case .awaitingApproval:
-            return "System Settings ▸ General ▸ Login Items & Extensions: switch XCodeVault on (administrator password)."
-        case .enabled:
-            return "Nothing to do. The app's Permissions section can uninstall it."
+        case .unavailableInThisBuild: return L10n.tr("perm.helper.next.unavailableInThisBuild", locale: locale)
+        case .notInstalled: return L10n.tr("perm.helper.next.notInstalled", locale: locale)
+        case .awaitingApproval: return L10n.tr("perm.helper.next.awaitingApproval", locale: locale)
+        case .enabled: return L10n.tr("perm.helper.next.enabled", locale: locale)
         }
     }
 }

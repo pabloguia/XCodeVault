@@ -11,12 +11,17 @@ struct XCodeVaultApp: App {
 
     /// Before any tool runs: once the user grants Full Disk Access, every tool the app starts works inside
     /// that grant, so what `xcrun` resolves must not come from this process's inherited environment.
+    ///
+    /// The language is chosen once, before any view is built: the app's own localization as macOS resolved it
+    /// (`CFBundleLocalizations` lists the five), then the user's preferences. The environment is empty on
+    /// purpose: `XCODEVAULT_LANG` is the CLI's, and the app follows the system.
     init() {
+        L10n.configure(override: nil, environment: [:], preferred: Bundle.main.preferredLocalizations + Locale.preferredLanguages)
         GrantedToolEnvironment.applyToThisProcess()
     }
 
     var body: some Scene {
-        WindowGroup("XCodeVault") {
+        WindowGroup(AppText.productName) {
             MainView(model: model)
                 .frame(minWidth: 960, minHeight: 620)
                 .task { await model.refresh() }
@@ -26,8 +31,8 @@ struct XCodeVaultApp: App {
                 // Deliberately empty — an empty replacement is how AppKit's File > New item is
                 // removed. XCodeVault has no document model, so "New" would have nothing to make.
             }
-            CommandMenu("Scan") {
-                Button("Rescan") { Task { await model.refresh() } }.keyboardShortcut("r")
+            CommandMenu(L10n.tr("app.menu.scan")) {
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
             }
         }
     }
@@ -138,7 +143,7 @@ final class AppModel {
         approvalTask?.cancel()
         showsHelperSheet = false
         pendingPrivilegedAction = nil
-        helperProgress = "Waiting for you to approve XCodeVault in System Settings ▸ General ▸ Login Items & Extensions…"
+        helperProgress = L10n.tr("app.helper.progress.waiting")
         approvalTask = Task {
             let outcome = await environment.approvalFlow(environment.helper).run()
             // Cancelled by Stop or by a newer request: this wait no longer owns the progress text, or the action.
@@ -150,9 +155,9 @@ final class AppModel {
             case .enabled:
                 if let action { await perform(action) }
             case .notAvailableInThisBuild:
-                lastError = HelperState.unavailableInThisBuild.why
+                lastError = HelperState.unavailableInThisBuild.why(in: L10n.locale)
             case .timedOut:
-                lastError = "macOS has not approved the helper yet. Approve it in System Settings ▸ General ▸ Login Items & Extensions, then try again."
+                lastError = L10n.tr("app.helper.error.timedOut")
             case .cancelled:
                 break
             case .failed(let why):
@@ -171,7 +176,7 @@ final class AppModel {
 
     func perform(_ action: PrivilegedAction) async {
         switch await environment.runner(environment.helper).run(action) {
-        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess].compactMap { $0 }.joined(separator: "\n\n")
+        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
         case .refused(let why), .failed(let why): lastError = why
         }
         await refresh()
@@ -198,6 +203,18 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     case overview = "Overview", storage = "Storage", doctor = "Doctor", clean = "Clean", volumes = "Volumes", runtimes = "Runtimes",
         journal = "Journal", permissions = "Permissions"
     var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .overview: L10n.tr("app.section.overview")
+        case .storage: L10n.tr("app.section.storage")
+        case .doctor: L10n.tr("app.section.doctor")
+        case .clean: L10n.tr("app.section.clean")
+        case .volumes: L10n.tr("app.section.volumes")
+        case .runtimes: L10n.tr("app.section.runtimes")
+        case .journal: L10n.tr("app.section.journal")
+        case .permissions: L10n.tr("app.section.permissions")
+        }
+    }
     var symbol: String {
         switch self {
         case .overview: "internaldrive";
@@ -217,7 +234,7 @@ struct MainView: View {
     @State private var section: SidebarSection = .overview
     var body: some View {
         NavigationSplitView {
-            List(SidebarSection.allCases, selection: $section) { s in Label(s.rawValue, systemImage: s.symbol).tag(s) }
+            List(SidebarSection.allCases, selection: $section) { s in Label(s.title, systemImage: s.symbol).tag(s) }
                 .navigationSplitViewColumnWidth(min: 170, ideal: 190)
         } detail: {
             Group {
@@ -239,8 +256,8 @@ struct MainView: View {
                     PermissionsView(model: model)  // needs no scan
                 } else {
                     ContentUnavailableView(
-                        "Scanning…", systemImage: "magnifyingglass",
-                        description: Text("Discovering Xcodes, runtimes, volumes and measuring storage. Nothing is changed."))
+                        L10n.tr("app.scanning.title"), systemImage: "magnifyingglass",
+                        description: Text.l10n(L10n.tr("app.scanning.detail")))
                 }
             }
             .toolbar {
@@ -248,20 +265,20 @@ struct MainView: View {
                     Button {
                         Task { await model.refresh() }
                     } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise")
+                        Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
                     }.disabled(model.isScanning)
                 }
                 if model.isScanning { ToolbarItem { ProgressView().controlSize(.small) } }
             }
-            .navigationTitle(section.rawValue)
+            .navigationTitle(section.title)
         }
-        .alert("Error", isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
-            Button("OK") {
+        .alert(L10n.tr("app.alert.error.title"), isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
+            Button(L10n.tr("app.action.ok")) {
                 // Dismissing is the whole action: SwiftUI clears the binding that presents this
                 // alert, which the `set:` closure above turns into `lastError = nil`.
             }
         } message: {
-            Text(model.lastError ?? "")
+            Text(verbatim: model.lastError ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.appDidBecomeActive() }
@@ -271,20 +288,23 @@ struct MainView: View {
             if let progress = model.helperProgress {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text(progress)
-                    Button("Stop waiting") { model.stopWaitingForApproval() }
+                    Text(verbatim: progress)
+                    Button(L10n.tr("app.helper.stopWaiting")) { model.stopWaitingForApproval() }
                 }
                 .padding(8)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 .padding()
             }
         }
-        .alert("Done", isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })) {
-            Button("OK") {
+        .alert(
+            L10n.tr("app.alert.done.title"),
+            isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })
+        ) {
+            Button(L10n.tr("app.action.ok")) {
                 // Dismissing is the whole action, as with the error alert above.
             }
         } message: {
-            Text(model.lastPrivilegedResult ?? "")
+            Text(verbatim: model.lastPrivilegedResult ?? "")
         }
     }
 }
@@ -297,31 +317,33 @@ struct OverviewView: View {
         let s = report.summary
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(
-                    "macOS \(report.host.macOSVersion) · \(report.host.architecture) · \(ByteCount.format(report.host.dataVolumeFreeBytes)) free of \(ByteCount.format(report.host.dataVolumeTotalBytes)) internal"
+                Text.l10n(
+                    L10n.tr(
+                        "app.overview.host", report.host.macOSVersion, report.host.architecture, ByteCount.format(report.host.dataVolumeFreeBytes),
+                        ByteCount.format(report.host.dataVolumeTotalBytes))
                 ).font(.headline)
                 Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
-                    row("Internal developer storage", s.internalDeveloperBytes, s.lowerBound ? "lower bound" : nil)
-                    row("  of which simulator runtime images", s.runtimeImageBytes, "delete with simctl; keep installers external")
-                    row("Safely cleanable", s.cleanableBytes, nil)
-                    row("Relocatable (supported mechanisms)", s.relocatableBytes, nil)
-                    row("Apple-managed (info only)", s.appleManagedBytes, nil)
-                    row("Must remain local", s.mustRemainLocalBytes, nil)
-                    row("Reclaimable from the boot volume", s.estimatedInternalSavingsBytes, "via recommended actions")
-                    row("  with verified strategies only", s.verifiedSavingsBytes, "the rest is experimental")
+                    row(L10n.tr("app.overview.row.internal"), s.internalDeveloperBytes, s.lowerBound ? L10n.tr("app.overview.note.lowerBound") : nil)
+                    row("  " + L10n.tr("app.overview.row.runtimeImages"), s.runtimeImageBytes, L10n.tr("app.overview.note.runtimeImages"))
+                    row(L10n.tr("app.overview.row.cleanable"), s.cleanableBytes, nil)
+                    row(L10n.tr("app.overview.row.relocatable"), s.relocatableBytes, nil)
+                    row(L10n.tr("app.overview.row.appleManaged"), s.appleManagedBytes, nil)
+                    row(L10n.tr("app.overview.row.mustRemainLocal"), s.mustRemainLocalBytes, nil)
+                    row(L10n.tr("app.overview.row.reclaimable"), s.estimatedInternalSavingsBytes, L10n.tr("app.overview.note.reclaimable"))
+                    row("  " + L10n.tr("app.overview.row.verified"), s.verifiedSavingsBytes, L10n.tr("app.overview.note.verified"))
                 }
                 if PermissionPrompts.shouldAskForFullDiskAccess(privacyRefusalCount: s.privacyRefusalCount, state: fullDiskAccess) {
                     GroupBox {
                         HStack {
-                            Label("Some folders could not be read", systemImage: "lock")
+                            Label(L10n.tr("app.overview.fda.prompt"), systemImage: "lock")
                             Spacer()
-                            Button("Open Settings", action: openSettings)
+                            Button(L10n.tr("app.action.openSettings"), action: openSettings)
                         }
-                        Text(PrivilegeRequirement.appFullDiskAccess.why).font(.callout).foregroundStyle(.secondary)
+                        Text(verbatim: PrivilegeRequirement.appFullDiskAccess.why(in: L10n.locale)).font(.callout).foregroundStyle(.secondary)
                     }
                 }
                 if !report.warnings.isEmpty {
-                    GroupBox("Before you act") {
+                    GroupBox(L10n.tr("app.overview.warnings.title")) {
                         VStack(alignment: .leading) {
                             ForEach(report.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
                         }
@@ -329,19 +351,20 @@ struct OverviewView: View {
                 }
                 let critical = findings.filter { $0.severity >= .error }
                 if !critical.isEmpty {
-                    GroupBox("Doctor: \(critical.count) issue(s) need attention") {
-                        VStack(alignment: .leading) { ForEach(critical) { Text("\($0.severity.rawValue.uppercased()): \($0.title)") } }
+                    GroupBox(L10n.plural("app.overview.doctor.issues", count: critical.count)) {
+                        VStack(alignment: .leading) {
+                            ForEach(critical) { Text.l10n(L10n.tr("app.overview.doctor.issue", AppText.severity($0.severity), $0.title)) }
+                        }
                     }
                 }
-                Text(
-                    "Every strategy marked (experimental) has not met the Definition of Done for your macOS/Xcode combination. Nothing in this app deletes non-regenerable data automatically."
-                ).font(.footnote).foregroundStyle(.secondary)
+                Text.l10n(L10n.tr("app.overview.footer")).font(.footnote).foregroundStyle(.secondary)
             }.padding()
         }
     }
     func row(_ label: String, _ bytes: UInt64, _ note: String?) -> some View {
         GridRow {
-            Text(label); Text(ByteCount.format(bytes)).monospacedDigit().bold(); Text(note ?? "").foregroundStyle(.secondary).font(.caption)
+            Text(verbatim: label); Text(verbatim: ByteCount.format(bytes)).monospacedDigit().bold()
+            Text(verbatim: note ?? "").foregroundStyle(.secondary).font(.caption)
         }
     }
 }
@@ -351,17 +374,19 @@ struct StorageView: View {
     var body: some View {
         let items = report.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
         Table(items) {
-            TableColumn("Size") { Text(ByteCount.format($0.allocatedBytes)).monospacedDigit() }.width(90)
-            TableColumn("Category") { Text(report.category(for: $0)?.name ?? $0.categoryID) }
-            TableColumn("Outcome") { Text(report.category(for: $0)?.outcomeLabel ?? "") }
-            TableColumn("Strategy") { it in
-                let c = report.category(for: it); Text((c?.recommendedStrategy.rawValue ?? "") + ((c?.isExperimental ?? false) ? " (experimental)" : ""))
+            // Category names and outcomes are the catalog's English: StorageCategory data, not app text (S4 Task 2).
+            TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.allocatedBytes)).monospacedDigit() }.width(90)
+            TableColumn(L10n.tr("app.column.category")) { Text(verbatim: report.category(for: $0)?.name ?? $0.categoryID) }
+            TableColumn(L10n.tr("app.column.outcome")) { Text(verbatim: report.category(for: $0)?.outcomeLabel ?? "") }
+            TableColumn(L10n.tr("app.column.strategy")) { it in
+                let c = report.category(for: it)
+                Text(verbatim: AppText.name(c?.recommendedStrategy.rawValue ?? "", experimental: c?.isExperimental ?? false))
             }
-            TableColumn("Path") { it in
-                Text(
-                    it.path + (it.isSymlink ? "  → SYMLINK" : "") + (it.isMountPoint ? "  [mount point]" : "")
-                        + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
-                ).font(.system(.body, design: .monospaced))
+            TableColumn(L10n.tr("app.column.path")) { it in
+                let marks =
+                    (it.isSymlink ? "  " + L10n.tr("app.storage.symlink") : "") + (it.isMountPoint ? "  " + L10n.tr("app.storage.mountPoint") : "")
+                    + (it.mountStateUndetermined ? "  " + L10n.tr("app.storage.mountStateUnreadable") : "")
+                Text(verbatim: it.path + marks).font(.system(.body, design: .monospaced))
             }
         }
     }
@@ -371,23 +396,23 @@ struct DoctorView: View {
     @Bindable var model: AppModel
     var body: some View {
         if model.findings.isEmpty {
-            ContentUnavailableView("No findings", systemImage: "checkmark.seal")
+            ContentUnavailableView(L10n.tr("app.doctor.empty"), systemImage: "checkmark.seal")
         } else {
             List(model.findings) { f in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(f.severity.rawValue.uppercased()).font(.caption).bold().foregroundStyle(
+                        Text(verbatim: AppText.severity(f.severity)).font(.caption).bold().foregroundStyle(
                             f.severity >= .error ? .red : (f.severity == .warning ? .orange : .secondary));
-                        Text(f.title).bold()
+                        Text(verbatim: f.title).bold()
                     }
-                    Text(f.detail).font(.callout)
-                    if let p = f.path { Text(p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
-                    if let r = f.remediation { Text("→ " + r).font(.callout) }
+                    Text(verbatim: f.detail).font(.callout)
+                    if let p = f.path { Text(verbatim: p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
+                    if let r = f.remediation { Text(verbatim: "→ " + r).font(.callout) }
                     // The finding carries the action; the button never re-derives it (carried note 2).
                     if let action = f.action {
                         PrivilegedActionControlView(action: action, state: model.helperState) { model.request(action) }
                     }
-                    if let e = f.evidence { Text("evidence: " + e).font(.caption2).foregroundStyle(.secondary) }
+                    if let e = f.evidence { Text.l10n(L10n.tr("app.doctor.evidence", e)).font(.caption2).foregroundStyle(.secondary) }
                 }.padding(.vertical, 4)
             }
         }
@@ -418,19 +443,19 @@ struct CleanView: View {
         if let plan = model.cleanPlan {
             VStack(alignment: .leading) {
                 Table(plan.actions, selection: $selection) {
-                    TableColumn("Size") { Text(ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
-                    TableColumn("Category") { Text($0.categoryName + ($0.isExperimental ? " (experimental)" : "")) }
-                    TableColumn("Path") { Text($0.path).font(.system(.body, design: .monospaced)) }
-                    TableColumn("Needs") { Text($0.privilegeRequirement?.label ?? "") }
+                    TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
+                    TableColumn(L10n.tr("app.column.category")) { Text(verbatim: AppText.name($0.categoryName, experimental: $0.isExperimental)) }
+                    TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.path).font(.system(.body, design: .monospaced)) }
+                    TableColumn(L10n.tr("app.column.needs")) { Text(verbatim: $0.privilegeRequirement?.label(in: L10n.locale) ?? "") }
                 }
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
-                ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }
+                ForEach(plan.skipped, id: \.self) { Text.l10n(L10n.tr("app.clean.skipped", $0)).font(.caption).foregroundStyle(.secondary) }
                 let privileged = plan.actions.filter { $0.privilegedAction != nil }
                 if !privileged.isEmpty {
-                    GroupBox("Needs the privileged helper") {
+                    GroupBox(L10n.tr("app.clean.privileged.title")) {
                         ForEach(privileged) { a in
                             HStack {
-                                Text("\(a.categoryName) (experimental) — \(ByteCount.format(a.bytes))")
+                                Text(verbatim: AppText.name(a.categoryName, experimental: true) + " — " + ByteCount.format(a.bytes))
                                 Spacer()
                                 if let action = a.privilegedAction {
                                     PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }
@@ -441,43 +466,39 @@ struct CleanView: View {
                 }
                 HStack {
                     let chosen = deletable(in: plan)
-                    Text("\(chosen.count) selected · \(ByteCount.format(chosen.reduce(0) { $0 + $1.bytes }))")
+                    Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
                     // The CLI has --trash; without this the GUI was strictly more destructive than
                     // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
-                    Toggle("Move to Trash instead of deleting (space is freed only when the Trash is emptied)", isOn: $useTrash)
+                    Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash)
                     Spacer()
-                    Button("Delete selected…") { confirm = true }.disabled(chosen.isEmpty)
+                    Button(L10n.tr("app.clean.deleteSelected")) { confirm = true }.disabled(chosen.isEmpty)
                 }.padding()
             }
             .confirmationDialog(
                 useTrash
-                    ? "Move \(deletable(in: plan).count) item(s) to the Trash?"
-                    : "Delete \(deletable(in: plan).count) item(s) permanently?",
+                    ? L10n.plural("app.clean.confirm.trash", count: deletable(in: plan).count)
+                    : L10n.plural("app.clean.confirm.delete", count: deletable(in: plan).count),
                 isPresented: $confirm
             ) {
-                Button(useTrash ? "Move to Trash" : "Delete", role: .destructive) {
+                Button(useTrash ? L10n.tr("app.clean.action.moveToTrash") : L10n.tr("app.clean.action.delete"), role: .destructive) {
                     Task {
                         await model.applyClean(actions: deletable(in: plan), useTrash: useTrash)
                         selection = []
                     }
                 }
             } message: {
-                Text(
-                    "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. Deletions are journaled."
-                )
+                Text.l10n(L10n.tr("app.clean.confirm.message"))
             }
             .confirmationDialog(
-                confirmPrivileged?.privilegedAction?.title ?? "",
+                confirmPrivileged?.privilegedAction?.title(in: L10n.locale) ?? "",
                 isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
                 presenting: confirmPrivileged
             ) { a in
-                Button("Empty \(ByteCount.format(a.bytes))", role: .destructive) {
+                Button(L10n.tr("app.clean.privileged.empty", ByteCount.format(a.bytes)), role: .destructive) {
                     if let action = a.privilegedAction { model.request(action) }
                 }
             } message: { _ in
-                Text(
-                    "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs."
-                )
+                Text.l10n(L10n.tr("app.clean.privileged.message"))
             }
         } else {
             ProgressView()
@@ -489,27 +510,29 @@ struct VolumesView: View {
     let report: ScanReport; let checks: [VaultVolumeCheck]
     var body: some View {
         List {
-            Section("Mounted volumes") {
+            Section(L10n.tr("app.volumes.mounted")) {
                 ForEach(report.volumes) { v in
                     let q = VolumeQualification.evaluate(v)
                     VStack(alignment: .leading) {
                         HStack {
-                            Text(v.volumeName).bold(); Text(v.filesystemPersonality); Text(v.busProtocol); Text(v.isInternal ? "internal" : "external");
-                            Spacer(); Text("free \(ByteCount.format(v.freeBytes))").monospacedDigit()
+                            Text(verbatim: v.volumeName).bold(); Text(verbatim: v.filesystemPersonality); Text(verbatim: v.busProtocol)
+                            Text(verbatim: v.isInternal ? L10n.tr("app.volumes.internal") : L10n.tr("app.volumes.external"))
+                            Spacer(); Text.l10n(L10n.tr("app.volumes.free", ByteCount.format(v.freeBytes))).monospacedDigit()
                         }
-                        Text(v.isBootVolume ? "boot volume" : q.verdict.rawValue).font(.caption).foregroundStyle(.secondary)
-                        ForEach(q.blockers, id: \.self) { Text("✗ " + $0).font(.caption).foregroundStyle(.red) }
-                        ForEach(q.warnings, id: \.self) { Text("! " + $0).font(.caption).foregroundStyle(.orange) }
+                        Text(verbatim: v.isBootVolume ? L10n.tr("app.volumes.bootVolume") : AppText.verdict(q.verdict)).font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(q.blockers, id: \.self) { Text(verbatim: "✗ " + $0).font(.caption).foregroundStyle(.red) }
+                        ForEach(q.warnings, id: \.self) { Text(verbatim: "! " + $0).font(.caption).foregroundStyle(.orange) }
                     }
                 }
             }
-            Section("Vault volumes (identified by UUID + sentinel)") {
-                if checks.isEmpty { Text("None registered. Use `xcodevaultctl vault init /Volumes/<name>`.").foregroundStyle(.secondary) }
+            Section(L10n.tr("app.volumes.vaults")) {
+                if checks.isEmpty { Text.l10n(L10n.tr("app.volumes.vaults.none")).foregroundStyle(.secondary) }
                 ForEach(checks, id: \.volume.volumeUUID) { c in
                     VStack(alignment: .leading) {
                         HStack {
-                            Text(c.state.rawValue.uppercased()).bold().foregroundStyle(c.isUsable ? .green : .red); Text(c.volume.volumeName)
-                        }; Text(c.detail).font(.caption)
+                            Text(verbatim: AppText.vaultState(c.state)).bold().foregroundStyle(c.isUsable ? .green : .red); Text(verbatim: c.volume.volumeName)
+                        }; Text(verbatim: c.detail).font(.caption)
                     }
                 }
             }
@@ -521,12 +544,12 @@ struct RuntimesView: View {
     let report: ScanReport
     var body: some View {
         Table(report.runtimes) {
-            TableColumn("Platform") { Text($0.platformName) }
-            TableColumn("Version") { Text(($0.version ?? "?") + " (" + ($0.build ?? "?") + ")") }
-            TableColumn("State") { Text($0.state ?? "?") }
-            TableColumn("Size") { Text(ByteCount.format($0.sizeBytes ?? 0)).monospacedDigit() }
-            TableColumn("Mounted") { Text($0.isMounted ? "yes" : "NO") }
-            TableColumn("Image") { Text($0.path ?? "").font(.system(.caption, design: .monospaced)) }
+            TableColumn(L10n.tr("app.column.platform")) { Text(verbatim: $0.platformName) }
+            TableColumn(L10n.tr("app.column.version")) { Text(verbatim: ($0.version ?? "?") + " (" + ($0.build ?? "?") + ")") }
+            TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state ?? "?") }
+            TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.sizeBytes ?? 0)).monospacedDigit() }
+            TableColumn(L10n.tr("app.column.mounted")) { Text(verbatim: $0.isMounted ? L10n.tr("app.value.yes") : L10n.tr("app.value.no")) }
+            TableColumn(L10n.tr("app.column.image")) { Text(verbatim: $0.path ?? "").font(.system(.caption, design: .monospaced)) }
         }
     }
 }
@@ -536,54 +559,56 @@ struct JournalView: View {
     var body: some View {
         if entries.isEmpty {
             ContentUnavailableView(
-                "Journal is empty", systemImage: "list.bullet.rectangle", description: Text("Every change XCodeVault makes is recorded here."))
+                L10n.tr("app.journal.empty.title"), systemImage: "list.bullet.rectangle", description: Text.l10n(L10n.tr("app.journal.empty.detail")))
         } else {
             Table(entries) {
-                TableColumn("#") { Text("\($0.sequence)") }.width(40)
-                TableColumn("When") { Text($0.timestamp.formatted(date: .abbreviated, time: .shortened)) }
-                TableColumn("Kind") { Text($0.kind.rawValue) }
-                TableColumn("State") { Text($0.state.rawValue) }
-                TableColumn("Summary") { Text($0.summary) }
+                // Kind, state and summary are the journal's own record: never translated (docs/process/LOCALIZATION.md).
+                TableColumn(L10n.tr("app.column.sequence")) { Text(verbatim: String($0.sequence)) }.width(40)
+                TableColumn(L10n.tr("app.column.when")) { Text(verbatim: AppText.date($0.timestamp)) }
+                TableColumn(L10n.tr("app.column.kind")) { Text(verbatim: $0.kind.rawValue) }
+                TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state.rawValue) }
+                TableColumn(L10n.tr("app.column.summary")) { Text(verbatim: $0.summary) }
             }
         }
     }
 }
 
-/// Spec §3: two rows, each with a status, one sentence of why, and one control. The texts come from
-/// `PermissionsReport`, the same the CLI prints; this view decides nothing.
+/// Spec §3: two rows, each with a status, one sentence of why, and one control. The texts come from the `perm.*`
+/// keys `xcodevaultctl permissions` prints, in the app's language; this view decides nothing.
 struct PermissionsView: View {
     @Bindable var model: AppModel
     @State private var confirmUninstall = false
     var body: some View {
-        let report = PermissionsReport(fullDiskAccess: model.fullDiskAccess, helper: model.helperState)
+        let locale = L10n.locale
+        let access = model.fullDiskAccess, helper = model.helperState
         Form {
-            Section("Full Disk Access") {
-                LabeledContent("Status", value: report.fullDiskAccess.state.displayName)
-                Text(report.fullDiskAccess.why).font(.callout)
-                if model.fullDiskAccess.offersOpenSettings {
-                    Button("Open Settings") { model.openFullDiskAccessSettings() }
+            Section(L10n.tr("perm.fda.title")) {
+                LabeledContent(L10n.tr("app.permissions.status"), value: access.displayName(in: locale))
+                Text(verbatim: access.why(in: locale)).font(.callout)
+                if access.offersOpenSettings {
+                    Button(L10n.tr("app.action.openSettings")) { model.openFullDiskAccessSettings() }
                 }
             }
-            Section("Privileged helper") {
-                LabeledContent("Status", value: report.helper.state.displayName)
-                Text(report.helper.why).font(.callout)
-                switch model.helperState.rowButton {
-                case .install: Button("Install…") { model.installHelper(then: nil) }
-                case .uninstall: Button("Uninstall…") { confirmUninstall = true }
-                case .none: Text(report.helper.nextStep).font(.callout).foregroundStyle(.secondary)
+            Section(L10n.tr("perm.helper.title")) {
+                LabeledContent(L10n.tr("app.permissions.status"), value: helper.displayName(in: locale))
+                Text(verbatim: helper.why(in: locale)).font(.callout)
+                switch helper.rowButton {
+                case .install: Button(L10n.tr("app.permissions.install")) { model.installHelper(then: nil) }
+                case .uninstall: Button(L10n.tr("app.permissions.uninstallEllipsis")) { confirmUninstall = true }
+                case .none: Text(verbatim: helper.nextStep(in: locale)).font(.callout).foregroundStyle(.secondary)
                 }
             }
             Section {
-                Text("XCodeVault never runs a shell and never asks for your password itself.")
+                Text.l10n(L10n.tr("app.permissions.footer"))
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .task { model.refreshPermissions() }
-        .confirmationDialog("Uninstall the privileged helper?", isPresented: $confirmUninstall) {
-            Button("Uninstall", role: .destructive) { Task { await model.uninstallHelper() } }
+        .confirmationDialog(L10n.tr("app.permissions.uninstall.confirm"), isPresented: $confirmUninstall) {
+            Button(L10n.tr("app.permissions.uninstall"), role: .destructive) { Task { await model.uninstallHelper() } }
         } message: {
-            Text("Actions that need root are unavailable until you install it again.")
+            Text.l10n(L10n.tr("app.permissions.uninstall.message"))
         }
     }
 }
@@ -596,9 +621,11 @@ struct PrivilegedActionControlView: View {
     let perform: @MainActor () -> Void
     var body: some View {
         switch state.actionControl {
-        case .run: Button(action.title, action: perform)
-        case .requestHelper: Button(action.title + "…", action: perform)
-        case .notAvailableInThisBuild: Text("Not available in this build.").font(.caption).foregroundStyle(.secondary)
+        case .run: Button(action.title(in: L10n.locale), action: perform)
+        case .requestHelper: Button(action.title(in: L10n.locale) + "…", action: perform)
+        // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
+        case .notAvailableInThisBuild:
+            Text.l10n(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -608,15 +635,15 @@ struct HelperRequestSheet: View {
     @Bindable var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.pendingPrivilegedAction?.title ?? "Install the privileged helper").font(.headline)
-            Text(model.pendingPrivilegedAction?.requirement.why ?? PrivilegeRequirement.helper.why)
+            Text(verbatim: model.pendingPrivilegedAction?.title(in: L10n.locale) ?? L10n.tr("app.helper.sheet.installTitle")).font(.headline)
+            Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.tr("app.action.cancel")) {
                     model.showsHelperSheet = false
                     model.pendingPrivilegedAction = nil
                 }
-                Button("Allow") { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+                Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
             }
         }
         .padding()

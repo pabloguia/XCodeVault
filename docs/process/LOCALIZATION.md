@@ -5,8 +5,8 @@ XCodeVault ships in English (base), Brazilian Portuguese, Spanish, Japanese and 
 ## How it works
 
 - One catalog, in Core: `Sources/XCodeVaultCore/Localization/Localizable.xcstrings` (open in Xcode, or edit
-  the JSON), with keys namespaced by where they are shown — `savings.*` (shared), `cli.*`, `app.*` (spec
-  §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
+  the JSON), with keys namespaced by where they are shown — `savings.*` and `perm.*` (shared), `cli.*`, `app.*`
+  (spec §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
 - `scripts/l10n.sh gen` compiles it into `CoreStrings.generated.swift`, a static table built into the binary.
   There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language. The catalog is
   kept sorted (`add` writes it that way); an editor that reorders it produces a large, harmless diff.
@@ -82,8 +82,15 @@ text — and the `status` footer. Still English in every language: the per-comma
 `clean` and `externalize` plan and preflight messages, and error messages (all of it formats bytes with
 `ByteCount.english`, so an English sentence never carries another language's number format) — and the older
 output lines. `--json` and `report` are
-always English. The app (S4) moves its text into the catalog as it is rewritten; each remaining English
-string moves when its text is next edited.
+always English.
+
+The app (S4) takes its language once at launch — its resolved localization, then the user's preferences;
+`XCODEVAULT_LANG` is the CLI's — and every string it shows is a catalog key (`AppTextCoverageTests` refuses a
+string literal in a view). Category names and outcomes stay the catalog's English, and Core prose (findings,
+warnings, vault details) is shown as given. The permission texts (`perm.*`) are shared: the app's Permissions
+section and the `permissions` text output show them in the chosen language, while `PermissionsReport`, the
+journal and the clean plan keep the English (`why(in:)`/`title(in:)` take a locale; the plain properties are the
+record's English).
 
 `scripts/l10n.sh check` prints `l10n: unused key <key>` for a catalog key no source references — a warning,
 not a failure, since a key can be built at run time.
