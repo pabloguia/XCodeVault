@@ -74,3 +74,78 @@ final class SavingsOptionsTests: XCTestCase {
         XCTAssertEqual(SavingsBucket.allCases.filter { !$0.isSaving }, [.keepLocal])
     }
 }
+
+final class SavingsSummaryTests: XCTestCase {
+    private func item(_ id: String, _ bytes: UInt64, onBoot: Bool = true, exists: Bool = true, symlink: Bool = false, unreadable: [String] = [])
+        -> StorageItem
+    {
+        var usage = DiskUsage.zero
+        usage.allocatedBytes = bytes
+        usage.unreadable = unreadable
+        return StorageItem(
+            categoryID: id, path: "/fixture/\(id)/\(bytes)", exists: exists, isSymlink: symlink, symlinkTarget: nil, isMountPoint: false,
+            usage: usage, volumeMountPoint: nil, onBootVolume: onBoot)
+    }
+
+    private func summarize(_ items: [StorageItem]) -> SavingsSummary {
+        SavingsCalculator.summarize(items: items, category: StorageCatalog.category)
+    }
+
+    func testAnOverlappingCategoryCountsOnceInPrimaryAndInEveryOption() {
+        // DerivedData can be deleted or run from external: both options see it, the primary total once.
+        let s = summarize([item("derivedData", 1000)])
+        XCTAssertEqual(s.runFromExternal.optionBytes, 1000)
+        XCTAssertEqual(s.deleteAndRegenerate.optionBytes, 1000)
+        XCTAssertEqual(s.runFromExternal.primaryBytes, 1000)
+        XCTAssertEqual(s.deleteAndRegenerate.primaryBytes, 0)
+        XCTAssertEqual(s.temporaryBytes, 1000)
+        XCTAssertEqual(s.permanentBytes, 1000)
+        XCTAssertEqual(s.reclaimableBytes, 1000, "the union counts a byte once, not once per option")
+    }
+
+    func testPrimaryTotalsAddUpToEveryCountedByte() {
+        let items = [
+            item("derivedData", 1000), item("archives", 200), item("xcodeCaches", 30), item("simulatorRuntimeAssets", 4000),
+            item("toolchains", 5),
+        ]
+        let s = summarize(items)
+        let primary = SavingsBucket.allCases.reduce(UInt64(0)) { $0 + s[$1].primaryBytes }
+        XCTAssertEqual(primary, 5235)
+        XCTAssertEqual(s.keepLocal.primaryBytes, 5)
+        XCTAssertEqual(s.reclaimableBytes, 5230)
+        // Archives park, runtimes park: temporary includes them; xcodeCaches deletes.
+        XCTAssertEqual(s.temporaryBytes, 1000 + 200 + 30 + 4000)
+        XCTAssertEqual(s.permanentBytes, 1000 + 200)
+    }
+
+    func testBreakdownsSymlinksMissingAndOffBootItemsAreNotCounted() {
+        let s = summarize([
+            item("simulatorDeadContainers", 7),  // breakdown of simulatorDevices
+            item("xcodeCaches", 11, symlink: true),
+            item("xcodeCaches", 13, exists: false),
+            item("xcodeCaches", 17, onBoot: false),
+            item("xcodeCaches", 19),
+        ])
+        XCTAssertEqual(s.reclaimableBytes, 19)
+        XCTAssertEqual(s.keepLocal.primaryBytes, 0)
+    }
+
+    func testVerifiedSharesFollowTheCategorysExperimentalLabel() {
+        let s = summarize([item("derivedData", 1000), item("simulatorRuntimeAssets", 4000)])
+        let derived = StorageCatalog.category("derivedData")!
+        let runtimes = StorageCatalog.category("simulatorRuntimeAssets")!
+        let expectedVerified = (derived.isExperimental ? 0 : 1000) + (runtimes.isExperimental ? 0 : 4000)
+        XCTAssertEqual(s.verifiedReclaimableBytes, UInt64(expectedVerified))
+        XCTAssertLessThanOrEqual(s.verifiedTemporaryBytes, s.temporaryBytes)
+        XCTAssertLessThanOrEqual(s.verifiedPermanentBytes, s.permanentBytes)
+    }
+
+    func testAnUnreadableItemMakesEveryHeadlineALowerBound() {
+        XCTAssertFalse(summarize([item("xcodeCaches", 1)]).isLowerBound)
+        XCTAssertTrue(summarize([item("xcodeCaches", 1), item("derivedData", 2, unreadable: ["/x"])]).isLowerBound)
+    }
+
+    func testAnUnknownCategoryIsSkippedNotCountedAsLocal() {
+        XCTAssertEqual(summarize([item("noSuchCategory", 99)]), SavingsSummary())
+    }
+}
