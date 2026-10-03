@@ -58,11 +58,46 @@ final class SavingsOptionsTests: XCTestCase {
         }
     }
 
+    func testRuleFiveHoldsEvenWhenAStrategyWouldAllowDeletion() {
+        // Positive control for the guard itself: the catalog's only non-regenerable category offers no cleanup,
+        // so the catalog test alone would pass without the guard.
+        let c = StorageCategory(
+            id: "synthetic", name: "Synthetic", subsystem: .other, pathTemplates: ["~/x"], description: "",
+            regenerability: .nonRegenerable, deletionRisk: .critical, relocationRisk: .low,
+            recommendedStrategy: .safeCleanup, allowedStrategies: [.safeCleanup], cleanupCommand: "rm")
+        XCTAssertEqual(c.savingsOptions, [.keepLocal])
+    }
+
+    func testExperimentalIsDecidedPerOption() {
+        let runtime = StorageCatalog.category("simulatorRuntimeAssets")!.savingsOptionDetails
+        XCTAssertEqual(runtime.map(\.bucket), [.parkExternally, .deleteAndRegenerate])
+        XCTAssertEqual(runtime.map(\.isExperimental), [true, false], "offload is experimental; simctl runtime delete is verified")
+        XCTAssertTrue(StorageCatalog.category("derivedData")!.savingsOptionDetails.allSatisfy(\.isExperimental))
+        XCTAssertEqual(StorageCatalog.category("toolchains")!.savingsOptionDetails.map(\.isExperimental), [false])
+    }
+
+    func testArchivesRunFromExternalOnlyRedirectsNewArchives() {
+        let archives = StorageCatalog.category("archives")!
+        XCTAssertEqual(archives.savingsOptionDetails.map(\.appliesToExistingData), [false, true])
+        XCTAssertEqual(archives.primaryBucket, .parkExternally)
+    }
+
+    func testOnlyDeletingSimulatorDevicesLosesUserData() {
+        for c in StorageCatalog.all {
+            for o in c.savingsOptionDetails where o.losesUserData {
+                XCTAssertEqual(c.id, "simulatorDevices")
+                XCTAssertEqual(o.bucket, .deleteAndRegenerate)
+            }
+        }
+        XCTAssertTrue(StorageCatalog.category("simulatorDevices")!.savingsOptionDetails.contains(where: \.losesUserData))
+    }
+
     func testThePrimaryBucketIsTheMostDurableOption() {
         XCTAssertEqual(StorageCatalog.category("derivedData")?.primaryBucket, .runFromExternal)
         XCTAssertEqual(StorageCatalog.category("simulatorRuntimeAssets")?.primaryBucket, .parkExternally)
         XCTAssertEqual(StorageCatalog.category("xcodeCaches")?.primaryBucket, .deleteAndRegenerate)
         XCTAssertEqual(StorageCatalog.category("toolchains")?.primaryBucket, .keepLocal)
+        XCTAssertEqual(StorageCatalog.category("archives")?.primaryBucket, .parkExternally)
     }
 
     func testEveryNamedParkCategoryExistsInTheCatalog() {
@@ -115,7 +150,9 @@ final class SavingsSummaryTests: XCTestCase {
         XCTAssertEqual(s.reclaimableBytes, 5230)
         // Archives park, runtimes park: temporary includes them; xcodeCaches deletes.
         XCTAssertEqual(s.temporaryBytes, 1000 + 200 + 30 + 4000)
-        XCTAssertEqual(s.permanentBytes, 1000 + 200)
+        XCTAssertEqual(s.permanentBytes, 1000, "archives' run-from-external only redirects new archives")
+        XCTAssertEqual(s.parkExternally.primaryBytes, 4200)
+        XCTAssertEqual(s.runFromExternal.optionBytes, 1000)
     }
 
     func testBreakdownsSymlinksMissingAndOffBootItemsAreNotCounted() {
@@ -130,14 +167,29 @@ final class SavingsSummaryTests: XCTestCase {
         XCTAssertEqual(s.keepLocal.primaryBytes, 0)
     }
 
-    func testVerifiedSharesFollowTheCategorysExperimentalLabel() {
+    func testOnlyVerifiedOptionsCountAsVerified() {
         let s = summarize([item("derivedData", 1000), item("simulatorRuntimeAssets", 4000)])
-        let derived = StorageCatalog.category("derivedData")!
-        let runtimes = StorageCatalog.category("simulatorRuntimeAssets")!
-        let expectedVerified = (derived.isExperimental ? 0 : 1000) + (runtimes.isExperimental ? 0 : 4000)
-        XCTAssertEqual(s.verifiedReclaimableBytes, UInt64(expectedVerified))
-        XCTAssertLessThanOrEqual(s.verifiedTemporaryBytes, s.temporaryBytes)
-        XCTAssertLessThanOrEqual(s.verifiedPermanentBytes, s.permanentBytes)
+        XCTAssertEqual(s.verifiedReclaimableBytes, 4000)
+        XCTAssertEqual(s.verifiedTemporaryBytes, 4000)
+        XCTAssertEqual(s.verifiedPermanentBytes, 0)
+        XCTAssertEqual(s.parkExternally.verifiedOptionBytes, 0)
+        XCTAssertEqual(s.deleteAndRegenerate.verifiedOptionBytes, 4000)
+    }
+
+    func testPrimaryTotalsMatchTheScannersBootVolumeTotal() {
+        let items = [
+            item("derivedData", 1000), item("archives", 200), item("xcodeCaches", 30), item("toolchains", 5),
+            item("simulatorDevices", 70), item("simulatorDeadContainers", 7),  // a breakdown of simulatorDevices
+            item("xcodeCaches", 17, onBoot: false), item("xcodeCaches", 11, symlink: true),
+        ]
+        let summary = XCodeVaultCore.Scanner(
+            runner: FakeRunner(responses: [:]), home: "/nonexistent", catalog: StorageCatalog.all, measureSizes: false,
+            detectXcodeCapabilities: false
+        ).summarize(items: items, runtimes: [])
+        let s = summarize(items)
+        // Positive control: the scanner counted something, so equality is not 0 == 0.
+        XCTAssertEqual(summary.internalDeveloperBytes, 1305)
+        XCTAssertEqual(SavingsBucket.allCases.reduce(UInt64(0)) { $0 + s[$1].primaryBytes }, summary.internalDeveloperBytes)
     }
 
     func testAnUnreadableItemMakesEveryHeadlineALowerBound() {
@@ -170,5 +222,7 @@ final class ScanReportSavingsTests: XCTestCase {
         let json = try JSONOutput.encode(report)
         XCTAssertTrue(json.contains("\"savings\""), json)
         XCTAssertTrue(json.contains("\"deleteAndRegenerate\""), json)
+        XCTAssertTrue(json.contains("42"), json)
+        XCTAssertTrue(json.contains("\"permanentBytes\""), json)
     }
 }

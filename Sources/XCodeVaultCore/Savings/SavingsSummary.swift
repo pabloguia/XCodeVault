@@ -17,6 +17,7 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
     public var runFromExternal = SavingsBucketTotals()
     public var parkExternally = SavingsBucketTotals()
     public var deleteAndRegenerate = SavingsBucketTotals()
+    /// Its `verifiedOptionBytes` equals its `optionBytes`; there is nothing to verify about keeping data.
     public var keepLocal = SavingsBucketTotals()
     /// Bytes that can be freed for a while: deleted (grows back) or parked (until brought back). A union.
     public var temporaryBytes: UInt64 = 0
@@ -24,13 +25,14 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
     /// Bytes with any saving option at all — temporary or permanent. A union.
     public var reclaimableBytes: UInt64 = 0
     public var verifiedReclaimableBytes: UInt64 = 0
-    /// Some counted item could not be fully read: every number above is "at least".
+    /// Bytes with a permanent option that applies to data already on disk. A union.
+    public var permanentBytes: UInt64 = 0
+    public var verifiedPermanentBytes: UInt64 = 0
+    /// Some counted item could not be fully read: every number above is "at least". Boot-volume items only,
+    /// unlike `ScanSummary.lowerBound`, because only those are savings.
     public var isLowerBound = false
 
     public init() {}
-
-    public var permanentBytes: UInt64 { runFromExternal.optionBytes }
-    public var verifiedPermanentBytes: UInt64 { runFromExternal.verifiedOptionBytes }
 
     public subscript(bucket: SavingsBucket) -> SavingsBucketTotals {
         switch bucket {
@@ -65,18 +67,20 @@ public enum SavingsCalculator {
         for item in items where item.exists && !item.isSymlink && item.onBootVolume {
             guard let c = category(item.categoryID), c.isBreakdownOf == nil else { continue }
             let bytes = item.allocatedBytes
-            let verified = !c.isExperimental
             if item.usage?.isLowerBound == true { s.isLowerBound = true }
-            let options = c.savingsOptions
-            for bucket in options { s.add(bytes, to: bucket, primary: bucket == c.primaryBucket, verified: verified) }
-            if options.contains(where: \.isSaving) {
-                s.reclaimableBytes += bytes
-                if verified { s.verifiedReclaimableBytes += bytes }
+            let options = c.savingsOptionDetails.filter(\.appliesToExistingData)
+            for option in options {
+                s.add(bytes, to: option.bucket, primary: option.bucket == c.primaryBucket, verified: !option.isExperimental)
             }
-            if options.contains(.deleteAndRegenerate) || options.contains(.parkExternally) {
-                s.temporaryBytes += bytes
-                if verified { s.verifiedTemporaryBytes += bytes }
+            func union(_ buckets: Set<SavingsBucket>, _ total: inout UInt64, _ verified: inout UInt64) {
+                let matching = options.filter { buckets.contains($0.bucket) }
+                guard !matching.isEmpty else { return }
+                total += bytes
+                if matching.contains(where: { !$0.isExperimental }) { verified += bytes }
             }
+            union([.deleteAndRegenerate, .parkExternally], &s.temporaryBytes, &s.verifiedTemporaryBytes)
+            union([.runFromExternal], &s.permanentBytes, &s.verifiedPermanentBytes)
+            union([.runFromExternal, .parkExternally, .deleteAndRegenerate], &s.reclaimableBytes, &s.verifiedReclaimableBytes)
         }
         return s
     }
