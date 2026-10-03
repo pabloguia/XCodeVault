@@ -32,6 +32,9 @@ public struct Scanner: Sendable {
 
         let items = resolveItems(warnings: &warnings)
         let summary = summarize(items: items, runtimes: runtimes)
+        let savings = SavingsCalculator.summarize(items: items) { id in
+            StorageCatalog.category(id) ?? catalog.first { $0.id == id }
+        }
 
         // Disclose-don't-bury warnings (NON_GOALS_AND_SAFETY.md).
         if host.dataVolumeFreeBytes < 40 * 1_000_000_000 {
@@ -46,10 +49,12 @@ public struct Scanner: Sendable {
             warnings.append(
                 "Runtime \(r.runtimeIdentifier ?? r.identifier) reports Ready but its image is not mounted at \(r.mountPath!) — Xcode may not see it (F1).")
         }
-        return ScanReport(
+        var report = ScanReport(
             generatedAt: Date(), toolVersion: XCodeVaultVersion.current, catalogVersion: StorageCatalog.version,
             host: host, xcodes: xcodes, runtimes: runtimes, devices: devices, volumes: volumes,
             items: items, summary: summary, warnings: warnings)
+        report.savings = savings
+        return report
     }
 
     /// Resolves every catalog path template on this machine. Sizes are measured in parallel.

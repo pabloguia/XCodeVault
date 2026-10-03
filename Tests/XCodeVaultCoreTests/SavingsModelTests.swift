@@ -149,3 +149,26 @@ final class SavingsSummaryTests: XCTestCase {
         XCTAssertEqual(summarize([item("noSuchCategory", 99)]), SavingsSummary())
     }
 }
+
+final class ScanReportSavingsTests: XCTestCase {
+    func testTheScannerFillsTheSavingsFromTheSameItemsAsTheSummary() {
+        let t = TempDir()
+        t.file("Library/Developer/Xcode/DerivedData/App-abc/Build/x", bytes: 8192)
+        let scanner = XCodeVaultCore.Scanner(
+            runner: FakeRunner(responses: [:]), home: t.path, catalog: [StorageCatalog.category("derivedData")!], measureSizes: true,
+            detectXcodeCapabilities: false)
+        let report = scanner.scan()
+        // Positive control: the fixture was measured, so equal zeros below would not pass vacuously.
+        XCTAssertGreaterThan(report.summary.internalDeveloperBytes, 0)
+        XCTAssertEqual(report.savings.runFromExternal.primaryBytes, report.summary.internalDeveloperBytes)
+        XCTAssertEqual(report.savings, SavingsCalculator.summarize(items: report.items, category: StorageCatalog.category))
+    }
+
+    func testTheSavingsAreInTheJSON() throws {
+        var report = Fixtures.minimalReport()
+        report.savings.deleteAndRegenerate.optionBytes = 42
+        let json = try JSONOutput.encode(report)
+        XCTAssertTrue(json.contains("\"savings\""), json)
+        XCTAssertTrue(json.contains("\"deleteAndRegenerate\""), json)
+    }
+}

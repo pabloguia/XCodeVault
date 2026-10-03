@@ -73,6 +73,10 @@ public struct ScanReport: Sendable, Codable, Equatable {
     public var volumes: [Volume]
     public var items: [StorageItem]
     public var summary: ScanSummary
+    /// The user-facing savings (spec 2026-10-03 §3.3). `summary` stays for its existing readers; new
+    /// renderings read this. Defaulted for the fixtures that build reports by hand; like every defaulted
+    /// field here, it does not make an older stored report decodable, and nothing decodes one.
+    public var savings = SavingsSummary()
     public var warnings: [String]
 
     public func category(for item: StorageItem) -> StorageCategory? { StorageCatalog.category(item.categoryID) }
