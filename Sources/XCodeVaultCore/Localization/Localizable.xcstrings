@@ -360,31 +360,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This build cannot reach the privileged helper. Use the signed release of XCodeVault, or run the manual step that xcodevaultctl doctor prints."
+            "value" : "This build cannot reach the privileged helper. Use the signed release of XCodeVault, or, where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta compilación no puede acceder al asistente privilegiado. Usa la versión firmada de XCodeVault o ejecuta el paso manual que muestra xcodevaultctl doctor."
+            "value" : "Esta compilación no puede acceder al asistente privilegiado. Usa la versión firmada de XCodeVault o, cuando haya un camino manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このビルドからは特権ヘルパーを利用できません。署名済みの XCodeVault を使うか、xcodevaultctl doctor が表示する手動の手順を実行してください。"
+            "value" : "このビルドからは特権ヘルパーを利用できません。署名済みの XCodeVault を使うか、手動の手順がある場合は `xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta versão não consegue acessar o auxiliar privilegiado. Use a versão assinada do XCodeVault ou execute o passo manual que xcodevaultctl doctor mostra."
+            "value" : "Esta versão não consegue acessar o auxiliar privilegiado. Use a versão assinada do XCodeVault ou, quando houver um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此版本无法使用特权助手。请使用已签名的 XCodeVault 发行版，或执行 xcodevaultctl doctor 列出的手动步骤。"
+            "value" : "此版本无法使用特权助手。请使用已签名的 XCodeVault 发行版；若有手动步骤，也可以执行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 列出的步骤。"
           }
         }
       }
@@ -3578,31 +3578,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "→ symlink"
+            "value" : "→ SYMLINK"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ enlace simbólico"
+            "value" : "→ SYMLINK"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ シンボリックリンク"
+            "value" : "→ SYMLINK"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ link simbólico"
+            "value" : "→ SYMLINK"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ 符号链接"
+            "value" : "→ SYMLINK"
           }
         }
       }

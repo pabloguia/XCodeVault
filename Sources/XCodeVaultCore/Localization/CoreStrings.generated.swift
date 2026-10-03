@@ -61,11 +61,11 @@ extension L10nCatalog {
                 "zh-Hans": "安装助手…",
             ],
             "app.access.helper.action.signedReleaseOrCLI": [
-                "en": "This build cannot reach the privileged helper. Use the signed release of XCodeVault, or run the manual step that xcodevaultctl doctor prints.",
-                "pt-BR": "Esta versão não consegue acessar o auxiliar privilegiado. Use a versão assinada do XCodeVault ou execute o passo manual que xcodevaultctl doctor mostra.",
-                "es": "Esta compilación no puede acceder al asistente privilegiado. Usa la versión firmada de XCodeVault o ejecuta el paso manual que muestra xcodevaultctl doctor.",
-                "ja": "このビルドからは特権ヘルパーを利用できません。署名済みの XCodeVault を使うか、xcodevaultctl doctor が表示する手動の手順を実行してください。",
-                "zh-Hans": "此版本无法使用特权助手。请使用已签名的 XCodeVault 发行版，或执行 xcodevaultctl doctor 列出的手动步骤。",
+                "en": "This build cannot reach the privileged helper. Use the signed release of XCodeVault, or, where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints.",
+                "pt-BR": "Esta versão não consegue acessar o auxiliar privilegiado. Use a versão assinada do XCodeVault ou, quando houver um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra.",
+                "es": "Esta compilación no puede acceder al asistente privilegiado. Usa la versión firmada de XCodeVault o, cuando haya un camino manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`.",
+                "ja": "このビルドからは特権ヘルパーを利用できません。署名済みの XCodeVault を使うか、手動の手順がある場合は `xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。",
+                "zh-Hans": "此版本无法使用特权助手。请使用已签名的 XCodeVault 发行版；若有手动步骤，也可以执行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 列出的步骤。",
             ],
             "app.access.helper.why.enabled": [
                 "en": "The privileged helper is installed. It runs only its fixed list of actions that need root.",
@@ -656,11 +656,11 @@ extension L10nCatalog {
                 "zh-Hans": "[无法读取挂载状态]",
             ],
             "app.storage.symlink": [
-                "en": "→ symlink",
-                "pt-BR": "→ link simbólico",
-                "es": "→ enlace simbólico",
-                "ja": "→ シンボリックリンク",
-                "zh-Hans": "→ 符号链接",
+                "en": "→ SYMLINK",
+                "pt-BR": "→ SYMLINK",
+                "es": "→ SYMLINK",
+                "ja": "→ SYMLINK",
+                "zh-Hans": "→ SYMLINK",
             ],
             "app.value.no": [
                 "en": "NO",

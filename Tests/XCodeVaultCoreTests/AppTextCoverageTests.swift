@@ -16,11 +16,25 @@ final class AppTextCoverageTests: XCTestCase {
     }
 
     /// A view initializer or modifier whose first argument is a string literal, and any `Text(` that is not `Text(verbatim:`.
+    /// `\s` spans newlines: the scan runs over whole files, so a literal on the line after the `(` is caught too.
     private static let literalUse = try! NSRegularExpression(
         pattern:
-            #"\b(?:Button|Label|Toggle|TableColumn|GroupBox|Section|ContentUnavailableView|LabeledContent|CommandMenu|WindowGroup|Text)\(\s*""#
-            + #"|\.(?:navigationTitle|confirmationDialog|alert|help)\(\s*""#
-            + #"|\bText\((?!verbatim:)"#)
+            #"\b(?:Button|Label|Toggle|TableColumn|GroupBox|Section|ContentUnavailableView|LabeledContent|CommandMenu|WindowGroup|Text"#
+            + #"|Picker|Menu|Link|TextField|ProgressView)\(\s*""#
+            + #"|\.(?:navigationTitle|navigationSubtitle|confirmationDialog|alert|help|accessibilityLabel)\(\s*""#
+            + #"|\bText\((?!\s*verbatim:)"#)
+
+    /// The hits in `text`, as `line: source line`. Comment lines are blanked first (keeping the line count), so a comment
+    /// that quotes a forbidden form is not a hit.
+    static func literalHits(in text: String) -> [String] {
+        let lines = text.components(separatedBy: "\n")
+        let code = lines.map { $0.trimmingCharacters(in: .whitespaces).hasPrefix("//") ? "" : $0 }.joined(separator: "\n")
+        return literalUse.matches(in: code, range: NSRange(code.startIndex..., in: code)).compactMap { match in
+            guard let range = Range(match.range, in: code) else { return nil }
+            let number = code[..<range.lowerBound].filter { $0 == "\n" }.count
+            return "\(number + 1): \(lines[number].trimmingCharacters(in: .whitespaces))"
+        }
+    }
 
     func testNoAppViewTakesAStringLiteral() throws {
         let files = try FileManager.default.contentsOfDirectory(atPath: appSources.path).filter { $0.hasSuffix(".swift") }
@@ -28,24 +42,44 @@ final class AppTextCoverageTests: XCTestCase {
         var hits: [String] = []
         for file in files {
             let text = try String(contentsOf: appSources.appendingPathComponent(file), encoding: .utf8)
-            for (number, line) in text.components(separatedBy: "\n").enumerated() {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.hasPrefix("//") || trimmed.hasPrefix("///") { continue }
-                if Self.literalUse.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
-                    hits.append("\(file):\(number + 1): \(trimmed)")
-                }
-            }
+            hits += Self.literalHits(in: text).map { "\(file):\($0)" }
         }
         XCTAssertEqual(hits, [], hits.joined(separator: "\n"))
     }
 
-    /// Control for the scan above: it does find the forms it forbids.
+    /// Control for the scan above: it does find the forms it forbids, including a literal on the next line.
     func testTheScanFindsALiteral() {
-        for line in [#"Text("Hi")"#, #"Button("OK") {}"#, #".navigationTitle("X")"#, #"Text(name)"#, #"TableColumn( "Size") {}"#] {
-            XCTAssertNotNil(Self.literalUse.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)), line)
-        }
-        for line in [#"Text(verbatim: name)"#, #"Button(L10n.tr("app.action.ok")) {}"#, #"Text.l10n(L10n.tr("app.x"))"#] {
-            XCTAssertNil(Self.literalUse.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)), line)
+        let forbidden = [
+            #"Text("Hi")"#, #"Button("OK") {}"#, #".navigationTitle("X")"#, #"Text(name)"#, #"TableColumn( "Size") {}"#,
+            "Text(\n    \"Hi\"\n)", "Button(\n\"OK\") {}", ".confirmationDialog(\n    \"Sure?\", isPresented: $x)",
+            #"Picker("P", selection: $x) {}"#, #"Menu("M") {}"#, #"Link("L", destination: url)"#, #"TextField("T", text: $x)"#,
+            #"ProgressView("Loading")"#, #".navigationSubtitle("S")"#, #".accessibilityLabel("A")"#,
+        ]
+        for source in forbidden { XCTAssertEqual(Self.literalHits(in: source).count, 1, source) }
+        let allowed = [
+            #"Text(verbatim: name)"#, "Text(\n    verbatim: name)", #"Button(L10n.tr("app.action.ok")) {}"#, #"Text.l10n(L10n.tr("app.x"))"#,
+            "ProgressView()", "// Text(\"in a comment\")",
+        ]
+        for source in allowed { XCTAssertEqual(Self.literalHits(in: source), [], source) }
+        XCTAssertEqual(Self.literalHits(in: "let a = 1\nButton(\n  \"OK\")"), [#"2: Button("#])
+    }
+
+    // MARK: - Safety wording, pinned (S4 review): the old literals, verbatim
+
+    func testTheCleanSafetyTextsKeepTheirEnglish() {
+        let en = { (key: String) in L10n.string(key, in: .core, locale: "en", arguments: []) }
+        XCTAssertEqual(
+            en("app.clean.privileged.message"),
+            "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, "
+                + "and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs.")
+        XCTAssertEqual(
+            en("app.clean.confirm.message"),
+            "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. "
+                + "Deletions are journaled.")
+        XCTAssertEqual(en("app.clean.useTrash"), "Move to Trash instead of deleting (space is freed only when the Trash is emptied)")
+        // Rule 7's cue stays loud in every language.
+        for locale in L10n.supportedLocales {
+            XCTAssertTrue(L10n.string("app.storage.symlink", in: .core, locale: locale, arguments: []).contains("SYMLINK"), locale)
         }
     }
 
@@ -85,7 +119,10 @@ final class AppTextCoverageTests: XCTestCase {
             XCTAssertFalse(text.contains("will"), text)
         }
         let guidance = AppText.access(AccessChecklist.Key.helperActionSignedReleaseOrCLI, bytes: nil, folders: nil)
-        XCTAssertTrue(guidance.contains("signed release") && guidance.contains("xcodevaultctl"), guidance)
+        XCTAssertTrue(guidance.contains("signed release"), guidance)
+        // Hedged like `perm.helper.next.unavailableInThisBuild`: not every action has a manual route.
+        XCTAssertTrue(guidance.contains("where there is a manual route"), guidance)
+        XCTAssertTrue(guidance.contains("`xcodevaultctl doctor`") && guidance.contains("`xcodevaultctl vault init`"), guidance)
     }
 
     // MARK: - Permission texts shared by the app and `xcodevaultctl permissions`
