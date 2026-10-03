@@ -82,6 +82,15 @@ public enum L10n {
         return format(template, fallback: forms[baseLocale]?[category] ?? forms[baseLocale]?["other"], locale: chosenLocale, arguments: [count] + arguments)
     }
 
+    /// The Core table in the process locale. Keys must be string literals (`scripts/l10n.sh check` reads them).
+    public static func tr(_ key: String, _ arguments: CVarArg...) -> String {
+        string(key, in: .core, locale: locale, arguments: arguments)
+    }
+
+    public static func plural(_ key: String, count: Int, _ arguments: CVarArg...) -> String {
+        plural(key, count: count, in: .core, locale: locale, arguments: arguments)
+    }
+
     /// CLDR cardinal categories for integers in the shipped languages. A new language adds its rule here
     /// (docs/process/LOCALIZATION.md); unknown locales use `other`.
     public static func pluralCategory(locale: String, count: Int) -> String {
