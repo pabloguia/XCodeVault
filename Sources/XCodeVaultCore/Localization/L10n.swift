@@ -47,7 +47,8 @@ public enum L10n {
     }
 
     /// Maps a BCP 47 / Apple language tag to a shipped locale. Portuguese of any region reads pt-BR; Chinese
-    /// matches only when Simplified (`Hans`, or a mainland/Singapore region, or no qualifier).
+    /// matches only when Simplified: an explicit `Hans` script (whatever the region, so `zh-Hans-HK` matches),
+    /// else no Traditional script or Traditional-script region (`Hant`, TW, HK, MO).
     public static func match(_ tag: String) -> String? {
         let normalized = tag.replacingOccurrences(of: "_", with: "-").lowercased()
         if let exact = supportedLocales.first(where: { $0.lowercased() == normalized }) { return exact }
@@ -56,6 +57,7 @@ public enum L10n {
         switch language {
         case "zh":
             let qualifiers = Set(parts.dropFirst())
+            if qualifiers.contains("hans") { return "zh-Hans" }
             return qualifiers.isDisjoint(with: ["hant", "tw", "hk", "mo"]) ? "zh-Hans" : nil
         case "pt":
             return "pt-BR"
@@ -102,7 +104,9 @@ public enum L10n {
     }
 
     /// Removes `--lang <code>` / `--lang=<code>` before ArgumentParser sees the arguments: help text is built
-    /// before any option is parsed, so the language must be known first. Stops at `--`.
+    /// before any option is parsed, so the language must be known first. Stops at `--`. A `--lang` with no
+    /// value — at the end, before another flag (`--lang --json`), or as `--lang=` — is left in place, so
+    /// ArgumentParser rejects it as an unknown option instead of the flag after it being taken as a language.
     public static func extractLanguageOverride(from arguments: [String]) -> (language: String?, remaining: [String]) {
         var language: String?
         var remaining: [String] = []
@@ -113,9 +117,9 @@ public enum L10n {
                 remaining.append(contentsOf: arguments[index...])
                 break
             }
-            if argument.hasPrefix("--lang=") {
+            if argument.hasPrefix("--lang="), argument.count > "--lang=".count {
                 language = String(argument.dropFirst("--lang=".count))
-            } else if argument == "--lang", index + 1 < arguments.count {
+            } else if argument == "--lang", index + 1 < arguments.count, !arguments[index + 1].hasPrefix("-") {
                 language = arguments[index + 1]
                 index += 1
             } else {
@@ -126,23 +130,32 @@ public enum L10n {
         return (language, remaining)
     }
 
-    /// Formats only when there are arguments and the template does not ask for more than were given
-    /// (`String(format:)` would read invalid memory). Too few: the English template if it fits, else the raw template.
+    /// Formats only when there are arguments and `String(format:)` is safe on the template: every `%` is a
+    /// specifier it knows (or `%%`) and there are no more specifiers than arguments — otherwise it would read
+    /// invalid memory. An unsupported or too-demanding template falls back to English if English is safe with
+    /// these arguments, else the raw template is returned unformatted.
     private static func format(_ template: String, fallback: String?, locale: String, arguments: [CVarArg]) -> String {
         if arguments.isEmpty { return template }
-        if specifierCount(template) <= arguments.count {
+        if isSafe(template, argumentCount: arguments.count) {
             return String(format: template, locale: Locale(identifier: locale), arguments: arguments)
         }
-        if let fallback, specifierCount(fallback) <= arguments.count {
+        if let fallback, isSafe(fallback, argumentCount: arguments.count) {
             return String(format: fallback, locale: Locale(identifier: baseLocale), arguments: arguments)
         }
         return template
     }
 
-    private static func specifierCount(_ template: String) -> Int {
+    /// After `%%` is removed: no `%#@…@` substitution, no `%` left that the pattern does not account for, and no
+    /// more specifiers than arguments.
+    /// The specifier pattern is the one `scripts/l10n/l10n.swift` checks the catalog with: one meaning in both.
+    private static func isSafe(_ template: String, argumentCount: Int) -> Bool {
         let stripped = template.replacingOccurrences(of: "%%", with: "")
-        guard let regex = try? NSRegularExpression(pattern: #"%(?:[0-9]+\$)?(lld|ld|d|@|f|s)"#) else { return Int.max }
-        return regex.numberOfMatches(in: stripped, range: NSRange(stripped.startIndex..., in: stripped))
+        guard !stripped.contains("%#@"),
+            let specifier = try? NSRegularExpression(pattern: #"%(?:[0-9]+\$)?[-+ 0#]*[0-9]*(?:\.[0-9]+)?(lld|llu|ld|lu|d|i|u|x|X|@|f|e|g|s|c)"#)
+        else { return false }
+        let range = NSRange(stripped.startIndex..., in: stripped)
+        if specifier.stringByReplacingMatches(in: stripped, range: range, withTemplate: "").contains("%") { return false }
+        return specifier.numberOfMatches(in: stripped, range: range) <= argumentCount
     }
 }
 

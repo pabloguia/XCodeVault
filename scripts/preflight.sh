@@ -25,6 +25,7 @@ set -u -o pipefail
 cd "$(dirname "$0")/.."
 
 GATES=(
+    "l10n:bash scripts/l10n.sh check && bash scripts/test-l10n.sh"
     "build:swift build -Xswiftc -warnings-as-errors"
     "environment:bash scripts/ci-environment-assertions.sh"
     "tests:swift test"
@@ -34,7 +35,6 @@ GATES=(
     "release-hygiene:bash scripts/release-hygiene.sh && bash scripts/test-release-hygiene.sh"
     "public-surface:bash scripts/public-surface.sh"
     "redaction:bash scripts/experiments/test-common.sh"
-    "l10n:bash scripts/l10n.sh check && bash scripts/test-l10n.sh"
     "e6c-dryrun:bash scripts/experiments/test-e6c-dryrun.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
     "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl permissions --json && .build/debug/xcodevaultctl report --json"

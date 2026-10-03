@@ -78,13 +78,78 @@ func generate(catalogPath: String, name: String, locales: [String]) -> String {
     return out
 }
 
-let specifier = try! NSRegularExpression(pattern: "%(?:[0-9]+\\$)?[-+ 0#]*[0-9]*(?:\\.[0-9]+)?(lld|llu|ld|lu|d|i|u|x|X|@|f|e|g|s|c)")
-func placeholders(_ s: String) -> [String] {
+// The same pattern and the same "unsupported" rule as `L10n.format` at run time (Sources/XCodeVaultCore/Localization/L10n.swift).
+let specifier = try! NSRegularExpression(pattern: "%(?:([0-9]+)\\$)?[-+ 0#]*[0-9]*(?:\\.[0-9]+)?(lld|llu|ld|lu|d|i|u|x|X|@|f|e|g|s|c)")
+
+/// A template's arguments as argument number → conversion. Non-positional specifiers are numbered in order, so
+/// `"%@ of %lld"` and `"%2$lld の %1$@"` compare equal and `"%lld の %@"` does not (spec §4.6: compared in order).
+/// A template that mixes positional and non-positional specifiers, or that `L10n` would refuse to format, is a
+/// problem rather than a signature.
+func placeholders(_ s: String) -> Result<[Int: String], PlaceholderProblem> {
     let stripped = s.replacingOccurrences(of: "%%", with: "")
-    return specifier.matches(in: stripped, range: NSRange(stripped.startIndex..., in: stripped)).map { String(stripped[Range($0.range(at: 1), in: stripped)!]) }.sorted()
+    if stripped.contains("%#@") { return .failure(.unsupported("%#@ (substitutions are not compiled)")) }
+    let range = NSRange(stripped.startIndex..., in: stripped)
+    if specifier.stringByReplacingMatches(in: stripped, range: range, withTemplate: "").contains("%") {
+        return .failure(.unsupported("a % that is not a supported specifier (write %% for a literal %)"))
+    }
+    let matches = specifier.matches(in: stripped, range: range)
+    let positions = matches.map { m in Range(m.range(at: 1), in: stripped).flatMap { Int(stripped[$0]) } }
+    if positions.contains(where: { $0 == nil }) && positions.contains(where: { $0 != nil }) { return .failure(.mixed) }
+    var signature: [Int: String] = [:]
+    for (offset, m) in matches.enumerated() {
+        let conversion = String(stripped[Range(m.range(at: 2), in: stripped)!])
+        let number = positions[offset] ?? offset + 1
+        if let earlier = signature[number], earlier != conversion { return .failure(.unsupported("argument \(number) used as both %\(earlier) and %\(conversion)")) }
+        signature[number] = conversion
+    }
+    return .success(signature)
 }
 
-let keyUse = try! NSRegularExpression(pattern: "L10n\\.(?:tr|plural|trCore)\\(\\s*\"([^\"]+)\"")
+enum PlaceholderProblem: Error, CustomStringConvertible {
+    case mixed
+    case unsupported(String)
+    var description: String {
+        switch self {
+        case .mixed: return "mixes positional (%1$@) and non-positional (%@) specifiers"
+        case .unsupported(let what): return "uses \(what)"
+        }
+    }
+}
+
+func describe(_ signature: [Int: String]) -> String {
+    "[" + signature.keys.sorted().map { "\($0):%\(signature[$0]!)" }.joined(separator: " ") + "]"
+}
+
+/// Compares `value` with the English signature; returns the problem, if any, for `where`.
+func comparePlaceholders(_ value: String, base: Result<[Int: String], PlaceholderProblem>, where label: String) -> String? {
+    switch (placeholders(value), base) {
+    case (.failure(let problem), _): return "\(label) \(problem)"
+    case (.success, .failure): return nil  // English itself is reported once, under its own label.
+    case (.success(let mine), .success(let english)):
+        return mine == english ? nil : "\(label) placeholders \(describe(mine)) ≠ en \(describe(english))"
+    }
+}
+
+/// Catalog features the tool does not compile are refused, not ignored (spec §4.6): `substitutions`, and any
+/// `variations` other than `plural` (device variations).
+func shapeProblems(_ catalog: [String: Any]) -> [String] {
+    var problems: [String] = []
+    let entries = catalog["strings"] as? [String: Any] ?? [:]
+    for key in entries.keys.sorted() {
+        let localizations = (entries[key] as? [String: Any])?["localizations"] as? [String: Any] ?? [:]
+        for locale in localizations.keys.sorted() {
+            let localization = localizations[locale] as? [String: Any] ?? [:]
+            if localization["substitutions"] != nil { problems.append("\(key): \(locale) uses substitutions, which the tool does not compile") }
+            let variations = localization["variations"] as? [String: Any] ?? [:]
+            for kind in variations.keys.sorted() where kind != "plural" {
+                problems.append("\(key): \(locale) uses '\(kind)' variations; only 'plural' is compiled")
+            }
+        }
+    }
+    return problems
+}
+
+let keyUse = try! NSRegularExpression(pattern: "L10n\\.(?:tr|plural)\\(\\s*\"([^\"]+)\"")
 func referencedKeys(under directory: String) -> [String: String] {
     var found: [String: String] = [:]
     let enumerator = FileManager.default.enumerator(atPath: directory)
@@ -104,23 +169,25 @@ func check(catalogPath: String, outPath: String, name: String, locales: [String]
     let expected = generate(catalogPath: catalogPath, name: name, locales: locales)
     let actual = (try? String(contentsOfFile: outPath, encoding: .utf8)) ?? ""
     if actual != expected { problems.append("\(outPath) is stale: run scripts/l10n.sh gen") }
-    let (strings, plurals, review) = flatten(loadCatalog(catalogPath))
-    for (key, byLocale) in strings {
+    let raw = loadCatalog(catalogPath)
+    problems += shapeProblems(raw)
+    let (strings, plurals, review) = flatten(raw)
+    for (key, byLocale) in strings.sorted(by: { $0.key < $1.key }) {
         let base = placeholders(byLocale["en"] ?? "")
         for locale in locales {
             guard let value = byLocale[locale] else { problems.append("\(key): missing \(locale)"); continue }
             if value.isEmpty { problems.append("\(key): empty \(locale)") }
-            if placeholders(value) != base { problems.append("\(key): \(locale) placeholders \(placeholders(value)) ≠ en \(base)") }
+            if let problem = comparePlaceholders(value, base: base, where: "\(key): \(locale)") { problems.append(problem) }
         }
     }
-    for (key, byLocale) in plurals {
+    for (key, byLocale) in plurals.sorted(by: { $0.key < $1.key }) {
         let base = placeholders(byLocale["en"]?["other"] ?? "")
         for locale in locales {
             guard let forms = byLocale[locale] else { problems.append("\(key): missing plural \(locale)"); continue }
             guard forms["other"] != nil else { problems.append("\(key): \(locale) has no 'other' form"); continue }
-            for (category, value) in forms {
+            for (category, value) in forms.sorted(by: { $0.key < $1.key }) {
                 if value.isEmpty { problems.append("\(key): empty \(locale)/\(category)") }
-                if placeholders(value) != base { problems.append("\(key): \(locale)/\(category) placeholders ≠ en") }
+                if let problem = comparePlaceholders(value, base: base, where: "\(key): \(locale)/\(category)") { problems.append(problem) }
             }
         }
     }

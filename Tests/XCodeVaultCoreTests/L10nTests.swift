@@ -36,6 +36,11 @@ final class L10nTests: XCTestCase {
         XCTAssertNil(L10n.match("zh-Hant-TW"))
         XCTAssertNil(L10n.match("zh-TW"))
         XCTAssertNil(L10n.match("zh-HK"))
+        XCTAssertNil(L10n.match("zh-Hant-HK"))
+        // An explicit Simplified script wins over a Traditional-script region (spec §4.2).
+        XCTAssertEqual(L10n.match("zh-Hans-HK"), "zh-Hans")
+        XCTAssertEqual(L10n.match("zh-Hans-TW"), "zh-Hans")
+        XCTAssertEqual(L10n.match("zh-Hans-MO"), "zh-Hans")
         XCTAssertNil(L10n.match("fr-FR"))
         XCTAssertNil(L10n.match(""))
     }
@@ -93,6 +98,14 @@ final class L10nTests: XCTestCase {
         XCTAssertEqual(L10n.extractLanguageOverride(from: ["x", "--", "--lang", "ja"]).remaining, ["x", "--", "--lang", "ja"])
         // A trailing `--lang` with no value is left for the parser to reject, not silently dropped.
         XCTAssertEqual(L10n.extractLanguageOverride(from: ["scan", "--lang"]).remaining, ["scan", "--lang"])
+        // A flag where the value should be is not a value: both stay, so ArgumentParser rejects `--lang`.
+        XCTAssertNil(L10n.extractLanguageOverride(from: ["permissions", "--lang", "--json"]).language)
+        XCTAssertEqual(L10n.extractLanguageOverride(from: ["permissions", "--lang", "--json"]).remaining, ["permissions", "--lang", "--json"])
+        XCTAssertNil(L10n.extractLanguageOverride(from: ["--lang", "-h"]).language)
+        XCTAssertEqual(L10n.extractLanguageOverride(from: ["--lang", "-h"]).remaining, ["--lang", "-h"])
+        // An empty `--lang=` is not a language either.
+        XCTAssertNil(L10n.extractLanguageOverride(from: ["--lang="]).language)
+        XCTAssertEqual(L10n.extractLanguageOverride(from: ["--lang="]).remaining, ["--lang="])
     }
 
     func testConfigureSetsTheProcessLocale() {
@@ -123,5 +136,26 @@ final class L10nTests: XCTestCase {
         XCTAssertEqual(L10n.string("x", in: c, locale: "pt-BR", arguments: ["1"]), "A 1")
         XCTAssertEqual(L10n.string("y", in: c, locale: "en", arguments: ["1"]), "%@ %@")
         XCTAssertEqual(L10n.string("z", in: c, locale: "en", arguments: ["1"]), "100% 1")
+    }
+
+    /// The runtime counts specifiers with the checker's pattern (scripts/l10n/l10n.swift), so a width or precision
+    /// is a specifier too; and a template with a `%` it cannot account for is never handed to `String(format:)`.
+    func testAnUnsupportedOrUndercountedTemplateIsNeverFormatted() {
+        let c = L10nCatalog(
+            strings: [
+                "precision": ["en": "%@ of all", "pt-BR": "%.1f de %@"],
+                "precisionOnly": ["en": "%.1f of %@"],
+                "substitution": ["en": "%@ files", "ja": "%#@files@"],
+                "substitutionOnly": ["en": "%#@files@"],
+                "stray": ["en": "%@ done", "es": "%@ al 50%z"],
+                "literal": ["en": "100%% %@"],
+            ],
+            plurals: [:])
+        XCTAssertEqual(L10n.string("precision", in: c, locale: "pt-BR", arguments: ["1"]), "1 of all")
+        XCTAssertEqual(L10n.string("precisionOnly", in: c, locale: "en", arguments: ["1"]), "%.1f of %@")
+        XCTAssertEqual(L10n.string("substitution", in: c, locale: "ja", arguments: ["3"]), "3 files")
+        XCTAssertEqual(L10n.string("substitutionOnly", in: c, locale: "en", arguments: ["3"]), "%#@files@")
+        XCTAssertEqual(L10n.string("stray", in: c, locale: "es", arguments: ["x"]), "x done")
+        XCTAssertEqual(L10n.string("literal", in: c, locale: "en", arguments: ["1"]), "100% 1")
     }
 }

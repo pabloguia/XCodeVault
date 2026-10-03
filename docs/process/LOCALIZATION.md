@@ -4,10 +4,12 @@ XCodeVault ships in English (base), Brazilian Portuguese, Spanish, Japanese and 
 
 ## How it works
 
-- Text lives in String Catalogs: `Sources/<Module>/Localization/Localizable.xcstrings` (open in Xcode, or
-  edit the JSON). Keys are stable identifiers such as `savings.bucket.parkExternally.title`.
-- `scripts/l10n.sh gen` compiles each catalog into `<Module>Strings.generated.swift`, a static table built
-  into the binary. There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language.
+- One catalog, in Core: `Sources/XCodeVaultCore/Localization/Localizable.xcstrings` (open in Xcode, or edit
+  the JSON), with keys namespaced by where they are shown — `savings.*` (shared), `cli.*`, `app.*` (spec
+  §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
+- `scripts/l10n.sh gen` compiles it into `CoreStrings.generated.swift`, a static table built into the binary.
+  There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language. The catalog is
+  kept sorted (`add` writes it that way); an editor that reorders it produces a large, harmless diff.
 - Code uses `L10n.tr("key", args…)` and `L10n.plural("key", count: n, args…)` with **literal** keys.
 - Locale: `--lang <code>` (CLI) → `XCODEVAULT_LANG` → macOS language preferences → English. Tests that
   assert English text must call `L10n.configure(override: "en", environment: [:], preferred: [])` first: the
@@ -15,11 +17,29 @@ XCodeVault ships in English (base), Brazilian Portuguese, Spanish, Japanese and 
 - Never translated: `--json` output, journal entries, category ids, commands, flags, paths, and the typed
   `--i-confirm-…` flags.
 
-## Glossary — keep these untranslated
+## Glossary
 
-XCodeVault, Xcode, Simulator, DerivedData, Archives, runtime (in commands), Full Disk Access (use Apple's
-own localized name for the Settings pane in prose: pt-BR "Acesso Total ao Disco", es "Acceso total al
-disco", ja "フルディスクアクセス", zh-Hans "完全磁盘访问权限").
+Product nouns and command words stay untranslated **where they are typed**: `vault init`, `runtime offload`,
+`--lang`, `--json`, category ids. In prose the **concept** is translated — pt-BR "guardar", "disco-cofre"; ja
+"退避" — because a sentence that mixes in an untranslated English verb reads as a bug to the user (spec §4.6).
+
+Always untranslated: XCodeVault, Xcode, Simulator, DerivedData, Archives. Full Disk Access: use Apple's own
+localized name for the Settings pane in prose — pt-BR "Acesso Total ao Disco", es "Acceso total al disco", ja
+"フルディスクアクセス", zh-Hans "完全磁盘访问权限".
+
+## Placeholders
+
+`scripts/l10n.sh check` compares every translation's placeholders with English's **in order** (spec §4.6):
+
+- The supported specifiers are `%@`, `%d`/`%i`/`%u`/`%x`/`%X` with `l`/`ll`, `%f`/`%e`/`%g`, `%s`, `%c`, with
+  optional flags, width and precision. Write `%%` for a literal percent sign; any other `%` is refused, by
+  `check` and at run time (the string is then shown in English, or unformatted).
+- A language whose word order differs uses positional specifiers: English `"%1$@ of %2$lld"`, Japanese
+  `"%2$lld の %1$@"`. Positional and non-positional specifiers are never mixed in one string, and a plain
+  `"%lld の %@"` against English `"%@ of %lld"` is refused, because the arguments would arrive swapped.
+- Every plural form, `one` included, contains the count placeholder: English `"%lld file"`, not `"One file"`.
+- Catalog features the tool does not compile are refused rather than ignored: `substitutions` (and their
+  `%#@name@` syntax) and any `variations` other than `plural` (device variations).
 
 ## Tone
 

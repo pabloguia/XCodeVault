@@ -60,6 +60,42 @@ catalog "$good"
 printf 'let z = L10n.tr("not.in.catalog")\n' >>"$work/src/Use.swift"
 expect "check refuses an unknown key in sources" 1 check
 
+printf 'let x = L10n.tr("a.b", "1 GB")\nlet y = L10n.plural("n.c", count: 2)\n' >"$work/src/Use.swift"
+
+# Placeholders are compared in order (spec §4.6); catalog shapes the tool does not compile are refused.
+shape() {  # $1 description, $2 expected exit, $3 one extra entry (JSON) added to the good catalog
+    catalog "$good,$3"
+    "${tool[@]}" gen "$work/c.xcstrings" "$work/T.generated.swift" test --locales en,ja >/dev/null 2>&1
+    expect "$1" "$2" check
+}
+entry() {  # $1 key, $2 en value, $3 ja value
+    printf '"%s":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"%s"}},"ja":{"stringUnit":{"state":"needs_review","value":"%s"}}}}' "$1" "$2" "$3"
+}
+shape "check refuses reordered placeholders" 1 "$(entry r.o '%@ of %lld' '%lld の %@')"
+shape "check accepts a positional reorder" 0 "$(entry r.p '%1$@ of %2$lld' '%2$lld の %1$@')"
+shape "check refuses positional mixed with non-positional" 1 "$(entry r.m '%1$@ of %lld' '%1$@ の %lld')"
+shape "check refuses %#@ (substitution syntax)" 1 "$(entry r.s '%#@x@' '%#@x@')"
+shape "check refuses an unsupported specifier" 1 "$(entry r.u '%@ at 50%z' '%@ で 50%z')"
+shape "check accepts %% beside a specifier" 0 "$(entry r.q '100%% of %@' '%@ の 100%%')"
+shape "check refuses substitutions" 1 '"r.t":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ files"},"substitutions":{"n":{"argNum":1,"formatSpecifier":"lld"}}},"ja":{"stringUnit":{"state":"needs_review","value":"%@ 個"}}}}'
+shape "check refuses a device variation" 1 '"r.d":{"localizations":{"en":{"variations":{"device":{"mac":{"stringUnit":{"state":"translated","value":"Mac"}}}}},"ja":{"variations":{"device":{"mac":{"stringUnit":{"state":"needs_review","value":"Mac"}}}}}}}'
+shape "check refuses a plural form that reorders" 1 '"r.n":{"localizations":{"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%lld file in %@"}},"other":{"stringUnit":{"state":"translated","value":"%lld files in %@"}}}}},"ja":{"variations":{"plural":{"other":{"stringUnit":{"state":"needs_review","value":"%@ に %lld 個"}}}}}}}'
+
+# l10n.sh reads the locale list from L10n.swift; a list it cannot read is reported, not a silent death.
+mkdir -p "$work/repo/scripts" "$work/repo/Sources/XCodeVaultCore/Localization"
+cp scripts/l10n.sh "$work/repo/scripts/"
+unreadable() {  # $1 description, $2 the declaration as printf format
+    printf "$2" >"$work/repo/Sources/XCodeVaultCore/Localization/L10n.swift"
+    bash "$work/repo/scripts/l10n.sh" check >"$work/out" 2>&1; local got=$?
+    if [ "$got" = 2 ] && grep -q 'cannot read L10n.supportedLocales' "$work/out"; then
+        pass=$((pass + 1))
+    else
+        fail=$((fail + 1)); echo "FAIL: l10n.sh reports $1 (exit $got)"; sed 's/^/    /' "$work/out"
+    fi
+}
+unreadable "a list on the next line" 'public static let supportedLocales =\n    ["en", "ja"]\n'
+unreadable "a list split over lines" 'public static let supportedLocales = [\n    "en",\n]\n'
+
 printf 'let x = L10n.tr("a.b", "1 GB")\n' >"$work/src/Use.swift"
 catalog "$good"
 expect "add seeds a new locale" 0 "${tool[@]}" add "$work/c.xcstrings" es

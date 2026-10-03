@@ -17,7 +17,7 @@ struct XCodeVaultCTL: ParsableCommand {
             Experiment IDs that appear in help text (E2, E8b, E11 …) are defined in \
             docs/architecture/EXPERIMENTS.md.
 
-            Language: --lang <code> (en, pt-BR, es, ja, zh-Hans) or XCODEVAULT_LANG; otherwise your \
+            Language: --lang <code> (\(L10n.supportedLocales.joined(separator: ", "))) or XCODEVAULT_LANG; otherwise your \
             macOS language. --json output is never translated.
             """,
         version: XCodeVaultVersion.current,

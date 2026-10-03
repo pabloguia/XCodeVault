@@ -6,9 +6,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The one list of locales lives in L10n.swift; read it, never restate it.
+# The one list of locales lives in L10n.swift; read it, never restate it. It must stay on one line: a list
+# this cannot read reaches the message below instead of ending the script silently under `set -e`.
 locales=$(grep -E '^\s*public static let supportedLocales = \[' Sources/XCodeVaultCore/Localization/L10n.swift \
-    | sed -E 's/.*\[(.*)\].*/\1/; s/[" ]//g')
+    | sed -nE 's/.*\[(.*)\].*/\1/p' | sed -E 's/[" ]//g' || true)
 [ -n "$locales" ] || { echo "l10n: cannot read L10n.supportedLocales" >&2; exit 2; }
 
 # module catalog | generated table | static name
