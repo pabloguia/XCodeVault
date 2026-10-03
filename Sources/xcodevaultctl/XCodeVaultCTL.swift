@@ -38,7 +38,13 @@ struct XCodeVaultCTL: ParsableCommand {
 
     static func prepareLanguage(arguments: [String], environment: [String: String], preferred: [String]) -> (remaining: [String], warning: String?) {
         let (flag, remaining) = L10n.extractLanguageOverride(from: arguments)
-        L10n.configure(override: flag, environment: environment, preferred: preferred)
+        // `--json` output embeds formatted byte strings in prose, and it is an API: always English (spec §4.3).
+        let wantsJSON = remaining.prefix { $0 != "--" }.contains("--json")
+        if wantsJSON {
+            L10n.configure(override: "en", environment: [:], preferred: [])
+        } else {
+            L10n.configure(override: flag, environment: environment, preferred: preferred)
+        }
         let requested = flag ?? environment["XCODEVAULT_LANG"]
         var warning: String?
         if let requested, L10n.match(requested) == nil {

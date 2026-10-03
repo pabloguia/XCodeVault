@@ -77,6 +77,11 @@ extension MigrationEngine {
 }
 
 public struct MigrationEngine: Sendable {
+    /// The journal's completion line. A record, not prose for the screen: always English (spec §4.3).
+    static func verifiedSummary(files: UInt64, bytes: UInt64) -> String {
+        "copied and verified \(files) files, \(ByteCount.format(Int64(clamping: bytes), locale: "en")); source intact"
+    }
+
     // Every seam is `let` (issue #31). They were all `var` and all already settable through `init`,
     // so the mutability bought nothing a caller needed and cost a second surface on each: a shipped
     // type whose checks can be switched off after construction, with the suite green.
@@ -410,7 +415,7 @@ public struct MigrationEngine: Sendable {
             }
             try journal.record(
                 id: op, kind: .migration, state: .completed,
-                summary: "copied and verified \(report.sourceFiles) files, \(ByteCount.format(report.sourceBytes)); source intact",
+                summary: Self.verifiedSummary(files: report.sourceFiles, bytes: report.sourceBytes),
                 paths: [plan.source, plan.destination], bytes: report.destinationBytes, detail: ["phase": "VERIFIED", "hashedFiles": "\(report.hashedFiles)"])
             return MigrationOutcome(plan: plan, verification: report, sourceRemoved: false)
         } catch {

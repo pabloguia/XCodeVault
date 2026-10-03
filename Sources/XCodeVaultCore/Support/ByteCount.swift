@@ -5,7 +5,7 @@ public enum ByteCount {
     public static func format(_ bytes: Int64) -> String { format(bytes, locale: L10n.locale) }
 
     /// Decimal units (GB), matching Finder and diskutil, in `locale`'s number format — never the machine's region
-    /// (spec §5.1). Zero is written as a number.
+    /// (spec §5.1). Zero is written as a number. Records (the journal, JSON output) pass `"en"`: they are never localized (spec §4.3).
     public static func format(_ bytes: Int64, locale: String) -> String {
         bytes.formatted(
             .byteCount(style: .file, allowedUnits: .all, spellsOutZero: false, includesActualByteCount: false)

@@ -21,10 +21,19 @@ final class ByteCountLocaleTests: XCTestCase {
 
     func testZeroIsANumberNotAWord() {
         // The old formatter had `allowsNonnumericFormatting = false`: "Zero KB" must not appear in any language.
-        for locale in L10n.supportedLocales { XCTAssertTrue(ByteCount.format(0, locale: locale).contains("0"), locale) }
+        for locale in L10n.supportedLocales {
+            XCTAssertTrue(ByteCount.format(0, locale: locale).contains("0"), locale)
+            XCTAssertFalse(ByteCount.format(0, locale: locale).lowercased().contains("zero"), locale)
+        }
+        XCTAssertTrue(ByteCount.format(1_000, locale: "en").contains("1"))
     }
 
     func testUnitsAreDecimalLikeFinder() {
         XCTAssertTrue(ByteCount.format(1_000_000_000, locale: "en").hasPrefix("1"), "1 GB, not 0.93 GiB")
+    }
+
+    func testTheJournalSummaryStaysEnglishWhateverTheLanguage() {
+        L10n.configure(override: "pt-BR", environment: [:], preferred: [])
+        XCTAssertEqual(MigrationEngine.verifiedSummary(files: 3, bytes: 10_370_000_000), "copied and verified 3 files, 10.37 GB; source intact")
     }
 }

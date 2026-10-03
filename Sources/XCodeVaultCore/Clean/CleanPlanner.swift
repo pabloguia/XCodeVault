@@ -341,7 +341,7 @@ public struct CleanExecutor: Sendable {
         try journal.record(
             id: opID, kind: .clean, state: .completed,
             summary:
-                "\(useTrash ? "moved to Trash" : "freed") \(ByteCount.format(deleted.reduce(0) { $0 + $1.bytes })), \(failed.count) failure(s)",
+                "\(useTrash ? "moved to Trash" : "freed") \(ByteCount.format(Int64(clamping: deleted.reduce(0) { $0 + $1.bytes }), locale: "en")), \(failed.count) failure(s)",
             paths: deleted.map(\.path), bytes: deleted.reduce(0) { $0 + $1.bytes })
         return CleanResult(deleted: deleted, failedPairs: failed)
     }

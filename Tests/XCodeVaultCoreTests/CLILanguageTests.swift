@@ -13,6 +13,22 @@ final class CLILanguageTests: XCTestCase {
         XCTAssertEqual(L10n.locale, "ja")
     }
 
+    func testJSONForcesEnglishWhateverTheFlag() {
+        let r = XCodeVaultCTL.prepareLanguage(arguments: ["doctor", "--json", "--lang", "pt-BR"], environment: ["XCODEVAULT_LANG": "es"], preferred: ["ja"])
+        XCTAssertEqual(L10n.locale, "en")
+        XCTAssertEqual(r.remaining, ["doctor", "--json"])
+    }
+
+    func testAFlagNamedJSONAfterTheSeparatorIsNotTheFlag() {
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["--lang", "ja", "x", "--", "--json"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "ja")
+    }
+
+    func testTheLanguageFlagStillWorksWithoutJSON() {
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["--lang", "ja", "status"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "ja")
+    }
+
     func testTheEnvironmentWinsOverPreferences() {
         _ = XCodeVaultCTL.prepareLanguage(arguments: ["status"], environment: ["XCODEVAULT_LANG": "es"], preferred: ["pt-BR"])
         XCTAssertEqual(L10n.locale, "es")
