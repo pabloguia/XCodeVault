@@ -1,16 +1,16 @@
 import Foundation
 
 public enum ByteCount {
-    private static func makeFormatter() -> ByteCountFormatter {
-        let f = ByteCountFormatter()
-        f.countStyle = .file  // decimal (GB), matching Finder and diskutil
-        f.allowsNonnumericFormatting = false
-        return f
+    public static func format(_ bytes: UInt64) -> String { format(Int64(clamping: bytes)) }
+    public static func format(_ bytes: Int64) -> String { format(bytes, locale: L10n.locale) }
+
+    /// Decimal units (GB), matching Finder and diskutil, in `locale`'s number format — never the machine's region
+    /// (spec §5.1). Zero is written as a number.
+    public static func format(_ bytes: Int64, locale: String) -> String {
+        bytes.formatted(
+            .byteCount(style: .file, allowedUnits: .all, spellsOutZero: false, includesActualByteCount: false)
+                .locale(Locale(identifier: locale)))
     }
-    public static func format(_ bytes: UInt64) -> String {
-        makeFormatter().string(fromByteCount: Int64(clamping: bytes))
-    }
-    public static func format(_ bytes: Int64) -> String { makeFormatter().string(fromByteCount: bytes) }
 }
 
 public extension String {
