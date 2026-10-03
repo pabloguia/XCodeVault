@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Single-colour mark for light backgrounds and print: same door, dial and arrow, no tile. The arrow cuts a gap in the door outline. -->
+  <defs>
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M 448 512 H 790" stroke="#000" stroke-width="130" stroke-linecap="round"/>
+      <path d="M 724 424 L 820 512 L 724 600" fill="none" stroke="#000" stroke-width="130" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <circle cx="448" cy="512" r="276" fill="none" stroke="#2B2D6E" stroke-width="24" mask="url(#gap)"/>
+  <circle cx="448" cy="512" r="112" fill="#2B2D6E"/>
+  <path d="M 448 512 H 790" stroke="#2B2D6E" stroke-width="60" stroke-linecap="round"/>
+  <path d="M 724 424 L 820 512 L 724 600" fill="none" stroke="#2B2D6E" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

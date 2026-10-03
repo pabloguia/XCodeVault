@@ -11,6 +11,7 @@
         <string>ja</string>
         <string>zh-Hans</string>
     </array>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleExecutable</key><string>XCodeVault</string>
     <key>CFBundleIdentifier</key><string>com.xcodevault.app</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>

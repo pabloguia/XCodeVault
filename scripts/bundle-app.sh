@@ -111,6 +111,7 @@ XCV_VERSION="$(sed -n 's/.*public static let current = "\(.*\)".*/\1/p' Sources/
 # the clause-by-clause reasoning. Info.plist's NSHumanReadableCopyright points the reader here.
 cp THIRD-PARTY-LICENSES.md "$APP/Contents/Resources/THIRD-PARTY-LICENSES.md"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
+cp Resources/App/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 if [ "$WITH_HELPER" = 1 ]; then
   mkdir -p "$APP/Contents/Library/LaunchDaemons"
   cp "$BIN/xcodevault-helper" "$APP/Contents/MacOS/xcodevault-helper"
