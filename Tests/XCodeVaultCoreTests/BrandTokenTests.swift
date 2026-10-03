@@ -13,6 +13,13 @@ final class BrandTokenTests: XCTestCase {
         XCTAssertEqual(Set(all.map(\.symbolName)).count, all.count)
     }
 
+    func testEveryHexTokenIsSixUppercaseHexDigits() {
+        let hexes = SavingsBucket.allCases.map(\.colorHex) + [Brand.indigoHex, Brand.tealHex, Brand.darkBackgroundHex]
+        for hex in hexes {
+            XCTAssertNotNil(hex.range(of: "^#[0-9A-F]{6}$", options: .regularExpression), hex)
+        }
+    }
+
     func testEverySymbolResolves() {
         for bucket in SavingsBucket.allCases {
             XCTAssertNotNil(NSImage(systemSymbolName: bucket.symbolName, accessibilityDescription: nil), bucket.symbolName)

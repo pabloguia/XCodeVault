@@ -10,7 +10,7 @@ safely moved out". The mark uses no Apple marks, no hammer and no Xcode icon.
 | File | Use |
 | --- | --- |
 | `Resources/Brand/logo.svg` | Master artwork (tile, door, arrow). Edit this one. |
-| `Resources/Brand/logo-mono.svg` | Single color, no tile. For one-color print and contexts without a tile. |
+| `Resources/Brand/logo-mono.svg` | Single color, no tile. For one-color print and contexts without a tile; light backgrounds only, no dark-background variant yet. |
 | `Resources/App/AppIcon.icns` | App icon, generated from the master. |
 | `docs/brand/logo-256.png` | README and docs, generated from the master. |
 
@@ -18,8 +18,8 @@ safely moved out". The mark uses no Apple marks, no hammer and no Xcode icon.
 
 | Role | Value |
 | --- | --- |
-| Indigo (tile) | `#2B2D6E`, tile gradient `#3B3E92` to `#1C1E52` |
-| Teal (arrow) | `#1FB5A8`, gradient to `#62E6CF` |
+| Indigo (primary / mono) | `#2B2D6E`; logo tile gradient `#3B3E92` → `#1C1E52` |
+| Teal | UI accent `#1FB5A8` (flat, `Brand.teal`); logo arrow gradient `#17A497` → `#62E6CF` |
 | Door | `#F5F7FC` to `#C7CCDF` |
 
 ## Bucket tokens
@@ -38,8 +38,16 @@ All four reach at least 3:1 contrast on white and on `#1C1E52` (pinned by `Brand
 
 ### CLI
 
-The CLI colors bucket titles only, and only on a terminal. There is no color when `NO_COLOR` is set
+The CLI colors bucket titles only, and only on a terminal: 24-bit when `COLORTERM` is `truecolor` or `24bit`, the nearest xterm-256 cube color otherwise. There is no color when `NO_COLOR` is set
 (any value), when `TERM=dumb`, with `--json`, for `report`, or when output is piped.
+
+## Using the tokens in the app
+
+- Bucket colors are fills and icon tints, never text color.
+- Tokens must be appearance-aware (light and dark) before GUI use.
+- Do not use `Brand.indigo` as a foreground in dark mode or `Brand.teal` on light surfaces.
+- In selected rows the symbol uses the selection style.
+- Never place the mark next to toolbar or menu actions, where it could read as "log out".
 
 ## Clear space
 
@@ -51,7 +59,7 @@ Keep one door-radius of empty space around the tile.
 
 ## Don'ts
 
-- Do not recolor the arrow; it is teal everywhere the mark has color.
+- In the color mark the arrow is always the teal gradient; in the mono mark everything is one color.
 - Do not use Apple marks, the Xcode icon or a hammer, alone or combined with the mark.
 - Do not stretch, rotate or add effects to the mark.
 - Do not signal a bucket by color alone.

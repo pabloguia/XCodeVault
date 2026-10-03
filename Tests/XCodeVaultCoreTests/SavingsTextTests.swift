@@ -128,12 +128,12 @@ final class SavingsTextTests: XCTestCase {
     func testNoColorsMeansNoEscapeByte() {
         L10n.configure(override: "en", environment: [:], preferred: [])
         XCTAssertFalse(TextRenderer.savings(summary(), runtimeImageBytes: 1).contains(esc))
-        XCTAssertEqual(TextRenderer.savings(summary(), runtimeImageBytes: 1), TextRenderer.savings(summary(), runtimeImageBytes: 1, colors: false))
+        XCTAssertEqual(TextRenderer.savings(summary(), runtimeImageBytes: 1), TextRenderer.savings(summary(), runtimeImageBytes: 1, colors: ColorDepth.none))
     }
 
     func testColorsWrapEveryBucketTitleInItsOwnColor() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true)
+        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor)
         XCTAssertTrue(out.contains(esc))
         for b in [SavingsBucket.deleteAndRegenerate, .parkExternally, .runFromExternal, .keepLocal] {
             let hex = b.colorHex.dropFirst()
@@ -150,14 +150,64 @@ final class SavingsTextTests: XCTestCase {
 
     func testStrippingTheCodesLeavesThePlainBlock() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let colored = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true)
+        let colored = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor)
         let stripped = colored.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
         XCTAssertEqual(stripped, TextRenderer.savings(summary(), runtimeImageBytes: 0))
     }
 
     func testAmountsAreStillAlignedInJapaneseWithColorsOn() {
         L10n.configure(override: "ja", environment: [:], preferred: [])
-        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: true).split(separator: "\n").map(String.init)
+        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor).split(separator: "\n").map(String.init)
+        let rows = [lines[2], lines[3], lines[5]].map { $0.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression) }
+        let widths = rows.map { row -> Int in
+            let amounts = [30_100_000_000, 12_200_000_000, 8_000_000_000].map { ByteCount.format(UInt64($0)) }
+            guard let a = amounts.first(where: { row.contains($0) }), let r = row.range(of: a) else { return -1 }
+            return TextRenderer.displayWidth(String(row[..<r.upperBound]))
+        }
+        XCTAssertFalse(widths.contains(-1), rows.joined(separator: "\n"))
+        XCTAssertEqual(Set(widths).count, 1, "\(widths)")
+    }
+
+    // MARK: color depth (S5 review)
+
+    /// The nearest xterm-256 color-cube index, computed here from the rule rather than from the implementation.
+    private func expectedCube(_ hex: String) -> Int {
+        let v = Int(hex.dropFirst(), radix: 16) ?? 0
+        let levels = [0, 95, 135, 175, 215, 255]
+        let ids = [(v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF].map { c in
+            levels.indices.min { abs(levels[$0] - c) < abs(levels[$1] - c) }!
+        }
+        return 16 + 36 * ids[0] + 6 * ids[1] + ids[2]
+    }
+
+    func testAnsi256UsesTheNearestCubeIndexForEveryBucket() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .ansi256)
+        for b in [SavingsBucket.deleteAndRegenerate, .parkExternally, .runFromExternal, .keepLocal] {
+            XCTAssertTrue(out.contains("\(esc)[38;5;\(expectedCube(b.colorHex))m\(b.localizedTitle)\(esc)[0m"), "\(b)\n\(out)")
+        }
+        XCTAssertFalse(out.contains("38;2;"))
+    }
+
+    func testKnownCubeIndexForBlue() {
+        // #3B82F6: R 59 is nearest 95 (level 1), G 130 nearest 135 (level 2), B 246 nearest 255 (level 5).
+        // 16 + 36*1 + 6*2 + 5 = 69.
+        XCTAssertEqual(expectedCube("#3B82F6"), 69)
+        XCTAssertEqual(TextRenderer.ansi("#3B82F6", depth: .ansi256), "\(esc)[38;5;69m")
+        XCTAssertEqual(TextRenderer.ansi("#3B82F6", depth: .trueColor), "\(esc)[38;2;59;130;246m")
+    }
+
+    func testNoneEmitsNoEscapeAndMalformedHexEmitsNeitherCodeNorReset() {
+        XCTAssertEqual(TextRenderer.ansi("#3B82F6", depth: .none), "")
+        for bad in ["#12", "nonsense", "#GGGGGG", ""] {
+            XCTAssertEqual(TextRenderer.colorize("Park", hex: bad, depth: .trueColor), "Park", bad)
+            XCTAssertEqual(TextRenderer.colorize("Park", hex: bad, depth: .ansi256), "Park", bad)
+        }
+    }
+
+    func testAmountsAreStillAlignedInJapaneseWithAnsi256() {
+        L10n.configure(override: "ja", environment: [:], preferred: [])
+        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .ansi256).split(separator: "\n").map(String.init)
         let rows = [lines[2], lines[3], lines[5]].map { $0.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression) }
         let widths = rows.map { row -> Int in
             let amounts = [30_100_000_000, 12_200_000_000, 8_000_000_000].map { ByteCount.format(UInt64($0)) }

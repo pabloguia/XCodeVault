@@ -65,9 +65,14 @@ struct XCodeVaultCTL: ParsableCommand {
 
 extension XCodeVaultCTL {
     /// Color only for a person at a terminal: not piped, not under NO_COLOR (no-color.org), not a dumb terminal.
+    /// 24-bit only when `COLORTERM` says `truecolor` or `24bit`; every other terminal gets the xterm-256 cube.
     /// `report` and `--json` are records and never ask.
-    static func wantsColor(environment: [String: String], isTTY: Bool) -> Bool {
-        isTTY && environment["NO_COLOR"] == nil && environment["TERM"] != "dumb"
+    static func colorDepth(environment: [String: String], isTTY: Bool) -> ColorDepth {
+        guard isTTY, environment["NO_COLOR"] == nil, environment["TERM"] != "dumb" else { return .none }
+        switch environment["COLORTERM"]?.lowercased() {
+        case "truecolor", "24bit": return .trueColor
+        default: return .ansi256
+        }
     }
 }
 
@@ -110,7 +115,7 @@ struct Scan: ParsableCommand {
         try emit(report, json: global.json) {
             TextRenderer.scan(
                 report, details: details,
-                colors: !global.json && XCodeVaultCTL.wantsColor(environment: ProcessInfo.processInfo.environment, isTTY: isatty(STDOUT_FILENO) != 0))
+                colors: global.json ? .none : XCodeVaultCTL.colorDepth(environment: ProcessInfo.processInfo.environment, isTTY: isatty(STDOUT_FILENO) != 0))
         }
     }
 }
