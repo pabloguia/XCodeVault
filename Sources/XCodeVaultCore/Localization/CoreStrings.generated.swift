@@ -4,6 +4,20 @@
 extension L10nCatalog {
     static let core = L10nCatalog(
         strings: [
+            "cli.savings.heading": [
+                "en": "What you can reclaim on this Mac",
+                "pt-BR": "O que você pode recuperar neste Mac",
+                "es": "Lo que puedes recuperar en este Mac",
+                "ja": "この Mac で回収できる容量",
+                "zh-Hans": "此 Mac 上可回收的空间",
+            ],
+            "cli.savings.next": [
+                "en": "Next: %@",
+                "pt-BR": "Próximo: %@",
+                "es": "Siguiente: %@",
+                "ja": "次へ: %@",
+                "zh-Hans": "下一步：%@",
+            ],
             "savings.alternativesNote": [
                 "en": "The options are alternatives for the same files; the total counts each file once.",
                 "pt-BR": "As opções são alternativas para os mesmos arquivos; o total conta cada arquivo uma vez.",

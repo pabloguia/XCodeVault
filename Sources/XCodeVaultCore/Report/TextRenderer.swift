@@ -106,6 +106,67 @@ public enum TextRenderer {
         return o
     }
 
+    /// The savings block (spec 2026-10-03 §5): both headlines, each option with its undo cost, the stay-local
+    /// remainder and the next command. Every column is padded by display width, so wide scripts stay aligned.
+    public static func savings(_ s: SavingsSummary) -> String {
+        func headline(_ bytes: UInt64) -> String {
+            let amount = ByteCount.format(bytes)
+            return s.isLowerBound ? L10n.tr("savings.atLeast", amount) : L10n.tr("savings.upTo", amount)
+        }
+        func option(_ bytes: UInt64) -> String { s.isLowerBound ? headline(bytes) : ByteCount.format(bytes) }
+
+        struct Row {
+            var label: String
+            var amount: String
+            var note: String = ""
+        }
+        func bucketRow(_ b: SavingsBucket) -> Row {
+            Row(label: "    " + b.localizedTitle, amount: option(s[b].optionBytes), note: b.localizedUndoCost)
+        }
+        func verified(_ bytes: UInt64) -> String { "(" + L10n.tr("savings.verifiedShare", ByteCount.format(bytes)) + ")" }
+
+        let rows: [Row] = [
+            Row(label: "  " + L10n.tr("savings.temporary.title"), amount: headline(s.temporaryBytes), note: verified(s.verifiedTemporaryBytes)),
+            bucketRow(.deleteAndRegenerate),
+            bucketRow(.parkExternally),
+            Row(label: "  " + L10n.tr("savings.permanent.title"), amount: headline(s.permanentBytes), note: verified(s.verifiedPermanentBytes)),
+            bucketRow(.runFromExternal),
+            Row(label: "  " + L10n.tr("savings.total.title"), amount: headline(s.reclaimableBytes)),
+        ]
+        let keep = Row(label: "  " + SavingsBucket.keepLocal.localizedTitle, amount: option(s.keepLocal.primaryBytes))
+        let all = rows + [keep]
+        let labelWidth = all.map { displayWidth($0.label) }.max() ?? 0
+        let amountWidth = all.map { displayWidth($0.amount) }.max() ?? 0
+        func render(_ r: Row) -> String {
+            let amount = String(repeating: " ", count: amountWidth - displayWidth(r.amount)) + r.amount
+            let line = padDisplay(r.label, labelWidth) + "  " + amount
+            return r.note.isEmpty ? line : line + "   " + r.note
+        }
+        var out = [L10n.tr("cli.savings.heading")]
+        out += rows.map(render)
+        out.append("  " + L10n.tr("savings.alternativesNote"))
+        out.append(render(keep))
+        out.append(L10n.tr("cli.savings.next", "xcodevaultctl plan delete | park | external"))
+        return out.joined(separator: "\n")
+    }
+
+    /// Terminal columns a string occupies: East Asian wide and fullwidth scalars take two, combining marks none.
+    static func displayWidth(_ s: String) -> Int {
+        s.unicodeScalars.reduce(0) { sum, u in
+            switch u.value {
+            case 0x0300...0x036F: sum
+            case 0x1100...0x115F, 0x2E80...0xA4CF, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE30...0xFE4F, 0xFF00...0xFF60, 0xFFE0...0xFFE6, 0x20000...0x3FFFD:
+                sum + 2
+            default: sum + 1
+            }
+        }
+    }
+
+    static func padDisplay(_ s: String, _ n: Int) -> String {
+        let w = displayWidth(s)
+        return w >= n ? s : s + String(repeating: " ", count: n - w)
+    }
+
     static func pad(_ s: String, _ n: Int) -> String { s.count >= n ? s : s + String(repeating: " ", count: n - s.count) }
     static func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
 }
