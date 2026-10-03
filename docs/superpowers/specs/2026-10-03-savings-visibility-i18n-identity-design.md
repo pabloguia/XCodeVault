@@ -108,8 +108,9 @@ Per bucket, over items on the boot volume, breakdowns skipped (same rule as toda
 - `primaryBytes[bucket]` — bytes counted once, under the primary bucket. Additive; sums to the
   boot-volume developer total.
 - `verifiedBytes[bucket]` — the non-experimental part of `optionBytes`.
-- `needsAccessBytes` — bytes the scan could not measure for lack of Full Disk Access (from the
-  existing `privacyRefusalCount`/lower-bound signals), shown as "at least".
+- `isLowerBound` — set when any counted item could not be fully read (the existing lower-bound
+  signal). Bytes that could not be read cannot be measured, so there is no "bytes needing access"
+  number; every headline is then rendered as "at least", and the access row (§6.3) says why.
 - `reclaimableUnionBytes` — the union of the three saving buckets (each byte once), the honest
   "up to" headline.
 
@@ -151,7 +152,7 @@ confirmations are localized, but the CLI's typed confirmation flags (`--i-confir
 `en` (base), `pt-BR`, `es`, `ja`, `zh-Hans` ship together. Non-English strings are first drafted by
 the implementer and marked `"state": "needs_review"` in the catalog until a native speaker reviews
 them; `docs/process/LOCALIZATION.md` lists the review state per language. The app's `Info.plist`
-gains `CFBundleLocalizations` for the five, and `InfoPlist.strings` per language.
+gains `CFBundleLocalizations` for the five. No `InfoPlist.strings`: the app's name is the same in every language.
 
 ### 4.5 Adding a language (the "resources for new languages")
 
