@@ -47,15 +47,8 @@ final class BrandTokenTests: XCTestCase {
     }
 
     func testBucketColorsHaveAtLeastThreeToOneOnWhite() {
-        for bucket in SavingsBucket.allCases where bucket != .deleteAndRegenerate {
+        for bucket in SavingsBucket.allCases {
             XCTAssertGreaterThanOrEqual(contrast(bucket.colorHex, "#FFFFFF"), 3, bucket.rawValue)
         }
-    }
-
-    /// Known failure, awaiting a ruling: amber `#E8A33D` is 2.16:1 on white. The expectation flips this test red
-    /// the day the token is adjusted, so the exception cannot outlive the fix.
-    func testAmberOnWhiteIsAKnownFailureUntilRuled() {
-        XCTExpectFailure("deleteAndRegenerate amber is below 3:1 on white")
-        XCTAssertGreaterThanOrEqual(contrast(SavingsBucket.deleteAndRegenerate.colorHex, "#FFFFFF"), 3)
     }
 }
