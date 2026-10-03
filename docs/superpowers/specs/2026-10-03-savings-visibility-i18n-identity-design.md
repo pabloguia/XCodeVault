@@ -184,6 +184,20 @@ gains `CFBundleLocalizations` for the five. No `InfoPlist.strings`: the app's na
   placeholder mismatch (`%@`/`%lld` count and order) between `en` and any locale, or a stale
   generated table.
 
+### 4.6 Amendment (2026-10-03, after the S2 whole-branch review)
+
+- **One catalog, in Core**, replacing "one String Catalog per module" in §4.1. Keys are namespaced by
+  where they are shown: `savings.*` (shared), `cli.*`, `app.*`. One table keeps `check` exact (every
+  literal key in `Sources/` is checked against it) and gives the CLI and the app one vocabulary. Revisit
+  only if the generated file's compile time on this machine becomes a problem (measure at ~200 keys).
+- **Glossary**, replacing §4.5's "vault, park … stay untranslated": product nouns and command words stay
+  untranslated where they are typed (`vault init`, `runtime offload`, `--lang`); in prose the *concept* is
+  translated (pt-BR "guardar", "disco-cofre"; ja "退避"), because a sentence that mixes in an untranslated
+  English verb reads as a bug to the user.
+- **Placeholders are compared in order**, as §4.5 always said; positional (`%1$@`) and non-positional
+  specifiers are never mixed in one template. Catalog features the tool does not compile (`substitutions`,
+  device variations, `%#@…@`) are refused by `check`, not ignored.
+
 ## 5. S3 — CLI
 
 - `xcodevaultctl` / `status`: still fast (no size measurement) but ends with the last measured
