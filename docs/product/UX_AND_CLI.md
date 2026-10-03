@@ -100,7 +100,8 @@ The app is a projection of Core: every number and every decision a screen shows 
   none of these commands: a GUI writer for `externalize`, `runtime offload` or `locations set-*` needs its own spec
   and the migration-safety review.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
-  Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`); Drives, Health and History
+  Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
+  an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows); Drives, Health and History
   are the earlier Volumes, Doctor and Journal views.
 - **Never color alone.** A bucket is always its symbol and its title; its color is a fill or a symbol tint, never a
   text color. Every state has a word next to its symbol.

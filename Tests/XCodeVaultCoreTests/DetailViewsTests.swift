@@ -23,6 +23,10 @@ func detailSampleSurvey() -> AppModel.Survey {
         SimulatorRuntime(
             identifier: "R1", runtimeIdentifier: iOSRuntimeID, platformIdentifier: "com.apple.platform.iphonesimulator", version: "26.0", build: "23A343",
             state: "Ready", sizeBytes: 9 * gb, path: "/Library/Developer/CoreSimulator/Images/R1.dmg"),
+        // simctl gave no size: shown as "not measured", and the scanner's total leaves it out.
+        SimulatorRuntime(
+            identifier: "R3", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.tvOS-26-0", platformIdentifier: "com.apple.platform.appletvsimulator",
+            version: "26.0", build: "23J352", state: "Ready"),
     ]
     let devices = "/Users/tester/Library/Developer/CoreSimulator/Devices/"
     survey.0.devices = [
@@ -112,7 +116,7 @@ final class DetailViewsTests: XCTestCase {
 
     func testRuntimesAreListedLargestFirst() {
         let report = detailSampleSurvey().0
-        XCTAssertEqual(SimulatorsTable.runtimes(report: report).map(\.identifier), ["R1", "R2"])
+        XCTAssertEqual(SimulatorsTable.runtimes(report: report).map(\.identifier), ["R1", "R2", "R3"])
         XCTAssertEqual(SimulatorsTable.runtimesBytes(report: report), 13_000_000_000)
     }
 
@@ -121,11 +125,34 @@ final class DetailViewsTests: XCTestCase {
         let rows = SimulatorsTable.devices(report: report)
         XCTAssertEqual(rows.map(\.device.udid), ["D1", "D2", "D3"])
         XCTAssertEqual(rows.map(\.bytes), [3_000_000_000, 1_000_000_000, nil])
-        XCTAssertEqual(rows[0].runtime, "iphone 26.0")
-        XCTAssertEqual(rows[2].runtime, "watch 11.5")
+        XCTAssertEqual(rows[0].runtime, "iOS 26.0")
+        XCTAssertEqual(rows[2].runtime, "watchOS 11.5")
         // A device whose runtime is no longer installed shows the identifier it names, never another runtime's name.
         XCTAssertEqual(rows[1].runtime, "com.apple.CoreSimulator.SimRuntime.iOS-17-0")
         XCTAssertEqual(SimulatorsTable.devicesBytes(report: report), 4_000_000_000)
+    }
+
+    /// Apple's names for the platforms simctl reports, never the identifier's lowercase short form (Task 6 review, M3).
+    func testPlatformsAreNamedAsAppleNamesThem() {
+        let names = [
+            "com.apple.platform.iphonesimulator": "iOS", "com.apple.platform.watchsimulator": "watchOS",
+            "com.apple.platform.appletvsimulator": "tvOS", "com.apple.platform.xrsimulator": "visionOS",
+            "com.apple.platform.newsimulator": "new",
+        ]
+        for (identifier, name) in names {
+            XCTAssertEqual(SimulatorRuntime(identifier: "R", platformIdentifier: identifier).platformDisplayName, name, identifier)
+        }
+        XCTAssertEqual(SimulatorRuntime(identifier: "R").platformDisplayName, "?", "no platform from simctl")
+    }
+
+    /// One source for the runtime total (M5): the scanner's `runtimeImageBytes`, which the Overview's line reads too —
+    /// even where the rows' own sizes would add up to something else (an unmeasured runtime).
+    func testTheRuntimeTotalIsTheScannersOneNumber() {
+        var report = detailSampleSurvey().0
+        report.summary.runtimeImageBytes = 21_000_000_000
+        XCTAssertEqual(SimulatorsTable.runtimesBytes(report: report), 21_000_000_000)
+        XCTAssertNil(report.runtimes.first { $0.identifier == "R3" }?.sizeBytes)
+        XCTAssertEqual(SimulatorsTable.runtimes(report: report).last?.identifier, "R3", "unmeasured last")
     }
 
     func testNoRuntimesAndNoDevicesAreEmptyRows() {

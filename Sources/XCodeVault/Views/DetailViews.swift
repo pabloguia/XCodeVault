@@ -36,7 +36,7 @@ struct StorageView: View {
 }
 
 /// Simulators: the installed runtimes and the devices with the size of their data. Read-only: runtimes and devices are
-/// deleted by `simctl` and `xcodebuild`, never from here (the Delete view lists their commands).
+/// deleted with `simctl`, never from here (the Delete view lists the commands). An unmeasured size says so, never zero.
 struct SimulatorsView: View {
     let report: ScanReport
     var body: some View {
@@ -48,9 +48,12 @@ struct SimulatorsView: View {
                 Text.l10n(L10n.tr("app.simulators.runtimes.none")).foregroundStyle(.secondary)
             } else {
                 Table(runtimes) {
-                    // Platform, version, build and state are simctl's own record: never translated.
-                    TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.sizeBytes ?? 0)).monospacedDigit() }.width(90)
-                    TableColumn(L10n.tr("app.column.platform")) { Text(verbatim: $0.platformName) }
+                    // Version, build and state are simctl's own record, and the platform Apple's name for it: never translated.
+                    TableColumn(L10n.tr("app.column.size")) {
+                        Text(verbatim: $0.sizeBytes.map { ByteCount.format($0) } ?? L10n.tr("app.value.notMeasured")).monospacedDigit()
+                    }
+                    .width(90)
+                    TableColumn(L10n.tr("app.column.platform")) { Text(verbatim: $0.platformDisplayName) }
                     TableColumn(L10n.tr("app.column.version")) { Text(verbatim: ($0.version ?? "?") + " (" + ($0.build ?? "?") + ")") }
                     TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state ?? "?") }
                     TableColumn(L10n.tr("app.column.mounted")) { Text(verbatim: $0.isMounted ? L10n.tr("app.value.yes") : L10n.tr("app.value.no")) }
@@ -63,8 +66,10 @@ struct SimulatorsView: View {
                 Text.l10n(L10n.tr("app.simulators.devices.none")).foregroundStyle(.secondary)
             } else {
                 Table(devices) {
-                    // An unmeasured device shows no size rather than a zero.
-                    TableColumn(L10n.tr("app.column.size")) { Text(verbatim: $0.bytes.map { ByteCount.format($0) } ?? "").monospacedDigit() }.width(90)
+                    TableColumn(L10n.tr("app.column.size")) {
+                        Text(verbatim: $0.bytes.map { ByteCount.format($0) } ?? L10n.tr("app.value.notMeasured")).monospacedDigit()
+                    }
+                    .width(90)
                     TableColumn(L10n.tr("app.column.name")) { Text(verbatim: $0.device.name) }
                     TableColumn(L10n.tr("app.column.runtime")) { Text(verbatim: $0.runtime) }
                     TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.device.state) }

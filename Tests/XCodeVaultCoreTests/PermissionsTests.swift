@@ -116,6 +116,10 @@ final class PermissionsReportTests: XCTestCase {
     func testTheHelperNextStepNamesTheAppsOwnButton() {
         XCTAssertTrue(HelperState.notInstalled.nextStep.contains("install it ahead of time"))
         XCTAssertTrue(HelperState.enabled.nextStep.contains("uninstall it"))
-        XCTAssertFalse(HelperState.unavailableInThisBuild.nextStep.contains("Permissions section"))
+        XCTAssertFalse(HelperState.unavailableInThisBuild.nextStep.contains("Access screen"))
+        // S4 renamed the app's Permissions section to Access: the CLI names the screen the app has.
+        XCTAssertTrue(HelperState.notInstalled.nextStep.contains("Access screen"))
+        XCTAssertTrue(HelperState.enabled.nextStep.contains("Access screen"))
+        for state in HelperState.allCases { XCTAssertFalse(state.nextStep.contains("Permissions section"), "\(state)") }
     }
 }

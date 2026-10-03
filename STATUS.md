@@ -54,14 +54,20 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Blocked / pending — manual (ask the user)
 
-- **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) the Delete table's grouped rows have never been seen
-  in a real window — off-screen snapshots cannot draw `NSTableView` rows (nor a `List`'s, so Health is also unseen) —
-  a manual look at the running app is scheduled before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
+- **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
+  off-screen snapshots cannot draw `NSTableView` rows: the Delete table's grouped rows, Storage's rows (the Bucket
+  column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
+  before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
   are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
   catalog's English in every language (S4 Task 2) — localizing them needs display names in the catalog; (4) the
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
   (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further; (5) the runtime
-  `.dmg` gap below is still open: the Overview and Simulators show those bytes on their own, outside the totals.
+  `.dmg` gap below is still open: the Overview and Simulators show those bytes on their own, outside the totals;
+  (6) `HelperClient`'s error text still says "Install… in its Permissions section" (`Sources/XCodeVaultHelperClient/
+  HelperClient.swift:51`) and `scripts/bundle-app.sh:49`'s comment says "Permissions section": both are helper/signing
+  files, so the rename waits for the next change that goes through the helper-security review; (7) platform names in
+  the Simulators screen are mapped from five known `platformIdentifier`s (iOS, watchOS, tvOS, visionOS, macOS); an
+  unknown platform shows its short identifier, unmapped.
 
 - **Runtime images outside the savings model.** Runtime images stored as
   `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` (Intel / pre-MobileAsset layout, measured

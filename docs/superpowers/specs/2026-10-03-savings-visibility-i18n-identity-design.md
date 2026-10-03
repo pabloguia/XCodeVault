@@ -325,6 +325,11 @@ Sidebar, two groups:
 - Category display names: the app shows the catalog's English names and outcomes in every language (S4 Task 2);
   localizing them needs display names in the catalog.
 - pt-BR, es, ja and zh-Hans app strings are drafts (`needs_review`) awaiting native review.
-- The Delete table's grouped rows were never seen in a real window (off-screen snapshots cannot draw `NSTableView`
-  rows); checked by hand before the final review.
+- Table and list rows were never seen in a real window (off-screen snapshots cannot draw `NSTableView` rows): the
+  Delete table's grouped rows, Storage's rows (the Bucket column's cells), both Simulators tables and Health's findings
+  `List`; checked by hand before the final review.
+- `HelperClient`'s error text and a `scripts/bundle-app.sh` comment still say "Permissions section"; renamed with the
+  next change that goes through the helper-security review.
+- Simulators maps five known platform identifiers to Apple's names (iOS, watchOS, tvOS, visionOS, macOS); an unknown
+  platform shows its short identifier.
 

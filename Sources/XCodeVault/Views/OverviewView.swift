@@ -66,9 +66,11 @@ struct OverviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text.l10n(L10n.tr("app.overview.total", Self.text(overview.total))).bold()
             Text.l10n(L10n.tr("savings.alternativesNote")).font(.callout).foregroundStyle(.secondary)
-            if report.summary.runtimeImageBytes > 0 {
-                // The runtime `.dmg` store is not a catalog category yet (S3 C5): its own line, as `scan` prints it.
-                Text.l10n(L10n.tr("app.overview.runtimes", ByteCount.format(report.summary.runtimeImageBytes)))
+            // The runtime `.dmg` store is not a catalog category yet (S3 C5): its own line, as `scan` prints it. The same
+            // number as the Simulators screen's (`SimulatorsTable.runtimesBytes`).
+            let runtimes = SimulatorsTable.runtimesBytes(report: report)
+            if runtimes > 0 {
+                Text.l10n(L10n.tr("app.overview.runtimes", ByteCount.format(runtimes)))
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

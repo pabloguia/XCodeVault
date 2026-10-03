@@ -38,8 +38,8 @@ public enum StorageTable {
 /// One simulator device of the Simulators screen, with the size of its data folder and the runtime it runs.
 public struct SimulatorDeviceRow: Sendable, Equatable, Identifiable {
     public let device: SimulatorDevice
-    /// The installed runtime's platform and version ("iOS 26.0"), or the device's runtime identifier when no installed
-    /// runtime matches it (a device whose runtime was deleted).
+    /// The installed runtime's platform and version ("iOS 26.0", `SimulatorRuntime.platformDisplayName`), or the device's
+    /// runtime identifier when no installed runtime matches it (a device whose runtime was deleted).
     public let runtime: String
     /// `SimulatorDevice.dataPathSize`; nil when the scan did not measure it.
     public let bytes: UInt64?
@@ -62,7 +62,7 @@ public enum SimulatorsTable {
         var names: [String: String] = [:]
         for runtime in report.runtimes {
             guard let id = runtime.runtimeIdentifier, names[id] == nil else { continue }
-            names[id] = [runtime.platformName, runtime.version].compactMap { $0 }.joined(separator: " ")
+            names[id] = [runtime.platformDisplayName, runtime.version].compactMap { $0 }.joined(separator: " ")
         }
         return report.devices
             .map { SimulatorDeviceRow(device: $0, runtime: names[$0.runtimeIdentifier] ?? $0.runtimeIdentifier, bytes: $0.dataPathSize) }
@@ -78,8 +78,26 @@ public enum SimulatorsTable {
         report.devices.reduce(UInt64(0)) { $0 + ($1.dataPathSize ?? 0) }
     }
 
-    /// The runtimes' measured images, summed (what `ScanSummary.runtimeImageBytes` holds, recomputed from the rows shown).
+    /// The runtimes' measured images: `ScanSummary.runtimeImageBytes`, the one number the scanner stores. The Overview's
+    /// runtime line and the Simulators screen both read it here, so they can never disagree.
     public static func runtimesBytes(report: ScanReport) -> UInt64 {
-        report.runtimes.reduce(UInt64(0)) { $0 + ($1.sizeBytes ?? 0) }
+        report.summary.runtimeImageBytes
+    }
+}
+
+extension SimulatorRuntime {
+    /// The platform as Apple names it — iOS, watchOS, tvOS, visionOS — from `platformIdentifier`
+    /// (`com.apple.platform.iphonesimulator` → iOS). A platform this does not know keeps `platformName`, the identifier's
+    /// short form; a runtime simctl gave no platform for shows "?", as a missing version does.
+    public var platformDisplayName: String {
+        guard platformIdentifier != nil else { return "?" }
+        return switch platformName {
+        case "iphone": "iOS"
+        case "watch": "watchOS"
+        case "appletv": "tvOS"
+        case "xr": "visionOS"
+        case "macosx", "macos": "macOS"
+        default: platformName
+        }
     }
 }

@@ -10,7 +10,7 @@ public enum PermissionPrompts {
 }
 
 extension FullDiskAccessState {
-    /// Whether the Permissions row offers **Open Settings**: whenever the grant is not known to be there.
+    /// Whether the Access screen's row offers to open the Full Disk Access settings: whenever the grant is not known to be there.
     public var offersOpenSettings: Bool { self != .granted }
 }
 
@@ -20,7 +20,7 @@ public enum PrivilegedActionControl: Sendable, Equatable {
     case run
     /// A build that can reach the helper, not yet approved: the button opens the sheet with **Allow**.
     case requestHelper
-    /// This build can never reach the helper: no button; "Not available in this build" and the manual route.
+    /// This build can never reach the helper: no button; "Not in this build" and what to do instead.
     case notAvailableInThisBuild
 }
 
