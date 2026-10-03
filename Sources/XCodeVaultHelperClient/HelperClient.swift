@@ -48,7 +48,7 @@ public struct HelperClient: Sendable {
             case .notRegistered(let s):
                 // Not "run the app once": nothing is installed at launch (ADR-0007).
                 return "The helper is not registered with launchd (\(s)). The app installs it when you choose an action that needs root, "
-                    + "or from Install… in its Permissions section; see SECURITY_MODEL.md."
+                    + "or from Install… on its Access screen; see SECURITY_MODEL.md."
             case .connectionFailed(let why):
                 return "The privileged helper did not reply (\(why)). Whether it acted is unknown; rescan to see."
             case .unexpectedProxy:
