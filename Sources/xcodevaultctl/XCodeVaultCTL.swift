@@ -16,6 +16,9 @@ struct XCodeVaultCTL: ParsableCommand {
 
             Experiment IDs that appear in help text (E2, E8b, E11 …) are defined in \
             docs/architecture/EXPERIMENTS.md.
+
+            Language: --lang <code> (en, pt-BR, es, ja, zh-Hans) or XCODEVAULT_LANG; otherwise your \
+            macOS language. --json output is never translated.
             """,
         version: XCodeVaultVersion.current,
         subcommands: [
@@ -23,6 +26,27 @@ struct XCodeVaultCTL: ParsableCommand {
             Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self,
         ],
         defaultSubcommand: Status.self)
+
+    /// The language must be known before ArgumentParser builds any help text, so `--lang` is taken out of
+    /// the arguments here rather than declared as an option (spec 2026-10-03 §4.2).
+    static func main() {
+        let env = ProcessInfo.processInfo.environment
+        let prepared = prepareLanguage(arguments: Array(CommandLine.arguments.dropFirst()), environment: env, preferred: Locale.preferredLanguages)
+        if let warning = prepared.warning { FileHandle.standardError.write(Data((warning + "\n").utf8)) }
+        main(prepared.remaining)
+    }
+
+    static func prepareLanguage(arguments: [String], environment: [String: String], preferred: [String]) -> (remaining: [String], warning: String?) {
+        let (flag, remaining) = L10n.extractLanguageOverride(from: arguments)
+        L10n.configure(override: flag, environment: environment, preferred: preferred)
+        let requested = flag ?? environment["XCODEVAULT_LANG"]
+        var warning: String?
+        if let requested, L10n.match(requested) == nil {
+            warning =
+                "xcodevaultctl: language '\(requested)' is not available; using \(L10n.locale). Available: \(L10n.supportedLocales.joined(separator: ", "))"
+        }
+        return (remaining, warning)
+    }
 }
 
 struct GlobalOptions: ParsableArguments {
