@@ -3053,10 +3053,13 @@ The CI-only Developer ID certificate is on team `4V58BSZL3W`; the notary key has
 - the `.p8` was deleted.
 
 **Open, the operator's:**
-- the environment has **no required reviewer and administrator bypass on**, so a tag would sign with no one
-  approving. The runbook's Part C says what to check before the first tag;
-- `~/certs/XCodeVault-Application-CI.p12`, and the CI identity in the login keychain, are still on the Mac
-  (A.2 step 4).
+- ~~the environment has no required reviewer and administrator bypass on~~. **Fixed by the operator later on
+  2026-10-02**, after the commit that recorded it (d72883f). `gh api …/environments/release` now shows rules
+  `branch_policy` and `required_reviewers` (reviewer `pabloguia`, prevent self-review off) and
+  `can_admins_bypass: false`. So a `v*` tag now waits at `sign` for the operator's approval;
+- the CI certificate's `.p12` and the notary API key's `.p8` are still on the Mac in `~/certs`, and the CI
+  identity is still in the login keychain (A.2 step 4, A.3 step 4). The `.p8` escaped the earlier search
+  because its file was renamed: it no longer starts with `AuthKey_`.
 
 **Written:** `release.yml`, `ci-sign-notarize.sh`, `release-artifact-scan.sh`, `release-hygiene.sh` and its
 test, the hygiene gate in CI and preflight (CI now has 14 named steps), `.gitignore`, and a refusal in
