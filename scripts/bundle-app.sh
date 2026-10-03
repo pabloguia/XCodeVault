@@ -85,9 +85,12 @@ if [ -n "$TEAM" ]; then
     grep -q "let teamID = \"$TEAM\"" "$src" || { echo "refusing: team id substitution did not apply to $src" >&2; exit 1; }
   done
 fi
-BUILD_PRODUCTS=(--product XCodeVault --product xcodevaultctl)
-[ "$WITH_HELPER" = 1 ] && BUILD_PRODUCTS+=(--product xcodevault-helper)
-swift build -c "$CONFIG" "${BUILD_PRODUCTS[@]}"
+BUILD_PRODUCTS=(XCodeVault xcodevaultctl)
+[ "$WITH_HELPER" = 1 ] && BUILD_PRODUCTS+=(xcodevault-helper)
+# One `swift build` per product. Given several `--product` options, SwiftPM builds only the last one: measured
+# 2026-10-02, when `--release` left only xcodevaultctl in .build/release and the copy below failed. Debug
+# bundles hid it by copying whatever an earlier full build had left in .build/debug, possibly stale.
+for product in "${BUILD_PRODUCTS[@]}"; do swift build -c "$CONFIG" --product "$product"; done
 BIN="$ROOT/.build/$CONFIG"
 APP="$ROOT/dist/XCodeVault.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
