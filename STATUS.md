@@ -44,8 +44,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   red for four pushes on `swift format lint --strict` while three of the four gates had been run
   locally and the tree was believed green — the cheapest check in the set was the one nobody ran.
 - **Savings visibility, i18n and identity** — spec `docs/superpowers/specs/2026-10-03-savings-visibility-i18n-identity-design.md`.
-  S1 (savings model in Core) and S2 (localization) done — non-English strings need native review
-  (docs/process/LOCALIZATION.md); S3 (CLI), S4 (GUI), S5 (identity) pending, in that order.
+  S1 (savings model in Core), S2 (localization) and S3 (CLI: savings-first `scan`/`status`, `plan`,
+  `--lang`, grouped help) done — non-English strings need native review (docs/process/LOCALIZATION.md);
+  S4 (GUI) and S5 (identity) pending, in that order.
 
 ## Blocked / pending — manual (ask the user)
 

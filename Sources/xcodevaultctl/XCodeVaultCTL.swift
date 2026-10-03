@@ -26,10 +26,10 @@ struct XCodeVaultCTL: ParsableCommand {
     /// Commands, so English in every language (spec §5.1).
     static let examples = """
         EXAMPLES:
-          xcodevaultctl             # quick status
-          xcodevaultctl scan        # what you can reclaim, temporarily and permanently
-          xcodevaultctl plan delete # what to run to delete regenerable data
-          xcodevaultctl clean --apply --trash
+          xcodevaultctl                       # quick status
+          xcodevaultctl scan                  # what you can reclaim, temporarily and permanently
+          xcodevaultctl plan delete           # what to run to delete regenerable data
+          xcodevaultctl clean --apply --trash # after reviewing `xcodevaultctl clean`
           xcodevaultctl --lang pt-BR scan
         """
 

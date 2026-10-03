@@ -279,8 +279,8 @@ extension L10nCatalog {
             ],
             "cli.group.recover": [
                 "en": "Recover",
-                "pt-BR": "Recuperação",
-                "es": "Recuperación",
+                "pt-BR": "Retomar e reparar",
+                "es": "Reanudar y reparar",
                 "ja": "復旧",
                 "zh-Hans": "恢复",
             ],

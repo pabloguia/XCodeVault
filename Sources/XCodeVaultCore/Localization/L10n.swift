@@ -145,17 +145,33 @@ public enum L10n {
         return template
     }
 
-    /// After `%%` is removed: no `%#@…@` substitution, no `%` left that the pattern does not account for, and no
-    /// more specifiers than arguments.
+    /// After `%%` is removed: no `%#@…@` substitution and no `%` left that the pattern does not account for. Then
+    /// either every specifier is non-positional and there are no more of them than arguments, or every specifier
+    /// is positional, each index `1…n` is used with one conversion, and `n` does not exceed the arguments (a
+    /// repeated index is fine: `%1$@ %1$@`). Anything else — `%3$@` with one argument, a gap, a mix — is unsafe.
     /// The specifier pattern is the one `scripts/l10n/l10n.swift` checks the catalog with: one meaning in both.
     private static func isSafe(_ template: String, argumentCount: Int) -> Bool {
         let stripped = template.replacingOccurrences(of: "%%", with: "")
         guard !stripped.contains("%#@"),
-            let specifier = try? NSRegularExpression(pattern: #"%(?:[0-9]+\$)?[-+ 0#]*[0-9]*(?:\.[0-9]+)?(lld|llu|ld|lu|d|i|u|x|X|@|f|e|g|s|c)"#)
+            let specifier = try? NSRegularExpression(pattern: #"%([0-9]+\$)?[-+ 0#]*[0-9]*(?:\.[0-9]+)?(lld|llu|ld|lu|d|i|u|x|X|@|f|e|g|s|c)"#)
         else { return false }
         let range = NSRange(stripped.startIndex..., in: stripped)
         if specifier.stringByReplacingMatches(in: stripped, range: range, withTemplate: "").contains("%") { return false }
-        return specifier.numberOfMatches(in: stripped, range: range) <= argumentCount
+        let matches = specifier.matches(in: stripped, range: range)
+        let positions: [Int?] = matches.map { m in
+            Range(m.range(at: 1), in: stripped).flatMap { Int(stripped[$0].dropLast()) }
+        }
+        if positions.allSatisfy({ $0 == nil }) { return matches.count <= argumentCount }
+        guard !positions.contains(where: { $0 == nil }) else { return false }
+        var conversions: [Int: String] = [:]
+        for (match, position) in zip(matches, positions) {
+            guard let number = position, let conversionRange = Range(match.range(at: 2), in: stripped) else { return false }
+            let conversion = String(stripped[conversionRange])
+            if let earlier = conversions[number], earlier != conversion { return false }
+            conversions[number] = conversion
+        }
+        let highest = conversions.keys.max() ?? 0
+        return conversions.keys.min() == 1 && conversions.count == highest && highest <= argumentCount
     }
 }
 

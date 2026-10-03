@@ -41,9 +41,14 @@ final class CLIExperimentalLabelTests: XCTestCase {
     private func assertLabelled(_ command: ParsableCommand.Type, because reason: String, line: UInt = #line) {
         for (locale, text) in abstracts(of: command) {
             let label = label(locale)
+            // No ASCII space after a full-width "。"; one after every other label.
+            let separator = label.hasSuffix("。") ? "" : " "
             XCTAssertTrue(
-                text.hasPrefix(label + " ") && text.count > label.count + 1,
+                text.hasPrefix(label + separator) && text.count > label.count + separator.count,
                 "[\(locale)] the abstract of `\(command)` does not open with \"\(label)\" (\(reason)): \(text)", line: line)
+            if separator.isEmpty {
+                XCTAssertFalse(text.hasPrefix(label + " "), "[\(locale)] an ASCII space follows the full-width full stop: \(text)", line: line)
+            }
         }
     }
 

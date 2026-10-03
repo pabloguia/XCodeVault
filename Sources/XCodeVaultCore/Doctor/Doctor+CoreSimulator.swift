@@ -67,7 +67,7 @@ extension Doctor {
                 let size = DiskUsage.measure(p)?.allocatedBytes ?? 0
                 out.append(
                     Finding(
-                        id: "stranded-inbox:\(n)", severity: .warning, title: "Stranded runtime download: \(n) (\(ByteCount.format(size)))",
+                        id: "stranded-inbox:\(n)", severity: .warning, title: "Stranded runtime download: \(n) (\(ByteCount.english(size)))",
                         detail:
                             "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful `-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
                         path: p,
@@ -227,8 +227,8 @@ extension Doctor {
             case .none: size = "size unknown"
             // "at least 0 bytes" is still a confident-looking number for a tree we could not read.
             case .some(let u) where u.isLowerBound && u.allocatedBytes == 0: size = "size unknown"
-            case .some(let u) where u.isLowerBound: size = "at least \(ByteCount.format(u.allocatedBytes))"
-            case .some(let u): size = ByteCount.format(u.allocatedBytes)
+            case .some(let u) where u.isLowerBound: size = "at least \(ByteCount.english(u.allocatedBytes))"
+            case .some(let u): size = ByteCount.english(u.allocatedBytes)
             }
             // `newestWrite`, not the directory's own mtime — the same frozen value the age guard was
             // fixed to stop trusting. Printing it next to a deletion command would tell the user a
@@ -282,7 +282,7 @@ extension Doctor {
                     Finding(
                         id: "orphan-dyld-host:\(buildDir)", severity: .info,
                         title:
-                            "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.format($0.allocatedBytes) } ?? "size unknown"))",
+                            "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.english($0.allocatedBytes) } ?? "size unknown"))",
                         detail:
                             "This machine runs \(hostBuild). Caches under another build are not read by anything — but XCodeVault has never observed a stale "
                             + "build directory in the field, so this is reported for inspection only and carries no command.",
@@ -363,7 +363,7 @@ extension Doctor {
                     let size = DiskUsage.measure(p)?.allocatedBytes ?? 0
                     out.append(
                         Finding(
-                            id: "orphan-asset:\(e)", severity: .warning, title: "Runtime asset not referenced by any runtime (\(ByteCount.format(size)))",
+                            id: "orphan-asset:\(e)", severity: .warning, title: "Runtime asset not referenced by any runtime (\(ByteCount.english(size)))",
                             detail:
                                 "\(p) exists in the MobileAsset store but `simctl runtime list` references no runtime backed by it. Likely a NeverCollected orphan (F1).",
                             path: p,
@@ -691,7 +691,7 @@ extension Doctor {
 
         return [
             Finding(
-                id: "unavailable-devices", severity: .warning, title: "\(bad.count) simulator device(s) unavailable (\(ByteCount.format(bytes)))",
+                id: "unavailable-devices", severity: .warning, title: "\(bad.count) simulator device(s) unavailable (\(ByteCount.english(bytes)))",
                 detail: bad.prefix(5).map { "\($0.name): \($0.availabilityError ?? "runtime missing")" }.joined(separator: "; "),
                 path: home + "/Library/Developer/CoreSimulator/Devices", remediation: fullRemediation, evidence: evidence)
         ]

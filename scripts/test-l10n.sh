@@ -62,6 +62,14 @@ expect "check refuses an unknown key in sources" 1 check
 
 printf 'let x = L10n.tr("a.b", "1 GB")\nlet y = L10n.plural("n.c", count: 2)\n' >"$work/src/Use.swift"
 
+# A catalog key no source references is a warning that names the key; the exit status stays 0.
+printf 'let x = L10n.tr("a.b", "1 GB")\n' >"$work/src/Use.swift"
+check >"$work/warn.out" 2>&1; rc=$?
+if [ "$rc" = 0 ] && grep -q '^l10n: unused key n.c$' "$work/warn.out"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: check warns about an unused key and exits 0 (exit $rc)"; sed 's/^/    /' "$work/warn.out"; fi
+check >"$work/warn.out" 2>&1
+if grep -q 'unused key a.b' "$work/warn.out"; then fail=$((fail + 1)); echo "FAIL: a referenced key is not reported unused"; else pass=$((pass + 1)); fi
+printf 'let x = L10n.tr("a.b", "1 GB")\nlet y = L10n.plural("n.c", count: 2)\n' >"$work/src/Use.swift"
+
 # Placeholders are compared in order (spec §4.6); catalog shapes the tool does not compile are refused.
 shape() {  # $1 description, $2 expected exit, $3 one extra entry (JSON) added to the good catalog
     catalog "$good,$3"

@@ -1338,7 +1338,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Recuperación"
+            "value" : "Reanudar y reparar"
           }
         },
         "ja" : {
@@ -1350,7 +1350,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Recuperação"
+            "value" : "Retomar e reparar"
           }
         },
         "zh-Hans" : {

@@ -39,7 +39,19 @@ read command.
 
 Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep in sync):
 
-- Read-only (all `--json`): `scan`, `status`, `report`, `doctor`, `xcode list`,
+- Groups (spec 2026-10-03 §5.1; the root `--help` lists commands under task headings): see what uses
+  space — `status` (default), `scan`, `plan`, `report`; save space — `clean`, `locations`,
+  `externalize`, `restore`, `runtime`; drives — `volumes`, `vault`, `bench`; recover — `migration`,
+  `journal`; diagnose — `doctor`, `xcode`, `compatibility`, `permissions`.
+- Savings first: `scan` opens with what can be reclaimed — temporarily, and permanently — and ends with
+  the next step; `scan --details` adds the full item table. `status` closes with the same footer.
+  `plan <delete|park|external>` is read-only: it prints, per category, the command to run to reclaim
+  space that one way (`<angle brackets>` are values the user supplies; the commands are never
+  translated). Preview forms only; the rows that act immediately are marked.
+- Language: `--lang <code>` (`en`, `pt-BR`, `es`, `ja`, `zh-Hans`) on any command, else
+  `XCODEVAULT_LANG`, else the macOS language, else English. `--json` and `report` are always English
+  (an API and a maintainer record); `report` carries the full item table.
+- Read-only (all `--json`): `scan [--details]`, `plan`, `status`, `report`, `doctor`, `xcode list`,
   `runtime list`, `runtime library --dir`, `volumes`, `compatibility`, `locations show`,
   `journal`, `vault status`, `migration status`, `permissions`, `bench <dir>`.
 - Changing (each journaled except `vault forget`, which only edits the registry; dry-run/plan by
@@ -59,8 +71,7 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   of its own `--help` and the only line the parent's command list shows; a `discussion:` shows in the
   command's own help only. `runtime delete` and `locations reset-*` carry no label.
   `CLIExperimentalLabelTests` pins the labels, and the absence on `runtime delete`, against the catalog.
-- Not implemented (from the original candidate list): `plan` (folded into each command's
-  dry run), `verify` (folded into externalize/restore; a standalone re-verify is a follow-up),
+- Not implemented (from the original candidate list): `verify` (folded into externalize/restore; a standalone re-verify is a follow-up),
   `mount status` (no canonical-mount strategy in v1, ADR-0004), `runtime install`
   (= `runtime import`).
 

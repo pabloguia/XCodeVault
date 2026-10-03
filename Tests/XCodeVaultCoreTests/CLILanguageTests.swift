@@ -62,6 +62,29 @@ final class CLILanguageTests: XCTestCase {
         XCTAssertTrue(english.contains("42"), "the savings were encoded")
     }
 
+    func testDoctorAndPlanJSONAreTheSameInEveryLanguage() throws {
+        // `doctor --json` encodes `Doctor().diagnoseAll`; `plan --json` encodes `[SavingsPlanRow]`. Both are APIs, so
+        // neither may carry text that was localized on the way. A registry that does not exist keeps the doctor off the
+        // real one.
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("xcv-\(UUID().uuidString)/volumes.json")
+        var report = Fixtures.minimalReport()
+        report.savings.deleteAndRegenerate.optionBytes = 42
+        func encoded() throws -> (doctor: String, plans: [String]) {
+            let findings = Doctor().diagnoseAll(report: report, registry: VaultRegistry(url: missing))
+            let plans = try SavingsBucket.allCases.map { try JSONOutput.encode(SavingsPlanner.rows(report: report, bucket: $0)) }
+            return (try JSONOutput.encode(findings), plans)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let english = try encoded()
+        XCTAssertFalse(english.plans.allSatisfy { $0 == "[]" || $0 == "[\n\n]" }, "some bucket has rows to compare")
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let other = try encoded()
+            XCTAssertEqual(other.doctor, english.doctor, "doctor \(locale)")
+            XCTAssertEqual(other.plans, english.plans, "plan \(locale)")
+        }
+    }
+
     func testPermissionsJSONIsTheSameInEveryLanguage() throws {
         // `permissions --json` encodes the `PermissionsReport` that `PermissionsCommand.report` builds; its texts are
         // taken when it is built, so it is built under each locale for every state it can report.

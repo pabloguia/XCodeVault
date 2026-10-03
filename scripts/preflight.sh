@@ -37,7 +37,7 @@ GATES=(
     "redaction:bash scripts/experiments/test-common.sh"
     "e6c-dryrun:bash scripts/experiments/test-e6c-dryrun.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
-    "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl permissions --json && .build/debug/xcodevaultctl report --json"
+    "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl permissions --json && .build/debug/xcodevaultctl report --json && .build/debug/xcodevaultctl plan delete --json >/dev/null && .build/debug/xcodevaultctl --lang pt-BR status >/dev/null"
 )
 
 if [ "${1:-}" = "--list" ]; then

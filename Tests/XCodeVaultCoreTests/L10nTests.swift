@@ -158,4 +158,26 @@ final class L10nTests: XCTestCase {
         XCTAssertEqual(L10n.string("stray", in: c, locale: "es", arguments: ["x"]), "x done")
         XCTAssertEqual(L10n.string("literal", in: c, locale: "en", arguments: ["1"]), "100% 1")
     }
+
+    /// Positional indices are bounded by the arguments (spec §10): `%3$@` with one argument would read past them.
+    func testPositionalIndicesBeyondTheArgumentsAreNeverFormatted() {
+        let c = L10nCatalog(
+            strings: [
+                "beyond": ["en": "A %@", "es": "%3$@ de %1$@"],
+                "beyondOnly": ["en": "%3$@"],
+                "repeat": ["en": "%1$@ %1$@"],
+                "reorder": ["en": "%2$@ %1$@"],
+                "gap": ["en": "A %@", "ja": "%1$@ %3$@"],
+                "mixed": ["en": "A %@", "ja": "%1$@ %@"],
+                "conversions": ["en": "A %@", "ja": "%1$@ %1$lld"],
+            ],
+            plurals: [:])
+        XCTAssertEqual(L10n.string("beyond", in: c, locale: "es", arguments: ["1"]), "A 1")
+        XCTAssertEqual(L10n.string("beyondOnly", in: c, locale: "en", arguments: ["1"]), "%3$@")
+        XCTAssertEqual(L10n.string("repeat", in: c, locale: "en", arguments: ["1"]), "1 1")
+        XCTAssertEqual(L10n.string("reorder", in: c, locale: "en", arguments: ["a", "b"]), "b a")
+        XCTAssertEqual(L10n.string("gap", in: c, locale: "ja", arguments: ["1", "2"]), "A 1")
+        XCTAssertEqual(L10n.string("mixed", in: c, locale: "ja", arguments: ["1", "2"]), "A 1")
+        XCTAssertEqual(L10n.string("conversions", in: c, locale: "ja", arguments: ["1"]), "A 1")
+    }
 }
