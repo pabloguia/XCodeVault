@@ -3038,3 +3038,83 @@ Declared gaps:
   different volume) is true of the volume but not of the journal: they come after the journal line for a vault
   under `.TemporaryItems`.
   Pre-existing, found by the review; the new refusal comes before every write.
+
+## 2026-10-02 — M5: releases signed in CI (ADR-0010), written and not yet run
+
+The operator chose option 1 of docs/process/RUNBOOK-M5-release-signing.md and did Parts A and B the same day.
+The CI-only Developer ID certificate is on team `4V58BSZL3W`; the notary key has the Developer role.
+
+**Checked with `gh api`, read-only:**
+- the `release` environment has the five secrets and the two variables, and its tag rule is `v*`;
+- `APPLE_SIGNING_IDENTITY` is the Developer ID hash, not the Apple Development one;
+- the rulesets are `release-tags` (create, update, delete and force push restricted to Repository admin) and
+  `main` (no deletion, no force push, no bypass);
+- workflows default to read-only, and fork pull requests need approval for every outside contributor;
+- the `.p8` was deleted.
+
+**Open, the operator's:**
+- the environment has **no required reviewer and administrator bypass on**, so a tag would sign with no one
+  approving. The runbook's Part C says what to check before the first tag;
+- `~/certs/XCodeVault-Application-CI.p12`, and the CI identity in the login keychain, are still on the Mac
+  (A.2 step 4).
+
+**Written:** `release.yml`, `ci-sign-notarize.sh`, `release-artifact-scan.sh`, `release-hygiene.sh` and its
+test, the hygiene gate in CI and preflight (CI now has 14 named steps), `.gitignore`, and a refusal in
+`release.sh`.
+
+**Measured:**
+- `test-release-hygiene.sh`: 19 cases in round 1; 43 after the review (below).
+- The artifact scan passed `dist/XCodeVault.app` until `strings -a` was replaced, which found none of the 206
+  home paths in the debug CLI; it now refuses that bundle, as it should (206 and 84 occurrences, counted).
+- The signature checks were read against a Developer ID app (iTerm): `TeamIdentifier=`, `Authority=Developer
+  ID Application: `, `Timestamp=`.
+
+**Found by the new gate:** `sonar.yml` ran `actions/setup-java@v4` and `SonarSource/sonarqube-scan-action@v6` by
+tag, in the job holding `SONAR_TOKEN`. Both are now pinned by SHA (v4.9.1, v6.0.0).
+
+**Helper-security review, round 1: REQUEST CHANGES.** Answered:
+- B1 is the missing required reviewer above.
+- R1–R3: the line-pattern gate let through every bypass the reviewer tried — a `#` in a quoted string, flow
+  style, quoted keys, `toJSON( secrets )`, `tojson(secrets)`, job permissions widened, `on: push`. It now reads
+  the workflows with Ruby's YAML parser, and each of those is a test case that must fire alone. One reproduced
+  case did not stand: in a *plain* scalar ` #` really is a comment, to YAML and so to Actions, so the test
+  uses a `run: |` block, where it is not.
+- R4: `sign` takes its scripts out of the checkout before it opens the build job's zip, and refuses entries
+  outside the bundle, `..` and links.
+- R5: the scan prints counts, never what it found.
+- R6: `sign` and `publish` refuse if the tag no longer names the commit built.
+- R7: the prose on the `main` check and on arguments is corrected.
+- N1 (keychain and job timeouts), N2 (cleanup by fixed path) and N5 (links) are fixed; N3, N4, N6 and N7 are
+  either fixed or written down in ADR-0010.
+- Tests: 43 cases, 0 failed. Two mutants of the gate killed. A third, which disabled the nil branch of HYG6,
+  survived because the next branch refuses the same input; it is equivalent.
+
+**Round 2: REQUEST CHANGES**, everything from round 1 verified fixed. The reviewer confirmed the plain-scalar
+reasoning and found that ditto clamped `..` and refused to write through a link in their tests, so no escape
+was demonstrated. Answered:
+- R8: the zip's `..` and link checks never ran on a large listing: `grep -q` exits at its first match, the
+  listing dies of SIGPIPE, the pipeline returns 141 and the `&&` refusal is skipped. Reproduced by the
+  reviewer with 3000 entries. The checks moved into `scripts/ci-unpack-bundle.sh`, which reads the listings
+  from files, and the test builds both 3000-entry zips. Each case is pinned by its message: the first version
+  of those cases checked only the exit status, and the piped mutant survived it, because the
+  "nothing beside the bundle" backstop refused the same zip. Once pinned, both piped mutants were killed.
+- N8 and N9: duplicate keys and `<<` merge keys are refused (HYG0), since Psych keeps the last duplicate and
+  applies merges, and Actions may do neither.
+- Tests: 52 cases, 0 failed.
+
+**Round 3: APPROVE.** One NIT, N10: duplicate keys were compared as written, and Psych reads a plain `on`,
+`On` and `true` as one key, so `on: [push, workflow_dispatch]` followed by `true:` holding the clean trigger
+passed. Fixed two ways: keys are compared as Psych reads them, and a top-level key Actions does not define is
+refused, as is a second YAML document. Tests: 57 cases, 0 failed. Mutants that disabled each of the two
+mechanisms were killed, each by its own case. Preflight on the round-3 tree: ok, 12 gates, 597 tests.
+
+**Round 4: APPROVE**, one NIT, N11, opened by that fix: a quoted `"on"` is compared as text and a plain `on`
+as `true`, so the two did not collide. Rather than chase spellings, quoted and complex keys are now refused
+(HYG0); the reviewer's quoted-`environment` case now fails there instead of at HYG9. Tests: 59 cases.
+
+**Round 5: APPROVE**, one speculative NIT, N12: `downcase` does not fold `ſ` (long s), so `permiſſions` beside
+`permissions` passed; it matters only if Actions folds Unicode case in keys. Non-ASCII keys are now refused
+(HYG0). Tests: 60 cases.
+
+**Not measured:** the workflow itself. Nothing signs or notarizes until the first tag, and only the run shows
+whether the keychain import, `notarytool` with the API key and `attest-build-provenance` work as written.

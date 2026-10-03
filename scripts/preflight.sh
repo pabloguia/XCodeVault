@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the CI gates that can be run here, in CI's order, on this machine.
 #
-# Nine of CI's eleven steps. The two it leaves out are named rather than silently missing:
+# Twelve of CI's fourteen steps. The two it leaves out are named rather than silently missing:
 # "Toolchain" only prints versions, and the read-only gating experiments (E1/E8) **write evidence
 # files into `docs/research/evidence/`** — running them before every push would dirty the working
 # tree as a side effect of checking it, which is a worse habit than the coverage is worth. Run
@@ -31,6 +31,7 @@ GATES=(
     "no-skips:bash scripts/ci-assert-no-skips.sh"
     "doc-mirror:bash scripts/check-doc-mirror.sh"
     "helper-invariants:bash scripts/helper-invariants.sh"
+    "release-hygiene:bash scripts/release-hygiene.sh && bash scripts/test-release-hygiene.sh"
     "public-surface:bash scripts/public-surface.sh"
     "redaction:bash scripts/experiments/test-common.sh"
     "e6c-dryrun:bash scripts/experiments/test-e6c-dryrun.sh"
@@ -53,7 +54,7 @@ fast=0
 # would make this script's central claim false for one step while this very guard reported
 # everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=13
+expected_steps=14
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2

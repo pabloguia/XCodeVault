@@ -516,7 +516,7 @@ for f in Resources/LaunchDaemons/*.plist; do
     forbid "$f" 'EnvironmentVariables|DYLD_' "environment injection into a root daemon"
 done
 
-for f in scripts/bundle-app.sh scripts/release.sh; do
+for f in scripts/bundle-app.sh scripts/release.sh scripts/ci-sign-notarize.sh; do
     [ -e "$f" ] || continue
     forbid "$f" 'disable-library-validation' "library validation must stay on"
     forbid "$f" 'codesign.*--deep.*--sign|codesign.*--sign.*--deep' "never sign with --deep; sign inside-out"

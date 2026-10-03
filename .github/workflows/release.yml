@@ -1,0 +1,220 @@
+name: Release
+
+# ADR-0010; operator steps in docs/process/RUNBOOK-M5-release-signing.md.
+#
+# A pushed `v*` tag — which the tag ruleset lets only the operator create — builds the app with no secrets,
+# then waits for the operator to approve the `sign` job, the only job the `release` environment's secrets
+# reach. `sign` builds nothing: it signs, notarizes and staples what `build` produced, after checking its
+# hash. `publish` attaches the result to a DRAFT release; the operator publishes it after checking it.
+#
+# scripts/release-hygiene.sh, run in CI and preflight, keeps the shape this file relies on: no other trigger,
+# no default permissions, signing secrets only in `sign`, actions pinned by SHA, no `--with-helper`.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # Public in every signed binary. Fixed here so the unprivileged build job can stamp it; `sign` refuses
+  # unless the `release` environment's APPLE_TEAM_ID agrees.
+  XCV_TEAM: 4V58BSZL3W
+
+jobs:
+  build:
+    if: github.repository == 'pabloguia/XCodeVault'
+    runs-on: macos-15
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: The tag is on main and names the version in the source
+        id: version
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "refusing: $GITHUB_REF_NAME ($GITHUB_SHA) is not on main"; exit 1; }
+          version="$(sed -n 's/.*public static let current = "\(.*\)".*/\1/p' Sources/XCodeVaultCore/Scan/ScanReport.swift)"
+          [ "v$version" = "$GITHUB_REF_NAME" ] \
+            || { echo "refusing: tag $GITHUB_REF_NAME does not match ScanReport.current ($version)"; exit 1; }
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - name: Toolchain
+        run: sw_vers; uname -m; xcodebuild -version; swift --version
+      - name: Preflight (every CI gate)
+        run: bash scripts/preflight.sh
+      - name: Bundle (unsigned, no helper)
+        run: |
+          set -euo pipefail
+          bash scripts/bundle-app.sh --release --team "$XCV_TEAM"
+          # bundle-app.sh stamps the team ID into two tracked sources and restores them; prove it did.
+          git diff --exit-code
+          bash scripts/release-artifact-scan.sh dist/XCodeVault.app
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          /usr/bin/ditto -c -k --keepParent dist/XCodeVault.app "$RUNNER_TEMP/XCodeVault-unsigned.zip"
+          sha=$(shasum -a 256 "$RUNNER_TEMP/XCodeVault-unsigned.zip" | cut -d' ' -f1)
+          echo "sha256=$sha" >>"$GITHUB_OUTPUT"
+          echo "unsigned bundle sha256: $sha"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-app
+          path: ${{ runner.temp }}/XCodeVault-unsigned.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  sign:
+    needs: build
+    runs-on: macos-15
+    # The run stops here until the operator approves it. That rests on the environment's required reviewer,
+    # a GitHub setting this file cannot enforce (ADR-0010; the runbook's Part C says how to check it).
+    environment: release
+    timeout-minutes: 110
+    permissions:
+      contents: read
+    steps:
+      # The artifact first, then the checkout, whose clean resets the workspace whatever the download wrote.
+      # Nothing the build job made is opened until the scripts that will hold the key have been copied out of
+      # the workspace, to a folder the bundle's own extraction is checked not to reach.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: unsigned-app
+          path: ${{ runner.temp }}/in
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Copy the signing scripts out of the workspace
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)" || { echo "refusing: the checkout is not clean"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/tools"
+          cp scripts/ci-sign-notarize.sh scripts/release-artifact-scan.sh scripts/ci-unpack-bundle.sh "$RUNNER_TEMP/tools/"
+          chmod -R a-w "$RUNNER_TEMP/tools"
+      - name: The tag still names the commit this run built
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          read -r type sha < <(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.type + " " + .object.sha')
+          [ "$type" = tag ] && sha=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha)
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "refusing: $GITHUB_REF_NAME now names $sha, this run built $GITHUB_SHA"; exit 1; }
+      - name: The bundle is the one the build job produced, and holds only the bundle
+        env:
+          EXPECTED: ${{ needs.build.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          ZIP="$RUNNER_TEMP/in/XCodeVault-unsigned.zip"
+          actual=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
+          [ -n "$EXPECTED" ] && [ "$actual" = "$EXPECTED" ] || { echo "refusing: artifact hash $actual, build job said $EXPECTED"; exit 1; }
+          # The hash only says the zip is what the build job uploaded, and the build job made it.
+          bash "$RUNNER_TEMP/tools/ci-unpack-bundle.sh" "$ZIP" "$RUNNER_TEMP/app"
+          test -z "$(git status --porcelain)" || { echo "refusing: the workspace changed"; exit 1; }
+      - name: The environment agrees on the team
+        env:
+          ENV_TEAM: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          [ "$ENV_TEAM" = "$XCV_TEAM" ] || { echo "refusing: environment APPLE_TEAM_ID does not match the workflow's team"; exit 1; }
+      - name: Temporary keychain
+        env:
+          P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          KC="$RUNNER_TEMP/xcv-sign.keychain-db"
+          KC_PASSWORD=$(openssl rand -base64 32)
+          echo "::add-mask::$KC_PASSWORD"
+          printf '%s' "$P12_BASE64" | base64 -D >"$RUNNER_TEMP/xcv.p12"
+          security create-keychain -p "$KC_PASSWORD" "$KC"
+          # Longer than the job may run (timeout-minutes), so it cannot lock between the app and the image.
+          security set-keychain-settings -lut 7200 "$KC"
+          security unlock-keychain -p "$KC_PASSWORD" "$KC"
+          # Apple's Developer ID G2 intermediate, pinned by SHA-256 (the same certificate Xcode installs), so the
+          # chain builds whatever the runner image ships.
+          curl -sSfL -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $RUNNER_TEMP/DeveloperIDG2CA.cer" | shasum -a 256 -c -
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$KC"
+          # The password is an argument here: `security import` reads it no other way. The runner is a
+          # single-use VM that runs only this job's steps.
+          security import "$RUNNER_TEMP/xcv.p12" -k "$KC" -f pkcs12 -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/xcv.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASSWORD" "$KC" >/dev/null
+          existing=()
+          while IFS= read -r k; do k="${k#"${k%%[![:space:]]*}"}"; existing+=("${k//\"/}"); done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$KC" "${existing[@]}"
+          echo "XCV_KEYCHAIN=$KC" >>"$GITHUB_ENV"
+      - name: Sign, notarize, staple
+        env:
+          NOTARY_P8_BASE64: ${{ secrets.NOTARY_KEY_P8_BASE64 }}
+          XCV_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          XCV_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER_ID }}
+          XCV_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          XCV_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export XCV_NOTARY_KEY="$RUNNER_TEMP/xcv-notary.p8"
+          printf '%s' "$NOTARY_P8_BASE64" | base64 -D >"$XCV_NOTARY_KEY"
+          XCV_APP="$RUNNER_TEMP/app/XCodeVault.app" XCV_OUT="$RUNNER_TEMP/out" bash "$RUNNER_TEMP/tools/ci-sign-notarize.sh"
+      - name: Remove the keychain and key files
+        if: always()
+        # The fixed path, not $XCV_KEYCHAIN: a failure after the import but before that was recorded would
+        # otherwise leave the key in a keychain nobody deletes.
+        run: |
+          security delete-keychain "$RUNNER_TEMP/xcv-sign.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/xcv.p12" "$RUNNER_TEMP/xcv-notary.p8"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-dmg
+          path: ${{ runner.temp }}/out/XCodeVault-*.dmg*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [build, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signed-dmg
+          path: out
+      - name: Checksum
+        run: cd out && sha256sum -c ./*.sha256
+      - name: The tag still names the commit this run built
+        # `gh release create` binds to wherever the tag points now, and `sign` may have waited days.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          read -r type sha < <(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.type + " " + .object.sha')
+          [ "$type" = tag ] && sha=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha)
+          [ "$sha" = "$GITHUB_SHA" ] || { echo "refusing: $GITHUB_REF_NAME now names $sha, this run built $GITHUB_SHA"; exit 1; }
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/XCodeVault-*.dmg
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "XCodeVault $VERSION" \
+            --notes "Signed with Developer ID and notarized by the Release workflow. Check it before trusting it: docs/process/RUNBOOK-M5-release-signing.md, Part D." \
+            out/XCodeVault-"$VERSION".dmg out/XCodeVault-"$VERSION".dmg.sha256

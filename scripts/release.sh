@@ -9,6 +9,9 @@ SIGN=""; PROFILE=""; VERSION="$(sed -n 's/.*public static let current = "\(.*\)"
 while [ $# -gt 0 ]; do case "$1" in
   --sign) SIGN="$2"; shift;; --profile) PROFILE="$2"; shift;; --version) VERSION="$2"; shift;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
 [ -n "$SIGN" ] && [ -n "$PROFILE" ] || { echo "need --sign and --profile"; exit 2; }
+# Only a Developer ID Application identity ships. An "Apple Development" identity's name is the Apple ID
+# e-mail, and it would be stamped into every distributed binary (ADR-0010).
+[[ "$SIGN" =~ ^Developer\ ID\ Application:\ .+\ \([A-Z0-9]{10}\)$ ]] || { echo "refusing: --sign must be a 'Developer ID Application: Name (TEAMID)' identity"; exit 2; }
 # An empty VERSION is not caught by `set -u` — the variable is set, just empty — and the run would
 # go on to build, notarize and publish `XCodeVault-.dmg`, reporting success.
 [ -n "$VERSION" ] || { echo "refusing: could not determine the version from ScanReport.swift"; exit 2; }

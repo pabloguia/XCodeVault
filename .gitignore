@@ -25,3 +25,15 @@ DerivedData/
 # The Sonar scanner's working directory. It holds report-task.txt — the server task id and the URLs
 # the verification step reads — which is per-run state, not source.
 .scannerwork/
+
+# Signing material never belongs in the tree (ADR-0010). scripts/release-hygiene.sh refuses any of these
+# that is tracked; this keeps a stray export out of `git add -A` in the first place.
+*.p12
+*.pfx
+*.p8
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.keychain
+*.keychain-db
