@@ -5,15 +5,22 @@ import XCodeVaultCore
 // MARK: - clean
 
 struct Clean: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Experimental. Plan (default) or apply deletion of regenerable developer data. Never touches Archives or anything non-regenerable.",
-        discussion: """
-            Without --apply this only prints the plan. Deletions are journaled to \
-            ~/Library/Application Support/XCodeVault/journal.jsonl. Root-owned categories are listed \
-            but not executable: the dyld caches need root with Full Disk Access (H15), and whether the \
-            privileged helper would have that access is unmeasured. Every category here is labeled \
-            experimental until its functional probes are recorded in the compatibility matrix.
-            """)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: HelpText.experimental(L10n.tr("cli.cmd.clean.abstract")),
+            discussion: """
+                Without --apply this only prints the plan. Deletions are journaled to \
+                ~/Library/Application Support/XCodeVault/journal.jsonl. Root-owned categories are listed \
+                but not executable: the dyld caches need root with Full Disk Access (H15), and whether the \
+                privileged helper would have that access is unmeasured. Every category here is labeled \
+                experimental until its functional probes are recorded in the compatibility matrix.
+
+                EXAMPLES:
+                  xcodevaultctl clean                        # the plan only
+                  xcodevaultctl clean --category derivedData --apply
+                  xcodevaultctl clean --apply --trash        # to the Trash instead
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     @Option(name: .long, parsing: .upToNextOption, help: "Restrict to these category ids (see `compatibility`).")
     var category: [String] = []

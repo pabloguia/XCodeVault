@@ -15,7 +15,16 @@ enum PlanKind: String, ExpressibleByArgument, CaseIterable {
 }
 
 struct Plan: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: L10n.tr("cli.cmd.plan.abstract"))
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: L10n.tr("cli.cmd.plan.abstract"),
+            discussion: """
+                EXAMPLES:
+                  xcodevaultctl plan delete    # regenerable data you can delete
+                  xcodevaultctl plan park      # copy to a vault drive, bring back later
+                  xcodevaultctl plan external --json
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     @Argument(help: "delete | park | external") var kind: PlanKind
 

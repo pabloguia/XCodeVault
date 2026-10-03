@@ -3,19 +3,28 @@ import Foundation
 import XCodeVaultCore
 
 struct Vault: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Experimental. Register and verify external vault volumes (identified by UUID + sentinel, never by name).",
-        subcommands: [Init.self, Status.self, Forget.self], defaultSubcommand: Status.self)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.abstract")), subcommands: [Init.self, Status.self, Forget.self],
+            defaultSubcommand: Status.self)
+    }
     struct Init: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. Register a mounted external APFS volume as a vault (creates <mount>/\(VaultVolume.directoryName) and a sentinel).",
-            discussion: """
-                Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
-                to use a folder you can write, or create the default one with the command this prints when it fails.
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(
+                abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.init.abstract", VaultVolume.directoryName)),
+                discussion: """
+                    Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
+                    to use a folder you can write, or create the default one with the command this prints when it fails.
 
-                Note --directory is a client-side choice: the privileged helper can only ever create the default \
-                \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
-                """)
+                    Note --directory is a client-side choice: the privileged helper can only ever create the default \
+                    \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
+
+                    EXAMPLES:
+                      xcodevaultctl vault init /Volumes/MyDrive
+                      xcodevaultctl vault init /Volumes/MyDrive --directory Developer/Vault
+                      xcodevaultctl vault status
+                    """)
+        }
         @Argument(help: "Mount point, e.g. /Volumes/MyDrive") var mountPoint: String
         @Option(
             name: .long,
@@ -35,8 +44,9 @@ struct Vault: ParsableCommand {
         }
     }
     struct Status: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. Registered vault volumes and the state of each: verified by UUID and sentinel, or why not.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.status.abstract")))
+        }
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let checks = try VaultVerifier().checkAll()
@@ -47,7 +57,7 @@ struct Vault: ParsableCommand {
         }
     }
     struct Forget: ParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Experimental. Remove a volume from the registry (data on the volume is untouched).")
+        static var configuration: CommandConfiguration { CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.forget.abstract"))) }
         @Argument var uuid: String
         func run() throws { try VaultRegistry().forget(uuid: uuid); print("Forgot \(uuid).") }
     }
