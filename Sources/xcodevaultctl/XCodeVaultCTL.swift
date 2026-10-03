@@ -24,6 +24,7 @@ struct XCodeVaultCTL: ParsableCommand {
         subcommands: [
             Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self, PermissionsCommand.self,
             Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self,
+            Plan.self,
         ],
         defaultSubcommand: Status.self)
 

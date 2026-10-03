@@ -1,6 +1,176 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "cli.cmd.plan.abstract" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read-only. What to run to reclaim space one way: delete, park, or run from an external drive."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Solo lectura. Qué ejecutar para recuperar espacio de una forma: eliminar, aparcar o usar desde una unidad externa."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "読み取り専用。容量を回収する方法ごとの実行コマンド: 削除、退避、または外付けドライブから実行。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Somente leitura. O que executar para recuperar espaço de um jeito: apagar, estacionar ou rodar de um disco externo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "只读。按一种方式回收空间时该运行什么：删除、转存，或从外置硬盘运行。"
+          }
+        }
+      }
+    },
+    "cli.plan.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing on this Mac offers this option."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nada en este Mac ofrece esta opción."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "この Mac にはこの方法を使えるものがありません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nada neste Mac oferece esta opção."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此 Mac 上没有可用此方式的内容。"
+          }
+        }
+      }
+    },
+    "cli.plan.marker.experimental" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "experimental"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "experimental"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "実験的"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "experimental"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "实验性"
+          }
+        }
+      }
+    },
+    "cli.plan.marker.losesUserData" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "deletes the apps' data"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "elimina los datos de las apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "アプリのデータも削除されます"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "apaga os dados dos apps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "会删除应用的数据"
+          }
+        }
+      }
+    },
+    "cli.plan.marker.newDataOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "new data only"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "solo datos nuevos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "新しいデータのみ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "somente dados novos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "仅限新数据"
+          }
+        }
+      }
+    },
     "cli.savings.heading" : {
       "localizations" : {
         "en" : {

@@ -59,13 +59,22 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
 }
 
 public enum SavingsCalculator {
+    /// The items a saving is counted from, with their category: existing, not a symlink, on the boot volume, of a
+    /// known category that is not a breakdown. Shared with `SavingsPlanner`, so a plan row can never count a
+    /// byte the summary does not.
+    static func countedItems(_ items: [StorageItem], category: (String) -> StorageCategory?) -> [(item: StorageItem, category: StorageCategory)] {
+        items.compactMap { item in
+            guard item.exists, !item.isSymlink, item.onBootVolume, let c = category(item.categoryID), c.isBreakdownOf == nil else { return nil }
+            return (item, c)
+        }
+    }
+
     /// Counts the same items `Scanner.summarize` counts for the boot-volume total — existing, not a symlink,
     /// not a breakdown — restricted to the boot volume, because only bytes there are a saving. An item whose
     /// category is unknown is skipped rather than guessed into `.keepLocal`.
     public static func summarize(items: [StorageItem], category: (String) -> StorageCategory?) -> SavingsSummary {
         var s = SavingsSummary()
-        for item in items where item.exists && !item.isSymlink && item.onBootVolume {
-            guard let c = category(item.categoryID), c.isBreakdownOf == nil else { continue }
+        for (item, c) in countedItems(items, category: category) {
             let bytes = item.allocatedBytes
             if item.usage?.isLowerBound == true { s.isLowerBound = true }
             let options = c.savingsOptionDetails.filter(\.appliesToExistingData)

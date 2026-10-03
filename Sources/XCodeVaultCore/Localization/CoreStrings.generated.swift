@@ -4,6 +4,41 @@
 extension L10nCatalog {
     static let core = L10nCatalog(
         strings: [
+            "cli.cmd.plan.abstract": [
+                "en": "Read-only. What to run to reclaim space one way: delete, park, or run from an external drive.",
+                "pt-BR": "Somente leitura. O que executar para recuperar espaço de um jeito: apagar, estacionar ou rodar de um disco externo.",
+                "es": "Solo lectura. Qué ejecutar para recuperar espacio de una forma: eliminar, aparcar o usar desde una unidad externa.",
+                "ja": "読み取り専用。容量を回収する方法ごとの実行コマンド: 削除、退避、または外付けドライブから実行。",
+                "zh-Hans": "只读。按一种方式回收空间时该运行什么：删除、转存，或从外置硬盘运行。",
+            ],
+            "cli.plan.empty": [
+                "en": "Nothing on this Mac offers this option.",
+                "pt-BR": "Nada neste Mac oferece esta opção.",
+                "es": "Nada en este Mac ofrece esta opción.",
+                "ja": "この Mac にはこの方法を使えるものがありません。",
+                "zh-Hans": "此 Mac 上没有可用此方式的内容。",
+            ],
+            "cli.plan.marker.experimental": [
+                "en": "experimental",
+                "pt-BR": "experimental",
+                "es": "experimental",
+                "ja": "実験的",
+                "zh-Hans": "实验性",
+            ],
+            "cli.plan.marker.losesUserData": [
+                "en": "deletes the apps\' data",
+                "pt-BR": "apaga os dados dos apps",
+                "es": "elimina los datos de las apps",
+                "ja": "アプリのデータも削除されます",
+                "zh-Hans": "会删除应用的数据",
+            ],
+            "cli.plan.marker.newDataOnly": [
+                "en": "new data only",
+                "pt-BR": "somente dados novos",
+                "es": "solo datos nuevos",
+                "ja": "新しいデータのみ",
+                "zh-Hans": "仅限新数据",
+            ],
             "cli.savings.heading": [
                 "en": "What you can reclaim on this Mac",
                 "pt-BR": "O que você pode recuperar neste Mac",
