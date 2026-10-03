@@ -41,6 +41,10 @@ final class ScanTextTests: XCTestCase {
         XCTAssertTrue(TextRenderer.scan(report(), details: true).contains("fixture warning"))
     }
 
+    func testWarningsAreSeparatedByABlankLine() {
+        XCTAssertTrue(TextRenderer.scan(report()).contains("\n\nWarnings:\n"))
+    }
+
     func testStatusFooterPointsAtScanAndOnlyWhenNotGrantedAtPermissions() {
         let granted = TextRenderer.statusFooter(fullDiskAccess: .granted)
         XCTAssertTrue(granted.contains("xcodevaultctl scan"), granted)

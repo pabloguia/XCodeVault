@@ -41,7 +41,9 @@ struct XCodeVaultCTL: ParsableCommand {
         let (flag, remaining) = L10n.extractLanguageOverride(from: arguments)
         // `--json` output embeds formatted byte strings in prose, and it is an API: always English (spec §4.3).
         let wantsJSON = remaining.prefix { $0 != "--" }.contains("--json")
-        if wantsJSON {
+        // `report` is a record for maintainers, like `--json`: always English.
+        let wantsReport = remaining.prefix { $0 != "--" }.first { !$0.hasPrefix("-") } == "report"
+        if wantsJSON || wantsReport {
             L10n.configure(override: "en", environment: [:], preferred: [])
         } else {
             L10n.configure(override: flag, environment: environment, preferred: preferred)
@@ -115,7 +117,7 @@ struct Report: ParsableCommand {
         if global.json {
             print(redact(try JSONOutput.encode(Bundle(scan: report, findings: findings))))
         } else {
-            print(redact(TextRenderer.scan(report) + "\n" + TextRenderer.findings(findings)), terminator: "")
+            print(redact(TextRenderer.scan(report, details: true) + "\n" + TextRenderer.findings(findings)), terminator: "")
         }
     }
 }

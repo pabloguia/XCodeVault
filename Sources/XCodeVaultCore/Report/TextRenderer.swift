@@ -53,7 +53,7 @@ public enum TextRenderer {
                     : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
                         + (it.onBootVolume ? "" : "  [not on boot volume]")
                         + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
-                        // Without this the rows stop adding up to the Summary and nothing says why: a
+                        // Without this the rows stop adding up to the savings block and nothing says why: a
                         // breakdown row's bytes are already inside its parent's row, and are counted
                         // once, there. Naming the parent is what keeps the reader from adding them.
                         + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
