@@ -141,21 +141,41 @@ final class SavingsPlannerTests: XCTestCase {
         XCTAssertEqual(ids, ["simulatorRuntimeAssets", "derivedData", "deviceLogs", "xcodeCaches", "simulatorDevices"])
     }
 
-    func testRowsTakingOneItemPerCommandSayHowManyCommands() {
+    /// A command that takes one `<udid>` or `<identifier>` runs once per device or runtime, so the marker counts those,
+    /// not catalog paths: the device set is one path holding every device (controller ruling, S3 review).
+    func testRowsTakingOneItemPerCommandCountDevicesAndRuntimes() {
         L10n.configure(override: "en", environment: [:], preferred: [])
         var r = report()
-        r.items += [item("simulatorDevices", 50), item("simulatorDevices", 60), item("simulatorDevices", 70)]
-        let rows = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate)
-        XCTAssertEqual(rows.first { $0.categoryID == "simulatorDevices" }?.itemCount, 3)
-        let text = SavingsPlanner.render(rows: rows, bucket: .deleteAndRegenerate)
-        let devices = text.split(separator: "\n").first { $0.hasPrefix("  Simulator devices") }
-        XCTAssertTrue(devices?.contains("3 items; one per command") == true, text)
-        let derived = text.split(separator: "\n").first { $0.hasPrefix("  DerivedData") }
-        XCTAssertFalse(derived?.contains("one per command") ?? true, "`clean --category` takes the whole category: \(text)")
-        var one = report()
-        one.items += [item("simulatorDevices", 50)]
+        r.items += [item("simulatorDevices", 50), item("simulatorRuntimeAssets", 4000)]
+        r.devices = (1...3).map { SimulatorDevice(udid: "D\($0)", name: "d", runtimeIdentifier: "rt", state: "Shutdown", isAvailable: true) }
+        r.runtimes = [SimulatorRuntime(identifier: "R1"), SimulatorRuntime(identifier: "R2")]
+        let delete = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate)
+        XCTAssertEqual(delete.first { $0.categoryID == "simulatorDevices" }?.itemCount, 3)
+        XCTAssertEqual(delete.first { $0.categoryID == "simulatorRuntimeAssets" }?.itemCount, 2)
+        XCTAssertEqual(SavingsPlanner.rows(report: r, bucket: .parkExternally).first { $0.categoryID == "simulatorRuntimeAssets" }?.itemCount, 2)
+        XCTAssertEqual(delete.first { $0.categoryID == "derivedData" }?.itemCount, 1, "other rows keep the counted items")
+        let lines = SavingsPlanner.render(rows: delete, bucket: .deleteAndRegenerate).split(separator: "\n")
+        XCTAssertTrue(lines.first { $0.hasPrefix("  Simulator devices") }?.contains("3 items; one per command") == true, "\(lines)")
+        XCTAssertTrue(lines.first { $0.hasPrefix("  Simulator runtime images") }?.contains("2 items; one per command") == true, "\(lines)")
+        XCTAssertFalse(lines.first { $0.hasPrefix("  DerivedData") }?.contains("one per command") ?? true, "`clean --category` takes the whole category")
+        var one = r
+        one.devices = Array(r.devices.prefix(1))
         let single = SavingsPlanner.render(rows: SavingsPlanner.rows(report: one, bucket: .deleteAndRegenerate), bucket: .deleteAndRegenerate)
         XCTAssertTrue(single.contains("1 item; one per command"), single)
+    }
+
+    func testNoDevicesMeansNoPerItemMarkerRatherThanZeroItems() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("simulatorDevices", 50)]
+        r.devices = []
+        let rows = SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate)
+        XCTAssertEqual(rows.first { $0.categoryID == "simulatorDevices" }?.itemCount, 0)
+        let text = SavingsPlanner.render(rows: rows, bucket: .deleteAndRegenerate)
+        let devices = text.split(separator: "\n").first { $0.hasPrefix("  Simulator devices") }
+        XCTAssertNotNil(devices, text)
+        XCTAssertFalse(devices?.contains("one per command") ?? true, text)
+        XCTAssertFalse(text.contains("0 items"), text)
     }
 
     func testRuntimeRowsSayTheSizeIsTheMobileAssetStoreAndParkSaysExportFirst() {

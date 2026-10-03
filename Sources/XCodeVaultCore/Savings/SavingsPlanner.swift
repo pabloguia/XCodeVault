@@ -10,7 +10,8 @@ public struct SavingsPlanRow: Sendable, Codable, Equatable {
     public let option: SavingsOption
     /// The command the user runs; `<angle brackets>` are values they supply. Never translated.
     public let command: String
-    /// Counted items in the row. A command taking one `<udid>` or `<identifier>` is run once per item.
+    /// What the row's command is run over: for a command taking one `<udid>` or `<identifier>`, the devices or runtimes
+    /// simctl lists (the catalog counts the whole device set as one path); otherwise the counted catalog items.
     public let itemCount: Int
     /// The command has no preview of its own: it applies (or downloads) the moment it is run.
     public let actsImmediately: Bool
@@ -45,7 +46,8 @@ public enum SavingsPlanner {
             guard bytes > 0 || !option.appliesToExistingData else { continue }
             rows.append(
                 SavingsPlanRow(
-                    categoryID: c.id, categoryName: c.name, bytes: bytes, option: option, command: command, itemCount: itemsByCategory[c.id] ?? 0,
+                    categoryID: c.id, categoryName: c.name, bytes: bytes, option: option, command: command,
+                    itemCount: itemCount(categoryID: c.id, report: report, counted: itemsByCategory[c.id] ?? 0),
                     actsImmediately: actsImmediately(categoryID: c.id, bucket: bucket), noteIDs: noteIDs(categoryID: c.id, bucket: bucket)))
         }
         func group(_ r: SavingsPlanRow) -> Int {
@@ -73,6 +75,15 @@ public enum SavingsPlanner {
         case (.runFromExternal, "archives"): return "xcodevaultctl locations set-archives <dir>"
         case (.runFromExternal, "runtimeLibrary"): return "xcodevaultctl runtime export <platform> --to <dir> --preflight"
         default: return nil
+        }
+    }
+
+    /// Devices for the `simctl delete <udid>` row, runtimes for the two `<identifier>` rows (controller ruling, S3 review).
+    static func itemCount(categoryID: String, report: ScanReport, counted: Int) -> Int {
+        switch categoryID {
+        case "simulatorDevices": report.devices.count
+        case "simulatorRuntimeAssets": report.runtimes.count
+        default: counted
         }
     }
 
