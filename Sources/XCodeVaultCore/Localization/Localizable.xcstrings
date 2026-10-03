@@ -171,6 +171,142 @@
         }
       }
     },
+    "cli.plan.note.archivesPark" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies and verifies first; the original is removed only in a second, explicit step."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Primero copia y verifica; el original se elimina solo en un segundo paso explícito."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "まずコピーして検証します。元のデータの削除は、別の明示的な手順でのみ行われます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Primeiro copia e verifica; o original só é removido em uma segunda etapa, explícita."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "先复制并验证；只有在第二个明确的步骤中才会删除原件。"
+          }
+        }
+      }
+    },
+    "cli.plan.note.derivedDataExternal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Existing DerivedData stays where it is; `xcodevaultctl clean --category derivedData` reclaims it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El DerivedData existente se queda donde está; `xcodevaultctl clean --category derivedData` lo recupera."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "既存の DerivedData はそのまま残ります。`xcodevaultctl clean --category derivedData` で回収できます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O DerivedData existente continua onde está; `xcodevaultctl clean --category derivedData` o recupera."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "现有的 DerivedData 会保留在原处；可用 `xcodevaultctl clean --category derivedData` 回收。"
+          }
+        }
+      }
+    },
+    "cli.plan.note.simctlDelete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shut the device down first; its apps and their data are deleted."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Apaga primero el dispositivo; sus apps y sus datos se eliminan."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "先にデバイスをシャットダウンしてください。アプリとそのデータは削除されます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desligue o dispositivo primeiro; seus apps e os dados deles são apagados."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "请先关闭该设备；其中的应用及其数据会被删除。"
+          }
+        }
+      }
+    },
+    "cli.plan.previewNote" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each command below shows what it would do first, and tells you how to confirm."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cada comando de abajo muestra primero lo que haría y te dice cómo confirmar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "以下の各コマンドは、まず実行内容を表示し、確定の方法を案内します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cada comando abaixo mostra primeiro o que faria e diz como confirmar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "下面每条命令都会先显示它将执行的操作，并告诉你如何确认。"
+          }
+        }
+      }
+    },
     "cli.savings.heading" : {
       "localizations" : {
         "en" : {

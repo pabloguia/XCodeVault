@@ -75,4 +75,30 @@ final class SavingsPlannerTests: XCTestCase {
         XCTAssertTrue(text.contains("new data only"))
         XCTAssertTrue(SavingsPlanner.render(rows: [], bucket: .parkExternally).contains("Nothing on this Mac offers this option."))
     }
+
+    func testNoCommandIsAnythingButAPreview() {
+        for c in StorageCatalog.all {
+            for bucket in SavingsBucket.allCases {
+                guard let command = SavingsPlanner.command(categoryID: c.id, bucket: bucket) else { continue }
+                for flag in ["--apply", "--yes", "--remove-source-after-verify", "--i-confirm"] {
+                    XCTAssertFalse(command.contains(flag), "\(c.id)/\(bucket): \(command)")
+                }
+            }
+        }
+        XCTAssertEqual(
+            SavingsPlanner.command(categoryID: "simulatorRuntimeAssets", bucket: .deleteAndRegenerate), "xcodevaultctl runtime delete <identifier> --dry-run")
+    }
+
+    func testRenderShowsMarkersAndNotesOnTheRowsThatNeedThem() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        var r = report()
+        r.items += [item("simulatorDevices", 50), item("simulatorRuntimeAssets", 4000)]
+        let del = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .deleteAndRegenerate), bucket: .deleteAndRegenerate)
+        XCTAssertTrue(del.contains("Each command below shows what it would do first"))
+        XCTAssertTrue(del.contains("deletes the apps' data"))
+        XCTAssertTrue(del.contains("Shut the device down first; its apps and their data are deleted."))
+        let park = SavingsPlanner.render(rows: SavingsPlanner.rows(report: r, bucket: .parkExternally), bucket: .parkExternally)
+        XCTAssertTrue(park.contains("experimental"))
+        XCTAssertTrue(park.contains("the original is removed only in a second, explicit step."))
+    }
 }
