@@ -27,14 +27,20 @@ safely moved out". The mark uses no Apple marks, no hammer and no Xcode icon.
 Every savings bucket has one color and one SF Symbol. Never use the color alone: always show the
 symbol and the localized bucket title with it.
 
-| Bucket | Color | SF Symbol |
-| --- | --- | --- |
-| Delete | `#C27C12` | `arrow.counterclockwise.circle` |
-| Park | `#3B82F6` | `shippingbox` |
-| Run from external | `#22A06B` | `externaldrive.badge.checkmark` |
-| Keep local | `#8A8FA3` | `internaldrive` |
+| Bucket | Color (token; app dark appearance) | App light appearance | SF Symbol |
+| --- | --- | --- | --- |
+| Delete | `#C27C12` | `#AB6D10` | `arrow.counterclockwise.circle` |
+| Park | `#3B82F6` | `#2776F5` | `shippingbox` |
+| Run from external | `#22A06B` | `#1E8B5D` | `externaldrive.badge.checkmark` |
+| Keep local | `#8A8FA3` | `#737991` | `internaldrive` |
 
-All four reach at least 3:1 contrast on white and on `#1C1E52` (pinned by `BrandTokenTests`).
+All four tokens reach at least 3:1 contrast on white and on `#1C1E52` (pinned by `BrandTokenTests`).
+
+In the app the colors are appearance-aware (`SavingsBucket.nsColor`, a dynamic `NSColor`): the token in the dark
+appearance, and a darker variant of the same hue in the light one, because on the light window background earlier
+macOS versions use (`#ECECEC`) three of the tokens fall below 3:1. `BrandTokenTests` resolves `windowBackgroundColor` and
+`controlBackgroundColor` under `.aqua` and `.darkAqua` and holds every bucket to 3:1 against both, and against `#FFFFFF`,
+`#ECECEC`, `#323232` and `#1E1E1E`.
 
 ### CLI
 

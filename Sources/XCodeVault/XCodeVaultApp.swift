@@ -187,6 +187,36 @@ final class AppModel {
         refreshPermissions()
     }
 
+    // MARK: - Navigation and the Overview (S4 Task 3)
+
+    /// The sidebar's selection. The Overview's **Review** buttons set it through `review(_:)`.
+    var section: SidebarSection = .overview
+
+    /// **Review** on an Overview card: that bucket's view. Keeping has no view, so it changes nothing.
+    func review(_ bucket: SavingsBucket) {
+        if let target = SidebarSection(reviewing: bucket) { section = target }
+    }
+
+    /// The Overview's one access banner: the first `AccessChecklist` row that holds back something the scan measured
+    /// (`AccessChecklist.banner`, in Core and tested). Nil before the first scan.
+    var accessBanner: AccessChecklist.Row? {
+        guard let report else { return nil }
+        return AccessChecklist.banner(
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings,
+            plan: SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate), privacyRefusalCount: report.summary.privacyRefusalCount)
+    }
+
+    /// A checklist row's button: the existing flows only (ADR-0007) — the Settings pane, a re-check of the probe, the
+    /// `SMAppService` approval. Guidance is text and does nothing.
+    func handle(_ action: AccessChecklist.Action) {
+        switch action {
+        case .openFullDiskAccessSettings: openFullDiskAccessSettings()
+        case .recheckFullDiskAccess: refreshPermissions()
+        case .installHelper: installHelper(then: nil)
+        case .guidanceOnly: break
+        }
+    }
+
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
@@ -196,176 +226,6 @@ final class AppModel {
             lastCleanResult = result
             await refresh()
         } catch { lastError = "\(error)" }
-    }
-}
-
-enum SidebarSection: String, CaseIterable, Identifiable {
-    case overview = "Overview", storage = "Storage", doctor = "Doctor", clean = "Clean", volumes = "Volumes", runtimes = "Runtimes",
-        journal = "Journal", permissions = "Permissions"
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .overview: L10n.tr("app.section.overview")
-        case .storage: L10n.tr("app.section.storage")
-        case .doctor: L10n.tr("app.section.doctor")
-        case .clean: L10n.tr("app.section.clean")
-        case .volumes: L10n.tr("app.section.volumes")
-        case .runtimes: L10n.tr("app.section.runtimes")
-        case .journal: L10n.tr("app.section.journal")
-        case .permissions: L10n.tr("app.section.permissions")
-        }
-    }
-    var symbol: String {
-        switch self {
-        case .overview: "internaldrive";
-        case .storage: "chart.pie";
-        case .doctor: "stethoscope";
-        case .clean: "trash"
-        case .volumes: "externaldrive";
-        case .runtimes: "iphone";
-        case .journal: "list.bullet.rectangle"
-        case .permissions: "lock.shield"
-        }
-    }
-}
-
-struct MainView: View {
-    @Bindable var model: AppModel
-    @State private var section: SidebarSection = .overview
-    var body: some View {
-        NavigationSplitView {
-            List(SidebarSection.allCases, selection: $section) { s in Label(s.title, systemImage: s.symbol).tag(s) }
-                .navigationSplitViewColumnWidth(min: 170, ideal: 190)
-        } detail: {
-            Group {
-                if let r = model.report {
-                    switch section {
-                    case .overview:
-                        OverviewView(
-                            report: r, findings: model.findings, fullDiskAccess: model.fullDiskAccess,
-                            openSettings: { model.openFullDiskAccessSettings() })
-                    case .storage: StorageView(report: r)
-                    case .doctor: DoctorView(model: model)
-                    case .clean: CleanView(model: model)
-                    case .volumes: VolumesView(report: r, checks: model.vaultChecks)
-                    case .runtimes: RuntimesView(report: r)
-                    case .journal: JournalView(entries: model.journal)
-                    case .permissions: PermissionsView(model: model)
-                    }
-                } else if section == .permissions {
-                    PermissionsView(model: model)  // needs no scan
-                } else {
-                    ContentUnavailableView(
-                        L10n.tr("app.scanning.title"), systemImage: "magnifyingglass",
-                        description: Text.l10n(L10n.tr("app.scanning.detail")))
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.refresh() }
-                    } label: {
-                        Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
-                    }.disabled(model.isScanning)
-                }
-                if model.isScanning { ToolbarItem { ProgressView().controlSize(.small) } }
-            }
-            .navigationTitle(section.title)
-        }
-        .alert(L10n.tr("app.alert.error.title"), isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
-            Button(L10n.tr("app.action.ok")) {
-                // Dismissing is the whole action: SwiftUI clears the binding that presents this
-                // alert, which the `set:` closure above turns into `lastError = nil`.
-            }
-        } message: {
-            Text(verbatim: model.lastError ?? "")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await model.appDidBecomeActive() }
-        }
-        .sheet(isPresented: $model.showsHelperSheet) { HelperRequestSheet(model: model) }
-        .overlay(alignment: .top) {
-            if let progress = model.helperProgress {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text(verbatim: progress)
-                    Button(L10n.tr("app.helper.stopWaiting")) { model.stopWaitingForApproval() }
-                }
-                .padding(8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding()
-            }
-        }
-        .alert(
-            L10n.tr("app.alert.done.title"),
-            isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })
-        ) {
-            Button(L10n.tr("app.action.ok")) {
-                // Dismissing is the whole action, as with the error alert above.
-            }
-        } message: {
-            Text(verbatim: model.lastPrivilegedResult ?? "")
-        }
-    }
-}
-
-struct OverviewView: View {
-    let report: ScanReport; let findings: [Finding]
-    let fullDiskAccess: FullDiskAccessState
-    let openSettings: @MainActor () -> Void
-    var body: some View {
-        let s = report.summary
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text.l10n(
-                    L10n.tr(
-                        "app.overview.host", report.host.macOSVersion, report.host.architecture, ByteCount.format(report.host.dataVolumeFreeBytes),
-                        ByteCount.format(report.host.dataVolumeTotalBytes))
-                ).font(.headline)
-                Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
-                    row(L10n.tr("app.overview.row.internal"), s.internalDeveloperBytes, s.lowerBound ? L10n.tr("app.overview.note.lowerBound") : nil)
-                    row("  " + L10n.tr("app.overview.row.runtimeImages"), s.runtimeImageBytes, L10n.tr("app.overview.note.runtimeImages"))
-                    row(L10n.tr("app.overview.row.cleanable"), s.cleanableBytes, nil)
-                    row(L10n.tr("app.overview.row.relocatable"), s.relocatableBytes, nil)
-                    row(L10n.tr("app.overview.row.appleManaged"), s.appleManagedBytes, nil)
-                    row(L10n.tr("app.overview.row.mustRemainLocal"), s.mustRemainLocalBytes, nil)
-                    row(L10n.tr("app.overview.row.reclaimable"), s.estimatedInternalSavingsBytes, L10n.tr("app.overview.note.reclaimable"))
-                    row("  " + L10n.tr("app.overview.row.verified"), s.verifiedSavingsBytes, L10n.tr("app.overview.note.verified"))
-                }
-                if PermissionPrompts.shouldAskForFullDiskAccess(privacyRefusalCount: s.privacyRefusalCount, state: fullDiskAccess) {
-                    GroupBox {
-                        HStack {
-                            Label(L10n.tr("app.overview.fda.prompt"), systemImage: "lock")
-                            Spacer()
-                            Button(L10n.tr("app.action.openSettings"), action: openSettings)
-                        }
-                        Text(verbatim: PrivilegeRequirement.appFullDiskAccess.why(in: L10n.locale)).font(.callout).foregroundStyle(.secondary)
-                    }
-                }
-                if !report.warnings.isEmpty {
-                    GroupBox(L10n.tr("app.overview.warnings.title")) {
-                        VStack(alignment: .leading) {
-                            ForEach(report.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
-                        }
-                    }
-                }
-                let critical = findings.filter { $0.severity >= .error }
-                if !critical.isEmpty {
-                    GroupBox(L10n.plural("app.overview.doctor.issues", count: critical.count)) {
-                        VStack(alignment: .leading) {
-                            ForEach(critical) { Text.l10n(L10n.tr("app.overview.doctor.issue", AppText.severity($0.severity), $0.title)) }
-                        }
-                    }
-                }
-                Text.l10n(L10n.tr("app.overview.footer")).font(.footnote).foregroundStyle(.secondary)
-            }.padding()
-        }
-    }
-    func row(_ label: String, _ bytes: UInt64, _ note: String?) -> some View {
-        GridRow {
-            Text(verbatim: label); Text(verbatim: ByteCount.format(bytes)).monospacedDigit().bold()
-            Text(verbatim: note ?? "").foregroundStyle(.secondary).font(.caption)
-        }
     }
 }
 

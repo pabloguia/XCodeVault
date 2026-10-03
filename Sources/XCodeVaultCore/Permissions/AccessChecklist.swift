@@ -84,6 +84,22 @@ public enum AccessChecklist {
         [fullDiskAccessRow(fullDiskAccess, savings: savings, refusals: privacyRefusalCount), helperRow(helper, plan: plan)]
     }
 
+    /// The Overview's one access banner (spec §6.2: "at most one"): the first row that holds back something the scan
+    /// measured, or nil. Full Disk Access holds something back when it is not granted and folders were refused or a size
+    /// is a lower bound; the helper, when it is not enabled and root-only delete rows wait on it (`blocksBytes`). A row that
+    /// holds nothing back stays in the Access view and never nags from the Overview.
+    public static func banner(
+        fullDiskAccess: FullDiskAccessState, helper: HelperState, savings: SavingsSummary, plan: [SavingsPlanRow], privacyRefusalCount: Int = 0
+    ) -> Row? {
+        rows(fullDiskAccess: fullDiskAccess, helper: helper, savings: savings, plan: plan, privacyRefusalCount: privacyRefusalCount).first { row in
+            guard row.state != .granted else { return false }
+            return switch row.need {
+            case .fullDiskAccess: privacyRefusalCount > 0 || savings.isLowerBound
+            case .privilegedHelper: row.blocksBytes != nil
+            }
+        }
+    }
+
     static func fullDiskAccessRow(_ state: FullDiskAccessState, savings: SavingsSummary, refusals: Int) -> Row {
         switch state {
         case .granted:

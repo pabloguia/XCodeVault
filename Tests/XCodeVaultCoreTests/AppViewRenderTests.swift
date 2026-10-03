@@ -40,11 +40,46 @@ final class AppViewRenderTests: XCTestCase {
         }
     }
 
-    func testTheOverviewRendersWithAndWithoutTheFullDiskAccessPrompt() {
-        for (refusals, access) in [(0, FullDiskAccessState.granted), (3, .notGranted), (3, .unknown), (3, .granted)] {
-            let survey = sampleSurvey(refusals: refusals)
-            render(OverviewView(report: survey.0, findings: [], fullDiskAccess: access) {})
+    /// Every Overview state (S4 Task 3): measured, lower bound, zero, not measured, with the runtimes line, with a clamped
+    /// bar, with each banner the checklist can produce and with critical findings — in every language.
+    func testTheOverviewRendersEveryStateInEveryLanguage() {
+        let critical = Finding(id: "f", severity: .critical, title: "Shadow CoreSimulator directory", detail: "d", path: nil, remediation: nil, evidence: nil)
+        let surveys = [
+            sampleSurvey(savings: sampleSavings()),
+            sampleSurvey(savings: sampleSavings(lowerBound: true), runtimeImageBytes: 9_400_000_000),
+            sampleSurvey(),
+            sampleSurvey(sizesMeasured: false),
+            sampleSurvey(savings: sampleSavings(), free: 490_000_000_000),  // free + developer data > volume: clamped
+        ]
+        var banners: [AccessChecklist.Row?] = [nil]
+        for fda in FullDiskAccessState.allCases {
+            for helper in HelperState.allCases {
+                banners += AccessChecklist.rows(fullDiskAccess: fda, helper: helper, savings: sampleSavings(lowerBound: true), plan: [], privacyRefusalCount: 3)
+            }
         }
+        var rendered = 0
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            for survey in surveys {
+                render(OverviewView(report: survey.0, findings: [critical], access: nil))
+                rendered += 1
+            }
+            for banner in banners {
+                render(OverviewView(report: surveys[0].0, findings: [], access: banner))
+                rendered += 1
+            }
+        }
+        XCTAssertEqual(rendered, L10n.supportedLocales.count * (surveys.count + banners.count))
+    }
+
+    func testTheMainViewRendersEverySection() async {
+        let t = TempDir()
+        let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: sampleSurvey(refusals: 2, savings: sampleSavings()), journal: t)
+        for section in SidebarSection.allCases {
+            model.section = section
+            render(MainView(model: model))
+        }
+        for bucket in [SavingsBucket.parkExternally, .runFromExternal] { render(BucketPlaceholderView(bucket: bucket)) }
     }
 
     func testTheMainViewRendersLoadingScannedAndWaitingForApproval() async {
@@ -112,7 +147,7 @@ final class AppViewRenderTests: XCTestCase {
             let survey = sampleSurvey(refusals: 3, findings: [finding], actions: [dyld])
             let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: survey, journal: t)
             render(MainView(model: model))
-            render(OverviewView(report: survey.0, findings: [finding], fullDiskAccess: .notGranted) {})
+            render(OverviewView(report: survey.0, findings: [finding], access: model.accessBanner))
             render(StorageView(report: survey.0))
             render(DoctorView(model: model))
             render(CleanView(model: model))

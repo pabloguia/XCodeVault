@@ -37,8 +37,10 @@ final class AppTextCoverageTests: XCTestCase {
     }
 
     func testNoAppViewTakesAStringLiteral() throws {
-        let files = try FileManager.default.contentsOfDirectory(atPath: appSources.path).filter { $0.hasSuffix(".swift") }
+        // Recursive: the views live in `Views/` (S4 Task 3), and a scan that stopped at the top folder would pass them unread.
+        let files = try XCTUnwrap(FileManager.default.subpaths(atPath: appSources.path)).filter { $0.hasSuffix(".swift") }
         XCTAssertGreaterThan(files.count, 3, "the app's sources were found")
+        XCTAssertTrue(files.contains("Views/OverviewView.swift"), "the scan reaches the Views folder")
         var hits: [String] = []
         for file in files {
             let text = try String(contentsOf: appSources.appendingPathComponent(file), encoding: .utf8)

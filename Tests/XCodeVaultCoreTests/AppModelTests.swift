@@ -64,16 +64,50 @@ struct Refusal: Error, CustomStringConvertible {
 }
 
 /// A small, fixed survey: a report whose summary can count privacy refusals, an optional finding and clean plan.
-func sampleSurvey(refusals: Int = 0, findings: [Finding] = [], actions: [CleanAction] = []) -> AppModel.Survey {
+func sampleSurvey(
+    refusals: Int = 0, findings: [Finding] = [], actions: [CleanAction] = [], savings: SavingsSummary = SavingsSummary(), runtimeImageBytes: UInt64 = 0,
+    sizesMeasured: Bool = true, free: UInt64 = 100_000_000_000
+) -> AppModel.Survey {
     let host = HostEnvironment(
         macOSVersion: "26.6", macOSBuild: "25G83", architecture: "arm64", homeDirectory: "/Users/tester",
-        dataVolumeFreeBytes: 100_000_000_000, dataVolumeTotalBytes: 500_000_000_000, userName: "tester", isRoot: false)
+        dataVolumeFreeBytes: free, dataVolumeTotalBytes: 500_000_000_000, userName: "tester", isRoot: false)
     var summary = ScanSummary()
     summary.privacyRefusalCount = refusals
-    let report = ScanReport(
+    summary.runtimeImageBytes = runtimeImageBytes
+    var report = ScanReport(
         generatedAt: Date(), toolVersion: "t", catalogVersion: "c", host: host, xcodes: [], runtimes: [], devices: [], volumes: [],
         items: [], summary: summary, warnings: [])
+    report.savings = savings
+    report.sizesMeasured = sizesMeasured
     return (report, findings, [], CleanPlan(actions: actions, skipped: [], warnings: []), [])
+}
+
+/// Savings shaped like a working developer Mac: every bucket non-empty, part of each experimental, simulator devices in
+/// the delete card. The Overview's sample (render tests and snapshots).
+func sampleSavings(lowerBound: Bool = false) -> SavingsSummary {
+    let gb: UInt64 = 1_000_000_000
+    var s = SavingsSummary()
+    s.deleteAndRegenerate.optionBytes = 64 * gb
+    s.deleteAndRegenerate.verifiedOptionBytes = 52 * gb
+    s.deleteAndRegenerate.primaryBytes = 31 * gb
+    s.parkExternally.optionBytes = 27 * gb
+    s.parkExternally.verifiedOptionBytes = 9 * gb
+    s.parkExternally.primaryBytes = 18 * gb
+    s.runFromExternal.optionBytes = 33 * gb
+    s.runFromExternal.verifiedOptionBytes = 33 * gb
+    s.runFromExternal.primaryBytes = 33 * gb
+    s.keepLocal.optionBytes = 14 * gb
+    s.keepLocal.verifiedOptionBytes = 14 * gb
+    s.keepLocal.primaryBytes = 14 * gb
+    s.temporaryBytes = 49 * gb
+    s.verifiedTemporaryBytes = 40 * gb
+    s.permanentBytes = 33 * gb
+    s.verifiedPermanentBytes = 33 * gb
+    s.reclaimableBytes = 82 * gb
+    s.verifiedReclaimableBytes = 73 * gb
+    s.deleteLosesUserDataBytes = 6 * gb
+    s.isLowerBound = lowerBound
+    return s
 }
 
 /// `AppModel` over fakes. The runner journals into `journal` and sees nothing running; the approval flow polls
@@ -398,4 +432,75 @@ final class Box<T>: @unchecked Sendable {
     init(_ value: T) { self.value = value }
     func set(_ new: T) { lock.withLock { value = new } }
     func get() -> T { lock.withLock { value } }
+}
+
+// MARK: - Navigation and the Overview's banner (S4 Task 3)
+
+extension AppModelTests {
+    func testTheSidebarHasTheTwoGroupsOfTheSpec() {
+        XCTAssertEqual(SidebarSection.saveSpace, [.overview, .delete, .park, .runExternally])
+        XCTAssertEqual(SidebarSection.details, [.storage, .simulators, .drives, .health, .history, .access])
+        XCTAssertEqual(SidebarSection.allCases, SidebarSection.saveSpace + SidebarSection.details)
+        // The bucket views carry the bucket's own S5 symbol; the others have one each.
+        XCTAssertEqual(SidebarSection.delete.symbol, SavingsBucket.deleteAndRegenerate.symbolName)
+        XCTAssertEqual(SidebarSection.park.symbol, SavingsBucket.parkExternally.symbolName)
+        XCTAssertEqual(SidebarSection.runExternally.symbol, SavingsBucket.runFromExternal.symbolName)
+        XCTAssertEqual(Set(SidebarSection.allCases.map(\.symbol)).count, SidebarSection.allCases.count)
+        for section in SidebarSection.allCases {
+            XCTAssertNotNil(NSImage(systemSymbolName: section.symbol, accessibilityDescription: nil), section.symbol)
+        }
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let titles = SidebarSection.allCases.map(\.title) + [SidebarSection.saveSpaceTitle, SidebarSection.detailsTitle]
+            XCTAssertEqual(Set(titles).count, titles.count, locale)
+            XCTAssertTrue(titles.allSatisfy { !$0.hasPrefix("app.") && !$0.isEmpty }, locale)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
+    }
+
+    func testReviewSelectsTheBucketsView() {
+        let model = makeModel(SwitchableHelper(.enabled), journal: TempDir())
+        XCTAssertEqual(model.section, .overview, "the app opens on the Overview")
+        model.review(.parkExternally)
+        XCTAssertEqual(model.section, .park)
+        model.review(.runFromExternal)
+        XCTAssertEqual(model.section, .runExternally)
+        model.review(.deleteAndRegenerate)
+        XCTAssertEqual(model.section, .delete)
+        model.review(.keepLocal)
+        XCTAssertEqual(model.section, .delete, "keeping has no view: nothing changes")
+        for section in SidebarSection.allCases {
+            if let bucket = section.bucket { XCTAssertEqual(SidebarSection(reviewing: bucket), section) }
+        }
+        XCTAssertNil(SidebarSection(reviewing: .keepLocal))
+    }
+
+    func testTheBannerIsTheFirstChecklistRowThatHoldsSomethingBack() async {
+        let t = TempDir()
+        let blocked = makeModel(SwitchableHelper(.notInstalled), journal: t, fullDiskAccess: .notGranted, survey: sampleSurvey(refusals: 2))
+        XCTAssertNil(blocked.accessBanner, "no scan, no banner")
+        await blocked.refresh()
+        XCTAssertEqual(blocked.accessBanner?.need, .fullDiskAccess)
+        XCTAssertEqual(blocked.accessBanner?.blocksFolders, 2)
+        let fine = makeModel(SwitchableHelper(.notInstalled), journal: t, fullDiskAccess: .granted, survey: sampleSurvey())
+        await fine.refresh()
+        XCTAssertNil(fine.accessBanner, "a missing helper with nothing root-only waiting is not a banner")
+    }
+
+    func testEachBannerActionUsesTheExistingFlow() async {
+        let t = TempDir()
+        let opened = OpenedURLs()
+        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, fullDiskAccess: .notGranted, opened: opened)
+        model.handle(.openFullDiskAccessSettings)
+        XCTAssertEqual(opened.urls.map(\.absoluteString), [FullDiskAccessProbe.settingsURL])
+        XCTAssertTrue(model.returningFromSettings)
+        model.fullDiskAccess = .unknown
+        model.handle(.recheckFullDiskAccess)
+        XCTAssertEqual(model.fullDiskAccess, .notGranted, "re-checked through the environment")
+        model.handle(.guidanceOnly)
+        XCTAssertNil(model.helperProgress, "guidance is text, it starts nothing")
+        model.handle(.installHelper)
+        XCTAssertNotNil(model.helperProgress, "the SMAppService approval flow, as Install… in Access")
+        model.stopWaitingForApproval()
+    }
 }

@@ -143,4 +143,41 @@ final class AccessChecklistTests: XCTestCase {
         let r = AccessChecklist.rows(fullDiskAccess: .notGranted, helper: .enabled, savings: SavingsSummary(), plan: [])
         XCTAssertEqual(r[0].whyKey, "app.access.fda.why.protected")
     }
+
+    // MARK: - The Overview's one banner (S4 Task 3)
+
+    private func banner(
+        _ fda: FullDiskAccessState, _ helper: HelperState, lowerBound: Bool = false, refusals: Int = 0, plan: [SavingsPlanRow]? = nil
+    ) -> AccessChecklist.Row? {
+        var s = SavingsSummary()
+        s.isLowerBound = lowerBound
+        return AccessChecklist.banner(fullDiskAccess: fda, helper: helper, savings: s, plan: plan ?? self.plan, privacyRefusalCount: refusals)
+    }
+
+    func testNoBannerWhenNothingIsHeldBack() {
+        XCTAssertNil(banner(.granted, .enabled))
+        // Missing, but nothing measured is held back by it: no banner, the Access view still lists the row.
+        XCTAssertNil(banner(.notGranted, .notInstalled, plan: [row("derivedData", 9000)]))
+        XCTAssertNil(banner(.unknown, .unavailableInThisBuild, plan: []))
+    }
+
+    func testFullDiskAccessBlocksWhenFoldersWereRefusedOrSizesAreALowerBound() {
+        XCTAssertEqual(banner(.notGranted, .enabled, refusals: 2)?.need, .fullDiskAccess)
+        XCTAssertEqual(banner(.notGranted, .enabled, lowerBound: true)?.need, .fullDiskAccess)
+        XCTAssertEqual(banner(.unknown, .enabled, refusals: 2)?.action, .recheckFullDiskAccess, "unknown re-checks, never sends to Settings")
+        XCTAssertNil(banner(.granted, .enabled, lowerBound: true, refusals: 2), "granted is never a banner")
+    }
+
+    func testTheHelperBlocksOnlyWithRootOnlyBytes() {
+        for state in [HelperState.notInstalled, .awaitingApproval, .unavailableInThisBuild] {
+            let b = banner(.granted, state)
+            XCTAssertEqual(b?.need, .privilegedHelper, "\(state)")
+            XCTAssertEqual(b?.blocksBytes, 3500, "\(state)")
+        }
+        XCTAssertNil(banner(.granted, .enabled))
+    }
+
+    func testAtMostOneBannerAndFullDiskAccessComesFirst() {
+        XCTAssertEqual(banner(.notGranted, .notInstalled, refusals: 1)?.need, .fullDiskAccess)
+    }
 }
