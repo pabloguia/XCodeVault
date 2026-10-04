@@ -105,7 +105,8 @@ The app is a projection of Core: every number and every decision a screen shows 
   `set-archives` and `runtime export`; on the Delete view, `runtime delete`. Simulator devices stay copy-only. The Run
   sheet reviews (Core's preflight or plan; blockers disable the confirm button), confirms with the exact action, then
   shows the stage, a progress bar and the live log (`StreamingCommandRunner`), and the result. The flags become
-  controls: the vault picker, a folder panel, the runtime and platform pickers, the tests checkbox for DerivedData;
+  controls: the **Destination** picker (R6: ready vaults first, drives that need preparation listed with **Prepare…**,
+  the folder pre-filled from `VaultLayout`, **Choose Another Folder…** as the override), the runtime and platform pickers, the tests checkbox for DerivedData;
   `--yes` becomes the confirm button. Removing an original is a second step after a verified copy, behind the
   non-regenerable checkbox; a Locations change offers **Undo** (the previous folder, or Core's reset when there was none). No cancel while copying, verifying or
   removing; one operation at a time, and no scan while it runs. Quitting follows `AppModel.quitChoice`: only **Keep
@@ -113,6 +114,14 @@ The app is a projection of Core: every number and every decision a screen shows 
   journal the failure) while deleting a runtime or changing a folder (`OperationKind.canBeStopped`). Offload and runtime delete wait for simulator work.
   **Undo** restores the previous folder, or resets to the default when there was none. An interrupted migration puts a banner with
   `migration status` / `resume` / `abort` on Park, Run externally and History; resume and abort stay CLI-only.
+- **Drives (R6, ADR-0012, experimental).** External physical disks from `DiskTopology` + `DriveEvaluation`: one verdict
+  each (Ready / Can be used / Needs preparation / Can't be used), the options least destructive first (add APFS volume,
+  add APFS partition in free space, erase one volume, erase the disk; ownership as Show in Finder + Copy Command), and
+  **Use This Drive…** (`DriveRegistration`: register + `VaultLayout` folders). `DiskSafety` refuses every change on
+  internal, boot, disk-image, Time Machine and read-only disks, and every erase on a disk holding a registered vault.
+  Preparation runs in the Run sheet: typed name for an erase, Core re-reads and re-checks identity before its one
+  `diskutil` command, journal kind `diskPreparation`, Keep Running only on quit. Detection: `NSWorkspace` mount/unmount,
+  debounced. `vault init` also creates the `VaultLayout` folders.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
   Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
   an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows; the devices total is the sum of

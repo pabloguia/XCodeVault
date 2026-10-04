@@ -64,6 +64,16 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   `xcodebuild -downloadPlatform -exportPath` grows its destination folder during the download (until measured, the
   export shows elapsed time only), and the folder panel as a sheet on the Run sheet.
 
+- **R6 — external drives** (branch `feat/r6-drives`, stacked on R5; ADR-0012, brief `.superpowers/sdd/r6/brief.md`,
+  approved 2026-10-04). E-diskprep (H17) measured on scratch disk images that `apfs addVolume` (incl. `-quota`),
+  `addPartition … APFS`, `eraseVolume` and `eraseDisk` run without sudo; only those are wired, through Core's one guard
+  (`DiskSafety`), the typed-name confirmation and an identity re-check before the one command; `enableOwnership` stays a
+  copyable command. Drives lists external disks with verdicts and options (experimental), **Use This Drive** registers
+  and creates the `VaultLayout` folders, the Run sheet's Destination pre-fills them. Tested with fakes only — **never
+  run against a real disk in a real window**. Waiting on the migration-safety review (dispatched by the controller).
+  **Manual check, open:** H17 on a physical disk (spare drive), mount detection on a real plug/unplug, the preparation
+  sheet's form in a real window, and Finder's Get Info route for ownership.
+
 ## Blocked / pending — manual (ask the user)
 
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
