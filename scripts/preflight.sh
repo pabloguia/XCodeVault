@@ -25,6 +25,7 @@ set -u -o pipefail
 cd "$(dirname "$0")/.."
 
 GATES=(
+    "l10n:bash scripts/l10n.sh check && bash scripts/test-l10n.sh"
     "build:swift build -Xswiftc -warnings-as-errors"
     "environment:bash scripts/ci-environment-assertions.sh"
     "tests:swift test"
@@ -54,7 +55,7 @@ fast=0
 # would make this script's central claim false for one step while this very guard reported
 # everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=14
+expected_steps=15
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2

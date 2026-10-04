@@ -34,6 +34,9 @@ let package = Package(
         // The single shared domain layer. No UI, no privileged calls, no shell.
         .target(
             name: "XCodeVaultCore",
+            // The String Catalog is compiled by scripts/l10n.sh into CoreStrings.generated.swift, not by SwiftPM
+            // into a resource bundle: a stand-alone CLI binary must carry every language (spec 2026-10-03 §4.1).
+            exclude: ["Localization/Localizable.xcstrings"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // XPC protocol shared by client and daemon. Nothing else crosses the boundary.

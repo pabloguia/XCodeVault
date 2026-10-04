@@ -10,6 +10,9 @@ Internal developer storage · externally relocatable · safely cleanable · cold
 eligible · Apple-managed (informational only) · must remain local (with reason) ·
 estimated internal SSD savings.
 
+The user-facing grouping is the savings buckets in `STORAGE_CATALOG.md` § Savings
+buckets; the groupings above remain in `ScanSummary` and the JSON for existing readers.
+
 Per category, show: size, current location, what generated it, deletable?, movable?,
 regenerable?, expected performance impact, recommended action, risk level. Never
 present a destructive action as harmless cleanup — the UI copy and confirmation flow

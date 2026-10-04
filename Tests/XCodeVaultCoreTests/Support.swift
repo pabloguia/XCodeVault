@@ -94,3 +94,11 @@ final class TempDir {
         return p
     }
 }
+
+extension Fixtures {
+    static func minimalReport() -> ScanReport {
+        XCodeVaultCore.Scanner(
+            runner: FakeRunner(responses: [:]), home: "/nonexistent", catalog: [], measureSizes: false, detectXcodeCapabilities: false
+        ).scan()
+    }
+}

@@ -140,3 +140,21 @@ behind:
 
 `remediationHint` being nil is deliberate and renders as no remediation at all: that is the honest
 rendering of not knowing, and it is never replaced by a plausible-sounding command we have not run.
+
+## Savings buckets (user-facing; spec 2026-10-03)
+
+Every category is shown to the user through the options it offers, derived in code
+(`StorageCategory.savingsOptions`) from `allowedStrategies`, `cleanupCommand` and `regenerability` —
+never a separate field:
+
+| Bucket | Derived from | Promise | Cost to undo |
+|---|---|---|---|
+| Run from external | `nativeConfiguration`, `userDirectoryRelocation`, `downloadRepository` | Permanent | None; drive must be connected |
+| Park externally | `coldStorage`, or a named park command (`simulatorRuntimeAssets`) | Temporary | Copy back (runtimes: re-import, needs staging space) |
+| Delete | `safeCleanup` or a `cleanupCommand`, and not non-regenerable | Temporary | Rebuild or re-download |
+| Keep local | none of the above | — | — |
+
+Options are listed most durable first; the first one that applies to the data already on disk is the bucket the dashboard counts. Each option is experimental unless its category's evidence is verified and it is not a named experimental command (`runtime offload`) — see `SavingsOption`. Archives' run-from-external only redirects new archives (`locations set-archives`); existing ones are parked. Parking a runtime and bringing it back needs internal staging space for the re-import (E11).
+
+`symlinkRelocation` and `canonicalMount` never produce "run from external". The current mapping is
+pinned by `SavingsOptionsTests`; moving a category between buckets is a reviewed decision.
