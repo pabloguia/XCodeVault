@@ -37,6 +37,7 @@ enum OperationText {
         case .deleting: L10n.tr("app.run.stage.deleting")
         case .exporting: L10n.tr("app.run.stage.exporting")
         case .applying: L10n.tr("app.run.stage.applying")
+        case .preparing: L10n.tr("app.run.stage.preparing")
         case .done: L10n.tr("app.run.stage.done")
         case .failed: L10n.tr("app.run.stage.failed")
         }

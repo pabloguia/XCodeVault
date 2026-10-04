@@ -201,7 +201,7 @@ extension AppModel {
             }
         }
         switch stage {
-        case .copying, .verifying, .removing: return .keepRunningOnly(.migration)
+        case .copying, .verifying, .removing, .preparing: return .keepRunningOnly(.migration)
         case .exporting: return .keepRunningOnly(.export)
         case .planning, .deleting, .applying, .done, .failed: return .stopThenQuit
         }

@@ -350,8 +350,10 @@ final class ExperimentScriptSafetyTests: XCTestCase {
     /// E-diskprep (H17, R6) erases and partitions disks. Its whole safety argument is that every mutating `diskutil`
     /// verb goes through `dp_mutate`, which runs `xcv_dp_guard` first — the guard that refuses anything but a disk image
     /// this script attached. A mutating line written outside that wrapper would reach whatever device it names.
-    static let diskMutatingVerbs = ["eraseDisk", "eraseVolume", "addPartition", "partitionDisk", "addVolume", "deleteVolume", "deleteContainer",
-        "resizeVolume", "reformat", "zeroDisk", "randomDisk", "secureErase", "mergePartitions", "splitPartition"]
+    static let diskMutatingVerbs = [
+        "eraseDisk", "eraseVolume", "addPartition", "partitionDisk", "addVolume", "deleteVolume", "deleteContainer",
+        "resizeVolume", "reformat", "zeroDisk", "randomDisk", "secureErase", "mergePartitions", "splitPartition",
+    ]
 
     static func unguardedDiskMutations(in body: String) -> [Int] {
         var lines: [Int] = []
@@ -374,7 +376,8 @@ final class ExperimentScriptSafetyTests: XCTestCase {
         XCTAssertTrue(body.contains("dp_mutate() {") && body.contains("xcv_dp_guard \"$target\""), "dp_mutate no longer runs the guard first")
         XCTAssertTrue(body.contains("\"Disk Image\"") && body.contains("\"Virtual\""), "the guard no longer checks that the target is a disk image")
         XCTAssertTrue(body.contains("trap 'on_exit' EXIT INT TERM HUP"), "the cleanup trap is gone")
-        XCTAssertFalse(body.split(separator: "\n").contains { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") && $0.contains("sudo diskutil") },
+        XCTAssertFalse(
+            body.split(separator: "\n").contains { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") && $0.contains("sudo diskutil") },
             "the experiment measures what runs WITHOUT sudo; it must never call sudo")
     }
 

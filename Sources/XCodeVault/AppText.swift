@@ -229,6 +229,7 @@ enum AppText {
         case .runtimeImport: L10n.tr("app.history.kind.runtimeImport")
         case .migration: L10n.tr("app.history.kind.migration")
         case .xcodeLocationChange: L10n.tr("app.history.kind.xcodeLocationChange")
+        case .diskPreparation: L10n.tr("app.history.kind.diskPreparation")
         case .privileged: L10n.tr("app.history.kind.privileged")
         case .other: L10n.tr("app.history.kind.other")
         }

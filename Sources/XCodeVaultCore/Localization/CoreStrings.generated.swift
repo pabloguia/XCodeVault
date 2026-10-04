@@ -739,6 +739,13 @@ extension L10nCatalog {
                 "ja": "クリーンアップ",
                 "zh-Hans": "清理",
             ],
+            "app.history.kind.diskPreparation": [
+                "en": "Drive preparation",
+                "pt-BR": "Preparação de disco",
+                "es": "Preparación de disco",
+                "ja": "ドライブの準備",
+                "zh-Hans": "驱动器准备",
+            ],
             "app.history.kind.migration": [
                 "en": "Migration",
                 "pt-BR": "Migração",
@@ -1704,6 +1711,13 @@ extension L10nCatalog {
                 "es": "Comprobando…",
                 "ja": "確認中…",
                 "zh-Hans": "正在检查…",
+            ],
+            "app.run.stage.preparing": [
+                "en": "Preparing the drive…",
+                "pt-BR": "Preparando o disco…",
+                "es": "Preparando el disco…",
+                "ja": "ドライブを準備中…",
+                "zh-Hans": "正在准备驱动器…",
             ],
             "app.run.stage.removing": [
                 "en": "Re-verifying, then deleting the original…",

@@ -15,6 +15,8 @@ public enum OperationStage: String, Sendable, Equatable, CaseIterable {
     case exporting
     /// Writing an Xcode Locations setting through `defaults`.
     case applying
+    /// R6: `diskutil` adding a volume or partition to, or erasing, an external drive.
+    case preparing
     case done
     case failed
 

@@ -10,7 +10,7 @@ public enum JournalTimeline {
     /// helper's actions are recorded under `clean` and `migration`, and so is the vault registry — and closed: a record
     /// this does not recognise is `other`, never a guess.
     public enum Kind: String, Sendable, CaseIterable, Hashable {
-        case clean, runtimeDelete, runtimeOffload, runtimeExport, runtimeImport, migration, xcodeLocationChange, privileged, other
+        case clean, runtimeDelete, runtimeOffload, runtimeExport, runtimeImport, migration, xcodeLocationChange, diskPreparation, privileged, other
     }
 
     /// How an operation ended, as its last record says.
@@ -88,6 +88,7 @@ public enum JournalTimeline {
         case .runtimeExport: return .runtimeExport
         case .runtimeImport: return .runtimeImport
         case .xcodeLocationChange: return .xcodeLocationChange
+        case .diskPreparation: return .diskPreparation
         case .migration: return records.contains { $0.detail["direction"] != nil } ? .migration : .other
         }
     }
@@ -159,6 +160,7 @@ extension JournalTimeline.Kind {
         case .runtimeImport: "square.and.arrow.down"
         case .migration: "arrow.left.arrow.right"
         case .xcodeLocationChange: "folder.badge.gearshape"
+        case .diskPreparation: "externaldrive.badge.plus"
         case .privileged: "lock.shield"
         case .other: "doc.text"
         }
@@ -176,6 +178,7 @@ extension JournalTimeline.Kind {
         case .runtimeImport: "#6A4FD6"
         case .migration: "#1E8B5D"
         case .xcodeLocationChange: "#B53C8C"
+        case .diskPreparation: "#8A5A3C"
         case .privileged: "#7A6418"
         case .other: "#6E7385"
         }
@@ -191,6 +194,7 @@ extension JournalTimeline.Kind {
         case .runtimeImport: "#9B87F5"
         case .migration: "#3DBE7E"
         case .xcodeLocationChange: "#E06AB8"
+        case .diskPreparation: "#D1956B"
         case .privileged: "#C2AE3A"
         case .other: "#9399AB"
         }
