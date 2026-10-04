@@ -148,7 +148,7 @@ public struct Doctor: Sendable {
                 // The path stays forbidden — the reason is "unverified and known to leave shadow
                 // data", not "proven to break".
                 why =
-                    "Unsupported redirect (this is what mac-ssd-rescue creates). CoreSimulator caches the resolved target, so this layout leaves shadow device sets behind (E9). An Aug 2025 report also describes the Simulator's Files app losing share/save/create-folder on this configuration; we could not reproduce that on macOS 26.6.2 / Xcode 26.5, so treat it as unverified rather than safe (H5)."
+                    "Unsupported redirect (this is what mac-ssd-rescue creates). CoreSimulator caches the resolved target, so this layout leaves shadow device sets behind. An Aug 2025 report also describes the Simulator's Files app losing share/save/create-folder on this configuration; we could not reproduce that on macOS 26.6.2 / Xcode 26.5, so treat it as unverified rather than safe."
             case "~/Library/Developer/DeveloperDiskImages": why = "Must be a real directory for device support to work (FB12363725)."
             default: why = "This path must never be redirected wholesale."
             }
@@ -502,7 +502,7 @@ public struct Doctor: Sendable {
                         : "Remove the empty directory. The volume root is root-owned, so this one needs sudo:\n  sudo rmdir \(OwnershipAdvice.shellQuoted(candidate))\nUse `rmdir`, not `rm -rf` — it refuses if anything reappeared inside."
                 } else {
                     detail =
-                        "\(candidate) contains: \(visible.isEmpty ? "(only hidden entries)" : visible.joined(separator: ", "))\(hiddenNote). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (H5 — the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind, see E9)."
+                        "\(candidate) contains: \(visible.isEmpty ? "(only hidden entries)" : visible.joined(separator: ", "))\(hiddenNote). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind)."
                     remediation = "Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone."
                 }
                 out.append(

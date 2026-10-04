@@ -143,13 +143,13 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         let external = (vol?.isExternal ?? false) || resolved.hasPrefix("/Volumes/")
         if external && warnsAboutTests {
             let msg =
-                "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (E2, reproduced) — unit tests will break for projects built here. Disk images and internal volumes are unaffected."
+                "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (reproduced here) — unit tests will break for projects built here. Disk images and internal volumes are unaffected."
             guard acknowledgeExternalTests else { throw RuntimeOperationError(msg + " Re-run with --i-understand-tests-may-fail to proceed anyway.") }
             w.append(msg)
         }
         if external {
             w.append(
-                "If this volume is disconnected, Xcode's behaviour is not yet verified (E6 pending): it may fail or recreate data locally. Run `xcodevaultctl doctor` after reconnecting to detect shadow data."
+                "If this volume is disconnected, Xcode's behaviour has not been tested yet: it may fail or recreate data locally. Run `xcodevaultctl doctor` after reconnecting to detect shadow data."
             )
         }
         if let vol, !vol.ownersEnabled { w.append("Ownership is ignored on \(vol.volumeName); enable it with `diskutil enableOwnership`.") }

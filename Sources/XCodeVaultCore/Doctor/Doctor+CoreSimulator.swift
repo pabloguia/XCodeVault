@@ -240,11 +240,11 @@ extension Doctor {
                     id: id, severity: .warning, title: "Orphaned dyld cache: \(dirName) (\(size))",
                     detail:
                         "\(reason)\(age) Nothing will rebuild it, because the runtime it belongs to is gone — unlike the rest of this tree, "
-                        + "where on one machine the caches for installed runtimes were rebuilt after a macOS update (H11, the one rebuild recorded; its trigger is not identified).",
+                        + "where on one machine the caches for installed runtimes were rebuilt after a macOS update (the one rebuild recorded; its trigger is not identified).",
                     path: path,
                     remediation:
                         "Do not start with a restart: where this was measured (macOS 26.6.2 / 25G83, 2026-09-16) the tree came back byte-identical across "
-                        + "a reboot, so the startup reaper that does collect the stranded runtime Inbox does not cover this path (E13). "
+                        + "a reboot, so the startup reaper that does collect the stranded runtime Inbox does not cover this path. "
                         + "What DOES clear it is a macOS update: these caches are keyed by host build, so updating 26.6.2 (25G83) to 26.7 (25G229) "
                         + "removed the whole previous build's tree (2026-09-16, one observation). Only the orphan's share of that is durable free space "
                         + "— within the hour the installed runtimes had rebuilt their caches to the same sizes on the new build, and only the orphan "

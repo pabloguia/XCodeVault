@@ -125,13 +125,13 @@ public struct CleanPlanner: Sendable {
             // 2026-09-26). No user-deleted cache has been seen rebuilt, so the text names the observation
             // and not a mechanism.
             warnings.append(
-                "CoreSimulator dyld caches are root-owned and need root with Full Disk Access (H15). `clean` lists them for accounting and never "
+                "CoreSimulator dyld caches are root-owned and need root with Full Disk Access. `clean` lists them for accounting and never "
                     + "deletes them; the app can empty them through the privileged helper (experimental), which needs a signed build and whose own Full Disk "
                     + "Access is unmeasured. "
-                    + "Most of this total is NOT durable free space — on one machine (H11), caches for installed runtimes were rebuilt within an hour after a macOS update, "
+                    + "Most of this total is NOT durable free space — on one machine, caches for installed runtimes were rebuilt within an hour after a macOS update, "
                     + "but no deleted cache has been seen rebuilt and the trigger is not identified; until a rebuild those simulators run without a dyld shared cache. "
                     + "`doctor` reports the part nothing was seen to rebuild — caches whose runtime is gone — and a restart does not reclaim those "
-                    + "either, measured byte-identical across a reboot (F10, E13).")
+                    + "either, measured byte-identical across a reboot.")
         }
         // One line per declined category, largest first, naming the total across every device rather
         // than each device separately. The short reason lives here; the full one is in `doctor`,

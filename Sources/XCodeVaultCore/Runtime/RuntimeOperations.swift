@@ -487,19 +487,19 @@ public struct RuntimeOperations: Sendable {
         // away from the one operation that is nearly free, which is also the one that frees the most
         // space (export the installer to a vault, then `runtime offload`).
         let downloadWarning =
-            "Observed on Xcode 26.5 (E11): for a runtime that is NOT already installed, `-downloadPlatform -exportPath` downloads, INSTALLS it on the internal volume, then exports a copy. "
+            "Observed on Xcode 26.5: for a runtime that is NOT already installed, `-downloadPlatform -exportPath` downloads, INSTALLS it on the internal volume, then exports a copy. "
             + "Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`."
         func warnIfTight(_ why: String) {
             if host.dataVolumeFreeBytes < 15_000_000_000 {
-                w.append("Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume, and \(why) (E11). Watch for ENOSPC.")
+                w.append("Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume, and \(why). Watch for ENOSPC.")
             }
         }
         switch exportCost(req, among: installedRuntimes) {
         case .copyOut:
             w.append(
                 "This exact runtime is already installed, so `-exportPath` should copy the sealed image out rather than downloading and installing it: internal use stays flat. "
-                    + "Budget the space at the DESTINATION, not internally. Both measurements behind this — 1 MB peak for iOS 26.5 (E11) and a 10.6 GB export on 2026-09-08 "
-                    + "with internal free unchanged (F11) — were run WITHOUT -buildVersion, i.e. in the case where the latest happened to be the installed build. "
+                    + "Budget the space at the DESTINATION, not internally. Both measurements behind this — 1 MB peak for iOS 26.5 and a 10.6 GB export on 2026-09-08 "
+                    + "with internal free unchanged — were run WITHOUT -buildVersion, i.e. in the case where the latest happened to be the installed build. "
                     + "The pinned-build path is inferred from those, not separately measured.")
         case .unknownDependsOnWhatIsLatest:
             // Never the cheap story on its own: without -buildVersion, `-downloadPlatform` fetches the
