@@ -195,6 +195,9 @@ func check(catalogPath: String, outPath: String, name: String, locales: [String]
     for (key, file) in referencedKeys(under: sources).sorted(by: { $0.key < $1.key }) where !known.contains(key) {
         problems.append("\(file): key \"\(key)\" is not in \((catalogPath as NSString).lastPathComponent)")
     }
+    // A catalog key no source references is a warning, not a failure: it may be used through a key built at run time.
+    let referenced = Set(referencedKeys(under: sources).keys)
+    for key in known.subtracting(referenced).sorted() { print("l10n: unused key \(key)") }
     for locale in locales where (review[locale] ?? 0) > 0 { print("l10n: \(locale): \(review[locale]!) string(s) need native review") }
     for p in problems { FileHandle.standardError.write(Data(("l10n: " + p + "\n").utf8)) }
     return problems.isEmpty ? 0 : 1

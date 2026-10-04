@@ -62,7 +62,7 @@ extension Doctor {
                 let title: String
                 let remediation: String
                 if let bytes = c.shadowBytes {
-                    title = "Shadow data at \(c.volume.lastMountPoint) (\(ByteCount.format(bytes)))"
+                    title = "Shadow data at \(c.volume.lastMountPoint) (\(ByteCount.english(bytes)))"
                     remediation =
                         "Reconciliation needed before the volume is mounted here again (mounting over it hides the data and it keeps consuming the internal disk). Inspect the directory; if it only contains regenerable data, delete it; otherwise merge it manually. XCodeVault never auto-resolves this."
                 } else {
@@ -155,7 +155,7 @@ extension Doctor {
             out.append(
                 Finding(
                     id: "shadow-volumes-dir:\(n)", severity: .warning,
-                    title: "/Volumes/\(n) is a plain directory with \(u.fileCount) file(s), \(ByteCount.format(u.allocatedBytes)) — no volume mounted there",
+                    title: "/Volumes/\(n) is a plain directory with \(u.fileCount) file(s), \(ByteCount.english(u.allocatedBytes)) — no volume mounted there",
                     detail:
                         "Something wrote here while the volume named '\(n)' was absent. macOS will mount that volume as '\(n) 1' next time, and every absolute path into /Volumes/\(n) will silently point at this local copy.",
                     path: p, remediation: "Inspect and reconcile before reconnecting the drive. Delete only if the content is regenerable.",
@@ -240,7 +240,7 @@ extension Doctor {
         // invitation to dismiss the one leftover most worth looking at.
         func sizeLabel(_ path: String) -> String {
             guard let bytes = DiskUsage.measure(path)?.allocatedBytes else { return "size unknown" }
-            return ByteCount.format(bytes)
+            return ByteCount.english(bytes)
         }
 
         return leftovers.map { e in

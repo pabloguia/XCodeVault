@@ -5,11 +5,14 @@ import XCodeVaultCore
 // MARK: - locations
 
 struct Locations: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Xcode ▸ Settings ▸ Locations (DerivedData, Archives) — Apple's supported relocation.",
-        subcommands: [
-            Show.self, SetDerivedData.self, ResetDerivedData.self, SetArchives.self, ResetArchives.self, SetCompilationCache.self, ResetCompilationCache.self,
-        ], defaultSubcommand: Show.self)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: L10n.tr("cli.cmd.locations.abstract"),
+            subcommands: [
+                Show.self, SetDerivedData.self, ResetDerivedData.self, SetArchives.self, ResetArchives.self, SetCompilationCache.self,
+                ResetCompilationCache.self,
+            ], defaultSubcommand: Show.self)
+    }
     struct Show: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
@@ -20,10 +23,20 @@ struct Locations: ParsableCommand {
         }
     }
     struct SetDerivedData: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            commandName: "set-derived-data",
-            abstract:
-                "Point DerivedData at a directory (IDECustomDerivedDataLocation; reproduced on Xcode 26.5, E8b). Experimental until the matrix is complete.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(
+                commandName: "set-derived-data",
+                abstract: HelpText.experimental(L10n.tr("cli.cmd.locations.setDerivedData.abstract")),
+                discussion: """
+                    EXAMPLES:
+                      xcodevaultctl locations set-derived-data /Volumes/Fast/DerivedData
+                      xcodevaultctl locations set-derived-data /Volumes/Fast/DerivedData \\
+                          --i-understand-tests-may-fail
+                      xcodevaultctl locations reset-derived-data
+
+                    Background: E8b in docs/architecture/EXPERIMENTS.md.
+                    """)
+        }
         @Argument(help: "Absolute path of an existing, writable directory.") var path: String
         @Flag(
             name: .customLong("i-understand-tests-may-fail"),
@@ -38,11 +51,9 @@ struct Locations: ParsableCommand {
         }
     }
     struct SetArchives: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            commandName: "set-archives",
-            abstract:
-                "Point new Archives at a directory (IDECustomDistributionArchivesLocation; reproduced on Xcode 26.5, status: probable/experimental). Existing archives are not moved — use `externalize --category archives`."
-        )
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(commandName: "set-archives", abstract: HelpText.experimental(L10n.tr("cli.cmd.locations.setArchives.abstract")))
+        }
         @Argument(help: "Absolute path of an existing, writable directory.") var path: String
         func run() throws {
             let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
@@ -52,16 +63,19 @@ struct Locations: ParsableCommand {
         }
     }
     struct ResetArchives: ParsableCommand {
-        static let configuration = CommandConfiguration(commandName: "reset-archives", abstract: "Restore Xcode's default Archives location.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(commandName: "reset-archives", abstract: L10n.tr("cli.cmd.locations.resetArchives.abstract"))
+        }
         func run() throws {
             _ = try XcodeLocations.preflightArchives(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning())
             try XcodeLocations.apply(.init(key: .archives, newValue: nil)); print("Archives location reset to the default.")
         }
     }
     struct SetCompilationCache: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            commandName: "set-compilation-cache",
-            abstract: "Point the Xcode 26 compilation cache at a directory (IDECustomCompilationCacheLocation). Experimental.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(
+                commandName: "set-compilation-cache", abstract: HelpText.experimental(L10n.tr("cli.cmd.locations.setCompilationCache.abstract")))
+        }
         @Argument(help: "Absolute path of an existing, writable directory.") var path: String
         @Flag(name: .customLong("i-understand-tests-may-fail"), help: "Acknowledge the E2 external-volume caveat (build products may be served from here).")
         var acknowledge = false
@@ -79,14 +93,18 @@ struct Locations: ParsableCommand {
         }
     }
     struct ResetCompilationCache: ParsableCommand {
-        static let configuration = CommandConfiguration(commandName: "reset-compilation-cache", abstract: "Restore the default compilation cache location.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(commandName: "reset-compilation-cache", abstract: L10n.tr("cli.cmd.locations.resetCompilationCache.abstract"))
+        }
         func run() throws {
             _ = try XcodeLocations.preflightArchives(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning())
             try XcodeLocations.apply(.init(key: .compilationCache, newValue: nil)); print("Compilation cache location reset to the default.")
         }
     }
     struct ResetDerivedData: ParsableCommand {
-        static let configuration = CommandConfiguration(commandName: "reset-derived-data", abstract: "Restore Xcode's default DerivedData location.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(commandName: "reset-derived-data", abstract: L10n.tr("cli.cmd.locations.resetDerivedData.abstract"))
+        }
         func run() throws {
             _ = try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: true)
             try XcodeLocations.apply(.init(key: .derivedData, newValue: nil))

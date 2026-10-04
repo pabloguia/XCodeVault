@@ -37,6 +37,10 @@ localized name for the Settings pane in prose — pt-BR "Acesso Total ao Disco",
 - A language whose word order differs uses positional specifiers: English `"%1$@ of %2$lld"`, Japanese
   `"%2$lld の %1$@"`. Positional and non-positional specifiers are never mixed in one string, and a plain
   `"%lld の %@"` against English `"%@ of %lld"` is refused, because the arguments would arrive swapped.
+- At run time a template is formatted only when it is safe: all specifiers non-positional and no more of
+  them than arguments, or all positional with indices `1…n`, each index used with one conversion
+  (repeating `%1$@` is fine) and `n` no greater than the arguments. `%3$@` with one argument is shown in
+  English, or unformatted.
 - Every plural form, `one` included, contains the count placeholder: English `"%lld file"`, not `"One file"`.
 - Catalog features the tool does not compile are refused rather than ignored: `substitutions` (and their
   `%#@name@` syntax) and any `variations` other than `plural` (device variations).
@@ -71,6 +75,15 @@ changes its state to `translated`. `scripts/l10n.sh check` prints the remaining 
 
 ## Coverage
 
-Localized so far: the savings vocabulary (S2). The CLI help and output (S3) and the app (S4) move their text
-into the catalog as they are rewritten. Doctor findings, warnings and error messages are still English-only;
-each one moves when its text is next edited.
+Localized (S2, S3): the savings vocabulary, the command abstracts and group names, the root help
+discussion, the savings and `plan` output — the notes under each `plan` row included, since they are display
+text — and the `status` footer. Still English in every language: the per-command discussions, the examples
+(they are commands), and Core's own prose — doctor findings, vault checks, scan and volume warnings, the
+`clean` and `externalize` plan and preflight messages, and error messages (all of it formats bytes with
+`ByteCount.english`, so an English sentence never carries another language's number format) — and the older
+output lines. `--json` and `report` are
+always English. The app (S4) moves its text into the catalog as it is rewritten; each remaining English
+string moves when its text is next edited.
+
+`scripts/l10n.sh check` prints `l10n: unused key <key>` for a catalog key no source references — a warning,
+not a failure, since a key can be built at run time.

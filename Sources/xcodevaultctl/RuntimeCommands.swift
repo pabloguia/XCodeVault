@@ -29,8 +29,7 @@ extension Runtime {
     }
 
     struct Delete: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Delete an installed runtime via `simctl runtime delete` (the only supported way; frees the MobileAsset store).")
+        static var configuration: CommandConfiguration { CommandConfiguration(abstract: L10n.tr("cli.cmd.runtime.delete.abstract")) }
         @Argument(help: "Runtime image identifier (UUID from `runtime list`), or 'all'.") var identifier: String
         @Flag(name: .long, help: "Keep the MobileAsset (only the mounted image is removed).") var keepAsset = false
         @Flag(name: .long, help: "Ask simctl what would be deleted without deleting.") var dryRun = false
@@ -46,8 +45,9 @@ extension Runtime {
     }
 
     struct Export: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. Download a runtime installer to a Runtime Library directory (`xcodebuild -downloadPlatform … -exportPath`).")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.runtime.export.abstract")))
+        }
         @Argument(help: "iOS | watchOS | tvOS | visionOS") var platform: String
         @Option(name: .long, help: "Destination directory (your Runtime Library, e.g. on an external APFS volume).") var to: String
         @Option(name: .long, help: "OS version, e.g. 26.5 (feature-detected; omit for the matching runtime).") var buildVersion: String?
@@ -71,8 +71,9 @@ extension Runtime {
     }
 
     struct Import: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. Install a runtime from a Runtime Library installer (`xcodebuild -importPlatform`).")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.runtime.import.abstract")))
+        }
         @Argument(help: "Path to the .dmg installer.") var dmg: String
         @Flag(name: .long, help: "Only run the preflight checks (staging space, capability).") var preflight = false
         func run() throws {
@@ -87,8 +88,9 @@ extension Runtime {
     }
 
     struct Library: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. List runtime installers in a Runtime Library directory and whether each installed runtime has one.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.runtime.library.abstract")))
+        }
         @OptionGroup var global: GlobalOptions
         @Option(name: .long, help: "Runtime Library directory.") var dir: String
         struct Row: Encodable { let installer: RuntimeInstaller?; let runtime: SimulatorRuntime? }
@@ -116,11 +118,16 @@ extension Runtime {
     }
 
     struct Offload: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract:
-                "EXPERIMENTAL. Delete an installed runtime only if its installer already sits in the Runtime Library (export first if not). "
-                + "Two-phase, journaled. The round trip that makes this safe — devices returning when the runtime is re-imported — has been "
-                + "observed twice on one configuration and at the same version; see `compatibility`.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(
+                abstract: HelpText.experimental(L10n.tr("cli.cmd.runtime.offload.abstract")),
+                discussion: """
+                    EXAMPLES:
+                      xcodevaultctl runtime library --dir /Volumes/Drive/Runtimes
+                      xcodevaultctl runtime offload <UUID> --library /Volumes/Drive/Runtimes
+                      xcodevaultctl runtime offload <UUID> --library /Volumes/Drive/Runtimes --yes
+                    """)
+        }
         @Argument(help: "Runtime image identifier (UUID from `runtime list`).") var identifier: String
         @Option(name: .long, help: "Runtime Library directory.") var library: String
         @Flag(name: .long, help: "Confirm deletion.") var yes = false

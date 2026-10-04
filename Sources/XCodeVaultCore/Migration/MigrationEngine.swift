@@ -77,6 +77,11 @@ extension MigrationEngine {
 }
 
 public struct MigrationEngine: Sendable {
+    /// The journal's completion line. A record, not prose for the screen: always English (spec §4.3).
+    static func verifiedSummary(files: UInt64, bytes: UInt64) -> String {
+        "copied and verified \(files) files, \(ByteCount.format(Int64(clamping: bytes), locale: "en")); source intact"
+    }
+
     // Every seam is `let` (issue #31). They were all `var` and all already settable through `init`,
     // so the mutability bought nothing a caller needed and cost a second surface on each: a shipped
     // type whose checks can be switched off after construction, with the suite green.
@@ -204,7 +209,7 @@ public struct MigrationEngine: Sendable {
         let usage = DiskUsage.measure(source) ?? .zero
         let free = MountStatus.space(at: vaultDir)?.free ?? 0
         guard free > usage.allocatedBytes + 1_000_000_000 else {
-            throw MigrationError("Vault has \(ByteCount.format(free)) free; need \(ByteCount.format(usage.allocatedBytes)) plus headroom.")
+            throw MigrationError("Vault has \(ByteCount.english(free)) free; need \(ByteCount.english(usage.allocatedBytes)) plus headroom.")
         }
         var warnings: [String] = []
         if c.regenerability == .nonRegenerable {
@@ -250,7 +255,7 @@ public struct MigrationEngine: Sendable {
         let usage = DiskUsage.measure(source) ?? .zero
         let free = MountStatus.space(at: parent)?.free ?? 0
         guard free > usage.allocatedBytes + 1_000_000_000 else {
-            throw MigrationError("Only \(ByteCount.format(free)) free at \(parent); need \(ByteCount.format(usage.allocatedBytes)) plus headroom.")
+            throw MigrationError("Only \(ByteCount.english(free)) free at \(parent); need \(ByteCount.english(usage.allocatedBytes)) plus headroom.")
         }
         return MigrationPlan(
             operationID: UUID().uuidString, direction: .restore, categoryID: c.id, source: source, destination: destination,
@@ -410,7 +415,7 @@ public struct MigrationEngine: Sendable {
             }
             try journal.record(
                 id: op, kind: .migration, state: .completed,
-                summary: "copied and verified \(report.sourceFiles) files, \(ByteCount.format(report.sourceBytes)); source intact",
+                summary: Self.verifiedSummary(files: report.sourceFiles, bytes: report.sourceBytes),
                 paths: [plan.source, plan.destination], bytes: report.destinationBytes, detail: ["phase": "VERIFIED", "hashedFiles": "\(report.hashedFiles)"])
             return MigrationOutcome(plan: plan, verification: report, sourceRemoved: false)
         } catch {

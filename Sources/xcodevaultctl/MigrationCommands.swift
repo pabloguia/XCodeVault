@@ -3,12 +3,18 @@ import Foundation
 import XCodeVaultCore
 
 struct Externalize: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract:
-            "Experimental. Copy a cold-storage category (Archives) to a verified vault volume with deep verification. The source is kept unless --remove-source-after-verify is given.",
-        discussion:
-            "Experimental: labeled so until the Definition of Done is met. Never merges into existing vault data; never removes a source without re-verification."
-    )
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: HelpText.experimental(L10n.tr("cli.cmd.externalize.abstract")),
+            discussion: """
+                Experimental: labeled so until the Definition of Done is met. Never merges into existing vault data; never removes a \
+                source without re-verification.
+
+                EXAMPLES:
+                  xcodevaultctl externalize --vault <UUID from vault status>          # plan only
+                  xcodevaultctl externalize --vault <UUID from vault status> --apply  # keeps source
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     @Option(name: .long, help: "Category id (currently: archives).") var category: String = "archives"
     @Option(name: .long, help: "Vault volume: UUID, name or mount point (see `vault status`).") var vault: String
@@ -51,10 +57,7 @@ struct Externalize: ParsableCommand {
 }
 
 struct Restore: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract:
-            "Experimental. Copy a vault entry back to its original location with deep verification. Never overwrites; destination must be under the category's standard path."
-    )
+    static var configuration: CommandConfiguration { CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.restore.abstract"))) }
     @OptionGroup var global: GlobalOptions
     @Option(name: .long) var category: String = "archives"
     @Option(name: .long, help: "Vault volume: UUID, name or mount point.") var vault: String
@@ -78,21 +81,23 @@ struct Restore: ParsableCommand {
 }
 
 struct Migration: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Experimental. Inspect, abort (pre-verification) or resume (post-verification) interrupted migrations.",
-        subcommands: [Status.self, Abort.self, Resume.self, Forget.self], defaultSubcommand: Status.self)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: HelpText.experimental(L10n.tr("cli.cmd.migration.abstract")), subcommands: [Status.self, Abort.self, Resume.self, Forget.self],
+            defaultSubcommand: Status.self)
+    }
     struct Resume: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract:
-                "Experimental. Finish a cleanup interrupted after verification: re-verify the renamed-aside original against the vault copy, then remove it (or restore it if they differ)."
-        )
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.migration.resume.abstract")))
+        }
         @Argument var operationID: String
         @Flag(name: .customLong("i-confirm-deleting-non-regenerable-data"), help: "Required for Archives.") var confirmNonRegenerable = false
         func run() throws { print(try MigrationEngine().resume(operationID: operationID, confirmNonRegenerable: confirmNonRegenerable)) }
     }
     struct Status: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract: "Experimental. Interrupted migrations, leftover partial copies, and copies you closed out by hand that may still be on disk.")
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.migration.status.abstract")))
+        }
         @OptionGroup var global: GlobalOptions
         func run() throws {
             let interrupted = try Journal().interrupted().filter { $0.kind == .migration }
@@ -128,10 +133,9 @@ struct Migration: ParsableCommand {
         }
     }
     struct Forget: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract:
-                "Experimental. Close out a migration this tool will not finish for you, after you have compared both copies by hand. Touches no files; only clears the journal entry so migrations can run again."
-        )
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.migration.forget.abstract")))
+        }
         @Argument var operationID: String
         @Flag(name: .customLong("i-verified-both-copies-myself"), help: "Required. Asserts you compared the vault copy and the original yourself.")
         var confirmed = false
@@ -141,10 +145,9 @@ struct Migration: ParsableCommand {
         }
     }
     struct Abort: ParsableCommand {
-        static let configuration = CommandConfiguration(
-            abstract:
-                "Experimental. Remove the partial destination copy of a migration interrupted before verification; refuses after verification; the source is never touched."
-        )
+        static var configuration: CommandConfiguration {
+            CommandConfiguration(abstract: HelpText.experimental(L10n.tr("cli.cmd.migration.abort.abstract")))
+        }
         @Argument var operationID: String
         func run() throws {
             try MigrationEngine().abort(operationID: operationID);

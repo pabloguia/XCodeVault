@@ -491,7 +491,7 @@ public struct Doctor: Sendable {
         let sev: Finding.Severity = free < 10 * 1_000_000_000 ? .critical : .warning
         return [
             Finding(
-                id: "low-free-space", severity: sev, title: "Low free space on the internal volume: \(ByteCount.format(free))",
+                id: "low-free-space", severity: sev, title: "Low free space on the internal volume: \(ByteCount.english(free))",
                 detail:
                     "Simulator runtime installs stage on the internal volume and reportedly need ~40 GB free even when the installer is elsewhere; Xcode itself needs headroom for indexes and builds.",
                 path: host.homeDirectory,
@@ -540,12 +540,12 @@ public struct Doctor: Sendable {
                 perDeviceTotals
                 .filter { $0.value > 0 }
                 .sorted { $0.value > $1.value }
-                .map { "  \($0.key): \(ByteCount.format($0.value))" }
+                .map { "  \($0.key): \(ByteCount.english($0.value))" }
                 .joined(separator: "\n")
             return Finding(
                 id: "perDeviceRegenerable.\(category.id)",
                 severity: .info,
-                title: "\(ByteCount.format(total)) in \(category.name.lowercased()) across \(perDeviceTotals.filter { $0.value > 0 }.count) device(s)",
+                title: "\(ByteCount.english(total)) in \(category.name.lowercased()) across \(perDeviceTotals.filter { $0.value > 0 }.count) device(s)",
                 detail: category.description + "\n" + breakdown
                     + "\n\nNot offered by `clean`: " + (category.notes.first ?? "reported for accounting only."),
                 path: nil,

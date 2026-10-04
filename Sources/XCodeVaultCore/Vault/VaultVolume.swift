@@ -280,7 +280,7 @@ public struct VaultVerifier: Sendable {
                 // Files seen are shadow data for certain; with nothing seen, there may be none. Either way no size.
                 if files > 0 {
                     detail =
-                        "\(v.lastMountPoint) exists as a local directory holding at least \(files) file(s), \(ByteCount.format(bytes)), written while the volume was absent (shadow data), and it could not be read in full (\(unread)), so it may hold more. Refusing to proceed until reconciled."
+                        "\(v.lastMountPoint) exists as a local directory holding at least \(files) file(s), \(ByteCount.english(bytes)), written while the volume was absent (shadow data), and it could not be read in full (\(unread)), so it may hold more. Refusing to proceed until reconciled."
                 } else {
                     detail =
                         "\(v.lastMountPoint) exists as a local directory that could not be read in full (\(unread)), so shadow data written while the volume was absent cannot be ruled out. Refusing to proceed until it has been inspected."
@@ -291,7 +291,7 @@ public struct VaultVerifier: Sendable {
                 return VaultVolumeCheck(
                     volume: v, state: .ambiguous, currentMountPoint: nil, shadowBytes: bytes,
                     detail:
-                        "\(v.lastMountPoint) exists as a local directory containing \(files) file(s), \(ByteCount.format(bytes)) — written while the volume was absent (shadow data). Refusing to proceed until reconciled."
+                        "\(v.lastMountPoint) exists as a local directory containing \(files) file(s), \(ByteCount.english(bytes)) — written while the volume was absent (shadow data). Refusing to proceed until reconciled."
                 )
             }
         }

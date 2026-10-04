@@ -106,6 +106,7 @@ let package = Package(
             name: "XCodeVaultCoreTests",
             dependencies: [
                 "XCodeVaultCore", "XCodeVaultHelperProtocol", "XCodeVaultHelperCore", "XCodeVaultHelperClient", "XCodeVault", "xcodevaultctl",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]

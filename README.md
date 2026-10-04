@@ -35,7 +35,9 @@ trusting it with anything you cannot re-create.
 Nothing is asked for. The first run scans and shows; it changes nothing.
 
 ```bash
-.build/debug/xcodevaultctl scan      # what is using the internal disk, per category
+.build/debug/xcodevaultctl scan      # what you can reclaim, temporarily and permanently
+.build/debug/xcodevaultctl plan delete # what to run to delete regenerable data (also: park, external)
+.build/debug/xcodevaultctl scan --details # every item, per category
 .build/debug/xcodevaultctl doctor    # unsafe or broken setups, and the proposed fix for each
 .build/debug/xcodevaultctl clean     # the cleanup plan; nothing is deleted without --apply
 ```

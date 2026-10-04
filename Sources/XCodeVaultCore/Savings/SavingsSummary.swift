@@ -28,6 +28,9 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
     /// Bytes with a permanent option that applies to data already on disk. A union.
     public var permanentBytes: UInt64 = 0
     public var verifiedPermanentBytes: UInt64 = 0
+    /// The part of `deleteAndRegenerate.optionBytes` whose delete option loses data the user made (simulator devices):
+    /// deleted, it does not come back on demand.
+    public var deleteLosesUserDataBytes: UInt64 = 0
     /// Some counted item could not be fully read: every number above is "at least". Boot-volume items only,
     /// unlike `ScanSummary.lowerBound`, because only those are savings.
     public var isLowerBound = false
@@ -59,18 +62,28 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
 }
 
 public enum SavingsCalculator {
+    /// The items a saving is counted from, with their category: existing, not a symlink, on the boot volume, of a
+    /// known category that is not a breakdown. Shared with `SavingsPlanner`, so a plan row can never count a
+    /// byte the summary does not.
+    static func countedItems(_ items: [StorageItem], category: (String) -> StorageCategory?) -> [(item: StorageItem, category: StorageCategory)] {
+        items.compactMap { item in
+            guard item.exists, !item.isSymlink, item.onBootVolume, let c = category(item.categoryID), c.isBreakdownOf == nil else { return nil }
+            return (item, c)
+        }
+    }
+
     /// Counts the same items `Scanner.summarize` counts for the boot-volume total — existing, not a symlink,
     /// not a breakdown — restricted to the boot volume, because only bytes there are a saving. An item whose
     /// category is unknown is skipped rather than guessed into `.keepLocal`.
     public static func summarize(items: [StorageItem], category: (String) -> StorageCategory?) -> SavingsSummary {
         var s = SavingsSummary()
-        for item in items where item.exists && !item.isSymlink && item.onBootVolume {
-            guard let c = category(item.categoryID), c.isBreakdownOf == nil else { continue }
+        for (item, c) in countedItems(items, category: category) {
             let bytes = item.allocatedBytes
             if item.usage?.isLowerBound == true { s.isLowerBound = true }
             let options = c.savingsOptionDetails.filter(\.appliesToExistingData)
             for option in options {
                 s.add(bytes, to: option.bucket, primary: option.bucket == c.primaryBucket, verified: !option.isExperimental)
+                if option.bucket == .deleteAndRegenerate && option.losesUserData { s.deleteLosesUserDataBytes += bytes }
             }
             func union(_ buckets: Set<SavingsBucket>, _ total: inout UInt64, _ verified: inout UInt64) {
                 let matching = options.filter { buckets.contains($0.bucket) }

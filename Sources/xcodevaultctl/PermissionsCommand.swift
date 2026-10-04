@@ -4,14 +4,20 @@ import XCodeVaultCore
 import XCodeVaultHelperClient
 
 struct PermissionsCommand: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "permissions",
-        abstract: "Read-only. Full Disk Access and the privileged helper: the state of each, why, and the one next step.",
-        discussion: """
-            Nothing here asks for a permission or changes one: XCodeVault asks only when an action needs it (ADR-0007). \
-            Full Disk Access is checked for this process, which macOS decides by the app you run xcodevaultctl from — \
-            usually your terminal.
-            """)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            commandName: "permissions",
+            abstract: L10n.tr("cli.cmd.permissions.abstract"),
+            discussion: """
+                Nothing here asks for a permission or changes one: XCodeVault asks only when an action needs it (ADR-0007). \
+                Full Disk Access is checked for this process, which macOS decides by the app you run xcodevaultctl from — \
+                usually your terminal.
+
+                EXAMPLES:
+                  xcodevaultctl permissions
+                  xcodevaultctl permissions --json
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let report = Self.report(client: HelperClient(), fullDiskAccess: FullDiskAccessProbe().state())

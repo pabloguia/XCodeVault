@@ -35,41 +35,44 @@ public enum TextRenderer {
         return o
     }
 
-    public static func scan(_ r: ScanReport) -> String {
+    /// The status, then the savings; the per-item table only with `details`. Warnings are safety information
+    /// and are always printed.
+    public static func scan(_ r: ScanReport, details: Bool = false) -> String {
         var o = status(r)
-        o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
-        o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
-        let items = r.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
-        for it in items {
-            guard let c = r.category(for: it) else { continue }
-            let label = c.isExperimental ? c.recommendedStrategy.rawValue + " (exp.)" : c.recommendedStrategy.rawValue
-            let extra =
-                it.isSymlink
-                ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
-                : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
-                    + (it.onBootVolume ? "" : "  [not on boot volume]")
-                    + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
-                    // Without this the rows stop adding up to the Summary and nothing says why: a
-                    // breakdown row's bytes are already inside its parent's row, and are counted
-                    // once, there. Naming the parent is what keeps the reader from adding them.
-                    + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
-            o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
+        // Without sizes every amount would be zero, which reads as "nothing to reclaim" rather than "not measured".
+        let measured = r.sizesMeasured
+        o += "\n" + (measured ? savings(r.savings, runtimeImageBytes: r.summary.runtimeImageBytes) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
+        if details {
+            o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
+            o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
+            let items = r.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
+            for it in items {
+                guard let c = r.category(for: it) else { continue }
+                let label = c.isExperimental ? c.recommendedStrategy.rawValue + " (exp.)" : c.recommendedStrategy.rawValue
+                let extra =
+                    it.isSymlink
+                    ? "  → SYMLINK to \(it.symlinkTarget ?? "?")"
+                    : (it.isMountPoint ? "  [mount point]" : "") + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
+                        + (it.onBootVolume ? "" : "  [not on boot volume]")
+                        + ((it.usage?.isLowerBound ?? false) ? "  [partial: unreadable entries]" : "")
+                        // Without this the rows stop adding up to the savings block and nothing says why: a
+                        // breakdown row's bytes are already inside its parent's row, and are counted
+                        // once, there. Naming the parent is what keeps the reader from adding them.
+                        + (it.breakdownParentName(in: r).map { "  [inside \($0)]" } ?? "")
+                o += "  \(pad(ByteCount.format(it.allocatedBytes), 10)) \(pad(c.name, 34)) \(pad(c.outcomeLabel, 15)) \(pad(label, 21)) \(it.path)\(extra)\n"
+            }
         }
-        let s = r.summary
-        o += "\nSummary:\n"
-        o += "  Internal developer storage found:   \(ByteCount.format(s.internalDeveloperBytes))\(s.lowerBound ? " (lower bound)" : "")\n"
-        o +=
-            "    of which simulator runtime images: \(ByteCount.format(s.runtimeImageBytes))  (delete with `simctl runtime delete`, keep installers externally)\n"
-        o += "  Safely cleanable:                   \(ByteCount.format(s.cleanableBytes))\n"
-        o += "  Relocatable (supported mechanisms): \(ByteCount.format(s.relocatableBytes))\n"
-        o += "  Cold-storage eligible:              \(ByteCount.format(s.coldStorageEligibleBytes))\n"
-        o += "  Apple-managed (info only):          \(ByteCount.format(s.appleManagedBytes))\n"
-        o += "  Must remain local:                  \(ByteCount.format(s.mustRemainLocalBytes))\n"
-        o += "  Reclaimable from the boot volume:   \(ByteCount.format(s.estimatedInternalSavingsBytes))  via recommended cleanup/relocation\n"
-        o += "    with verified strategies only:    \(ByteCount.format(s.verifiedSavingsBytes))  (the rest is labeled experimental — see `compatibility`)\n"
         if !r.warnings.isEmpty {
+            if !o.hasSuffix("\n") { o += "\n" }
             o += "\nWarnings:\n"; for w in r.warnings { o += "  ! \(w)\n" }
         }
+        return o
+    }
+
+    /// What `status` ends with: the next step, and why a measurement may be incomplete.
+    public static func statusFooter(fullDiskAccess: FullDiskAccessState) -> String {
+        var o = "\n" + L10n.tr("cli.status.measureHint", "xcodevaultctl scan") + "\n"
+        if fullDiskAccess == .notGranted { o += L10n.tr("cli.status.fdaHint", "xcodevaultctl permissions") + "\n" }
         return o
     }
 
@@ -104,6 +107,79 @@ public enum TextRenderer {
                 "\(pad(c.name, 34)) \(pad(c.recommendedStrategy.rawValue, 21)) \(pad(c.isExperimental ? "experimental" : c.evidenceStatus.rawValue, 13)) \(pad(c.privilege.rawValue, 5)) \(c.evidence ?? "(none — unverified)")\n"
         }
         return o
+    }
+
+    /// The savings block (spec 2026-10-03 §5): both headlines, each option with its undo cost, the stay-local
+    /// remainder and the next command. Every column is padded by display width, so wide scripts stay aligned.
+    /// Under the delete row, the part that does not come back (simulator devices); after the stay-local row, the
+    /// runtime images simctl measured (`runtimeImageBytes`, from `ScanSummary`), which no catalog category counts yet.
+    public static func savings(_ s: SavingsSummary, runtimeImageBytes: UInt64) -> String {
+        func headline(_ bytes: UInt64) -> String {
+            let amount = ByteCount.format(bytes)
+            return s.isLowerBound ? L10n.tr("savings.atLeast", amount) : L10n.tr("savings.upTo", amount)
+        }
+        func option(_ bytes: UInt64) -> String { s.isLowerBound ? headline(bytes) : ByteCount.format(bytes) }
+
+        struct Row {
+            var label: String
+            var amount: String
+            var note: String = ""
+            /// An indented line printed right under this row, outside the aligned columns.
+            var detail: String?
+        }
+        func bucketRow(_ b: SavingsBucket) -> Row {
+            Row(label: "    " + b.localizedTitle, amount: option(s[b].optionBytes), note: b.localizedUndoCost)
+        }
+        func verified(_ bytes: UInt64) -> String { "(" + L10n.tr("savings.verifiedShare", ByteCount.format(bytes)) + ")" }
+
+        var delete = bucketRow(.deleteAndRegenerate)
+        if s.deleteLosesUserDataBytes > 0 { delete.detail = "      " + L10n.tr("cli.savings.losesUserData", option(s.deleteLosesUserDataBytes)) }
+        let rows: [Row] = [
+            Row(label: "  " + L10n.tr("savings.temporary.title"), amount: headline(s.temporaryBytes), note: verified(s.verifiedTemporaryBytes)),
+            delete,
+            bucketRow(.parkExternally),
+            Row(label: "  " + L10n.tr("savings.permanent.title"), amount: headline(s.permanentBytes), note: verified(s.verifiedPermanentBytes)),
+            bucketRow(.runFromExternal),
+            Row(label: "  " + L10n.tr("savings.total.title"), amount: headline(s.reclaimableBytes)),
+        ]
+        let keep = Row(label: "  " + SavingsBucket.keepLocal.localizedTitle, amount: option(s.keepLocal.primaryBytes))
+        let all = rows + [keep]
+        let labelWidth = all.map { displayWidth($0.label) }.max() ?? 0
+        let amountWidth = all.map { displayWidth($0.amount) }.max() ?? 0
+        func render(_ r: Row) -> String {
+            let amount = String(repeating: " ", count: amountWidth - displayWidth(r.amount)) + r.amount
+            let line = padDisplay(r.label, labelWidth) + "  " + amount
+            return r.note.isEmpty ? line : line + "   " + r.note
+        }
+        var out = [L10n.tr("cli.savings.heading")]
+        for row in rows {
+            out.append(render(row))
+            if let detail = row.detail { out.append(detail) }
+        }
+        out.append("  " + L10n.tr("savings.alternativesNote"))
+        out.append(render(keep))
+        if runtimeImageBytes > 0 {
+            out.append("  " + L10n.tr("cli.savings.runtimesNote", ByteCount.format(runtimeImageBytes), "xcodevaultctl runtime list"))
+        }
+        out.append(L10n.tr("cli.savings.next", "xcodevaultctl plan delete | park | external"))
+        return out.joined(separator: "\n")
+    }
+
+    /// Terminal columns a string occupies: East Asian wide and fullwidth scalars take two, combining marks none.
+    static func displayWidth(_ s: String) -> Int {
+        s.unicodeScalars.reduce(0) { sum, u in
+            switch u.value {
+            case 0x0300...0x036F: sum
+            case 0x1100...0x115F, 0x2E80...0xA4CF, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE30...0xFE4F, 0xFF00...0xFF60, 0xFFE0...0xFFE6, 0x20000...0x3FFFD:
+                sum + 2
+            default: sum + 1
+            }
+        }
+    }
+
+    static func padDisplay(_ s: String, _ n: Int) -> String {
+        let w = displayWidth(s)
+        return w >= n ? s : s + String(repeating: " ", count: n - w)
     }
 
     static func pad(_ s: String, _ n: Int) -> String { s.count >= n ? s : s + String(repeating: " ", count: n - s.count) }

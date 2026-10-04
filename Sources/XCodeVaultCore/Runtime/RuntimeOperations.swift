@@ -472,7 +472,7 @@ public struct RuntimeOperations: Sendable {
             w.append("Destination resolves to \(fs.mountPoint) (\(fs.typeName)\(fs.isReadOnly ? ", read-only" : "")).")
         }
         if let free = freeBytesAtDestination, free < 12_000_000_000 {
-            w.append("Only \(ByteCount.format(free)) free at the destination; runtime images are 5–25 GB.")
+            w.append("Only \(ByteCount.english(free)) free at the destination; runtime images are 5–25 GB.")
         }
         // The internal cost of an export is not one number: it depends entirely on whether the
         // runtime is already installed, and the two cases differ by four orders of magnitude.
@@ -484,7 +484,7 @@ public struct RuntimeOperations: Sendable {
             + "Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`."
         func warnIfTight(_ why: String) {
             if host.dataVolumeFreeBytes < 15_000_000_000 {
-                w.append("Only \(ByteCount.format(host.dataVolumeFreeBytes)) free on the internal volume, and \(why) (E11). Watch for ENOSPC.")
+                w.append("Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume, and \(why) (E11). Watch for ENOSPC.")
             }
         }
         switch exportCost(req, among: installedRuntimes) {
@@ -602,7 +602,7 @@ public struct RuntimeOperations: Sendable {
         let need = size * 3 / 2 + 2_000_000_000
         if host.dataVolumeFreeBytes < need {
             throw RuntimeOperationError(
-                "Installing needs internal staging space: image is \(ByteCount.format(size)), only \(ByteCount.format(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.format(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
+                "Installing needs internal staging space: image is \(ByteCount.english(size)), only \(ByteCount.english(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.english(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
             )
         }
         if host.dataVolumeFreeBytes < size * 2 + 2_000_000_000 {

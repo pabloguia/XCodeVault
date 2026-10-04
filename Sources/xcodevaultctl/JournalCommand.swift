@@ -5,8 +5,7 @@ import XCodeVaultCore
 // MARK: - journal
 
 struct JournalCommand: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "journal", abstract: "Show the operation journal (every change XCodeVault made, and any interrupted operation).")
+    static var configuration: CommandConfiguration { CommandConfiguration(commandName: "journal", abstract: L10n.tr("cli.cmd.journal.abstract")) }
     @OptionGroup var global: GlobalOptions
     @Option(name: .long, help: "Show only the last N entries.") var last: Int = 50
     func run() throws {

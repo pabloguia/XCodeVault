@@ -13,6 +13,29 @@ final class CLILanguageTests: XCTestCase {
         XCTAssertEqual(L10n.locale, "ja")
     }
 
+    func testJSONForcesEnglishWhateverTheFlag() {
+        let r = XCodeVaultCTL.prepareLanguage(arguments: ["doctor", "--json", "--lang", "pt-BR"], environment: ["XCODEVAULT_LANG": "es"], preferred: ["ja"])
+        XCTAssertEqual(L10n.locale, "en")
+        XCTAssertEqual(r.remaining, ["doctor", "--json"])
+    }
+
+    func testAFlagNamedJSONAfterTheSeparatorIsNotTheFlag() {
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["--lang", "ja", "x", "--", "--json"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "ja")
+    }
+
+    func testReportIsAlwaysEnglish() {
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["report", "--lang", "ja"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "en")
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["--lang", "ja", "report"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "en")
+    }
+
+    func testTheLanguageFlagStillWorksWithoutJSON() {
+        _ = XCodeVaultCTL.prepareLanguage(arguments: ["--lang", "ja", "status"], environment: [:], preferred: [])
+        XCTAssertEqual(L10n.locale, "ja")
+    }
+
     func testTheEnvironmentWinsOverPreferences() {
         _ = XCodeVaultCTL.prepareLanguage(arguments: ["status"], environment: ["XCODEVAULT_LANG": "es"], preferred: ["pt-BR"])
         XCTAssertEqual(L10n.locale, "es")
@@ -37,6 +60,70 @@ final class CLILanguageTests: XCTestCase {
             XCTAssertEqual(try JSONOutput.encode(report), english, locale)
         }
         XCTAssertTrue(english.contains("42"), "the savings were encoded")
+    }
+
+    func testDoctorAndPlanJSONAreTheSameInEveryLanguage() throws {
+        // `doctor --json` encodes `Doctor().diagnoseAll`; `plan --json` encodes `[SavingsPlanRow]`. Both are APIs, so
+        // neither may carry text that was localized on the way. A registry that does not exist keeps the doctor off the
+        // real one.
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("xcv-\(UUID().uuidString)/volumes.json")
+        var report = Fixtures.minimalReport()
+        report.savings.deleteAndRegenerate.optionBytes = 42
+        var usage = DiskUsage.zero
+        usage.allocatedBytes = 42
+        report.items.append(
+            StorageItem(
+                categoryID: "simulatorDevices", path: "/fixture/simulatorDevices", exists: true, isSymlink: false, symlinkTarget: nil,
+                isMountPoint: false, usage: usage, volumeMountPoint: nil, onBootVolume: true))
+        report.items.append(
+            StorageItem(
+                categoryID: "coreSimulatorSystemCaches", path: "/fixture/dyld", exists: true, isSymlink: false, symlinkTarget: nil,
+                isMountPoint: false, usage: usage, volumeMountPoint: nil, onBootVolume: true))
+        func encoded() throws -> (doctor: String, plans: [String]) {
+            let findings = Doctor().diagnoseAll(report: report, registry: VaultRegistry(url: missing))
+            let plans = try SavingsBucket.allCases.map { try JSONOutput.encode(SavingsPlanner.rows(report: report, bucket: $0)) }
+            return (try JSONOutput.encode(findings), plans)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let english = try encoded()
+        XCTAssertFalse(english.plans.allSatisfy { $0 == "[]" || $0 == "[\n\n]" }, "some bucket has rows to compare")
+        // The facts a script needs are in the JSON, not only in the text: the simctl row acts immediately.
+        let devices = try XCTUnwrap(SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate).first { $0.categoryID == "simulatorDevices" })
+        let devicesJSON = try JSONOutput.encode(devices)
+        XCTAssertTrue(devicesJSON.contains("\"actsImmediately\" : true"), devicesJSON)
+        XCTAssertTrue(devicesJSON.contains("\"simctlDelete\""), devicesJSON)
+        let dyld = try XCTUnwrap(SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate).first { $0.categoryID == "coreSimulatorSystemCaches" })
+        XCTAssertTrue(try JSONOutput.encode(dyld).contains("\"rootOnly\""))
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let other = try encoded()
+            XCTAssertEqual(other.doctor, english.doctor, "doctor \(locale)")
+            XCTAssertEqual(other.plans, english.plans, "plan \(locale)")
+        }
+    }
+
+    func testTheShadowVaultCheckIsTheSameInEveryLanguage() throws {
+        // The critical `vault-shadow:*` finding copies its detail from `VaultVerifier.check`, so the check is what must not localize.
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xcv-shadow-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data().write(to: dir.appendingPathComponent("leftover"))
+        let volume = VaultVolume(
+            volumeUUID: "U-1", volumeName: "Vault", lastMountPoint: dir.path, registeredAt: Date(timeIntervalSince1970: 0), sentinelID: "s")
+        let registry = VaultRegistry(url: dir.appendingPathComponent("none/volumes.json"))
+        func encoded() throws -> String {
+            let check = VaultVerifier(registry: registry, mountedVolumes: { [] }, isMountPoint: { _ in false }).check(volume)
+            XCTAssertEqual(check.state, .ambiguous)
+            return try JSONOutput.encode(check)
+        }
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        let english = try encoded()
+        XCTAssertTrue(english.contains("0 bytes"), english)
+        for locale in L10n.supportedLocales {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let other = try encoded()
+            XCTAssertEqual(other, english, locale)
+        }
     }
 
     func testPermissionsJSONIsTheSameInEveryLanguage() throws {

@@ -4,28 +4,34 @@ import XCodeVaultCore
 
 @main
 struct XCodeVaultCTL: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "xcodevaultctl",
-        abstract: "Honest accounting and safe relocation of Apple developer tooling storage.",
-        discussion: """
-            Read commands (scan, status, report, doctor, xcode, runtime list, volumes, journal, compatibility, permissions) \
-            are always safe and never change anything. Every read command supports --json.
+    /// Computed, like every command's, so the help is built in the language `main()` chose (spec §5.1).
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            commandName: "xcodevaultctl",
+            abstract: L10n.tr("cli.cmd.root.abstract"),
+            discussion: L10n.tr("cli.root.discussion", L10n.supportedLocales.joined(separator: ", ")) + "\n\n" + Self.examples,
+            version: XCodeVaultVersion.current,
+            groupedSubcommands: [
+                CommandGroup(name: L10n.tr("cli.group.see"), subcommands: [Status.self, Scan.self, Plan.self, Report.self]),
+                CommandGroup(
+                    name: L10n.tr("cli.group.save"), subcommands: [Clean.self, Locations.self, Externalize.self, Restore.self, Runtime.self]),
+                CommandGroup(name: L10n.tr("cli.group.drives"), subcommands: [Volumes.self, Vault.self, Bench.self]),
+                CommandGroup(name: L10n.tr("cli.group.recover"), subcommands: [Migration.self, JournalCommand.self]),
+                CommandGroup(
+                    name: L10n.tr("cli.group.diagnose"), subcommands: [DoctorCommand.self, Xcode.self, Compatibility.self, PermissionsCommand.self]),
+            ],
+            defaultSubcommand: Status.self)
+    }
 
-            Strategies marked "(exp.)" / experimental have not met the Definition of Done in \
-            docs/product/NON_GOALS_AND_SAFETY.md for your macOS/Xcode combination.
-
-            Experiment IDs that appear in help text (E2, E8b, E11 …) are defined in \
-            docs/architecture/EXPERIMENTS.md.
-
-            Language: --lang <code> (\(L10n.supportedLocales.joined(separator: ", "))) or XCODEVAULT_LANG; otherwise your \
-            macOS language. --json output is never translated.
-            """,
-        version: XCodeVaultVersion.current,
-        subcommands: [
-            Scan.self, Status.self, Report.self, DoctorCommand.self, Xcode.self, Runtime.self, Volumes.self, Compatibility.self, PermissionsCommand.self,
-            Clean.self, Locations.self, JournalCommand.self, Vault.self, Externalize.self, Restore.self, Migration.self, Bench.self,
-        ],
-        defaultSubcommand: Status.self)
+    /// Commands, so English in every language (spec §5.1).
+    static let examples = """
+        EXAMPLES:
+          xcodevaultctl                       # quick status
+          xcodevaultctl scan                  # what you can reclaim, temporarily and permanently
+          xcodevaultctl plan delete           # what to run to delete regenerable data
+          xcodevaultctl clean --apply --trash # after reviewing `xcodevaultctl clean`
+          xcodevaultctl --lang pt-BR scan
+        """
 
     /// The language must be known before ArgumentParser builds any help text, so `--lang` is taken out of
     /// the arguments here rather than declared as an option (spec 2026-10-03 §4.2).
@@ -38,7 +44,15 @@ struct XCodeVaultCTL: ParsableCommand {
 
     static func prepareLanguage(arguments: [String], environment: [String: String], preferred: [String]) -> (remaining: [String], warning: String?) {
         let (flag, remaining) = L10n.extractLanguageOverride(from: arguments)
-        L10n.configure(override: flag, environment: environment, preferred: preferred)
+        // `--json` output embeds formatted byte strings in prose, and it is an API: always English (spec §4.3).
+        let wantsJSON = remaining.prefix { $0 != "--" }.contains("--json")
+        // `report` is a record for maintainers, like `--json`: always English.
+        let wantsReport = remaining.prefix { $0 != "--" }.first { !$0.hasPrefix("-") } == "report"
+        if wantsJSON || wantsReport {
+            L10n.configure(override: "en", environment: [:], preferred: [])
+        } else {
+            L10n.configure(override: flag, environment: environment, preferred: preferred)
+        }
         let requested = flag ?? environment["XCODEVAULT_LANG"]
         var warning: String?
         if let requested, L10n.match(requested) == nil {
@@ -68,28 +82,40 @@ extension ParsableCommand {
 }
 
 struct Scan: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Discover Xcodes, runtimes, volumes and measure every storage category (read-only).")
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: L10n.tr("cli.cmd.scan.abstract"),
+            discussion: """
+                EXAMPLES:
+                  xcodevaultctl scan             # what you can reclaim, each way
+                  xcodevaultctl scan --details   # also every category, its size and path
+                  xcodevaultctl scan --no-sizes --json
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     @Flag(name: .long, help: "Skip size measurement (fast inventory only).")
     var noSizes = false
+    @Flag(name: .long, help: "Also list every storage category found, with its size and path.")
+    var details = false
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: !noSizes).scan()
-        try emit(report, json: global.json) { TextRenderer.scan(report) }
+        try emit(report, json: global.json) { TextRenderer.scan(report, details: details) }
     }
 }
 
 struct Status: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Quick environment summary without measuring directory sizes.")
+    static var configuration: CommandConfiguration { CommandConfiguration(abstract: L10n.tr("cli.cmd.status.abstract")) }
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: false).scan()
-        try emit(report, json: global.json) { TextRenderer.status(report) }
+        try emit(report, json: global.json) {
+            TextRenderer.status(report) + TextRenderer.statusFooter(fullDiskAccess: FullDiskAccessProbe().state())
+        }
     }
 }
 
 struct Report: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Full scan + doctor findings, suitable for a GitHub issue (home directory, account name, volume labels and volume UUIDs redacted).")
+    static var configuration: CommandConfiguration { CommandConfiguration(abstract: L10n.tr("cli.cmd.report.abstract")) }
     @OptionGroup var global: GlobalOptions
     struct Bundle: Encodable { let scan: ScanReport; let findings: [Finding] }
     func run() throws {
@@ -104,13 +130,13 @@ struct Report: ParsableCommand {
         if global.json {
             print(redact(try JSONOutput.encode(Bundle(scan: report, findings: findings))))
         } else {
-            print(redact(TextRenderer.scan(report) + "\n" + TextRenderer.findings(findings)), terminator: "")
+            print(redact(TextRenderer.scan(report, details: true) + "\n" + TextRenderer.findings(findings)), terminator: "")
         }
     }
 }
 
 struct DoctorCommand: ParsableCommand {
-    static let configuration = CommandConfiguration(commandName: "doctor", abstract: "Detect broken/unsafe configurations and propose (never execute) repairs.")
+    static var configuration: CommandConfiguration { CommandConfiguration(commandName: "doctor", abstract: L10n.tr("cli.cmd.doctor.abstract")) }
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let report = XCodeVaultCore.Scanner(measureSizes: false).scan()
@@ -122,8 +148,9 @@ struct DoctorCommand: ParsableCommand {
 }
 
 struct Xcode: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Installed Xcodes and their feature-detected capabilities.", subcommands: [List.self], defaultSubcommand: List.self)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(abstract: L10n.tr("cli.cmd.xcode.abstract"), subcommands: [List.self], defaultSubcommand: List.self)
+    }
     struct List: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
@@ -161,9 +188,9 @@ struct Xcode: ParsableCommand {
 }
 
 struct Runtime: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Simulator runtimes: list, delete, export/import installers (Runtime Library), offload.",
-        subcommands: Runtime.extendedSubcommands, defaultSubcommand: List.self)
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(abstract: L10n.tr("cli.cmd.runtime.abstract"), subcommands: Runtime.extendedSubcommands, defaultSubcommand: List.self)
+    }
     struct List: ParsableCommand {
         @OptionGroup var global: GlobalOptions
         func run() throws {
@@ -182,7 +209,7 @@ struct Runtime: ParsableCommand {
 }
 
 struct Volumes: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Mounted volumes and whether each qualifies as an XCodeVault destination.")
+    static var configuration: CommandConfiguration { CommandConfiguration(abstract: L10n.tr("cli.cmd.volumes.abstract")) }
     @OptionGroup var global: GlobalOptions
     struct Row: Encodable { let volume: Volume; let qualification: VolumeQualification }
     func run() throws {
@@ -204,7 +231,7 @@ struct Volumes: ParsableCommand {
 }
 
 struct Compatibility: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Every storage category with its strategy, evidence status and privilege level.")
+    static var configuration: CommandConfiguration { CommandConfiguration(abstract: L10n.tr("cli.cmd.compatibility.abstract")) }
     @OptionGroup var global: GlobalOptions
     func run() throws {
         let violations = CatalogRules.validate(StorageCatalog.all)

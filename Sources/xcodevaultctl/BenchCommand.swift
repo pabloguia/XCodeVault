@@ -3,9 +3,15 @@ import Foundation
 import XCodeVaultCore
 
 struct Bench: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Qualify a drive for developer workloads: 4 KiB random IOPS at QD1 and small-file metadata rate (E10), not sequential MB/s.",
-        discussion: "Creates and removes a temporary file (default 256 MB) in the directory. Run on the internal disk and on the candidate volume and compare.")
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            abstract: L10n.tr("cli.cmd.bench.abstract"),
+            discussion: """
+                Creates and removes a temporary file (default 256 MB) in the directory. Run on the internal disk and on the candidate volume and compare.
+
+                Background: E10 in docs/architecture/EXPERIMENTS.md.
+                """)
+    }
     @OptionGroup var global: GlobalOptions
     @Argument(help: "Directory on the volume to test (must be writable).") var directory: String
     @Option(name: .long, help: "Test file size in MB.") var sizeMB: UInt64 = 256
