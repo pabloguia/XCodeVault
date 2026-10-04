@@ -19,8 +19,9 @@ private struct ChartClick: ViewModifier {
                     .onTapGesture { location in
                         guard let plot = proxy.plotFrame else { return click(nil) }
                         let frame = geometry[plot]
-                        guard location.y >= frame.minY, location.y <= frame.maxY else { return click(nil) }
-                        click(proxy.value(atY: location.y - frame.minY, as: String.self))
+                        // Inside the plot or not, and where, is Core's (`ChartHit`); only the chart can name the value there.
+                        guard let y = ChartHit.plotY(clickY: location.y, plotMinY: frame.minY, plotMaxY: frame.maxY) else { return click(nil) }
+                        click(proxy.value(atY: y, as: String.self))
                     }
             }
         }

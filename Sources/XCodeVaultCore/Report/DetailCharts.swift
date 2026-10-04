@@ -8,8 +8,10 @@ import Foundation
 extension StorageRow {
     /// The bucket column's order: `SavingsBucket`'s, most durable saving first; a row with no bucket last.
     public var bucketSortKey: Int { bucket.flatMap { SavingsBucket.allCases.firstIndex(of: $0) } ?? SavingsBucket.allCases.count }
-    /// The strategy column's order: the strategy's identifier; a row with none first.
-    public var strategySortKey: String { strategy?.rawValue ?? "" }
+    /// The strategy column's order. The cell shows the strategy's identifier verbatim — an identifier, never translated —
+    /// with a localized "experimental" suffix, so identifier order is the order on screen; the experimental one of two
+    /// equal identifiers sorts after the plain one, as its longer label does. A row with no strategy first.
+    public var strategySortKey: String { (strategy?.rawValue ?? "") + (isExperimental ? " ~" : "") }
 }
 
 extension StorageTable {
@@ -28,7 +30,7 @@ extension StorageTable {
         DiskBar.bucketOrder.compactMap { bucket in
             let inBucket = rows.filter { $0.bucket == bucket }
             guard !inBucket.isEmpty else { return nil }
-            let bytes = inBucket.filter(\.countsInBucketTotal).reduce(UInt64(0)) { sum, row in
+            let bytes = inBucket.filter { $0.countedBucket == bucket }.reduce(UInt64(0)) { sum, row in
                 let (value, overflow) = sum.addingReportingOverflow(row.item.allocatedBytes)
                 return overflow ? .max : value
             }
@@ -53,6 +55,13 @@ extension StorageTable {
         return clicked == current ? nil : clicked
     }
 
+    /// The filter after a new scan: kept while its bucket still has a bar, cleared otherwise, so the chip never names a
+    /// filter no bar can toggle.
+    public static func filter(_ current: SavingsBucket?, validIn bars: [BucketBar]) -> SavingsBucket? {
+        guard let current, bars.contains(where: { $0.bucket == current }) else { return nil }
+        return current
+    }
+
     /// The table's sortable columns, and the comparator each one sorts by.
     public enum Column: CaseIterable, Sendable {
         case size, bucket, category, outcome, strategy, path
@@ -75,6 +84,18 @@ extension StorageTable {
     /// `rows` sorted by the table's sort order; equal rows by path then id, so the order does not change between redraws.
     public static func sorted(_ rows: [StorageRow], using order: [KeyPathComparator<StorageRow>]) -> [StorageRow] {
         rows.sorted(using: order + [KeyPathComparator(\StorageRow.item.path), KeyPathComparator(\StorageRow.id)])
+    }
+}
+
+// MARK: - Chart clicks
+
+/// Where a click lands on a chart (R2 review M1), decided here so the view only reads the chart's value at it.
+public enum ChartHit {
+    /// The click's y inside the plot, measured from the plot's top — what `ChartProxy.value(atY:)` takes — or nil when
+    /// the click is above or below the plot. Its edges count as inside.
+    public static func plotY(clickY: Double, plotMinY: Double, plotMaxY: Double) -> Double? {
+        guard plotMinY <= plotMaxY, clickY >= plotMinY, clickY <= plotMaxY else { return nil }
+        return clickY - plotMinY
     }
 }
 
@@ -117,6 +138,20 @@ public struct SimulatorSelection: Sendable, Equatable {
     public init(runtimeID: String? = nil, deviceID: String? = nil) {
         self.runtimeID = runtimeID
         self.deviceID = deviceID
+    }
+
+    /// The selection after a click in the runtimes table (R2 review I1): that row, and nothing in the devices table. A nil
+    /// (the runtimes table deselecting) clears only the runtime, so it never undoes a device just selected.
+    public func selecting(runtimeID id: String?) -> SimulatorSelection {
+        guard let id else { return SimulatorSelection(runtimeID: nil, deviceID: deviceID) }
+        return SimulatorSelection(runtimeID: id)
+    }
+
+    /// The selection after a click in the devices table: that row, and nothing in the runtimes table. A nil clears only
+    /// the device.
+    public func selecting(deviceID id: String?) -> SimulatorSelection {
+        guard let id else { return SimulatorSelection(runtimeID: runtimeID, deviceID: nil) }
+        return SimulatorSelection(deviceID: id)
     }
 
     /// The selection a click on the bar `barID` makes: that bar's row, in its table, and nothing in the other. A value
@@ -218,14 +253,18 @@ extension SimulatorsTable {
     public static var defaultRuntimeSortOrder: [KeyPathComparator<SimulatorRuntime>] { [RuntimeColumn.size.comparator(.reverse)] }
     public static var defaultDeviceSortOrder: [KeyPathComparator<SimulatorDeviceRow>] { [DeviceColumn.size.comparator(.reverse)] }
 
-    /// The runtimes by the table's sort order; equal ones by identifier.
+    /// The runtimes by the table's sort order; equal ones by platform, version and identifier.
     public static func sorted(_ runtimes: [SimulatorRuntime], using order: [KeyPathComparator<SimulatorRuntime>]) -> [SimulatorRuntime] {
-        runtimes.sorted(using: order + [KeyPathComparator(\SimulatorRuntime.identifier)])
+        runtimes.sorted(
+            using: order + [
+                KeyPathComparator(\SimulatorRuntime.platformName), KeyPathComparator(\SimulatorRuntime.versionSortKey),
+                KeyPathComparator(\SimulatorRuntime.identifier),
+            ])
     }
 
-    /// The devices by the table's sort order; equal ones by UDID.
+    /// The devices by the table's sort order; equal ones by name and UDID.
     public static func sorted(_ devices: [SimulatorDeviceRow], using order: [KeyPathComparator<SimulatorDeviceRow>]) -> [SimulatorDeviceRow] {
-        devices.sorted(using: order + [KeyPathComparator(\SimulatorDeviceRow.device.udid)])
+        devices.sorted(using: order + [KeyPathComparator(\SimulatorDeviceRow.device.name), KeyPathComparator(\SimulatorDeviceRow.device.udid)])
     }
 }
 
@@ -239,17 +278,20 @@ extension DiskBar {
         return DiskBar(totalBytes: row.volume.totalBytes, freeBytes: row.volume.freeBytes, bucketBytes: developerBytes(on: row, report: report))
     }
 
-    /// The bytes by primary bucket of the items on the drive: existing, not a symlink, of a known category that is not a
-    /// breakdown — the items the savings model counts, without its boot-volume limit. An item is on the boot group's row
-    /// when the scan put it on the boot volume, and on any other row when its volume's mount point is that row's.
+    /// The bytes on the drive by the bucket they count once in (`SavingsCalculator.countedOnceBucket`, the rule the
+    /// Storage chart uses). The boot group's row adds the savings model's own filter, `SavingsCalculator.isInternalSaving`,
+    /// so its bar matches the Overview's; any other row takes the items whose volume is mounted where the row's is.
     public static func developerBytes(on row: DriveRow, report: ScanReport) -> [SavingsBucket: UInt64] {
         let mountPoints = Set(row.members.compactMap(\.mountPoint))
         var bytes: [SavingsBucket: UInt64] = [:]
-        for item in report.items where item.exists && !item.isSymlink {
-            let onDrive = row.isBootGroup ? item.onBootVolume : (item.volumeMountPoint.map(mountPoints.contains) ?? false) && !item.onBootVolume
-            guard onDrive, let category = report.category(for: item), category.isBreakdownOf == nil else { continue }
-            let (value, overflow) = bytes[category.primaryBucket, default: 0].addingReportingOverflow(item.allocatedBytes)
-            bytes[category.primaryBucket] = overflow ? .max : value
+        for item in report.items {
+            let onDrive =
+                row.isBootGroup
+                ? SavingsCalculator.isInternalSaving(item)
+                : !SavingsCalculator.isInternalSaving(item) && (item.volumeMountPoint.map(mountPoints.contains) ?? false)
+            guard onDrive, let bucket = SavingsCalculator.countedOnceBucket(item, category: report.category(for: item)) else { continue }
+            let (value, overflow) = bytes[bucket, default: 0].addingReportingOverflow(item.allocatedBytes)
+            bytes[bucket] = overflow ? .max : value
         }
         return bytes
     }

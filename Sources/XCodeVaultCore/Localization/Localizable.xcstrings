@@ -5280,31 +5280,65 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Each item counted once. Click a bar to show only its rows."
+            "value" : "Items on all drives, each counted once. Click a bar to show only its rows."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Cada elemento se cuenta una vez. Haz clic en una barra para ver solo sus filas."
+            "value" : "Elementos de todas las unidades, cada uno contado una vez. Haz clic en una barra para ver solo sus filas."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "各項目は一度だけ数えます。バーをクリックすると、その行だけを表示します。"
+            "value" : "すべてのドライブ上の項目を、それぞれ一度だけ数えます。バーをクリックすると、その行だけを表示します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Cada item é contado uma vez. Clique numa barra para ver só as linhas dela."
+            "value" : "Itens em todos os discos, cada um contado uma vez. Clique numa barra para ver só as linhas dela."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "每个项目只计算一次。点按一个条形即可只显示其行。"
+            "value" : "所有驱动器上的项目，每个只计算一次。点按一个条形即可只显示其行。"
+          }
+        }
+      }
+    },
+    "app.storage.chart.none" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing found in any bucket to chart."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se encontró nada en ningún grupo para el gráfico."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "グラフにするものはどのグループにもありません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nada encontrado em nenhum grupo para o gráfico."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "任何分组中都没有可绘制的内容。"
           }
         }
       }
@@ -5441,6 +5475,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "显示所有分组"
+          }
+        }
+      }
+    },
+    "app.storage.filter.menu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bucket"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Grupo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "グループ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Grupo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "分组"
           }
         }
       }

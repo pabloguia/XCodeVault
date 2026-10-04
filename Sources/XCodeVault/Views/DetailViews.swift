@@ -19,9 +19,15 @@ struct StorageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            StorageBucketChart(bars: model.storageBars(report), selected: model.storageBucketFilter) { model.clickStorageBar($0) }
-                .frame(height: Self.chartHeight)
-                .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.chart.title")))
+            let bars = model.storageBars(report)
+            if bars.isEmpty {
+                // No row in any bucket: a sentence, not an empty plot (R2 review M4).
+                Text.l10n(L10n.tr("app.storage.chart.none")).foregroundStyle(.secondary).padding(.horizontal)
+            } else {
+                StorageBucketChart(bars: bars, selected: model.storageBucketFilter) { model.clickStorageBar($0) }
+                    .frame(height: Self.chartHeight)
+                    .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.chart.title")))
+            }
             table
         }
         .padding(.top, 8)
@@ -49,6 +55,17 @@ struct StorageView: View {
                 .padding(.horizontal, 8).padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
             }
+            // The chart's filter without a pointer (R2 review M5): the same buckets, for keyboard and VoiceOver.
+            Menu(L10n.tr("app.storage.filter.menu")) {
+                ForEach(model.storageBars(report)) { bar in
+                    Button {
+                        model.chooseStorageFilter(bar.bucket)
+                    } label: {
+                        Label(bar.bucket.localizedTitle, systemImage: bar.bucket.symbolName)
+                    }
+                }
+            }
+            .fixedSize()
             Button(L10n.tr("app.storage.filter.all")) { model.clearStorageFilter() }
                 .disabled(model.storageBucketFilter == nil)
         }
@@ -104,7 +121,8 @@ struct SimulatorsView: View {
             ScrollView {
                 content(runtimes: runtimes, devices: devices)
             }
-            .onChange(of: model.simulatorSelection) {
+            // Only a click on the chart scrolls (R2 review M8): a click in a table leaves the table under the pointer.
+            .onChange(of: model.simulatorScrollRequests) {
                 guard let target = model.simulatorScrollTarget(report) else { return }
                 withAnimation { proxy.scrollTo(target.table, anchor: UnitPoint(x: 0, y: target.anchor)) }
             }
@@ -138,7 +156,10 @@ struct SimulatorsView: View {
             if runtimes.isEmpty {
                 Text.l10n(L10n.tr("app.simulators.runtimes.none")).foregroundStyle(.secondary)
             } else {
-                Table(runtimes, selection: $model.simulatorSelection.runtimeID, sortOrder: $model.runtimeSortOrder) {
+                Table(
+                    runtimes, selection: Binding(get: { model.simulatorSelection.runtimeID }, set: { model.selectRuntimeRow($0) }),
+                    sortOrder: $model.runtimeSortOrder
+                ) {
                     // Version, build and state are simctl's own record, and the platform Apple's name for it: never translated.
                     TableColumn(L10n.tr("app.column.size"), sortUsing: SimulatorsTable.RuntimeColumn.size.comparator()) {
                         Text(verbatim: $0.sizeBytes.map { ByteCount.format($0) } ?? L10n.tr("app.value.notMeasured")).monospacedDigit()
@@ -167,7 +188,10 @@ struct SimulatorsView: View {
             if devices.isEmpty {
                 Text.l10n(L10n.tr("app.simulators.devices.none")).foregroundStyle(.secondary)
             } else {
-                Table(devices, selection: $model.simulatorSelection.deviceID, sortOrder: $model.deviceSortOrder) {
+                Table(
+                    devices, selection: Binding(get: { model.simulatorSelection.deviceID }, set: { model.selectDeviceRow($0) }),
+                    sortOrder: $model.deviceSortOrder
+                ) {
                     TableColumn(L10n.tr("app.column.size"), sortUsing: SimulatorsTable.DeviceColumn.size.comparator()) {
                         Text(verbatim: $0.bytes.map { ByteCount.format($0) } ?? L10n.tr("app.value.notMeasured")).monospacedDigit()
                     }

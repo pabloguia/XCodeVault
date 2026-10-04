@@ -108,6 +108,80 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(ties, StorageTable.sorted(rows.reversed(), using: [StorageTable.Column.bucket.comparator()]))
     }
 
+    /// Review I2: one counting rule. The Storage chart counts every drive's items once; the Overview's bar applies the
+    /// savings model's boot-volume filter on top, so an item on an external drive is in the chart and not in the bar.
+    func testOneCountingRuleWithTheBootVolumeFilterOnTop() {
+        let external = item("archives", 40 * gb, path: "/Volumes/Drive/Archives", mount: "/Volumes/Drive", onBoot: false)
+        let r = report(storageReport().items + [external])
+        let archives = StorageCatalog.category("archives")
+        XCTAssertTrue(SavingsCalculator.countsOnce(external, category: archives))
+        XCTAssertFalse(SavingsCalculator.isInternalSaving(external))
+        let counted = SavingsCalculator.countedOnceBucket(external, category: archives)
+        XCTAssertNotNil(counted)
+        let rows = StorageTable.rows(report: r)
+        let savings = SavingsCalculator.summarize(items: r.items) { StorageCatalog.category($0) }
+        let bars = StorageTable.bucketBars(rows: rows)
+        let bar = bars.first { $0.bucket == counted }!
+        // Storage counts the external item; the Overview's bar does not.
+        XCTAssertEqual(bar.bytes, savings[counted!].primaryBytes + 40 * gb)
+        // The boot-volume subset of the chart is exactly the Overview's bar, bucket by bucket.
+        let bootBars = StorageTable.bucketBars(rows: rows.filter { SavingsCalculator.isInternalSaving($0.item) })
+        for b in DiskBar.bucketOrder {
+            XCTAssertEqual(bootBars.first { $0.bucket == b }?.bytes ?? 0, savings[b].primaryBytes, "\(b)")
+        }
+        // A symlink, a breakdown and an unknown category never count, on any drive.
+        XCTAssertFalse(SavingsCalculator.countsOnce(item("swiftPMCaches", 1, symlink: true), category: StorageCatalog.category("swiftPMCaches")))
+        XCTAssertFalse(
+            SavingsCalculator.countsOnce(item("simulatorDeadContainers", 1), category: StorageCatalog.category("simulatorDeadContainers")))
+        XCTAssertFalse(SavingsCalculator.countsOnce(item("unknownThing", 1), category: nil))
+        var missing = item("derivedData", 1)
+        missing.exists = false
+        XCTAssertFalse(SavingsCalculator.countsOnce(missing, category: StorageCatalog.category("derivedData")))
+    }
+
+    func testTheStrategyColumnSortsAsItShows() {
+        let rows = StorageTable.rows(report: storageReport())
+        for row in rows where row.strategy != nil {
+            XCTAssertTrue(row.strategySortKey.hasPrefix(row.strategy!.rawValue))
+            XCTAssertEqual(row.strategySortKey.count > row.strategy!.rawValue.count, row.isExperimental, "experimental after the plain one")
+        }
+    }
+
+    /// Review M3: the default order and Core's own order are one order, ties included.
+    func testTheDefaultSortIsCoresOrderWithTies() {
+        let r = report([item("derivedData", 5 * gb, path: "/b"), item("xcodeCaches", 5 * gb, path: "/a"), item("archives", 5 * gb, path: "/A")])
+        let rows = StorageTable.rows(report: r)
+        XCTAssertEqual(StorageTable.sorted(rows.reversed(), using: StorageTable.defaultSortOrder), rows)
+        var s = simulatorsReport()
+        s.runtimes.append(
+            SimulatorRuntime(identifier: "R0", runtimeIdentifier: "rt.ios2", platformIdentifier: "com.apple.platform.iphonesimulator", version: "25.0"))
+        let runtimes = SimulatorsTable.runtimes(report: s)
+        XCTAssertEqual(SimulatorsTable.sorted(runtimes.reversed(), using: SimulatorsTable.defaultRuntimeSortOrder), runtimes)
+        XCTAssertEqual(runtimes.suffix(2).map(\.id), ["R3", "R0"], "two unmeasured: by platform (appletv before iphone)")
+        let devices = SimulatorsTable.devices(report: s)
+        XCTAssertEqual(SimulatorsTable.sorted(devices.reversed(), using: SimulatorsTable.defaultDeviceSortOrder), devices)
+    }
+
+    func testAClickCountsInsideThePlotOnly() {
+        XCTAssertEqual(ChartHit.plotY(clickY: 10, plotMinY: 10, plotMaxY: 160), 0, "the top edge is inside")
+        XCTAssertEqual(ChartHit.plotY(clickY: 160, plotMinY: 10, plotMaxY: 160), 150, "the bottom edge is inside")
+        XCTAssertEqual(ChartHit.plotY(clickY: 50, plotMinY: 10, plotMaxY: 160), 40)
+        XCTAssertNil(ChartHit.plotY(clickY: 9.5, plotMinY: 10, plotMaxY: 160))
+        XCTAssertNil(ChartHit.plotY(clickY: 160.5, plotMinY: 10, plotMaxY: 160))
+        XCTAssertNil(ChartHit.plotY(clickY: 10, plotMinY: 20, plotMaxY: 10), "an inverted plot frame hits nothing")
+    }
+
+    func testAValidFilterSurvivesAndAStaleOneDoesNot() {
+        let bars = StorageTable.bucketBars(rows: StorageTable.rows(report: storageReport()))
+        let present = bars[0].bucket
+        XCTAssertEqual(StorageTable.filter(present, validIn: bars), present)
+        if let absent = SavingsBucket.allCases.first(where: { b in !bars.contains { $0.bucket == b } }) {
+            XCTAssertNil(StorageTable.filter(absent, validIn: bars))
+        }
+        XCTAssertNil(StorageTable.filter(present, validIn: []))
+        XCTAssertNil(StorageTable.filter(nil, validIn: bars))
+    }
+
     // MARK: - Simulators chart and selection
 
     private func simulatorsReport() -> ScanReport {
@@ -151,6 +225,12 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(picked.selecting(barID: "volume:X"), picked)
         XCTAssertEqual(picked.selecting(barID: "device:"), picked)
         XCTAssertEqual(picked.selecting(barID: "device:a:b"), SimulatorSelection(deviceID: "a:b"), "only the first colon separates")
+        // The tables' own setters keep one selection across both (review I1).
+        XCTAssertEqual(picked.selecting(deviceID: "D1"), SimulatorSelection(deviceID: "D1"))
+        XCTAssertEqual(SimulatorSelection(deviceID: "D1").selecting(runtimeID: "R2"), SimulatorSelection(runtimeID: "R2"))
+        XCTAssertEqual(picked.selecting(deviceID: nil), picked, "the devices table deselecting keeps the runtime")
+        XCTAssertEqual(picked.selecting(runtimeID: nil), SimulatorSelection())
+        XCTAssertEqual(SimulatorSelection(deviceID: "D1").selecting(runtimeID: nil), SimulatorSelection(deviceID: "D1"))
         // Every bar's id selects that bar's row.
         for bar in SimulatorsChart.bars(report: simulatorsReport()) {
             let s = none.selecting(barID: bar.id)
@@ -203,7 +283,8 @@ final class R2ChartsTests: XCTestCase {
             SimulatorsTable.sorted(devices, using: [SimulatorsTable.DeviceColumn.size.comparator()]).map(\.id), ["D3", "D2", "D1"], "unmeasured as smallest")
         XCTAssertEqual(
             SimulatorsTable.sorted(devices, using: [SimulatorsTable.DeviceColumn.name.comparator()]).map(\.id), ["D3", "D1", "D2"], "equal names by UDID")
-        XCTAssertEqual(SimulatorsTable.sorted(devices, using: [SimulatorsTable.DeviceColumn.state.comparator(.reverse)]).map(\.id), ["D2", "D3", "D1"])
+        let byState = SimulatorsTable.sorted(devices, using: [SimulatorsTable.DeviceColumn.state.comparator(.reverse)])
+        XCTAssertEqual(byState.map(\.id), ["D3", "D2", "D1"], "equal states by name")
         XCTAssertEqual(
             SimulatorsTable.sorted(devices, using: [SimulatorsTable.DeviceColumn.runtime.comparator()]).map(\.runtime),
             ["iOS 26.0", "iOS 26.0", "watchOS 11.5"])

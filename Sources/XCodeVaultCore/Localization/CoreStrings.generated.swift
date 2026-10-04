@@ -922,11 +922,18 @@ extension L10nCatalog {
                 "zh-Hans": "运行时：%@",
             ],
             "app.storage.chart.caption": [
-                "en": "Each item counted once. Click a bar to show only its rows.",
-                "pt-BR": "Cada item é contado uma vez. Clique numa barra para ver só as linhas dela.",
-                "es": "Cada elemento se cuenta una vez. Haz clic en una barra para ver solo sus filas.",
-                "ja": "各項目は一度だけ数えます。バーをクリックすると、その行だけを表示します。",
-                "zh-Hans": "每个项目只计算一次。点按一个条形即可只显示其行。",
+                "en": "Items on all drives, each counted once. Click a bar to show only its rows.",
+                "pt-BR": "Itens em todos os discos, cada um contado uma vez. Clique numa barra para ver só as linhas dela.",
+                "es": "Elementos de todas las unidades, cada uno contado una vez. Haz clic en una barra para ver solo sus filas.",
+                "ja": "すべてのドライブ上の項目を、それぞれ一度だけ数えます。バーをクリックすると、その行だけを表示します。",
+                "zh-Hans": "所有驱动器上的项目，每个只计算一次。点按一个条形即可只显示其行。",
+            ],
+            "app.storage.chart.none": [
+                "en": "Nothing found in any bucket to chart.",
+                "pt-BR": "Nada encontrado em nenhum grupo para o gráfico.",
+                "es": "No se encontró nada en ningún grupo para el gráfico.",
+                "ja": "グラフにするものはどのグループにもありません。",
+                "zh-Hans": "任何分组中都没有可绘制的内容。",
             ],
             "app.storage.chart.title": [
                 "en": "Size by bucket",
@@ -955,6 +962,13 @@ extension L10nCatalog {
                 "es": "Mostrar todos los grupos",
                 "ja": "すべてのグループを表示",
                 "zh-Hans": "显示所有分组",
+            ],
+            "app.storage.filter.menu": [
+                "en": "Bucket",
+                "pt-BR": "Grupo",
+                "es": "Grupo",
+                "ja": "グループ",
+                "zh-Hans": "分组",
             ],
             "app.storage.mountPoint": [
                 "en": "[mount point]",
