@@ -47,7 +47,7 @@ public struct OverviewCards: Sendable, Equatable {
     public let verifiedReclaimableBytes: UInt64
     /// Every amount is "at least" rather than "up to": something counted could not be fully read.
     public let isLowerBound: Bool
-    /// The alternatives note's total, as a headline.
+    /// The alternatives note's total: a headline, or `.none` by the cards' rule — nothing reclaimable and not a lower bound.
     public let total: Amount
 
     public static func make(savings s: SavingsSummary) -> OverviewCards {
@@ -63,6 +63,6 @@ public struct OverviewCards: Sendable, Equatable {
         }
         return OverviewCards(
             cards: cards, reclaimableBytes: s.reclaimableBytes, verifiedReclaimableBytes: s.verifiedReclaimableBytes, isLowerBound: s.isLowerBound,
-            total: .headline(s.reclaimableBytes, lowerBound: s.isLowerBound))
+            total: s.reclaimableBytes == 0 && !s.isLowerBound ? .none : .headline(s.reclaimableBytes, lowerBound: s.isLowerBound))
     }
 }

@@ -101,7 +101,10 @@ The app is a projection of Core: every number and every decision a screen shows 
   and the migration-safety review.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
   Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
-  an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows); Drives, Health and History
+  an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows; the devices total is the sum of
+  simctl's per-device `dataPathSize`, captioned as such, and is a known difference from Delete's "Simulator devices"
+  row, which is the catalog's measure of the whole `Devices` folder); the helper's root-only bytes come from one source,
+  the Delete list when there is one (`AccessChecklist.rootOnlyBytes`), on the Access screen, the banner and Delete; Drives, Health and History
   are the earlier Volumes, Doctor and Journal views.
 - **Never color alone.** A bucket is always its symbol and its title; its color is a fill or a symbol tint, never a
   text color. Every state has a word next to its symbol.
@@ -138,8 +141,10 @@ are the only privileged path.
   status, and run the action when it reaches `enabled`. **Uninstall…** calls `unregister()`. The Delete view shows
   the helper's row above its table when a listed row needs root and the helper is not enabled.
 - **A button that cannot work is never shown.** A build with no usable team ID, not signed by that
-  team, or without the daemon in its bundle, says "Not in this build" and, instead of a button, what to do: the signed
-  release, or the manual step that `doctor` or `vault init` prints. A screen says it once: where the helper's row is
+  team, or without the daemon in its bundle, says "Not in this build" and, instead of a button, what to do, as a condition:
+  the helper needs a signed build that includes it, none is released yet (#30), and where there is a manual route
+  `doctor` or `vault init` prints it. Such a build's helper row is not an Overview banner (nothing there can act on it);
+  the Access screen and the Delete view still show it, with the root-only bytes. A screen says it once: where the helper's row is
   shown, the root action's own control below it does not repeat it.
 - Whether the launchd daemon needs Full Disk Access for `Caches/dyld` is **unmeasured** until the
   helper's first live run (#30).

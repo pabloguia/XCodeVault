@@ -121,9 +121,11 @@ final class AppTextCoverageTests: XCTestCase {
             XCTAssertFalse(text.contains("will"), text)
         }
         let guidance = AppText.access(AccessChecklist.Key.helperActionSignedReleaseOrCLI, bytes: nil, folders: nil)
-        XCTAssertTrue(guidance.contains("signed release"), guidance)
+        // A condition, never an instruction to use a release that does not exist (final review I1).
+        XCTAssertTrue(guidance.contains("needs a signed build that includes it") && guidance.contains("none is released yet"), guidance)
+        XCTAssertFalse(guidance.lowercased().contains("use the signed release"), guidance)
         // Hedged like `perm.helper.next.unavailableInThisBuild`: not every action has a manual route.
-        XCTAssertTrue(guidance.contains("where there is a manual route"), guidance)
+        XCTAssertTrue(guidance.lowercased().contains("where there is a manual route"), guidance)
         XCTAssertTrue(guidance.contains("`xcodevaultctl doctor`") && guidance.contains("`xcodevaultctl vault init`"), guidance)
     }
 
@@ -133,6 +135,7 @@ final class AppTextCoverageTests: XCTestCase {
         let row = AccessChecklist.rows(fullDiskAccess: .granted, helper: .unavailableInThisBuild, savings: SavingsSummary(), plan: [])[1]
         XCTAssertEqual(AppText.access(row.statusKey, bytes: nil, folders: nil), "Not in this build")
         XCTAssertEqual(row.actionKey, AccessChecklist.Key.helperActionSignedReleaseOrCLI)
+        XCTAssertTrue(AppText.access(row.actionKey ?? "", bytes: nil, folders: nil).contains("none is released yet"))
         XCTAssertEqual(AppText.access(row.titleKey, bytes: nil, folders: nil), "Privileged helper")
     }
 

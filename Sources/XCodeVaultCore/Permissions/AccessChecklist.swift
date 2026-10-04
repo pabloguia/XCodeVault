@@ -89,7 +89,8 @@ public enum AccessChecklist {
         public static let helperWhyRootActions = "app.access.helper.why.rootActions"
         public static let helperActionInstall = "app.access.helper.action.install"
         public static let helperActionApprove = "app.access.helper.action.approve"
-        /// What to do instead in a build without the helper: the signed release, or the manual route `doctor` prints.
+        /// What to do instead in a build without the helper. A condition, not an instruction: the helper needs a signed build
+        /// that includes it, and none is released yet (#30); where there is a manual route, `doctor` or `vault init` prints it.
         public static let helperActionSignedReleaseOrCLI = "app.access.helper.action.signedReleaseOrCLI"
     }
 
@@ -107,24 +108,42 @@ public enum AccessChecklist {
     ///   - plan: the plan rows; only delete rows noted `rootOnly` count towards the helper (`clean` never deletes them
     ///     without root).
     ///   - privacyRefusalCount: `ScanSummary.privacyRefusalCount`, the folders privacy protection refused.
+    ///   - deleteList: the Delete view's list, when there is one. Its root actions are then the helper row's bytes, so the
+    ///     Access screen, the Overview banner and the Delete view's row say the same number (`rootOnlyBytes`).
     public static func rows(
-        fullDiskAccess: FullDiskAccessState, helper: HelperState, savings: SavingsSummary, plan: [SavingsPlanRow], privacyRefusalCount: Int = 0
+        fullDiskAccess: FullDiskAccessState, helper: HelperState, savings: SavingsSummary, plan: [SavingsPlanRow], privacyRefusalCount: Int = 0,
+        deleteList: DeleteList? = nil
     ) -> [Row] {
-        [fullDiskAccessRow(fullDiskAccess, savings: savings, refusals: privacyRefusalCount), helperRow(helper, plan: plan)]
+        [
+            fullDiskAccessRow(fullDiskAccess, savings: savings, refusals: privacyRefusalCount),
+            helperRow(helper, rootOnlyBytes: rootOnlyBytes(plan: plan, list: deleteList)),
+        ]
+    }
+
+    /// The bytes only root can delete: the Delete list's root actions when there is a list — what the Delete view shows —
+    /// otherwise the plan's delete rows noted `rootOnly`. One source per call, so two screens never show two numbers.
+    public static func rootOnlyBytes(plan: [SavingsPlanRow], list: DeleteList?) -> UInt64 {
+        if let list { return list.groups.flatMap(\.actions).filter(\.requiresRoot).reduce(UInt64(0)) { $0 + $1.bytes } }
+        return plan.filter { $0.option.bucket == .deleteAndRegenerate && $0.noteIDs.contains("rootOnly") }.reduce(UInt64(0)) { $0 + $1.bytes }
     }
 
     /// The Overview's one access banner (spec §6.2: "at most one"): the first row that holds back something the scan
     /// measured, or nil. Full Disk Access holds something back when it is not granted and folders were refused or a size
     /// is a lower bound; the helper, when it is not enabled and root-only delete rows wait on it (`blocksBytes`). A row that
-    /// holds nothing back stays in the Access view and never nags from the Overview.
+    /// holds nothing back stays in the Access view and never nags from the Overview. Nor does the helper's row in a build
+    /// that can never reach it (`unavailableInThisBuild`): the user cannot act on it from there, so it stays on the Access
+    /// screen and above the Delete table, where the root rows it holds back are listed.
     public static func banner(
-        fullDiskAccess: FullDiskAccessState, helper: HelperState, savings: SavingsSummary, plan: [SavingsPlanRow], privacyRefusalCount: Int = 0
+        fullDiskAccess: FullDiskAccessState, helper: HelperState, savings: SavingsSummary, plan: [SavingsPlanRow], privacyRefusalCount: Int = 0,
+        deleteList: DeleteList? = nil
     ) -> Row? {
-        rows(fullDiskAccess: fullDiskAccess, helper: helper, savings: savings, plan: plan, privacyRefusalCount: privacyRefusalCount).first { row in
+        rows(
+            fullDiskAccess: fullDiskAccess, helper: helper, savings: savings, plan: plan, privacyRefusalCount: privacyRefusalCount, deleteList: deleteList
+        ).first { row in
             guard row.state != .granted else { return false }
             return switch row.need {
             case .fullDiskAccess: privacyRefusalCount > 0 || savings.isLowerBound
-            case .privilegedHelper: row.blocksBytes != nil
+            case .privilegedHelper: row.state != .unavailableInThisBuild && row.blocksBytes != nil
             }
         }
     }
@@ -133,9 +152,8 @@ public enum AccessChecklist {
     /// root-only row and the helper is not enabled. Its bytes are those root rows', so the sentence matches the table.
     /// Nil when the helper is enabled or nothing listed needs root: the Access view still has the row.
     public static func deleteRow(helper: HelperState, list: DeleteList) -> Row? {
-        let root = list.groups.flatMap(\.actions).filter(\.requiresRoot)
-        guard helper != .enabled, !root.isEmpty else { return nil }
-        return helperRow(helper, rootOnlyBytes: root.reduce(UInt64(0)) { $0 + $1.bytes })
+        guard helper != .enabled, list.groups.contains(where: { $0.actions.contains(where: \.requiresRoot) }) else { return nil }
+        return helperRow(helper, rootOnlyBytes: rootOnlyBytes(plan: [], list: list))
     }
 
     /// Whether a root action's own control (`PrivilegedActionControlView`) shows its "what to do instead" text. Only in a
@@ -168,11 +186,6 @@ public enum AccessChecklist {
                 need: .fullDiskAccess, state: .missing, whyKey: why, actionKey: Key.fdaActionOpenSettings, action: .openFullDiskAccessSettings,
                 blocksBytes: nil, blocksFolders: refusals > 0 ? refusals : nil)
         }
-    }
-
-    static func helperRow(_ state: HelperState, plan: [SavingsPlanRow]) -> Row {
-        let rootOnly = plan.filter { $0.option.bucket == .deleteAndRegenerate && $0.noteIDs.contains("rootOnly") }.reduce(UInt64(0)) { $0 + $1.bytes }
-        return helperRow(state, rootOnlyBytes: rootOnly)
     }
 
     static func helperRow(_ state: HelperState, rootOnlyBytes rootOnly: UInt64) -> Row {

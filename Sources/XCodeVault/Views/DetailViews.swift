@@ -62,6 +62,8 @@ struct SimulatorsView: View {
                 .frame(minHeight: 140)
             }
             Text.l10n(L10n.tr("app.simulators.devices.title", ByteCount.format(SimulatorsTable.devicesBytes(report: report)))).font(.headline)
+            // simctl's per-device data size, not the catalog's `du` of the Devices folder that Delete shows (final review M2).
+            Text.l10n(L10n.tr("app.simulators.devices.caption")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if devices.isEmpty {
                 Text.l10n(L10n.tr("app.simulators.devices.none")).foregroundStyle(.secondary)
             } else {

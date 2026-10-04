@@ -542,6 +542,11 @@ extension AppModelTests {
             XCTAssertEqual(model.deleteAccessRow?.need, .privilegedHelper, "\(state)")
             XCTAssertEqual(model.deleteAccessRow?.blocksBytes, rootBytes, "\(state)")
             XCTAssertEqual(model.deleteAccessRow, model.deleteList.flatMap { AccessChecklist.deleteRow(helper: state, list: $0) })
+            // Final review M1: the Access row says the Delete view's number.
+            XCTAssertEqual(model.accessRows.last?.blocksBytes, model.deleteAccessRow?.blocksBytes, "\(state)")
+            if model.accessBanner?.need == .privilegedHelper { XCTAssertEqual(model.accessBanner?.blocksBytes, rootBytes, "\(state)") }
+            // Final review M6: no Overview nag in a build that cannot reach the helper; the rows above keep it.
+            if state == .unavailableInThisBuild { XCTAssertNotEqual(model.accessBanner?.need, .privilegedHelper) }
         }
         // Hidden once the helper is enabled: the row follows the permissions, without a rescan.
         let helper = SwitchableHelper(.notInstalled)

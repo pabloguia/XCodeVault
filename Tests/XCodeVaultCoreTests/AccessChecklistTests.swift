@@ -169,12 +169,23 @@ final class AccessChecklistTests: XCTestCase {
     }
 
     func testTheHelperBlocksOnlyWithRootOnlyBytes() {
-        for state in [HelperState.notInstalled, .awaitingApproval, .unavailableInThisBuild] {
+        for state in [HelperState.notInstalled, .awaitingApproval] {
             let b = banner(.granted, state)
             XCTAssertEqual(b?.need, .privilegedHelper, "\(state)")
             XCTAssertEqual(b?.blocksBytes, 3500, "\(state)")
         }
         XCTAssertNil(banner(.granted, .enabled))
+    }
+
+    /// Final review M6: a build that can never reach the helper does not nag from the Overview, but the blocker is not
+    /// hidden — the Access row and the Delete view's row still carry it, with its bytes and what to do instead.
+    func testABuildWithoutTheHelperKeepsItsRowOffTheOverviewOnly() {
+        XCTAssertNil(banner(.granted, .unavailableInThisBuild))
+        XCTAssertEqual(banner(.notGranted, .unavailableInThisBuild, refusals: 1)?.need, .fullDiskAccess, "Full Disk Access still banners")
+        let access = rows(.granted, .unavailableInThisBuild)[1]
+        XCTAssertEqual(access.blocksBytes, 3500)
+        XCTAssertEqual(access.actionKey, AccessChecklist.Key.helperActionSignedReleaseOrCLI)
+        XCTAssertEqual(AccessChecklist.deleteRow(helper: .unavailableInThisBuild, list: deleteList(rootBytes: [3000, 500]))?.blocksBytes, 3500)
     }
 
     func testAtMostOneBannerAndFullDiskAccessComesFirst() {
@@ -248,5 +259,21 @@ final class AccessChecklistTests: XCTestCase {
         }
         // A root row of zero bytes still needs the helper; the sentence is then the general one.
         XCTAssertEqual(AccessChecklist.deleteRow(helper: .notInstalled, list: deleteList(rootBytes: [0]))?.whyKey, AccessChecklist.Key.helperWhyRootActions)
+    }
+
+    /// Final review M1: with a Delete list, the Access row and the banner take their root-only bytes from it, so every
+    /// screen says the same number even where the plan's `rootOnly` rows count something else.
+    func testTheDeleteListIsTheOneSourceOfRootOnlyBytes() {
+        let list = deleteList(rootBytes: [1200])
+        var s = SavingsSummary()
+        s.isLowerBound = false
+        for state in [HelperState.notInstalled, .awaitingApproval, .unavailableInThisBuild] {
+            let access = AccessChecklist.rows(fullDiskAccess: .granted, helper: state, savings: s, plan: plan, deleteList: list)[1]
+            XCTAssertEqual(access.blocksBytes, 1200, "not the plan's 3500: \(state)")
+            XCTAssertEqual(access.blocksBytes, AccessChecklist.deleteRow(helper: state, list: list)?.blocksBytes, "\(state)")
+        }
+        XCTAssertEqual(AccessChecklist.banner(fullDiskAccess: .granted, helper: .notInstalled, savings: s, plan: plan, deleteList: list)?.blocksBytes, 1200)
+        XCTAssertEqual(AccessChecklist.rootOnlyBytes(plan: plan, list: nil), 3500, "no list: the plan's rootOnly delete rows")
+        XCTAssertEqual(AccessChecklist.rootOnlyBytes(plan: plan, list: deleteList(rootBytes: [])), 0)
     }
 }

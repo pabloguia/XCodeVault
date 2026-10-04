@@ -145,7 +145,7 @@ struct PlanView: View {
                 if rows.isEmpty {
                     Text.l10n(L10n.tr("cli.plan.empty")).foregroundStyle(.secondary)
                 }
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                ForEach(rows, id: \.categoryID) { row in
                     PlanRowView(row: row) { copy(row) }
                 }
             }
@@ -289,7 +289,7 @@ struct DeleteView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text.l10n(L10n.tr("app.delete.otherTools.detail")).font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    ForEach(Array(list.otherTools.enumerated()), id: \.offset) { _, row in
+                    ForEach(list.otherTools, id: \.categoryID) { row in
                         PlanRowView(row: row) { model.copyCommand(row) }
                     }
                 }

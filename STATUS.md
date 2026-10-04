@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-09-28. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-03. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -63,9 +63,7 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
   (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further; (5) the runtime
   `.dmg` gap below is still open: the Overview and Simulators show those bytes on their own, outside the totals;
-  (6) `HelperClient`'s error text still says "Install… in its Permissions section" (`Sources/XCodeVaultHelperClient/
-  HelperClient.swift:51`) and `scripts/bundle-app.sh:49`'s comment says "Permissions section": both are helper/signing
-  files, so the rename waits for the next change that goes through the helper-security review; (7) platform names in
+  (6) platform names in
   the Simulators screen are mapped from five known `platformIdentifier`s (iOS, watchOS, tvOS, visionOS, macOS); an
   unknown platform shows its short identifier, unmapped.
 

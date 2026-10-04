@@ -232,10 +232,13 @@ final class AppModel {
         }
         let plan = SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate)
         let refusals = report.summary.privacyRefusalCount
+        // The Delete list, when there is one, is the one source of the root-only bytes on every screen (final review M1).
         accessRows = AccessChecklist.rows(
-            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals)
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals,
+            deleteList: deleteList)
         accessBanner = AccessChecklist.banner(
-            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals)
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals,
+            deleteList: deleteList)
         deleteAccessRow = deleteList.flatMap { AccessChecklist.deleteRow(helper: helperState, list: $0) }
     }
 

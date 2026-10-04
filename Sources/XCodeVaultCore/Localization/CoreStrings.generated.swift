@@ -61,11 +61,11 @@ extension L10nCatalog {
                 "zh-Hans": "安装助手…",
             ],
             "app.access.helper.action.signedReleaseOrCLI": [
-                "en": "This build cannot reach the privileged helper. Use the signed release of XCodeVault, or, where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints.",
-                "pt-BR": "Esta versão não consegue acessar o auxiliar privilegiado. Use a versão assinada do XCodeVault ou, quando houver um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra.",
-                "es": "Esta compilación no puede acceder al asistente privilegiado. Usa la versión firmada de XCodeVault o, cuando haya un camino manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`.",
-                "ja": "このビルドからは特権ヘルパーを利用できません。署名済みの XCodeVault を使うか、手動の手順がある場合は `xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。",
-                "zh-Hans": "此版本无法使用特权助手。请使用已签名的 XCodeVault 发行版；若有手动步骤，也可以执行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 列出的步骤。",
+                "en": "This build cannot reach the privileged helper: that needs a signed build that includes it, and none is released yet (issue #30). Where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints.",
+                "pt-BR": "Esta versão não consegue acessar o auxiliar privilegiado: isso exige uma versão assinada que o inclua, e nenhuma foi lançada ainda (issue #30). Quando houver um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra.",
+                "es": "Esta compilación no puede acceder al asistente privilegiado: eso requiere una compilación firmada que lo incluya, y todavía no se ha publicado ninguna (issue #30). Cuando haya un camino manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`.",
+                "ja": "このビルドからは特権ヘルパーを利用できません。利用するにはヘルパーを含む署名済みビルドが必要ですが、まだリリースされていません（issue #30）。手動の手順がある場合は、`xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。",
+                "zh-Hans": "此版本无法使用特权助手：这需要包含该助手的已签名版本，而目前尚未发布（issue #30）。若有手动步骤，请执行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 列出的步骤。",
             ],
             "app.access.helper.why.enabled": [
                 "en": "The privileged helper is installed. It runs only its fixed list of actions that need root.",
@@ -822,6 +822,13 @@ extension L10nCatalog {
                 "es": "Liberar espacio",
                 "ja": "空き容量を増やす",
                 "zh-Hans": "释放空间",
+            ],
+            "app.simulators.devices.caption": [
+                "en": "Each device\'s data folder, as simctl reports it. Delete measures the whole Devices folder, so its total can differ.",
+                "pt-BR": "A pasta de dados de cada dispositivo, como o simctl a informa. Apagar mede a pasta Devices inteira, então o total lá pode ser diferente.",
+                "es": "La carpeta de datos de cada dispositivo, tal como la informa simctl. Eliminar mide toda la carpeta Devices, así que su total puede ser distinto.",
+                "ja": "各デバイスのデータフォルダ（simctl が報告するサイズ）です。「削除」は Devices フォルダ全体を測るため、合計が異なることがあります。",
+                "zh-Hans": "每台设备的数据文件夹，按 simctl 报告的大小。“删除”测量整个 Devices 文件夹，因此其总量可能不同。",
             ],
             "app.simulators.devices.none": [
                 "en": "No simulator devices.",

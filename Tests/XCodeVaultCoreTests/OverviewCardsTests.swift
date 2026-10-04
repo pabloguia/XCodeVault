@@ -100,8 +100,12 @@ final class OverviewCardsTests: XCTestCase {
         XCTAssertEqual(card(bytes: 500, verified: 0).verified, .share(0))
     }
 
-    func testTheTotalIsAHeadlineNeverNothing() {
-        XCTAssertEqual(OverviewCards.make(savings: SavingsSummary()).total, .upTo(0))
+    /// Final review M9: a clean Mac reads "Nothing found" in the total too, never "up to Zero KB" under three empty cards.
+    func testTheTotalIsAHeadlineAndNothingByTheCardsRule() {
+        XCTAssertEqual(OverviewCards.make(savings: SavingsSummary()).total, .none)
+        var empty = SavingsSummary()
+        empty.isLowerBound = true
+        XCTAssertEqual(OverviewCards.make(savings: empty).total, .atLeast(0), "a lower bound is never 'nothing'")
         XCTAssertEqual(OverviewCards.make(savings: savings).total, .upTo(701))
         var s = savings
         s.isLowerBound = true
