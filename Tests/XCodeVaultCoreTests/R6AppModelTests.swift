@@ -583,7 +583,7 @@ final class R6AppModelTests: XCTestCase {
         XCTAssertEqual(try assessment(m, "disk7").shownRefusals, [.timeMachine])
         XCTAssertTrue(OperationSheetState(row: nil, kind: .eraseDisk, inputs: OperationInputs()).showsExperimentalBadge)
         XCTAssertFalse(OperationSheetState(row: nil, kind: .useDrive, inputs: OperationInputs()).showsExperimentalBadge)
-        XCTAssertEqual(DriveText.optionButton(.addVolume(container: "d"), recommended: true), "Add an APFS volume (erases nothing) — recommended…")
+        XCTAssertEqual(DriveText.optionButton(.addVolume(container: "d")), "Add a Case-insensitive Volume…", "R7-B: a verb title")
     }
 
     // MARK: - Fit (R1's lesson) and words

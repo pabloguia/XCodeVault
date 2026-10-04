@@ -110,16 +110,15 @@ extension AppModel {
         guard !s.isPreviewing, s.preview?.prepared != nil else { return L10n.tr("app.run.confirm.pending") }
         let p = s.preview
         let size = ByteCount.format(p?.bytes ?? 0)
-        let folder = s.inputs.folder ?? ""
         let runtime = runtimesForPicker.first { $0.identifier == s.inputs.runtimeID }.map(OperationText.runtime) ?? ""
         switch s.kind {
         case .externalizeArchives:
             let vault = usableVaults.first { $0.volume.volumeUUID == s.inputs.vaultUUID }?.volume.volumeName ?? ""
             return L10n.tr("app.run.confirm.externalizeArchives", size, vault)
         case .offloadRuntime: return L10n.tr("app.run.confirm.offloadRuntime", runtime, size)
-        case .setDerivedData: return L10n.tr("app.run.confirm.setDerivedData", folder)
-        case .setArchives: return L10n.tr("app.run.confirm.setArchives", folder)
-        case .exportRuntime: return L10n.tr("app.run.confirm.exportRuntime", s.inputs.platform, folder)
+        // R7-B (audit row 16): a short verb, never a path; the folder is in the review, shown once.
+        case .setDerivedData, .setArchives: return L10n.tr("app.run.confirm.useFolder")
+        case .exportRuntime: return L10n.tr("app.run.confirm.exportInstaller", s.inputs.platform)
         case .deleteRuntime: return L10n.tr("app.run.confirm.deleteRuntime", runtime, size)
         case .addVolume: return L10n.tr("app.run.confirm.addVolume", s.inputs.volume.name)
         case .addPartition: return L10n.tr("app.run.confirm.addPartition", s.inputs.volume.name)
@@ -184,9 +183,23 @@ enum DriveText {
         }
     }
 
-    /// A Drives button: the option, "recommended" when it is, and the ellipsis of an action that opens a sheet.
-    static func optionButton(_ o: PreparationOption, recommended: Bool) -> String {
-        option(o) + (recommended ? " — " + L10n.tr("app.prep.recommended") : "") + "…"
+    /// A Drives button (R7-B, audit row 4): a short verb title with the ellipsis of an action that opens a sheet — the
+    /// same title the Run sheet's Destination gives the option (`prepareTitle`). What it costs is `optionsFootnote`.
+    static func optionButton(_ o: PreparationOption) -> String { prepareTitle(.prepare(o)) ?? option(o) + "…" }
+
+    /// The line under a drive's option buttons: which one is recommended and that it erases nothing, and that an Erase
+    /// option deletes what is on the volume or disk. Nil when there are no options.
+    static func optionsFootnote(_ a: DriveAssessment) -> String? {
+        let options = a.commandOptions
+        guard !options.isEmpty else { return nil }
+        var parts: [String] = []
+        if let recommended = a.recommendedOption {
+            parts.append(L10n.tr("app.drives.options.recommended", optionButton(recommended)))
+        } else if options.contains(where: { !$0.erases }) {
+            parts.append(L10n.tr("app.drives.options.addErasesNothing"))
+        }
+        if options.contains(where: \.erases) { parts.append(L10n.tr("app.drives.options.eraseDeletes")) }
+        return parts.joined(separator: " ")
     }
 
     /// What a drive's button beside or under the Destination picker does, as its title (R7-A): **Use This Drive…**, or the
@@ -196,7 +209,7 @@ enum DriveText {
         case .useDrive: L10n.tr("app.drives.useDrive")
         case .prepare(.addVolume): L10n.tr("app.drives.fix.addVolume")
         case .prepare(.addPartition): L10n.tr("app.drives.fix.addPartition")
-        case .prepare(.eraseVolume): L10n.tr("app.drives.fix.eraseVolume")
+        case .prepare(.eraseVolume(let id, let name)): L10n.tr("app.drives.fix.eraseVolume", name.isEmpty ? id : name)
         case .prepare(.eraseDisk): L10n.tr("app.drives.fix.eraseDisk")
         case .prepare(.enableOwnership), .nothing: nil
         }

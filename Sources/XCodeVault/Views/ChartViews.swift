@@ -50,6 +50,8 @@ struct BarList<Icon: View>: View {
 
     var body: some View {
         let largest = bars.map(\.bytes).max() ?? 0
+        // R7-B: the label column is as wide as the longest label measured, up to its maximum — no gap after short labels.
+        let column = BarChartLayout.labelColumnWidth(bars.map { ChartLabelMetrics.width($0.label) })
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
             ForEach(bars) { bar in
                 GridRow(alignment: .center) {
@@ -58,7 +60,7 @@ struct BarList<Icon: View>: View {
                         Text(verbatim: bar.label).fontWeight(hovered == bar.id ? .semibold : .regular)
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: BarChartLayout.labelColumnMaxWidth, alignment: .leading)
+                    .frame(width: column, alignment: .leading)
                     .modifier(BarInteraction(id: bar.id, cell: "label", pointerCells: $pointerCells, click: click))
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(Text(verbatim: bar.accessibilityLabel))
@@ -67,11 +69,11 @@ struct BarList<Icon: View>: View {
                     .accessibilityAction { click(bar.id, false) }
                     GeometryReader { geometry in
                         HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 3).fill(bar.color)
+                            RoundedRectangle(cornerRadius: Radius.chartBar).fill(bar.color)
                                 .frame(
                                     width: max(0, geometry.size.width - BarChartLayout.sizeLabelWidth) * BarChartLayout.fraction(bar.bytes, largest: largest),
                                     height: 12)
-                            Text(verbatim: ByteCount.format(bar.bytes)).font(.callout).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+                            Text(verbatim: ByteCount.format(bar.bytes)).font(.caption).monospacedDigit().foregroundStyle(.secondary).fixedSize()
                         }
                         .frame(maxHeight: .infinity, alignment: .leading)
                     }
@@ -82,6 +84,18 @@ struct BarList<Icon: View>: View {
                 }
             }
         }
+    }
+}
+
+/// How wide a chart label is on one line (R7-B): at body size and in its hovered weight, so hovering never re-wraps it,
+/// with room for the symbol before it. The column is the widest, capped (`BarChartLayout.labelColumnWidth`).
+enum ChartLabelMetrics {
+    /// The symbol before the label and the gap after it.
+    static let iconAllowance: Double = 24
+
+    static func width(_ label: String) -> Double {
+        let font = NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: .body).pointSize, weight: .semibold)
+        return (label as NSString).size(withAttributes: [.font: font]).width.rounded(.up) + iconAllowance
     }
 }
 
@@ -152,8 +166,8 @@ struct SimulatorsChartView: View {
     /// System indigo and teal (BRAND.md: the brand teal is not for light surfaces); the legend and the symbols say the kind.
     static func color(_ kind: SimulatorBar.Kind) -> Color {
         switch kind {
-        case .runtime: .indigo
-        case .device: .teal
+        case .runtime: Tokens.simRuntime
+        case .device: Tokens.simDevice
         }
     }
 

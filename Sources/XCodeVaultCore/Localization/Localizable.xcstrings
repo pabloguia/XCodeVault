@@ -1,6 +1,74 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "app.a11y.off" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desactivado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "オフ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desativado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "关"
+          }
+        }
+      }
+    },
+    "app.a11y.on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "オン"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "开"
+          }
+        }
+      }
+    },
     "app.access.fda.action.openSettings" : {
       "localizations" : {
         "en" : {
@@ -1777,6 +1845,40 @@
         }
       }
     },
+    "app.clean.selectToDelete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select items to delete."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Selecciona elementos para eliminar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "削除する項目を選択してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Selecione itens para apagar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "选择要删除的项目。"
+          }
+        }
+      }
+    },
     "app.clean.selected" : {
       "localizations" : {
         "en" : {
@@ -3348,31 +3450,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erase the Volume…"
+            "value" : "Erase “%@”…"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Borrar el volumen…"
+            "value" : "Borrar «%@»…"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ボリュームを消去…"
+            "value" : "「%@」を消去…"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Apagar o Volume…"
+            "value" : "Apagar “%@”…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "抹掉宗卷…"
+            "value" : "抹掉“%@”…"
           }
         }
       }
@@ -3407,6 +3509,108 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "未连接外置驱动器。"
+          }
+        }
+      }
+    },
+    "app.drives.options.addErasesNothing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adding a volume or a partition erases nothing."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Añadir un volumen o una partición no borra nada."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ボリュームやパーティションの追加では何も消去しません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Adicionar um volume ou uma partição não apaga nada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "添加宗卷或分区不会抹掉任何内容。"
+          }
+        }
+      }
+    },
+    "app.drives.options.eraseDeletes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Erase option deletes everything on that volume or disk; its sheet lists what and asks you to type the name."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Una opción Borrar elimina todo lo que hay en ese volumen o disco; su hoja indica qué y te pide escribir el nombre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "「消去」の項目は、そのボリュームやディスクの内容をすべて削除します。シートで対象を示し、名前の入力を求めます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Uma opção Apagar apaga tudo nesse volume ou disco; a janela dela lista o quê e pede que você digite o nome."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“抹掉”选项会删除该宗卷或磁盘上的所有内容；其表单会列出内容并要求你输入名称。"
+          }
+        }
+      }
+    },
+    "app.drives.options.recommended" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is recommended: it erases nothing."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se recomienda «%@»: no borra nada."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "「%@」がおすすめです。何も消去しません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“%@” é o recomendado: não apaga nada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "推荐“%@”：它不抹掉任何内容。"
           }
         }
       }
@@ -7093,40 +7297,6 @@
         }
       }
     },
-    "app.plan.copy" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Copiar"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "コピー"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Copiar"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "拷贝"
-          }
-        }
-      }
-    },
     "app.plan.copyCommand" : {
       "localizations" : {
         "en" : {
@@ -9473,36 +9643,36 @@
         }
       }
     },
-    "app.run.confirm.exportRuntime" : {
+    "app.run.confirm.exportInstaller" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export the %1$@ Installer to %2$@"
+            "value" : "Export the %@ Installer"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Exportar el instalador de %1$@ a %2$@"
+            "value" : "Exportar el instalador de %@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "%1$@ のインストーラを %2$@ に書き出す"
+            "value" : "%@ のインストーラを書き出す"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Exportar o Instalador de %1$@ para %2$@"
+            "value" : "Exportar o Instalador de %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "将 %1$@ 安装器导出到 %2$@"
+            "value" : "导出 %@ 安装器"
           }
         }
       }
@@ -9512,31 +9682,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy %1$@ of Archives to the vault %2$@"
+            "value" : "Copy %1$@ of Archives to %2$@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Copiar %1$@ de Archives al disco bóveda %2$@"
+            "value" : "Copiar %1$@ de Archives a %2$@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Archives %1$@ を保管庫 %2$@ にコピー"
+            "value" : "Archives %1$@ を %2$@ にコピー"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Copiar %1$@ de Archives para o disco-cofre %2$@"
+            "value" : "Copiar %1$@ de Archives para %2$@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "将 %1$@ 的 Archives 拷贝到保险库 %2$@"
+            "value" : "将 %1$@ 的 Archives 拷贝到 %2$@"
           }
         }
       }
@@ -9609,74 +9779,6 @@
         }
       }
     },
-    "app.run.confirm.setArchives" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Point Archives at %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Apuntar Archives a %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Archives を %@ に設定"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Apontar Archives para %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "将 Archives 指向 %@"
-          }
-        }
-      }
-    },
-    "app.run.confirm.setDerivedData" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Point DerivedData at %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Apuntar DerivedData a %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "DerivedData を %@ に設定"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Apontar DerivedData para %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "将 DerivedData 指向 %@"
-          }
-        }
-      }
-    },
     "app.run.confirm.useDrive" : {
       "localizations" : {
         "en" : {
@@ -9707,6 +9809,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "将“%@”用作保险库"
+          }
+        }
+      }
+    },
+    "app.run.confirm.useFolder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This Folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Usar esta carpeta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このフォルダを使用"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Usar Esta Pasta"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "使用此文件夹"
           }
         }
       }
@@ -11543,6 +11679,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "原件未被移除。"
+          }
+        }
+      }
+    },
+    "app.run.removeOriginal.needsConfirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check the box above to remove the original."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Marca la casilla de arriba para eliminar el original."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "元のデータを削除するには、上のチェックボックスをオンにしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Marque a caixa acima para remover o original."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "勾选上方的复选框以移除原件。"
           }
         }
       }

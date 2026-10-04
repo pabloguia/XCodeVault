@@ -778,8 +778,8 @@ struct PrivilegedActionControlView: View {
     var body: some View {
         // Title case, in the app's own words (HIG review X5); `PrivilegedAction.title` stays the journal's record.
         switch state.actionControl {
-        case .run: Button(AppText.privilegedButton(action), action: perform)
-        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform)
+        case .run: Button(AppText.privilegedButton(action), action: perform).actionButton()
+        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform).actionButton()
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
             if showsGuidance {
@@ -815,8 +815,7 @@ struct HelperRequestSheet: View {
         }
         Text(verbatim: AppText.requirementWhy(model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper))
             .font(.callout).fixedSize(horizontal: false, vertical: true)
-        HStack {
-            Spacer()
+        SheetFooter {
             Button(L10n.tr("app.action.cancel"), role: .cancel) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
             Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
         }
@@ -829,10 +828,10 @@ struct HelperRequestSheet: View {
             ProgressView().controlSize(.small)
             Text(verbatim: progress).font(.callout).fixedSize(horizontal: false, vertical: true)
         }
-        HStack {
-            Spacer()
+        // Open System Settings is the next step, not a default: Return does nothing while waiting; Escape stops waiting.
+        SheetFooter {
             Button(L10n.tr("app.helper.stopWaiting")) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
-            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }
+            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }.actionButton()
         }
     }
 }

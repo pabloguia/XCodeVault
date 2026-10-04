@@ -23,17 +23,17 @@ struct AccessRowView: View {
                     Label {
                         Text(verbatim: text(row.statusKey))
                     } icon: {
-                        // The status word is next to it: the symbol is not said twice.
-                        Image(systemName: Self.symbol(for: row)).accessibilityHidden(true)
+                        // The status word is next to it: the symbol is not said twice. Only the symbol is tinted (R7-B).
+                        StatusIcon(.access(row.state, isNeeded: row.isNeeded), symbol: Self.symbol(for: row))
                     }
                     .font(.callout)
                 }
                 Spacer(minLength: 8)
                 if let key = row.actionKey, let action = row.action, action != .guidanceOnly {
-                    Button(text(key)) { act(action) }
+                    Button(text(key)) { act(action) }.actionButton()
                 }
                 if let relaunch {
-                    Button(text(AccessChecklist.Key.fdaActionRelaunch), action: relaunch)
+                    Button(text(AccessChecklist.Key.fdaActionRelaunch), action: relaunch).actionButton()
                 }
             }
             // Full width under the status, not a narrow column beside it (HIG review D5).
@@ -102,7 +102,8 @@ struct AccessView: View {
                         model.handle($0)
                     }
                     if model.offersUninstall(row) {
-                        Button(L10n.tr("app.permissions.uninstallEllipsis")) { confirmUninstall = true }
+                        // Opens the confirmation; destructive in role, never the default (R7-B, §3.6).
+                        Button(L10n.tr("app.permissions.uninstallEllipsis"), role: .destructive) { confirmUninstall = true }.actionButton()
                     }
                 }
             }
@@ -113,7 +114,7 @@ struct AccessView: View {
         .formStyle(.grouped)
         .task { model.refreshPermissions() }
         .confirmationDialog(L10n.tr("app.permissions.uninstall.confirm"), isPresented: $confirmUninstall) {
-            Button(L10n.tr("app.permissions.uninstall"), role: .destructive) { Task { await model.uninstallHelper() } }
+            Button(L10n.tr("app.permissions.uninstall"), role: .destructive) { Task { await model.uninstallHelper() } }  // U10: dialog
         } message: {
             Text.l10n(L10n.tr("app.permissions.uninstall.message"))
         }

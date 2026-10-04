@@ -40,7 +40,7 @@ struct DrivesView: View {
                                 Label {
                                     Text(verbatim: AppText.vaultState(c.state))
                                 } icon: {
-                                    Image(systemName: DrivesList.offlineSymbol(for: c)).foregroundStyle(c.isUsable ? Color.green : Color.red)
+                                    StatusIcon(.offlineVault(c), symbol: DrivesList.offlineSymbol(for: c))
                                 }
                                 Text(verbatim: c.volume.volumeName).font(.headline)
                             }
@@ -71,7 +71,7 @@ struct DriveRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(verbatim: name).font(.headline)
-                Text(verbatim: facts).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                Text(verbatim: facts).font(.callout).foregroundStyle(.secondary).lineLimit(1).help(facts)
                 Spacer()
                 Text.l10n(L10n.tr("app.volumes.free", ByteCount.format(v.freeBytes))).font(.callout).foregroundStyle(.secondary).monospacedDigit()
             }
@@ -89,36 +89,23 @@ struct DriveRowView: View {
                     Label {
                         InlineCodeText(blocker).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                     } icon: {
-                        Image(systemName: "xmark.octagon.fill").foregroundStyle(.red).accessibilityHidden(true)
+                        StatusIcon(.blocker)
                     }
                 }
             }
             // A mounted vault that cannot be used says why in visible text, not only in a tooltip (`DriveRow.showsVaultDetail`).
             if let vault = row.vault, row.showsVaultDetail {
-                Label {
-                    Text(verbatim: vault.detail).font(.callout).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
-                }
+                StatusLabel(.warning, vault.detail).font(.callout)
             }
             // Further registry entries for this volume (`DriveRow.duplicateVaults`): shown, never dropped.
             ForEach(Array(row.duplicateVaults.enumerated()), id: \.offset) { _, extra in
-                Label {
-                    Text(verbatim: L10n.tr("app.volumes.vaultBadge", AppText.vaultState(extra.state)) + " — " + extra.detail).font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
-                }
+                StatusLabel(.warning, L10n.tr("app.volumes.vaultBadge", AppText.vaultState(extra.state)) + " — " + extra.detail).font(.callout)
             }
             if row.showsQualificationDetail, !q.warnings.isEmpty {
                 DisclosureGroup(isExpanded: Binding(get: { showsWarnings ?? !row.warningsStartCollapsed }, set: { showsWarnings = $0 })) {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(q.warnings, id: \.self) { warning in
-                            Label {
-                                Text(verbatim: warning).font(.caption).fixedSize(horizontal: false, vertical: true)
-                            } icon: {
-                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
-                            }
+                            StatusLabel(.warning, warning).font(.caption)
                         }
                     }
                 } label: {
@@ -141,37 +128,12 @@ struct DriveRowView: View {
     @ViewBuilder
     private var verdictLine: some View {
         if let verdict = row.vaultVerdict {
-            Label {
-                Text(verbatim: AppText.vaultVerdict(verdict)).font(.callout)
-            } icon: {
-                Image(systemName: Self.symbol(verdict)).foregroundStyle(Self.tint(verdict)).accessibilityHidden(true)
-            }
-            .help(row.vault?.detail ?? "")
+            StatusLabel(.vaultVerdict(verdict), AppText.vaultVerdict(verdict)).font(.callout)
+                .help(row.vault?.detail ?? "")
         } else if row.showsQualificationDetail {
-            Label {
-                Text(verbatim: AppText.verdict(row.qualification.verdict)).font(.callout).foregroundStyle(.secondary)
-            } icon: {
-                Image(systemName: Self.symbol(row.qualification.verdict)).foregroundStyle(.secondary).accessibilityHidden(true)
-            }
+            StatusLabel(.neutral, AppText.verdict(row.qualification.verdict), symbol: Self.symbol(row.qualification.verdict)).font(.callout)
         } else {
             Text.l10n(L10n.tr("app.volumes.bootVolume")).font(.callout).foregroundStyle(.secondary)
-        }
-    }
-
-    static func symbol(_ verdict: DriveRow.VaultVerdict) -> String {
-        switch verdict {
-        case .ready: "checkmark.circle.fill"
-        case .readyWithWarnings, .needsAttention: "exclamationmark.triangle.fill"
-        case .notUsable: "xmark.octagon.fill"
-        }
-    }
-
-    /// The verdict symbol's tint; the words beside it say the same.
-    static func tint(_ verdict: DriveRow.VaultVerdict) -> Color {
-        switch verdict {
-        case .ready: .green
-        case .readyWithWarnings, .needsAttention: .orange
-        case .notUsable: .red
         }
     }
 
@@ -205,14 +167,10 @@ struct ExternalDriveRowView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(verbatim: a.displayName).font(.headline)
-                Text(verbatim: DriveText.facts(a)).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                Text(verbatim: DriveText.facts(a)).font(.callout).foregroundStyle(.secondary).lineLimit(1).help(DriveText.facts(a))
                 Spacer()
             }
-            Label {
-                Text(verbatim: DriveText.verdict(a.verdict)).font(.callout)
-            } icon: {
-                Image(systemName: DriveText.symbol(a.verdict)).foregroundStyle(a.verdict == .ready ? Color.green : Color.secondary).accessibilityHidden(true)
-            }
+            StatusLabel(.driveVerdict(a.verdict), DriveText.verdict(a.verdict), symbol: DriveText.symbol(a.verdict)).font(.callout)
             // `DriveAssessment.shownRefusals` and `.volumeReasons`: Core chose what to say.
             ForEach(a.shownRefusals, id: \.self) { r in
                 Text(verbatim: DriveText.refusal(r)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -230,36 +188,29 @@ struct ExternalDriveRowView: View {
                     Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack {
-                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
-                        Button(L10n.tr("app.plan.copyCommand")) { actions.copyOwnershipCommand(mp) }
+                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }.actionButton().controlSize(.small)
+                        CopyCommandButton { actions.copyOwnershipCommand(mp) }
                     }
-                    .controlSize(.small)
                 }
             }
-            // R7-A (the user: "destacar como botão"): each action is a real bordered button, the recommended one prominent;
-            // the experimental marker beside them is a plain label (`MarkerBadges`), never shaped like a button.
+            // The user ("destacar como botão", R7-A/R7-B): each action is a bordered button with a verb title, at most one
+            // prominent per drive row (ruling B-1); the Experimental tag is on its own line above the options, never in the
+            // buttons' row, and what each option costs is a footnote under them.
             if a.verdict == .canBeUsed {
-                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }.modifier(DriveButtonStyle(prominent: a.useDriveIsPrimary))
+                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }.actionButton(prominent: a.useDriveIsPrimary)
             }
             if !a.commandOptions.isEmpty {
-                HStack(spacing: 8) {
-                    MarkerBadges(markers: [.experimental])
+                Tag.marker(.experimental)
+                HStack(spacing: Spacing.s) {
                     ForEach(a.commandOptions, id: \.self) { o in
-                        Button(DriveText.optionButton(o, recommended: a.isRecommended(o))) { actions.prepare(a, o) }
-                            .modifier(DriveButtonStyle(prominent: a.isRecommended(o)))
+                        Button(DriveText.optionButton(o)) { actions.prepare(a, o) }.actionButton(prominent: a.isRecommended(o))
                     }
+                }
+                if let note = DriveText.optionsFootnote(a) {
+                    Text(verbatim: note).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .padding(.vertical, 2)
-    }
-}
-
-/// A drive action's button (R7-A): bordered, or bordered and prominent for the one the drive's assessment recommends.
-struct DriveButtonStyle: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        if prominent { content.buttonStyle(.borderedProminent) } else { content.buttonStyle(.bordered) }
     }
 }

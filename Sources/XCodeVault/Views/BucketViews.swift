@@ -18,43 +18,7 @@ struct BucketHeaderView: View {
         .help(bucket.localizedTitle + "\n" + bucket.localizedUndoCost)
         .overlay(alignment: .leading) {
             // The bucket color as a fill, never as text.
-            RoundedRectangle(cornerRadius: 2).fill(bucket.color).frame(width: 4).accessibilityHidden(true)
-        }
-    }
-}
-
-/// A row's markers, in Core's order and words (`SavingsMarker`). The experimental marker is how rule 10 reaches every
-/// experimental row and sheet. R7-A (the user's check of R6: the marker "has the same layout" as a button): a marker is a
-/// plain label — its symbol and word in secondary color, with no capsule, no hover and no pointer — so it never looks like
-/// something to click. Every marker the same way: a badge never looks like a button.
-struct MarkerBadges: View {
-    let markers: [SavingsMarker]
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
-                Label {
-                    Text(verbatim: AppText.marker(marker))
-                } icon: {
-                    Image(systemName: Self.symbol(marker))
-                }
-                .labelStyle(.titleAndIcon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isStaticText)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    static func symbol(_ marker: SavingsMarker) -> String {
-        switch marker {
-        case .experimental: "flask"
-        case .losesUserData: "exclamationmark.triangle"
-        case .actsImmediately: "bolt"
-        case .newDataOnly: "arrow.forward.circle"
-        case .perItem: "number"
-        case .needsRoot: "lock"
+            RoundedRectangle(cornerRadius: Radius.swatch).fill(bucket.color).frame(width: 4).accessibilityHidden(true)
         }
     }
 }
@@ -94,11 +58,6 @@ struct PlanRowView: View {
         self.suggestion = suggestion
         self.showDrives = showDrives
     }
-    /// A moment of "Copied" after the button, said to VoiceOver too: feedback only, it decides nothing.
-    @State private var copied = false
-    /// Counts the clicks: each one restarts the moment (`.task(id:)` cancels the previous wait), and nothing outlives the view.
-    @State private var copies = 0
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -106,7 +65,7 @@ struct PlanRowView: View {
                 if row.option.appliesToExistingData {
                     Text(verbatim: ByteCount.format(row.bytes)).monospacedDigit().foregroundStyle(.secondary)
                 }
-                MarkerBadges(markers: SavingsMarker.markers(for: row))
+                MarkerTags(markers: SavingsMarker.markers(for: row))
                 Spacer(minLength: 0)
             }
             HStack(alignment: .firstTextBaseline) {
@@ -116,25 +75,12 @@ struct PlanRowView: View {
                     suggestionLine
                 }
                 Spacer()
-                Button {
-                    copy()
-                    copied = true
-                    copies += 1
-                    AccessibilityNotification.Announcement(L10n.tr("app.plan.copied")).post()
-                } label: {
-                    Label(copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                }
-                // Secondary to the command beside it (HIG review P4).
-                .buttonStyle(.bordered).controlSize(.small)
-                // Several rows, several buttons: VoiceOver hears whose command each one copies.
-                .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
-                .task(id: copies) {
-                    guard copies > 0 else { return }
-                    do { try await Task.sleep(for: .seconds(2)) } catch { return }  // cancelled: a newer click, or the view went away
-                    copied = false
-                }
+                // Secondary to the command beside it (HIG review P4). Several rows, several buttons: VoiceOver hears whose
+                // command each one copies.
+                CopyCommandButton(copy: copy, accessibilityLabel: L10n.tr("app.plan.copyCommand.a11y", row.categoryName))
                 if let run {
-                    Button(action: run) { Label(L10n.tr("app.plan.run"), systemImage: "play") }
+                    // Opens the Run sheet: bordered, with an ellipsis (R7-B, audit row 23).
+                    Button(action: run) { Label(L10n.tr("app.plan.run"), systemImage: "play") }.actionButton().controlSize(.small)
                         .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.run.a11y", row.categoryName)))
                 }
             }
@@ -144,8 +90,8 @@ struct PlanRowView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
+        .background(Tokens.surfaceCard, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Tokens.strokeHairline))
     }
 
     /// The second line under the command (R7-A): the command with the vault's folder in it — what **Copy Command** copies —
@@ -238,32 +184,14 @@ struct VaultStatusRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label {
-                Text(verbatim: AppText.vaultStatus(status)).font(.callout).fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: PlanView.vaultSymbol(status)).foregroundStyle(Self.tint(status)).accessibilityHidden(true)
-            }
+            StatusLabel(.vaultStatus(status), AppText.vaultStatus(status), symbol: PlanView.vaultSymbol(status)).font(.callout)
             if status == .noVault {
                 HStack(alignment: .firstTextBaseline) {
                     Text(verbatim: Self.initCommand).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                    Button {
-                        copy(Self.initCommand)
-                    } label: {
-                        Label(L10n.tr("app.plan.copy"), systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    CopyCommandButton { copy(Self.initCommand) }
                 }
                 .padding(.leading, 28)
             }
-        }
-    }
-
-    /// The symbol's tint; the words say the same.
-    static func tint(_ status: VaultStatus) -> Color {
-        switch status {
-        case .ready: .green
-        case .needsAttention: .orange
-        case .noVault, .offline: .secondary
         }
     }
 }
@@ -366,7 +294,7 @@ struct DeleteView: View {
             // Category names are the catalog's English: StorageCategory data, not app text (S4 Task 2).
             TableColumn(L10n.tr("app.column.category")) { Text(verbatim: $0.categoryName) }
             TableColumn(L10n.tr("app.delete.column.undo")) { a in Text(verbatim: list.undo(of: a).map(AppText.undoCost) ?? "") }
-            TableColumn(L10n.tr("app.delete.column.markers")) { MarkerBadges(markers: DeleteList.markers(for: $0)) }
+            TableColumn(L10n.tr("app.delete.column.markers")) { MarkerTags(markers: DeleteList.markers(for: $0)) }
             TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.path).font(.system(.body, design: .monospaced)) }
         } rows: {
             ForEach(list.groups) { group in
@@ -423,7 +351,7 @@ struct DeleteView: View {
     private func notesContent(_ plan: CleanPlan, _ list: DeleteList) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
+                ForEach(plan.warnings, id: \.self) { StatusLabel(.info, $0).font(.callout) }
                 privileged(plan)
                 otherTools(list)
                 skipped(plan)
@@ -445,7 +373,7 @@ struct DeleteView: View {
                     HStack(alignment: .firstTextBaseline) {
                         Text(verbatim: a.categoryName).bold()
                         // The helper's dyld verb is experimental wherever it appears (`app.clean.privileged.message`).
-                        MarkerBadges(markers: [.experimental])
+                        Tag.marker(.experimental)
                         Text(verbatim: ByteCount.format(a.bytes)).monospacedDigit().foregroundStyle(.secondary)
                         Spacer()
                         if let action = a.privilegedAction {
@@ -499,13 +427,19 @@ struct DeleteView: View {
     private func footer(_ list: DeleteList) -> some View {
         HStack {
             let chosen = list.deletable(selected: selection)
-            Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
+            if chosen.isEmpty {
+                // Why Delete Selected… is disabled, in visible text (R7-B, audit row 30).
+                Text.l10n(L10n.tr("app.clean.selectToDelete")).font(.footnote).foregroundStyle(.secondary)
+            } else {
+                Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
+            }
             // The CLI has --trash; without this the GUI was strictly more destructive than
             // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
             Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash).help(L10n.tr("app.clean.useTrash.help"))
             Spacer()
             // A destructive verb with ⌘⌫ (HIG review D1); it only opens the confirmation.
             Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) { confirm = true }
+                .actionButton()
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(chosen.isEmpty || model.isCleaning)
         }

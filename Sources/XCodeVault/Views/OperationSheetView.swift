@@ -23,27 +23,35 @@ struct OperationSheetView: View {
 
     var body: some View {
         if let s = model.operationSheet {
-            VStack(alignment: .leading, spacing: 14) {
-                header(s)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        switch s.phase {
-                        case .review: review(s)
-                        case .running: running(s)
-                        case .succeeded, .failed: finished(s)
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 14) {
+                    header(s)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            switch s.phase {
+                            case .review: review(s)
+                            case .running: running(s)
+                            case .succeeded, .failed: finished(s)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // R7-A: the review can be longer than the sheet (the user's 19: a warning cut off at the bottom). It
+                    // scrolls, with its scroller shown, and the footer below stays visible.
+                    .scrollIndicators(.visible)
+                    if s.phase != .review || !s.log.lines.isEmpty { log(s) }
                 }
-                // R7-A: the review can be longer than the sheet (the user's 19: a warning cut off at the bottom). It scrolls,
-                // with its scroller shown, and the buttons below stay visible.
-                .scrollIndicators(.visible)
-                if s.phase != .review || !s.log.lines.isEmpty { log(s) }
-                buttons(s)
+                .padding([.horizontal, .top], Spacing.xl)
+                .padding(.bottom, Spacing.m)
+                // R7-B (§3.7): a divider marks where the content ends and the footer begins.
+                Divider()
+                buttons(s).padding(.horizontal, Spacing.xl).padding(.vertical, Spacing.m)
             }
-            .padding(20)
             .frame(minWidth: 520, idealWidth: 560, minHeight: 260, idealHeight: Self.idealHeight)
             .interactiveDismissDisabled(model.isOperationRunning)
+            // Ruling B-2: Escape always closes the sheet, also when Cancel is the default (a destructive review); never
+            // while something runs (`closeOperationSheet` refuses then).
+            .onExitCommand { model.closeOperationSheet() }
             .onChange(of: s.stage) { _, stage in
                 // Phase changes and the end, never every line or percent (HIG review §4).
                 AccessibilityNotification.Announcement(OperationText.stage(stage)).post()
@@ -72,7 +80,7 @@ struct OperationSheetView: View {
             Text(verbatim: OperationText.title(s.kind)).font(.headline)
             // Rule 10: where the strategy is experimental, the badge is in the title, not a footnote. Every drive preparation
             // is experimental (R6, H17).
-            if s.showsExperimentalBadge { MarkerBadges(markers: [.experimental]) }
+            if s.showsExperimentalBadge { Tag.marker(.experimental) }
             Spacer(minLength: 0)
         }
     }
@@ -83,7 +91,7 @@ struct OperationSheetView: View {
     private func review(_ s: OperationSheetState) -> some View {
         if s.kind.isDriveKind { driveControls(s) } else { controls(s) }
         if s.exportedFirst {
-            Label(L10n.tr("app.run.exportedFirst"), systemImage: "checkmark.circle.fill").font(.callout)
+            StatusLabel(.success, L10n.tr("app.run.exportedFirst")).font(.callout)
         }
         if s.isPreviewing || s.preview == nil {
             HStack {
@@ -100,20 +108,11 @@ struct OperationSheetView: View {
                     Image(systemName: "folder.badge.plus").accessibilityHidden(true)
                 }
             }
-            if !p.blockers.isEmpty {
-                // The fix for a precondition the world changes — Xcode quit, the vault reconnected (review I3).
-                Button(L10n.tr("app.run.checkAgain")) { model.checkOperationAgain() }
-            }
-            ForEach(Array(p.warnings.enumerated()), id: \.offset) { _, w in
-                Label {
-                    InlineCodeText(w).font(.callout).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                }
-            }
+            // Core's warnings gate the decision: never folded, never clipped (§3.5). **Check Again** is in the footer, beside
+            // the reason it answers (R7-B, audit row 24).
+            ForEach(Array(p.warnings.enumerated()), id: \.offset) { _, w in NoticeRow(.warning, w) }
             if p.installerMissing {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text.l10n(L10n.tr("app.run.installerMissing")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                NoticeRow(.info, L10n.tr("app.run.installerMissing")) {
                     Button(L10n.tr("app.run.exportInstallerFirst")) { model.exportInstallerFirst() }
                 }
             }
@@ -141,7 +140,7 @@ struct OperationSheetView: View {
                         // R7-A: the verdict is said once, in the picker. Beside it, only when the chosen drive has a fix to
                         // make, a button that says what the fix is (`AppModel.destinationFix`).
                         if let fix = model.destinationFix, let title = DriveText.prepareTitle(fix.prepareAction) {
-                            Button(title) { model.prepareFromDestination(fix) }.disabled(s.offloadToReturnTo != nil)
+                            Button(title) { model.prepareFromDestination(fix) }.actionButton().disabled(s.offloadToReturnTo != nil)
                         }
                     }
                 }
@@ -179,7 +178,7 @@ struct OperationSheetView: View {
                             .help(s.inputs.folder ?? "")
                         Spacer(minLength: 0)
                         Button(L10n.tr("app.run.destination.chooseFolder")) { Task { await model.chooseOperationFolder() } }
-                            .disabled(s.offloadToReturnTo != nil)
+                            .actionButton().disabled(s.offloadToReturnTo != nil)
                     }
                 }
             }
@@ -230,7 +229,7 @@ struct OperationSheetView: View {
                 }
                 Spacer()
                 if let title = DriveText.prepareTitle(a.prepareAction) {
-                    Button(title) { model.prepareFromDestination(a) }.disabled(s.offloadToReturnTo != nil)
+                    Button(title) { model.prepareFromDestination(a) }.actionButton().disabled(s.offloadToReturnTo != nil)
                 }
             }
         }
@@ -289,12 +288,7 @@ struct OperationSheetView: View {
             Text(verbatim: L10n.tr("app.prep.mountsAs", m.mountPoint)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if m.isTaken {
-                Label {
-                    Text(verbatim: L10n.tr("app.prep.mountsAs.taken", m.mountPoint, m.actualMountPoint, m.suggestedName ?? ""))
-                        .font(.callout).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).accessibilityHidden(true)
-                }
+                NoticeRow(.warning, L10n.tr("app.prep.mountsAs.taken", m.mountPoint, m.actualMountPoint, m.suggestedName ?? ""))
             }
         }
     }
@@ -304,30 +298,20 @@ struct OperationSheetView: View {
     private func drivePlan(_ s: OperationSheetState) -> some View {
         if let plan = model.pendingDiskPlan {
             HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: plan.command).font(.system(.callout, design: .monospaced)).textSelection(.enabled).lineLimit(2)
+                Text(verbatim: plan.command).font(.system(.callout, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button(L10n.tr("app.plan.copyCommand")) { model.copyPreparationCommand() }
+                CopyCommandButton { model.copyPreparationCommand() }
             }
             Text.l10n(L10n.tr("app.prep.notSudo")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if !plan.destroys.isEmpty {
+                // What the erase destroys, as a danger notice (§3.6): every volume, with what it holds.
                 GroupBox {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label {
-                            Text.l10n(L10n.tr("app.prep.destroys.title")).bold()
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).accessibilityHidden(true)
-                        }
-                        ForEach(plan.destroys, id: \.id) { v in Text(verbatim: "• " + DriveText.destroyed(v)).font(.callout) }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    NoticeRow(.danger, L10n.tr("app.prep.destroys.title"), detail: plan.destroys.map { "• " + DriveText.destroyed($0) }.joined(separator: "\n"))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             if model.previewedDiskIsIndistinguishable {
-                Label {
-                    Text.l10n(L10n.tr("app.prep.identityWeak")).font(.callout).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).accessibilityHidden(true)
-                }
+                NoticeRow(.warning, L10n.tr("app.prep.identityWeak"))
             }
             if let name = plan.confirmationName {
                 Text(verbatim: L10n.tr("app.prep.typeName.prompt", name)).font(.callout)
@@ -357,7 +341,6 @@ struct OperationSheetView: View {
                     }
                 }
             }
-            Label(L10n.tr("app.run.cannotStop"), systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -391,7 +374,7 @@ struct OperationSheetView: View {
                     Text.l10n(L10n.tr("app.run.failed.seeDetails")).font(.callout).foregroundStyle(.secondary)
                 }
             } icon: {
-                Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+                StatusIcon(.blocker)
             }
             if let id = model.failedCopyLeftoverID {
                 // The partial copy the failure left on the vault, and the exact command that removes it (review I4).
@@ -401,14 +384,13 @@ struct OperationSheetView: View {
                     HStack {
                         Text(verbatim: command).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                         Spacer()
-                        Button(L10n.tr("app.plan.copyCommand")) { model.environment.copy(command) }
+                        CopyCommandButton { model.environment.copy(command) }
                     }
                 }
             }
         default:
             if let r = s.result {
-                Label(OperationText.done(r), systemImage: model.registrationFoldersError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .fixedSize(horizontal: false, vertical: true)
+                StatusLabel(model.registrationFoldersError == nil ? .success : .warning, OperationText.done(r))
             }
             if let why = model.registrationFoldersError {
                 InlineCodeText(why).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
@@ -418,7 +400,7 @@ struct OperationSheetView: View {
             if let made = model.madeVolume {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(verbatim: L10n.tr("app.run.done.useMadeVolume", made.volume.volumeName)).font(.callout).fixedSize(horizontal: false, vertical: true)
-                    Button(L10n.tr("app.drives.useDrive")) { model.useMadeVolume() }.buttonStyle(.bordered).disabled(model.isOperationRunning)
+                    Button(L10n.tr("app.drives.useDrive")) { model.useMadeVolume() }.actionButton().disabled(model.isOperationRunning)
                 }
             }
         }
@@ -441,7 +423,7 @@ struct OperationSheetView: View {
                             Text.l10n(L10n.tr("app.run.removeOriginal.failed") + " " + L10n.tr("app.run.failed.seeDetails")).font(.callout)
                                 .fixedSize(horizontal: false, vertical: true)
                         } icon: {
-                            Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+                            StatusIcon(.blocker)
                         }
                     }
                     if model.removalNeedsConfirmation {
@@ -453,7 +435,11 @@ struct OperationSheetView: View {
                         ProgressView().progressViewStyle(.linear)
                     }
                     Button(L10n.tr("app.run.removeOriginal"), role: .destructive) { confirmsRemoval = true }
-                        .disabled(!model.canRemoveOriginal)
+                        .actionButton().disabled(!model.canRemoveOriginal)
+                    // Why it is disabled, in visible text (ruling B-3).
+                    if let why = model.removeOriginalDisabledReason {
+                        Text(verbatim: why).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         case .undo, .undoing, .undoFailed:
@@ -462,7 +448,7 @@ struct OperationSheetView: View {
                 if case .undoFailed = s.secondStep {
                     Text.l10n(L10n.tr("app.run.undoFailed") + " " + L10n.tr("app.run.failed.seeDetails")).font(.callout).foregroundStyle(.secondary)
                 }
-                Button(OperationText.undoAction(restoring: previous)) { Task { await model.undoLocation() } }.disabled(model.isOperationRunning)
+                Button(OperationText.undoAction(restoring: previous)) { Task { await model.undoLocation() } }.actionButton().disabled(model.isOperationRunning)
             }
         case .undone:
             Label(OperationText.undone(restored: model.undoRestores ?? nil), systemImage: "arrow.uturn.backward.circle")
@@ -484,14 +470,14 @@ struct OperationSheetView: View {
                             ForEach(s.log.droppedCount..<s.log.total, id: \.self) { n in
                                 let line = s.log.lines[n - s.log.droppedCount]
                                 Text(verbatim: line.rendered).font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(line.stream == .stderr ? Color.red : Color.primary)
+                                    .foregroundStyle(line.stream == .stderr ? Tokens.logStderr : Color.primary)
                             }
                         }
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(height: 180)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 4))
+                    .background(Tokens.surfaceCode, in: RoundedRectangle(cornerRadius: Radius.code))
                     .onChange(of: s.log.total) { _, total in
                         if followsOutput && total > 0 { proxy.scrollTo(total - 1, anchor: .bottom) }
                     }
@@ -509,33 +495,42 @@ struct OperationSheetView: View {
 
     // MARK: - Buttons
 
-    @ViewBuilder
+    /// The footer (R7-B, §3.7): the reason the primary is disabled (or that the run cannot be stopped) and tertiary actions
+    /// on the leading side; Cancel, then the primary, rightmost. One default button at most.
     private func buttons(_ s: OperationSheetState) -> some View {
-        HStack {
-            if !model.canConfirmOperation, s.phase == .review, let first = model.operationBlockers.first {
-                Text(verbatim: AppModel.blockerText(first)).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+        SheetFooter(reason: model.operationFooterReason) {
+            if model.offersCheckAgain {
+                // The fix for a precondition the world changes — Xcode quit, the vault reconnected (review I3).
+                Button(L10n.tr("app.run.checkAgain")) { model.checkOperationAgain() }.actionButton().controlSize(.small)
             }
-            Spacer()
+            switch s.phase {
+            case .running:
+                StatusLabel(.neutral, L10n.tr("app.run.cannotStop"), symbol: "info.circle").font(.footnote)
+            case .succeeded, .failed:
+                if model.offersBackToOffload {
+                    Button(L10n.tr("app.run.backToOffload")) { model.backToOffload() }.actionButton()
+                }
+                Button(L10n.tr("app.run.showInHistory")) { model.showHistoryFromOperation() }.actionButton().disabled(model.isOperationRunning)
+            case .review:
+                EmptyView()
+            }
+        } trailing: {
             switch s.phase {
             case .review:
                 if s.kind.deletesData {
-                    // Deletes data here: destructive, and not the default — Cancel is (HIG).
+                    // Deletes data here (ruling B-2, ADR-0012): Cancel stays the default, so Return cancels; Escape closes
+                    // the sheet too (`onExitCommand`). The destructive verb is bordered and never the default.
                     Button(L10n.tr("app.action.cancel")) { model.closeOperationSheet() }.keyboardShortcut(.defaultAction)
                     Button(model.operationConfirmTitle, role: .destructive) { Task { await model.runOperation() } }
-                        .disabled(!model.canConfirmOperation)
+                        .actionButton().disabled(!model.canConfirmOperation)
                 } else {
-                    Button(L10n.tr("app.action.cancel")) { model.closeOperationSheet() }.keyboardShortcut(.cancelAction)
+                    Button(L10n.tr("app.action.cancel"), role: .cancel) { model.closeOperationSheet() }.keyboardShortcut(.cancelAction)
                     Button(model.operationConfirmTitle) { Task { await model.runOperation() } }
                         .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).disabled(!model.canConfirmOperation)
                 }
             case .running:
                 EmptyView()
             case .succeeded, .failed:
-                if model.offersBackToOffload {
-                    Button(L10n.tr("app.run.backToOffload")) { model.backToOffload() }
-                }
-                Button(L10n.tr("app.run.showInHistory")) { model.showHistoryFromOperation() }.disabled(model.isOperationRunning)
                 Button(L10n.tr("app.run.done")) { model.closeOperationSheet() }.keyboardShortcut(.defaultAction).disabled(model.isOperationRunning)
             }
         }
@@ -600,12 +595,7 @@ struct InterruptedMigrationsBanner: View {
         if !items.isEmpty {
             GroupBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label {
-                        Text.l10n(L10n.tr("app.run.interrupted.title")).bold()
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    }
-                    Text.l10n(L10n.tr("app.run.interrupted.detail")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    NoticeRow(.warning, L10n.tr("app.run.interrupted.title"), detail: L10n.tr("app.run.interrupted.detail"))
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(items) { item in
@@ -614,8 +604,7 @@ struct InterruptedMigrationsBanner: View {
                                     HStack {
                                         Text(verbatim: command).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                                         Spacer()
-                                        Button(L10n.tr("app.plan.copyCommand")) { copy(command) }
-                                            .accessibilityLabel(Text(verbatim: L10n.tr("app.run.interrupted.copy.a11y", command)))
+                                        CopyCommandButton(copy: { copy(command) }, accessibilityLabel: L10n.tr("app.run.interrupted.copy.a11y", command))
                                     }
                                 }
                             }

@@ -159,6 +159,32 @@ extension AppModel {
         return p.blockers.isEmpty && p.prepared != nil && typedNameNeeded == nil
     }
 
+    /// The footer's leading text (R7-B, §3.7, ruling B-3): while the review cannot be confirmed, why — the first blocker in
+    /// words, visible, never only a tooltip. Nil otherwise.
+    var operationFooterReason: String? {
+        guard let s = operationSheet, s.phase == .review, !canConfirmOperation, let first = operationBlockers.first else { return nil }
+        return Self.blockerText(first)
+    }
+
+    /// **Check Again** in the footer, beside that reason: only while the review is blocked by something the world can
+    /// change (review I3).
+    var offersCheckAgain: Bool {
+        guard let s = operationSheet, s.phase == .review, let p = s.preview else { return false }
+        return !p.blockers.isEmpty
+    }
+
+    /// Why **Remove Original…** is disabled, in visible text (ruling B-3): the confirmation checkbox is not checked. Nil
+    /// when it is enabled, or when it is disabled for a reason the sheet already shows (running, removed).
+    var removeOriginalDisabledReason: String? {
+        guard let s = operationSheet, !canRemoveOriginal, !isOperationRunning, case .copied(let outcome)? = s.result, !outcome.sourceRemoved else {
+            return nil
+        }
+        switch s.secondStep {
+        case .removeOriginal, .removeFailed: return removalNeedsConfirmation && !s.confirmRemoval ? L10n.tr("app.run.removeOriginal.needsConfirm") : nil
+        default: return nil
+        }
+    }
+
     /// A blocker as the sheet says it. Core's own sentences are English prose and are shown as given.
     static func blockerText(_ blocker: OperationBlocker) -> String {
         switch blocker {

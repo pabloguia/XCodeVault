@@ -52,31 +52,26 @@ struct StorageView: View {
         .searchable(text: $model.storageQuery, placement: .toolbar, prompt: Text(verbatim: L10n.tr("app.search.storage")))
     }
 
-    /// "Filtering: Delete, Park" with an × that clears it, and **Show All** beside it: always visible while filtered.
+    /// "Filtering: Delete, Park" as plain text with the filter symbol, and one **Show All** beside it: always visible while
+    /// filtered. No capsule and no second clear (R7-B, audit row 9): one way to clear, and nothing that reads like a chip.
     private var filterSummary: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 4) {
-                Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary).accessibilityHidden(true)
-                Text(verbatim: AppText.storageFilterSummary(model.storageFilterBuckets, query: model.storageQuery)).font(.callout).lineLimit(1)
-                Button {
-                    model.clearStorageFilter()
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.filter.clear")))
-                .help(L10n.tr("app.storage.filter.clear"))
+        HStack(spacing: Spacing.s) {
+            Label {
+                Text(verbatim: AppText.storageFilterSummary(model.storageFilterBuckets, query: model.storageQuery)).lineLimit(1)
+            } icon: {
+                Image(systemName: "line.3.horizontal.decrease.circle").accessibilityHidden(true)
             }
-            .padding(.horizontal, 8).padding(.vertical, 2)
-            .background(.quaternary, in: Capsule())
-            Button(L10n.tr("app.storage.filter.clear")) { model.clearStorageFilter() }
+            .font(.callout).foregroundStyle(.secondary)
+            .help(AppText.storageFilterSummary(model.storageFilterBuckets, query: model.storageQuery))
+            Button(L10n.tr("app.storage.filter.clear")) { model.clearStorageFilter() }.actionButton().controlSize(.small)
         }
     }
 
-    /// One toggle per option with rows: its symbol, name and size. On when the table shows that option; the bars say the
-    /// same. Keyboard and VoiceOver reach the filter here, without a pointer.
+    /// One filter chip per option with rows (R7-B, §3.3): its symbol, name and size, a checkmark and an accent outline when
+    /// on — never a button's look. On when the table shows that option; the bars say the same. Keyboard and VoiceOver reach
+    /// the filter here, without a pointer.
     private func legend(_ bars: [StorageTable.BucketBar]) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Spacing.s) {
             ForEach(bars) { bar in
                 Toggle(isOn: Binding(get: { model.storageBucketFilter.contains(bar.bucket) }, set: { _ in model.toggleStorageBucket(bar.bucket) })) {
                     HStack(spacing: 4) {
@@ -85,8 +80,7 @@ struct StorageView: View {
                         Text(verbatim: ByteCount.format(bar.bytes)).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(.button)
-                .controlSize(.small)
+                .toggleStyle(FilterChipStyle())
                 .help(bar.bucket.localizedTitle)
             }
             Spacer(minLength: 0)
@@ -116,7 +110,7 @@ struct StorageView: View {
                 // The strategy's name in words, and the experimental badge every experimental row carries (rule 10).
                 HStack(spacing: 4) {
                     Text(verbatim: row.strategy.map(AppText.strategy) ?? "")
-                    if row.isExperimental { MarkerBadges(markers: [.experimental]) }
+                    if row.isExperimental { Tag.marker(.experimental) }
                 }
             }
             TableColumn(L10n.tr("app.column.path"), sortUsing: StorageTable.Column.path.comparator()) { row in
@@ -206,7 +200,7 @@ struct SimulatorsView: View {
             if !bars.isEmpty { SimulatorsChartView.legend.padding(.leading, 8) }
             Spacer(minLength: 0)
             if !model.simulatorSelection.isEmpty {
-                Button(L10n.tr("app.simulators.clearSelection")) { model.clearSimulatorSelection() }
+                Button(L10n.tr("app.simulators.clearSelection")) { model.clearSimulatorSelection() }.actionButton().controlSize(.small)
             }
         }
         if bars.isEmpty {

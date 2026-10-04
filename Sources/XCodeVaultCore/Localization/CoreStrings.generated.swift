@@ -4,6 +4,20 @@
 extension L10nCatalog {
     static let core = L10nCatalog(
         strings: [
+            "app.a11y.off": [
+                "en": "Off",
+                "pt-BR": "Desativado",
+                "es": "Desactivado",
+                "ja": "オフ",
+                "zh-Hans": "关",
+            ],
+            "app.a11y.on": [
+                "en": "On",
+                "pt-BR": "Ativado",
+                "es": "Activado",
+                "ja": "オン",
+                "zh-Hans": "开",
+            ],
             "app.access.fda.action.openSettings": [
                 "en": "Open System Settings",
                 "pt-BR": "Abrir Ajustes do Sistema",
@@ -319,6 +333,13 @@ extension L10nCatalog {
                 "ja": "ゴミ箱には入れず、削除します。キャッシュが作り直されるまでシミュレータの動作が遅くなることがあり、何が作り直すかはまだわかっていません。Xcode、シミュレータ、ビルドのいずれかが実行中の場合、XCodeVault は実行しません。",
                 "zh-Hans": "它会被删除，而不是移到废纸篓。在缓存重建之前，模拟器可能运行较慢，而由什么重建它尚不清楚。当 Xcode、模拟器或构建正在运行时，XCodeVault 会拒绝执行。",
             ],
+            "app.clean.selectToDelete": [
+                "en": "Select items to delete.",
+                "pt-BR": "Selecione itens para apagar.",
+                "es": "Selecciona elementos para eliminar.",
+                "ja": "削除する項目を選択してください。",
+                "zh-Hans": "选择要删除的项目。",
+            ],
             "app.clean.skipped": [
                 "en": "Skipped: %@",
                 "pt-BR": "Ignorado: %@",
@@ -558,11 +579,11 @@ extension L10nCatalog {
                 "zh-Hans": "抹掉磁盘…",
             ],
             "app.drives.fix.eraseVolume": [
-                "en": "Erase the Volume…",
-                "pt-BR": "Apagar o Volume…",
-                "es": "Borrar el volumen…",
-                "ja": "ボリュームを消去…",
-                "zh-Hans": "抹掉宗卷…",
+                "en": "Erase “%@”…",
+                "pt-BR": "Apagar “%@”…",
+                "es": "Borrar «%@»…",
+                "ja": "「%@」を消去…",
+                "zh-Hans": "抹掉“%@”…",
             ],
             "app.drives.none": [
                 "en": "No external drives are connected.",
@@ -570,6 +591,27 @@ extension L10nCatalog {
                 "es": "No hay discos externos conectados.",
                 "ja": "外部ドライブが接続されていません。",
                 "zh-Hans": "未连接外置驱动器。",
+            ],
+            "app.drives.options.addErasesNothing": [
+                "en": "Adding a volume or a partition erases nothing.",
+                "pt-BR": "Adicionar um volume ou uma partição não apaga nada.",
+                "es": "Añadir un volumen o una partición no borra nada.",
+                "ja": "ボリュームやパーティションの追加では何も消去しません。",
+                "zh-Hans": "添加宗卷或分区不会抹掉任何内容。",
+            ],
+            "app.drives.options.eraseDeletes": [
+                "en": "An Erase option deletes everything on that volume or disk; its sheet lists what and asks you to type the name.",
+                "pt-BR": "Uma opção Apagar apaga tudo nesse volume ou disco; a janela dela lista o quê e pede que você digite o nome.",
+                "es": "Una opción Borrar elimina todo lo que hay en ese volumen o disco; su hoja indica qué y te pide escribir el nombre.",
+                "ja": "「消去」の項目は、そのボリュームやディスクの内容をすべて削除します。シートで対象を示し、名前の入力を求めます。",
+                "zh-Hans": "“抹掉”选项会删除该宗卷或磁盘上的所有内容；其表单会列出内容并要求你输入名称。",
+            ],
+            "app.drives.options.recommended": [
+                "en": "“%@” is recommended: it erases nothing.",
+                "pt-BR": "“%@” é o recomendado: não apaga nada.",
+                "es": "Se recomienda «%@»: no borra nada.",
+                "ja": "「%@」がおすすめです。何も消去しません。",
+                "zh-Hans": "推荐“%@”：它不抹掉任何内容。",
             ],
             "app.drives.ownership.detail": [
                 "en": "Ownership is ignored on “%@”. In Finder, choose File ▸ Get Info and turn off “Ignore ownership on this volume” (Finder asks for your password), or copy the command for Terminal.",
@@ -1194,13 +1236,6 @@ extension L10nCatalog {
                 "ja": "コピーしました",
                 "zh-Hans": "已拷贝",
             ],
-            "app.plan.copy": [
-                "en": "Copy",
-                "pt-BR": "Copiar",
-                "es": "Copiar",
-                "ja": "コピー",
-                "zh-Hans": "拷贝",
-            ],
             "app.plan.copyCommand": [
                 "en": "Copy Command",
                 "pt-BR": "Copiar Comando",
@@ -1684,19 +1719,19 @@ extension L10nCatalog {
                 "ja": "“%@” を消去",
                 "zh-Hans": "抹掉“%@”",
             ],
-            "app.run.confirm.exportRuntime": [
-                "en": "Export the %1$@ Installer to %2$@",
-                "pt-BR": "Exportar o Instalador de %1$@ para %2$@",
-                "es": "Exportar el instalador de %1$@ a %2$@",
-                "ja": "%1$@ のインストーラを %2$@ に書き出す",
-                "zh-Hans": "将 %1$@ 安装器导出到 %2$@",
+            "app.run.confirm.exportInstaller": [
+                "en": "Export the %@ Installer",
+                "pt-BR": "Exportar o Instalador de %@",
+                "es": "Exportar el instalador de %@",
+                "ja": "%@ のインストーラを書き出す",
+                "zh-Hans": "导出 %@ 安装器",
             ],
             "app.run.confirm.externalizeArchives": [
-                "en": "Copy %1$@ of Archives to the vault %2$@",
-                "pt-BR": "Copiar %1$@ de Archives para o disco-cofre %2$@",
-                "es": "Copiar %1$@ de Archives al disco bóveda %2$@",
-                "ja": "Archives %1$@ を保管庫 %2$@ にコピー",
-                "zh-Hans": "将 %1$@ 的 Archives 拷贝到保险库 %2$@",
+                "en": "Copy %1$@ of Archives to %2$@",
+                "pt-BR": "Copiar %1$@ de Archives para %2$@",
+                "es": "Copiar %1$@ de Archives a %2$@",
+                "ja": "Archives %1$@ を %2$@ にコピー",
+                "zh-Hans": "将 %1$@ 的 Archives 拷贝到 %2$@",
             ],
             "app.run.confirm.offloadRuntime": [
                 "en": "Delete Runtime %1$@ (%2$@) from This Mac",
@@ -1712,26 +1747,19 @@ extension L10nCatalog {
                 "ja": "実行",
                 "zh-Hans": "运行",
             ],
-            "app.run.confirm.setArchives": [
-                "en": "Point Archives at %@",
-                "pt-BR": "Apontar Archives para %@",
-                "es": "Apuntar Archives a %@",
-                "ja": "Archives を %@ に設定",
-                "zh-Hans": "将 Archives 指向 %@",
-            ],
-            "app.run.confirm.setDerivedData": [
-                "en": "Point DerivedData at %@",
-                "pt-BR": "Apontar DerivedData para %@",
-                "es": "Apuntar DerivedData a %@",
-                "ja": "DerivedData を %@ に設定",
-                "zh-Hans": "将 DerivedData 指向 %@",
-            ],
             "app.run.confirm.useDrive": [
                 "en": "Use “%@” as a Vault",
                 "pt-BR": "Usar “%@” como Disco-Cofre",
                 "es": "Usar “%@” como disco bóveda",
                 "ja": "“%@” を保管庫として使用",
                 "zh-Hans": "将“%@”用作保险库",
+            ],
+            "app.run.confirm.useFolder": [
+                "en": "Use This Folder",
+                "pt-BR": "Usar Esta Pasta",
+                "es": "Usar esta carpeta",
+                "ja": "このフォルダを使用",
+                "zh-Hans": "使用此文件夹",
             ],
             "app.run.copyLog": [
                 "en": "Copy Log",
@@ -2110,6 +2138,13 @@ extension L10nCatalog {
                 "es": "El original no se eliminó.",
                 "ja": "元のデータは削除されませんでした。",
                 "zh-Hans": "原件未被移除。",
+            ],
+            "app.run.removeOriginal.needsConfirm": [
+                "en": "Check the box above to remove the original.",
+                "pt-BR": "Marque a caixa acima para remover o original.",
+                "es": "Marca la casilla de arriba para eliminar el original.",
+                "ja": "元のデータを削除するには、上のチェックボックスをオンにしてください。",
+                "zh-Hans": "勾选上方的复选框以移除原件。",
             ],
             "app.run.showDetails": [
                 "en": "Show Details",

@@ -47,7 +47,7 @@ struct HealthSummaryLine: View {
                     Text(verbatim: AppText.healthCount(item.severity, item.count))
                 } icon: {
                     // The word is next to it: the symbol is not said twice.
-                    Image(systemName: item.severity.symbolName).foregroundStyle(HealthCardView.tint(item.severity)).accessibilityHidden(true)
+                    StatusIcon(.severity(item.severity))
                 }
             }
         }
@@ -64,22 +64,13 @@ struct HealthCardView: View {
     let perform: @MainActor (PrivilegedAction) -> Void
     @State private var showsDetails = false
 
-    /// The severity symbol's tint. It repeats the word next to it, never replaces it.
-    static func tint(_ severity: Finding.Severity) -> Color {
-        switch severity {
-        case .critical, .error: .red
-        case .warning: .orange
-        case .info: .secondary
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Label {
                     Text(verbatim: AppText.severity(card.severity)).font(.caption).bold()
                 } icon: {
-                    Image(systemName: card.severity.symbolName).foregroundStyle(Self.tint(card.severity)).accessibilityHidden(true)
+                    StatusIcon(.severity(card.severity))
                 }
                 Text(verbatim: card.title).bold().fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
@@ -109,8 +100,8 @@ struct HealthCardView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+        .background(Tokens.surfaceCard, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Tokens.strokeHairline))
     }
 }
 
@@ -150,7 +141,7 @@ struct HealthDetailsView: View {
                 Text(verbatim: path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if let evidence = details.evidence {
-                Text.l10n(L10n.tr("app.doctor.evidence", evidence)).font(.caption2).foregroundStyle(.secondary)
+                Text.l10n(L10n.tr("app.doctor.evidence", evidence)).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -208,7 +199,7 @@ struct HistoryView: View {
     private func table(_ sections: [JournalTimeline.DaySection]) -> some View {
         Table(of: JournalTimeline.Row.self, selection: $selection) {
             TableColumn(L10n.tr("app.column.when")) { Text(verbatim: AppText.time($0.started)).monospacedDigit() }.width(min: 56, ideal: 72)
-            TableColumn(L10n.tr("app.column.kind")) { HistoryKindBadge(kind: $0.kind) }.width(min: 100, ideal: 140)
+            TableColumn(L10n.tr("app.column.kind")) { Tag.historyKind($0.kind) }.width(min: 100, ideal: 140)
             TableColumn(L10n.tr("app.column.state")) { HistoryOutcomeLabel(outcome: $0.outcome) }.width(min: 90, ideal: 120)
             TableColumn(L10n.tr("app.column.summary")) { HistorySummaryCell(row: $0) }
             TableColumn(L10n.tr("app.column.size")) { row in
@@ -230,24 +221,17 @@ struct HistoryView: View {
     }
 }
 
-/// A History row's state: its symbol, tinted for a failed (red) or interrupted (orange) operation (HIG review HI2), and its
-/// word, which always says it.
+/// A History row's state (HIG review HI2): a failure and an interruption as their status symbols (`StatusKind
+/// .historyOutcome`), every other state as its own neutral symbol, and its word, which always says it.
 struct HistoryOutcomeLabel: View {
     let outcome: JournalTimeline.Outcome
 
     var body: some View {
+        let kind = StatusKind.historyOutcome(outcome)
         Label {
             Text(verbatim: AppText.historyOutcome(outcome)).lineLimit(1)
         } icon: {
-            Image(systemName: outcome.symbolName).foregroundStyle(Self.tint(outcome)).accessibilityHidden(true)
-        }
-    }
-
-    static func tint(_ outcome: JournalTimeline.Outcome) -> Color {
-        switch outcome {
-        case .failed: .red
-        case .interrupted: .orange
-        default: .secondary
+            StatusIcon(kind, symbol: kind == .neutral ? outcome.symbolName : nil)
         }
     }
 }
@@ -265,20 +249,5 @@ struct HistorySummaryCell: View {
             }
         }
         .help([row.summary, row.endSummary].compactMap { $0 }.joined(separator: "\n"))
-    }
-}
-
-/// A kind at a glance: its symbol in its color and its short name, on a tinted capsule. The name is `.primary` text.
-struct HistoryKindBadge: View {
-    let kind: JournalTimeline.Kind
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: kind.symbolName).foregroundStyle(kind.color).accessibilityHidden(true)
-            Text(verbatim: AppText.historyKind(kind)).font(.caption).lineLimit(1)
-        }
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(kind.color.opacity(0.14), in: Capsule())
-        .overlay(Capsule().strokeBorder(kind.color.opacity(0.7)))
     }
 }

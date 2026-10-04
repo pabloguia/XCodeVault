@@ -506,7 +506,7 @@ final class R4AppModelTests: XCTestCase {
                         ForEach(section.rows) { row in
                             HStack(spacing: 10) {
                                 Text(verbatim: AppText.time(row.started)).monospacedDigit()
-                                HistoryKindBadge(kind: row.kind)
+                                Tag.historyKind(row.kind)
                                 HistoryOutcomeLabel(outcome: row.outcome)
                                 HistorySummaryCell(row: row)
                             }

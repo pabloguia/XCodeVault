@@ -99,7 +99,7 @@ final class R7AAppTests: XCTestCase {
         XCTAssertEqual(DriveText.prepareTitle(.useDrive), "Use This Drive…")
         XCTAssertEqual(DriveText.prepareTitle(.prepare(.addVolume(container: "d"))), "Add a Case-insensitive Volume…")
         XCTAssertEqual(DriveText.prepareTitle(.prepare(.addPartition(after: "d", freeBytes: 1))), "Add a Case-insensitive Partition…")
-        XCTAssertEqual(DriveText.prepareTitle(.prepare(.eraseVolume(volume: "d", name: "n"))), "Erase the Volume…")
+        XCTAssertEqual(DriveText.prepareTitle(.prepare(.eraseVolume(volume: "d", name: "n"))), "Erase “n”…")
         XCTAssertEqual(DriveText.prepareTitle(.prepare(.eraseDisk(disk: "d"))), "Erase the Disk…")
         XCTAssertNil(DriveText.prepareTitle(.prepare(.enableOwnership(mountPoint: "/m"))), "runs nothing: Drives explains it")
         XCTAssertNil(DriveText.prepareTitle(.nothing))

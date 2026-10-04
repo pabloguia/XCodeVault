@@ -213,9 +213,7 @@ struct FeedbackBanner: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: feedback.kind == .success ? "checkmark.circle.fill" : "info.circle.fill")
-                .foregroundStyle(feedback.kind == .success ? Color.green : Color.accentColor)
-                .accessibilityHidden(true)
+            StatusIcon(.feedback(feedback.kind))
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: feedback.title).font(.callout).bold()
                 ForEach(Array(feedback.detail.enumerated()), id: \.offset) { _, line in
@@ -225,7 +223,7 @@ struct FeedbackBanner: View {
             }
             Spacer(minLength: 8)
             Button(action: dismiss) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).minimumTarget()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: L10n.tr("app.feedback.dismiss")))

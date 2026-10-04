@@ -153,6 +153,12 @@ public enum BarChartLayout {
     /// The room kept after the longest bar for its size, so the size is never pushed out of the row.
     public static let sizeLabelWidth: Double = 84
 
+    /// The label column's width (R7-B): the longest label as measured on one line, never wider than `maximum` — a longer
+    /// one wraps inside it — and never narrower than `minimum`.
+    public static func labelColumnWidth(_ measured: [Double], minimum: Double = 40, maximum: Double = labelColumnMaxWidth) -> Double {
+        min(maximum, max(minimum, measured.max() ?? minimum))
+    }
+
     /// A bar's length as a fraction of the longest bar's: 0 for nothing measured, otherwise at least `minimum` so a bar
     /// of a few kilobytes beside one of tens of gigabytes is still seen. Never more than 1.
     public static func fraction(_ bytes: UInt64, largest: UInt64, minimum: Double = 0.01) -> Double {
