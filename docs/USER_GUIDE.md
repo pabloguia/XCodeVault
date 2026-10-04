@@ -99,9 +99,10 @@ it changes is journaled and shows in History.
    log: each command as it runs and everything it prints, following the newest line while **Follow output** is on.
    **Copy Log** copies it; the whole log is also kept in a file whose path the sheet shows, also after it ends. It
    cannot be stopped from the app once it starts, and there is no rescan while it runs. Quitting depends on what it is
-   doing: while it copies, verifies or removes an original, or exports an installer, the app offers only **Keep
-   Running** — stopping there would leave a half-written copy, or an export nobody has tested stopping. While it
-   deletes a runtime or changes a folder, **Stop and Quit** stops the command, waits for it to end, records the
+   doing: while it copies, verifies or removes an original, exports an installer or offloads a runtime, the app offers
+   only **Keep Running** — stopping there would leave a half-written copy, an export nobody has tested stopping, or an
+   offload whose runtime may already be gone while its record says it failed. While it deletes a runtime (Delete) or
+   changes a folder, **Stop and Quit** stops the command, waits for it to end, records the
    operation as failed, and then quits.
 
 When it ends the sheet says what happened, with **Show in History**. After Archives are copied and verified, **Remove
