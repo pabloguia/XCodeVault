@@ -42,19 +42,22 @@ extension AppModel {
         return out
     }
 
-    /// Runs the review step for the sheet's current choices, off the main actor. A preview for choices that changed while
-    /// it ran is dropped: the next one is coming.
+    /// Runs the review step for the sheet's current choices, off the cooperative pool. A preview for choices that changed
+    /// while it ran is dropped: the next one is coming.
     func previewOperation() async {
         guard let sheet = operationSheet, sheet.phase == .review else { return }
         let missing = Self.inputBlockers(sheet.kind, sheet.inputs)
         guard missing.isEmpty else {
             operationSheet?.preview = OperationPreview(blockers: missing)
+            // A preview still in flight for the earlier choices is dropped when it returns; nothing else would clear
+            // this (review I2).
+            operationSheet?.isPreviewing = false
             return
         }
         operationSheet?.isPreviewing = true
         let preview = environment.operations.preview
         let (kind, inputs, id) = (sheet.kind, sheet.inputs, sheet.id)
-        let result = await Task.detached(priority: .userInitiated) { preview(kind, inputs) }.value
+        let result = await Self.offThePool { preview(kind, inputs) }
         guard operationSheet?.id == id, operationSheet?.kind == kind, operationSheet?.inputs == inputs, operationSheet?.phase == .review else { return }
         operationSheet?.preview = result
         operationSheet?.isPreviewing = false
@@ -69,9 +72,27 @@ extension AppModel {
         Task { await previewOperation() }
     }
 
+    /// **Check Again** (review I3): the same choices, reviewed again — Xcode quit, the vault came back, space was freed.
+    func checkOperationAgain() {
+        guard operationSheet?.phase == .review else { return }
+        operationSheet?.preview = nil
+        Task { await previewOperation() }
+    }
+
+    /// After a scan, while the sheet reviews (review I3): a vault no longer usable is no longer chosen, and the review
+    /// runs again on what the scan found.
+    func revalidateOperationAfterScan() {
+        guard let s = operationSheet, s.phase == .review else { return }
+        if let uuid = s.inputs.vaultUUID, !usableVaults.contains(where: { $0.volume.volumeUUID == uuid }) {
+            updateOperationInputs { $0.vaultUUID = nil }
+        } else {
+            checkOperationAgain()
+        }
+    }
+
     /// **Choose…**: the folder panel (behind `AppEnvironment`), then a new review.
-    func chooseOperationFolder() {
-        guard let path = environment.operations.chooseFolder(operationSheet?.inputs.folder ?? folderPanelStart) else { return }
+    func chooseOperationFolder() async {
+        guard let path = await environment.operations.chooseFolder(operationSheet?.inputs.folder ?? folderPanelStart) else { return }
         updateOperationInputs { $0.folder = path }
     }
 
@@ -91,6 +112,7 @@ extension AppModel {
         case .chooseFolder: L10n.tr("app.run.blocker.chooseFolder")
         case .chooseRuntime: L10n.tr("app.run.blocker.chooseRuntime")
         case .acknowledgeTests: L10n.tr("app.run.blocker.acknowledgeTests")
+        case .simulatorWorkRunning: L10n.tr("app.run.blocker.simulatorWork")
         case .core(let why): why
         }
     }
@@ -109,6 +131,26 @@ extension AppModel {
         Task { await previewOperation() }
     }
 
+    /// Whether **Back to Offload** is offered: an export offload asked for failed (review M9).
+    var offersBackToOffload: Bool {
+        guard let s = operationSheet, s.offloadToReturnTo != nil, case .failed = s.phase else { return false }
+        return true
+    }
+
+    /// **Back to Offload**: offload's review again, with its choices; the log is kept.
+    func backToOffload() {
+        guard offersBackToOffload, var s = operationSheet, let back = s.offloadToReturnTo else { return }
+        s.kind = .offloadRuntime
+        s.inputs = back
+        s.offloadToReturnTo = nil
+        s.phase = .review
+        s.stage = .planning
+        s.result = nil
+        s.preview = nil
+        operationSheet = s
+        Task { await previewOperation() }
+    }
+
     // MARK: - Running
 
     /// Whether something is running: the operation, or its second step. What the quit guard asks about.
@@ -117,13 +159,55 @@ extension AppModel {
         return s.phase == .running || s.secondStep == .removingOriginal || s.secondStep == .undoing
     }
 
-    /// Quitting asks first while this is true (`AppDelegate.applicationShouldTerminate`).
-    var quitNeedsConfirmation: Bool { isOperationRunning }
-
-    /// The journal ids of what runs now, which the History and the banner treat as in progress.
+    /// The journal ids of what runs now, which the History and the banner treat as in progress. Only a migration's is
+    /// known before it starts; scans wait while anything runs (`refresh`), so the others never show as interrupted.
     var runningJournalIDs: Set<String> {
         guard isOperationRunning, let id = operationSheet?.runningJournalID else { return [] }
         return [id]
+    }
+
+    /// What **Quit** may do now (review M1).
+    enum QuitChoice: Equatable {
+        case quitNow
+        /// Only **Keep Running**: the operation's command cannot be stopped cleanly.
+        case keepRunningOnly(QuitReason)
+        /// **Stop and Quit**: terminate the running command, wait for the operation to record how it ended, then quit.
+        case stopThenQuit
+    }
+
+    enum QuitReason: Equatable {
+        /// Copy, verify or remove: stopping leaves a copy half-written that the journal calls interrupted.
+        case migration
+        /// `xcodebuild -downloadPlatform`: stopping it part-way has not been tested.
+        case export
+    }
+
+    /// The decision per stage. Copying, verifying and removing an original keep running; so does an export. Deleting a
+    /// runtime and applying a folder can be stopped: their commands are short, and a stopped one is recorded as failed.
+    static func quitChoice(running: Bool, stage: OperationStage) -> QuitChoice {
+        guard running else { return .quitNow }
+        switch stage {
+        case .copying, .verifying, .removing: return .keepRunningOnly(.migration)
+        case .exporting: return .keepRunningOnly(.export)
+        case .planning, .deleting, .applying, .done, .failed: return .stopThenQuit
+        }
+    }
+
+    var quitChoice: QuitChoice { Self.quitChoice(running: isOperationRunning, stage: operationSheet?.stage ?? .done) }
+
+    /// Kept for the guard's callers: whether quitting asks first.
+    var quitNeedsConfirmation: Bool { quitChoice != .quitNow }
+
+    /// **Stop and Quit**: stops the running command (`ChildProcesses.stopAndWait`), then waits for the operation to end
+    /// and journal how it ended. Returns when nothing runs, or after `timeout`.
+    func stopOperationForQuit(timeout: Duration = .seconds(30)) async {
+        guard quitChoice == .stopThenQuit else { return }
+        if let children = activeChildren {
+            _ = await Self.offThePool { children.stopAndWait(timeout: 20) }
+        }
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while isOperationRunning && clock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
     }
 
     /// The confirm button: runs what the review prepared, streaming its log. No cancel (rule 4): Core's copy, verify and
@@ -135,89 +219,94 @@ extension AppModel {
         s.startedAt = Date()
         s.finishedAt = nil
         s.progressBytes = nil
-        s.progressBaseline = nil
         s.runningJournalID = prepared.journalID
         operationSheet = s
         beginOperationLog(s.kind.rawValue)
-        appendLog(LogLine(.stage, s.stage.rawValue))
+        appendLog([LogLine(.stage, s.stage.rawValue)])
         let run = environment.operations.run
-        let progress: ProgressWatch? =
-            switch prepared {
-            case .migration(let plan): ProgressWatch(path: plan.destination, mode: .copy)
-            case .export(let req, _, _): ProgressWatch(path: req.destination, mode: .added)
-            default: nil
-            }
-        let result = await execute(progress) { observer in try run(prepared, observer) }
+        // Copy progress only: an export's folder may not grow until the end (review M4), so it shows elapsed time alone.
+        let progress: String? = if case .migration(let plan) = prepared { plan.destination } else { nil }
+        let result = await execute(progress) { children, observer in try run(prepared, children, observer) }
         finishOperation(result)
         await refresh()
         if case .success(.exported) = result { returnToOffloadIfAsked() }
     }
 
-    /// What the progress bar measures, and how.
-    struct ProgressWatch: Sendable {
-        enum Mode: Sendable { case copy, added }
-        let path: String
-        let mode: Mode
-    }
-
-    /// Runs `work` off the main actor with an observer whose lines come back to the main actor in order (one stream),
-    /// while the progress watch measures. Returns when the work and every line it sent are done.
-    func execute<T: Sendable>(_ progress: ProgressWatch?, _ work: @escaping @Sendable (@escaping LogObserver) throws -> T) async -> Result<T, any Error> {
+    /// Runs `work` on a GCD thread (minutes of `waitUntilExit` must not hold a cooperative-pool thread, review M15) with
+    /// an observer whose lines reach the main actor in order, a batch per turn (review M1, minor), while the copy is
+    /// measured. Returns when the work and every line it sent are done.
+    func execute<T: Sendable>(
+        _ copyDestination: String?, _ work: @escaping @Sendable (ChildProcesses, @escaping LogObserver) throws -> T
+    ) async -> Result<T, any Error> {
         awakeActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "XCodeVault operation")
-        let (stream, continuation) = AsyncStream.makeStream(of: LogLine.self)
+        let children = ChildProcesses()
+        activeChildren = children
+        let buffer = LineBuffer()
+        let (ticks, tick) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         let consumer = Task { @MainActor in
-            for await line in stream { receive(line) }
+            for await _ in ticks { appendLog(buffer.drain()) }
+            appendLog(buffer.drain())
         }
-        let poller = progress.map { watch(progress: $0) }
-        let result = await Task.detached(priority: .userInitiated) { () -> Result<T, any Error> in
-            Result { try work { continuation.yield($0) } }
-        }.value
-        continuation.finish()
+        let poller = copyDestination.map { watch(copyTo: $0) }
+        let observer: LogObserver = { line in
+            buffer.add(line)
+            tick.yield()
+        }
+        let result = await Self.offThePool { () -> Result<T, any Error> in Result { try work(children, observer) } }
+        tick.finish()
         await consumer.value
         poller?.cancel()
+        await poller?.value
+        activeChildren = nil
         if let a = awakeActivity { ProcessInfo.processInfo.endActivity(a) }
         awakeActivity = nil
         return result
     }
 
-    /// One line from the running operation: into the log, and the stage it implies (`OperationStage.after`).
-    func receive(_ line: LogLine) {
-        guard let current = operationSheet?.stage else { return }
-        appendLog(line)
-        let next = OperationStage.after(line, from: current)
-        if next != current {
-            operationSheet?.stage = next
-            appendLog(LogLine(.stage, next.rawValue))
+    /// Long synchronous work on a GCD thread, bridged back with a continuation.
+    static func offThePool<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async { continuation.resume(returning: work()) }
         }
     }
 
-    func appendLog(_ line: LogLine) {
-        operationSheet?.log.append(line)
-        operationLogFile?.append(line)
+    /// Lines from the running operation, in one mutation: into the log, and the stage they imply (`OperationStage.after`).
+    func appendLog(_ lines: [LogLine]) {
+        guard !lines.isEmpty, var s = operationSheet else { return }
+        for line in lines {
+            s.log.append(line)
+            operationLogFile?.append(line)
+            let next = OperationStage.after(line, from: s.stage)
+            if next != s.stage {
+                s.stage = next
+                let stageLine = LogLine(.stage, next.rawValue)
+                s.log.append(stageLine)
+                operationLogFile?.append(stageLine)
+            }
+        }
+        operationSheet = s
     }
 
     private func beginOperationLog(_ name: String) {
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         operationLogFile = environment.operations.logFile?("\(stamp)-\(name)")
+        if let url = operationLogFile?.url { operationSheet?.logFileURL = url }
     }
 
-    /// Measures every `pollInterval` until cancelled; a copy only while it is still copying.
-    private func watch(progress: ProgressWatch) -> Task<Void, Never> {
+    /// Measures the vault copy while it is copying, no more often than `pollInterval` and never more than half the time
+    /// (a measure that takes a second waits two before the next, review M5).
+    private func watch(copyTo path: String) -> Task<Void, Never> {
         let measure = environment.operations.measure
         let interval = environment.operations.pollInterval
         let id = operationSheet?.id
         return Task { @MainActor in
-            if progress.mode == .added {
-                let baseline = await Task.detached { measure(progress.path) }.value
-                guard operationSheet?.id == id else { return }
-                operationSheet?.progressBaseline = baseline
-            }
-            while !Task.isCancelled {
-                if progress.mode == .copy && operationSheet?.stage != .copying { return }
-                let bytes = await Task.detached { measure(progress.path) }.value
+            let clock = ContinuousClock()
+            while !Task.isCancelled, operationSheet?.id == id, operationSheet?.stage == .copying {
+                let started = clock.now
+                let bytes = await Self.offThePool { measure(path) }
                 guard !Task.isCancelled, operationSheet?.id == id else { return }
                 operationSheet?.progressBytes = bytes
-                try? await Task.sleep(for: interval)
+                try? await Task.sleep(for: max(interval, (clock.now - started) * 2))
             }
         }
     }
@@ -237,24 +326,28 @@ extension AppModel {
         s.finishedAt = Date()
         switch result {
         case .success(let r):
-            s.phase = .succeeded
+            s.phase = .succeeded(Self.secondStep(after: r))
             s.stage = .done
             s.result = r
-            s.secondStep = Self.secondStep(after: r)
-        case .failure(let error):
-            s.phase = .failed("\(error)")
+        case .failure:
+            s.phase = .failed(Self.failureText(result))
             s.stage = .failed
-            s.log.append(LogLine(.stderr, "\(error)"))
-            operationLogFile?.append(LogLine(.stderr, "\(error)"))
         }
         operationSheet = s
-        appendLog(LogLine(.stage, s.stage.rawValue))
+        if case .failure(let error) = result { appendLog([LogLine(.stderr, "\(error)")]) }
+        appendLog([LogLine(.stage, s.stage.rawValue)])
         operationLogFile = nil
+        environment.operations.notifyFinished()
+    }
+
+    private static func failureText(_ result: Result<OperationResult, any Error>) -> String {
+        if case .failure(let error) = result { return "\(error)" }
+        return ""
     }
 
     /// After an export offload asked for: back to offload's review, with its choices, the log kept.
     private func returnToOffloadIfAsked() {
-        guard var s = operationSheet, s.phase == .succeeded, let back = s.offloadToReturnTo else { return }
+        guard var s = operationSheet, s.isSucceeded, let back = s.offloadToReturnTo else { return }
         s.kind = .offloadRuntime
         s.inputs = back
         s.offloadToReturnTo = nil
@@ -262,7 +355,6 @@ extension AppModel {
         s.phase = .review
         s.stage = .planning
         s.result = nil
-        s.secondStep = .none
         s.preview = nil
         operationSheet = s
         Task { await previewOperation() }
@@ -276,10 +368,13 @@ extension AppModel {
         return OperationProgress.fraction(done: s.progressBytes, total: plan.sourceBytes)
     }
 
-    /// An export's bytes so far: the folder's growth since it started.
-    var operationDownloadedBytes: UInt64? {
-        guard let s = operationSheet, s.stage == .exporting else { return nil }
-        return OperationProgress.added(baseline: s.progressBaseline, current: s.progressBytes)
+    /// The migration id whose partial copy a failed copy may have left on the vault, when the scanned journal says one may
+    /// be there (review I4): what `xcodevaultctl migration abort <id>` removes.
+    var failedCopyLeftoverID: String? {
+        guard let s = operationSheet, case .failed = s.phase, s.kind == .externalizeArchives, let id = s.runningJournalID,
+            interruptedMigrations.contains(where: { $0.id == id })
+        else { return nil }
+        return id
     }
 
     // MARK: - The second steps
@@ -310,9 +405,9 @@ extension AppModel {
         s.runningJournalID = outcome.plan.operationID
         operationSheet = s
         beginOperationLog("remove-original")
-        appendLog(LogLine(.stage, OperationStage.removing.rawValue))
+        appendLog([LogLine(.stage, OperationStage.removing.rawValue)])
         let remove = environment.operations.removeSource
-        let result = await execute(nil) { observer in try remove(outcome, confirmed, observer) }
+        let result = await execute(nil) { _, observer in try remove(outcome, confirmed, observer) }
         guard var done = operationSheet else { return }
         switch result {
         case .success(let removed):
@@ -322,17 +417,24 @@ extension AppModel {
         case .failure(let error):
             done.secondStep = .removeFailed("\(error)")
             done.stage = .failed
-            done.log.append(LogLine(.stderr, "\(error)"))
         }
         operationSheet = done
-        appendLog(LogLine(.stage, done.stage.rawValue))
+        if case .failure(let error) = result { appendLog([LogLine(.stderr, "\(error)")]) }
+        appendLog([LogLine(.stage, done.stage.rawValue)])
         operationLogFile = nil
+        environment.operations.notifyFinished()
         await refresh()
     }
 
-    /// **Undo** after a Locations change: back to Xcode's default through Core's reset path.
+    /// What **Undo** puts back: the folder Xcode used before the change, or nil for its default (review L4).
+    var undoRestores: String?? {
+        guard case .locationApplied(_, let previous)? = operationSheet?.result else { return nil }
+        return .some(previous)
+    }
+
+    /// **Undo** after a Locations change: the previous folder put back, or Xcode's default when it had none.
     func undoLocation() async {
-        guard var s = operationSheet, !isOperationRunning, case .locationApplied(let key)? = s.result else { return }
+        guard var s = operationSheet, !isOperationRunning, case .locationApplied(let key, let previous)? = s.result else { return }
         switch s.secondStep {
         case .undo, .undoFailed: break
         default: return
@@ -340,9 +442,10 @@ extension AppModel {
         s.secondStep = .undoing
         s.stage = .applying
         operationSheet = s
-        appendLog(LogLine(.stage, OperationStage.applying.rawValue))
-        let reset = environment.operations.resetLocation
-        let result = await execute(nil) { observer in try reset(key, observer) }
+        beginOperationLog("undo")
+        appendLog([LogLine(.stage, OperationStage.applying.rawValue)])
+        let restore = environment.operations.restoreLocation
+        let result = await execute(nil) { children, observer in try restore(key, previous, children, observer) }
         guard var done = operationSheet else { return }
         switch result {
         case .success:
@@ -351,10 +454,11 @@ extension AppModel {
         case .failure(let error):
             done.secondStep = .undoFailed("\(error)")
             done.stage = .failed
-            done.log.append(LogLine(.stderr, "\(error)"))
         }
         operationSheet = done
-        appendLog(LogLine(.stage, done.stage.rawValue))
+        if case .failure(let error) = result { appendLog([LogLine(.stderr, "\(error)")]) }
+        appendLog([LogLine(.stage, done.stage.rawValue)])
+        operationLogFile = nil
         await refresh()
     }
 
@@ -366,10 +470,10 @@ extension AppModel {
         operationSheet = nil
     }
 
-    /// **Copy Log**: the lines kept in memory, as text.
+    /// **Copy Log**: the lines kept in memory, as text, naming the full log's file when lines were dropped.
     func copyOperationLog() {
-        guard let text = operationSheet?.log.text else { return }
-        environment.copy(text)
+        guard let s = operationSheet else { return }
+        environment.copy(s.log.text(fullLogAt: s.logFileURL?.path))
     }
 
     /// **Show in History**: closes the sheet and shows History.
@@ -379,13 +483,41 @@ extension AppModel {
         section = .history
     }
 
-    /// The banner's lines (`MigrationRecovery`), oldest first.
-    static func interruptedBanner(_ entries: [JournalEntry], running: Set<String>) -> [InterruptedMigration] {
-        MigrationRecovery.interrupted(entries, running: running).map { last in
+    /// The banner's lines (`MigrationRecovery`), oldest first: interrupted migrations, then failed ones whose partial copy
+    /// may still be on disk (review I4), each once.
+    static func interruptedBanner(
+        _ entries: [JournalEntry], running: Set<String>, mayBePresent: (String) -> Bool = { MigrationEngine.presence(of: $0).mayBePresent }
+    ) -> [InterruptedMigration] {
+        let interrupted = MigrationRecovery.interrupted(entries, running: running)
+        var items = interrupted.map { last in
             // The opening record's summary says what the migration was; the last one only names a phase.
             let opening = entries.filter { $0.id == last.id }.min { $0.sequence < $1.sequence }
             return InterruptedMigration(
                 id: last.id, summary: opening?.summary ?? last.summary, commands: MigrationRecovery.commands(for: last.id, in: entries))
+        }
+        let listed = Set(items.map(\.id))
+        for plan in MigrationRecovery.leftoverPartialCopies(entries, mayBePresent: mayBePresent)
+        where !listed.contains(plan.id) && !running.contains(plan.id) {
+            items.append(
+                InterruptedMigration(
+                    id: plan.id, summary: plan.summary,
+                    commands: ["xcodevaultctl migration status", "xcodevaultctl migration abort \(plan.id)"]))
+        }
+        return items
+    }
+}
+
+/// Lines the operation produced, waiting for the main actor: appended from any thread, taken in order in one batch.
+final class LineBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [LogLine] = []
+
+    func add(_ line: LogLine) { lock.withLock { lines.append(line) } }
+
+    func drain() -> [LogLine] {
+        lock.withLock {
+            defer { lines.removeAll(keepingCapacity: true) }
+            return lines
         }
     }
 }

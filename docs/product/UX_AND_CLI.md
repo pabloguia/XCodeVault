@@ -108,7 +108,10 @@ The app is a projection of Core: every number and every decision a screen shows 
   controls: the vault picker, a folder panel, the runtime and platform pickers, the tests checkbox for DerivedData;
   `--yes` becomes the confirm button. Removing an original is a second step after a verified copy, behind the
   non-regenerable checkbox; a Locations change offers **Undo** (Core's reset). No cancel while copying, verifying or
-  removing; one operation at a time; quitting while one runs asks first. An interrupted migration puts a banner with
+  removing; one operation at a time, and no scan while it runs. Quitting follows `AppModel.quitChoice`: only **Keep
+  Running** while copying, verifying, removing or exporting; **Stop and Quit** (terminate the command, wait, journal
+  the failure) while deleting a runtime or changing a folder. Offload and runtime delete wait for simulator work.
+  **Undo** restores the previous folder, or resets to the default when there was none. An interrupted migration puts a banner with
   `migration status` / `resume` / `abort` on Park, Run externally and History; resume and abort stay CLI-only.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
   Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,

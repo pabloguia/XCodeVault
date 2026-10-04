@@ -80,6 +80,8 @@ struct OperationInputs: Sendable, Equatable {
 /// Why **Run** is disabled. The app's own reasons are localized; Core's are its English prose, shown as given.
 enum OperationBlocker: Sendable, Equatable {
     case chooseVault, chooseFolder, chooseRuntime, acknowledgeTests
+    /// Simulator work (a simulator, `simctl`, a test run) is running: offload and delete wait for it (review L3).
+    case simulatorWorkRunning
     case core(String)
 }
 
@@ -115,7 +117,9 @@ struct OperationPreview: Sendable {
 /// How a run ended well.
 enum OperationResult: Sendable {
     case copied(MigrationOutcome)
-    case locationApplied(XcodeLocations.Key)
+    /// `previous`: the folder Xcode used before, read just before the change (the value the journal records as
+    /// `previous`); nil when it used its default. **Undo** puts it back.
+    case locationApplied(XcodeLocations.Key, previous: String?)
     case offloaded
     case exported
     case runtimeDeleted
@@ -123,10 +127,12 @@ enum OperationResult: Sendable {
 
 /// The Run sheet's whole state (R3). Presented while `AppModel.operationSheet` is non-nil.
 struct OperationSheetState: Sendable {
+    /// Where the sheet is. What may follow a success lives inside `.succeeded`, so a second step without a success
+    /// cannot be represented (review M11).
     enum Phase: Sendable, Equatable {
         case review
         case running
-        case succeeded
+        case succeeded(SecondStep)
         case failed(String)
     }
 
@@ -150,12 +156,23 @@ struct OperationSheetState: Sendable {
     var log = OperationLog()
     var startedAt: Date?
     var finishedAt: Date?
-    /// The last measure of what is being written: the vault copy, or the export folder.
+    /// The last measure of the vault copy while copying.
     var progressBytes: UInt64?
-    /// The export folder's size before the export started.
-    var progressBaseline: UInt64?
     var result: OperationResult?
-    var secondStep: SecondStep = .none
+    /// The step after a success; `.none` in every other phase, and it can be set only while succeeded.
+    var secondStep: SecondStep {
+        get {
+            if case .succeeded(let step) = phase { return step }
+            return .none
+        }
+        set { if case .succeeded = phase { phase = .succeeded(newValue) } }
+    }
+    var isSucceeded: Bool {
+        if case .succeeded = phase { return true }
+        return false
+    }
+    /// The full log's file, kept after the operation ends so the sheet can still name it (review I5).
+    var logFileURL: URL?
     /// "I confirm deleting non-regenerable data (Archives)": unchecked until the user checks it.
     var confirmRemoval = false
     /// Set while an export runs on offload's behalf: offload's choices, restored when the export succeeds.

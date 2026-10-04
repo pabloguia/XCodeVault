@@ -108,7 +108,7 @@ struct MainView: View {
                         Task { await model.refresh() }
                     } label: {
                         Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
-                    }.disabled(model.isScanning)
+                    }.disabled(model.isScanning || model.isOperationRunning)
                 }
                 if model.isScanning { ToolbarItem { ProgressView().controlSize(.small) } }
             }

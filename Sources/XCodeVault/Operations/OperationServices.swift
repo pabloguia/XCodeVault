@@ -9,37 +9,41 @@ struct OperationServices: Sendable {
     /// The review step: Core's preflight or plan for `kind` with `inputs`. Called off the main actor, only once the
     /// inputs are complete (`AppModel.inputBlockers`).
     var preview: @Sendable (OperationKind, OperationInputs) -> OperationPreview
-    /// Runs what the preview prepared, every command's lines going to the observer.
-    var run: @Sendable (PreparedOperation, @escaping LogObserver) throws -> OperationResult
+    /// Runs what the preview prepared, every command's lines going to the observer, every command registered in the
+    /// `ChildProcesses` so quitting can stop it.
+    var run: @Sendable (PreparedOperation, ChildProcesses, @escaping LogObserver) throws -> OperationResult
     /// The second step of an externalization: `MigrationEngine.removeSource`, which re-verifies first.
     var removeSource: @Sendable (MigrationOutcome, _ confirmNonRegenerable: Bool, @escaping LogObserver) throws -> MigrationOutcome
-    /// **Undo** after a Locations change: the same Core reset path as `xcodevaultctl locations reset-*`.
-    var resetLocation: @Sendable (XcodeLocations.Key, @escaping LogObserver) throws -> Void
+    /// **Undo** after a Locations change: the previous folder put back when there was one, else Core's reset path
+    /// (`xcodevaultctl locations reset-*`).
+    var restoreLocation: @Sendable (XcodeLocations.Key, _ previous: String?, ChildProcesses, @escaping LogObserver) throws -> Void
     /// Allocated bytes under a path, for the progress bar; nil when it cannot be measured.
     var measure: @Sendable (String) -> UInt64?
-    /// The folder panel, opened at `startingAt`; nil when the user cancels.
-    var chooseFolder: @MainActor @Sendable (_ startingAt: String?) -> String?
+    /// The folder panel, opened at `startingAt` as a sheet on the key window; nil when the user cancels.
+    var chooseFolder: @MainActor @Sendable (_ startingAt: String?) async -> String?
     /// How often the progress bar measures.
     var pollInterval: Duration = .seconds(1)
     /// Keeps the full log of an operation (the sheet keeps the newest lines only); nil keeps none.
     var logFile: (@Sendable (_ name: String) -> OperationLogFile?)?
+    /// An operation finished while the app was not frontmost: the Dock icon asks for attention (HIG review §4).
+    var notifyFinished: @MainActor @Sendable () -> Void = {}
 
     static let inert = OperationServices(
         preview: { _, _ in OperationPreview(blockers: [.core("No operations in this environment.")]) },
-        run: { _, _ in throw RuntimeOperationError("No operations in this environment.") },
+        run: { _, _, _ in throw RuntimeOperationError("No operations in this environment.") },
         removeSource: { _, _, _ in throw RuntimeOperationError("No operations in this environment.") },
-        resetLocation: { _, _ in throw RuntimeOperationError("No operations in this environment.") },
+        restoreLocation: { _, _, _, _ in throw RuntimeOperationError("No operations in this environment.") },
         measure: { _ in nil },
         chooseFolder: { _ in nil },
         logFile: nil)
 
     static let live = OperationServices(
         preview: { LiveOperations.preview($0, $1) },
-        run: { try LiveOperations.run($0, observer: $1) },
+        run: { try LiveOperations.run($0, children: $1, observer: $2) },
         removeSource: { outcome, confirm, observer in
             try MigrationEngine(runner: StreamingCommandRunner(observer: observer)).removeSource(outcome, confirmNonRegenerable: confirm)
         },
-        resetLocation: { try LiveOperations.resetLocation($0, observer: $1) },
+        restoreLocation: { try LiveOperations.restoreLocation($0, previous: $1, children: $2, observer: $3) },
         measure: { DiskUsage.measure($0)?.allocatedBytes },
         chooseFolder: { start in
             let panel = NSOpenPanel()
@@ -48,9 +52,18 @@ struct OperationServices: Sendable {
             panel.canCreateDirectories = true
             panel.allowsMultipleSelection = false
             if let start { panel.directoryURL = URL(fileURLWithPath: start) }
-            return panel.runModal() == .OK ? panel.url?.path : nil
+            // A sheet on the Run sheet's window (review M13); app-modal only when there is no window to attach to.
+            guard let window = NSApp.keyWindow else { return panel.runModal() == .OK ? panel.url?.path : nil }
+            let response = await withCheckedContinuation { continuation in
+                panel.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+            }
+            return response == .OK ? panel.url?.path : nil
         },
-        logFile: { OperationLogFile.create(name: $0) })
+        logFile: { OperationLogFile.create(name: $0) },
+        notifyFinished: {
+            guard !NSApp.isActive else { return }
+            NSApp.requestUserAttention(.informationalRequest)
+        })
 }
 
 /// An operation's whole log, appended line by line to a file in the temporary folder.
@@ -64,8 +77,9 @@ final class OperationLogFile: @unchecked Sendable {
         self.handle = handle
     }
 
-    static func create(name: String) -> OperationLogFile? {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("XCodeVault-logs", isDirectory: true)
+    static func create(
+        name: String, in dir: URL = FileManager.default.temporaryDirectory.appendingPathComponent("XCodeVault-logs", isDirectory: true)
+    ) -> OperationLogFile? {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(name + ".log")
         guard FileManager.default.createFile(atPath: url.path, contents: nil), let handle = try? FileHandle(forWritingTo: url) else { return nil }
@@ -123,8 +137,14 @@ enum LiveOperations {
         let (x, h) = try selectedXcode()
         let runtimes = try SimulatorDiscovery.runtimes(developerDir: x.developerDirectory)
         let ops = RuntimeOperations(xcode: x, host: h)
+        let busy = simulatorWorkBlockers(CleanExecutor.simulatorWorkIsRunning())
         do {
             let (plan, warnings) = try ops.preflightOffload(identifier: id, library: library, installedRuntimes: runtimes)
+            guard busy.isEmpty else {
+                return OperationPreview(
+                    source: runtimes.first { $0.identifier == id }?.path, destination: plan.installerPath, bytes: plan.sizeBytes, warnings: warnings,
+                    blockers: busy)
+            }
             return OperationPreview(
                 source: runtimes.first { $0.identifier == id }?.path, destination: plan.installerPath, bytes: plan.sizeBytes, warnings: warnings,
                 prepared: .offload(plan, x, h))
@@ -168,15 +188,19 @@ enum LiveOperations {
         guard x.capabilities.simctlRuntimeDelete else { throw RuntimeOperationError("This Xcode's simctl has no `runtime delete` verb.") }
         let runtime = try SimulatorDiscovery.runtimes(developerDir: x.developerDirectory).first { $0.identifier == id }
         guard let runtime else { throw RuntimeOperationError("No installed runtime with identifier \(id).") }
-        return OperationPreview(source: runtime.path, bytes: runtime.sizeBytes, prepared: .deleteRuntime(identifier: id, x, h))
+        let busy = simulatorWorkBlockers(CleanExecutor.simulatorWorkIsRunning())
+        return OperationPreview(
+            source: runtime.path, bytes: runtime.sizeBytes, blockers: busy, prepared: busy.isEmpty ? .deleteRuntime(identifier: id, x, h) : nil)
     }
 
-    static func run(_ prepared: PreparedOperation, observer: @escaping LogObserver) throws -> OperationResult {
-        let runner = StreamingCommandRunner(observer: observer)
+    static func run(_ prepared: PreparedOperation, children: ChildProcesses, observer: @escaping LogObserver) throws -> OperationResult {
+        let runner = StreamingCommandRunner(observer: observer, children: children)
         switch prepared {
         case .migration(let plan):
             return .copied(try MigrationEngine(runner: runner).copyAndVerify(plan))
         case .offload(let plan, let x, let h):
+            // Again at the moment of use, like the preview (review L3): the user runs test rigs on these simulators.
+            try refuseIfSimulatorWork(CleanExecutor.simulatorWorkIsRunning())
             try RuntimeOperations(runner: runner, xcode: x, host: h).offload(
                 plan, confirmedByUser: .explicitUserIntent(recordedAs: "app: Run sheet confirmation"))
             return .offloaded
@@ -189,23 +213,42 @@ enum LiveOperations {
             } else {
                 _ = try XcodeLocations.preflightArchives(path: change.newValue, volumes: volumes, xcodeRunning: running)
             }
+            // The value the journal records as `previous`, read the same way, just before the change: what **Undo** restores.
+            let read = try? ProcessCommandRunner().run(Tools.defaults, ["read", XcodeLocations.domain, change.key.defaultsKey])
+            let previous = read.flatMap { $0.succeeded ? $0.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil }.flatMap { $0.isEmpty ? nil : $0 }
             try XcodeLocations.apply(change, runner: runner)
-            return .locationApplied(change.key)
+            return .locationApplied(change.key, previous: previous)
         case .export(let req, let x, let h):
             let ops = RuntimeOperations(runner: runner, xcode: x, host: h)
             _ = try ops.preflightExport(req, freeBytesAtDestination: MountStatus.space(at: req.destination)?.free)
             try ops.export(req)
             return .exported
         case .deleteRuntime(let id, let x, let h):
+            // The preview's checks again at the moment of use (review L3).
+            guard x.capabilities.simctlRuntimeDelete else { throw RuntimeOperationError("This Xcode's simctl has no `runtime delete` verb.") }
+            try refuseIfSimulatorWork(CleanExecutor.simulatorWorkIsRunning())
             try RuntimeOperations(runner: runner, xcode: x, host: h).delete(identifier: id)
             return .runtimeDeleted
         }
     }
 
-    static func resetLocation(_ key: XcodeLocations.Key, observer: @escaping LogObserver) throws {
-        // The CLI's reset: the preflight with no path (it refuses while Xcode runs), then `defaults delete`.
-        _ = try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: true)
-        try XcodeLocations.apply(XcodeLocations.Change(key: key, newValue: nil), runner: StreamingCommandRunner(observer: observer))
+    /// **Undo** (review L4): the previous folder, through the same preflight a change gets, when there was one;
+    /// otherwise the CLI's reset — the preflight with no path (it refuses while Xcode runs), then `defaults delete`.
+    static func restoreLocation(_ key: XcodeLocations.Key, previous: String?, children: ChildProcesses, observer: @escaping LogObserver) throws {
+        let running = CleanExecutor.xcodeIsRunning()
+        if let previous {
+            let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
+            if key == .derivedData {
+                // The user had this folder before; the tests risk was theirs to accept then.
+                _ = try XcodeLocations.preflightDerivedData(path: previous, volumes: volumes, xcodeRunning: running, acknowledgeExternalTests: true)
+            } else {
+                _ = try XcodeLocations.preflightArchives(path: previous, volumes: volumes, xcodeRunning: running)
+            }
+        } else {
+            _ = try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: running, acknowledgeExternalTests: true)
+        }
+        try XcodeLocations.apply(
+            XcodeLocations.Change(key: key, newValue: previous), runner: StreamingCommandRunner(observer: observer, children: children))
     }
 
     // MARK: - Decisions, tested
@@ -219,6 +262,15 @@ enum LiveOperations {
             if !acknowledged, let warnings = try? preflight(true) { return (warnings, [.acknowledgeTests]) }
             return ([], [.core("\(error)")])
         }
+    }
+
+    /// Offload and delete wait while simulator work runs (review L3).
+    static func simulatorWorkBlockers(_ running: Bool) -> [OperationBlocker] { running ? [.simulatorWorkRunning] : [] }
+
+    static func refuseIfSimulatorWork(_ running: Bool) throws {
+        guard running else { return }
+        throw RuntimeOperationError(
+            "A simulator, simctl or a test run is running; deleting a runtime under it could break it. Nothing was deleted — run this again when it ends.")
     }
 
     /// Whether offload's refusal is the missing installer, which **Export installer first** fixes: the runtime is known

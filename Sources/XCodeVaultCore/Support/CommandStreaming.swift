@@ -43,9 +43,65 @@ public struct LogLine: Sendable, Equatable {
     }
 }
 
-/// Where a running operation's log lines go. Called on whatever thread produced the line; it returns nothing, so it
-/// cannot change what the operation does next.
+/// Where a running operation's log lines go. Called synchronously, on whatever thread produced the line, while the
+/// operation runs: it **must not block** — a slow observer delays the operation it watches — and it **cannot alter
+/// results**: it returns `Void`, throws nothing, and no result is built from anything it does.
 public typealias LogObserver = @Sendable (LogLine) -> Void
+
+/// The child processes an operation's runner has started, so the app can stop them before it quits (R3 review M1).
+///
+/// `stopAndWait` refuses every later launch, terminates the children still running and waits for them to exit, so a
+/// quitting app never leaves a child behind that goes on writing after the journal stopped. A launch and a stop are
+/// ordered by one lock: a child is either registered before the stop, and terminated, or refused.
+public final class ChildProcesses: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var running: [ObjectIdentifier: Process] = [:]
+    private var stopped = false
+
+    public init() {
+        // Nothing to configure: a fresh set, accepting launches.
+    }
+
+    /// How many children are running now.
+    public var count: Int { condition.withLock { running.count } }
+    /// Whether `stopAndWait` was called: no child may start any more.
+    public var isStopped: Bool { condition.withLock { stopped } }
+
+    /// Refuses later launches, sends SIGTERM to the running children, and waits up to `timeout` for every one to exit.
+    /// True when none is left running.
+    @discardableResult
+    public func stopAndWait(timeout: TimeInterval) -> Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        stopped = true
+        for p in running.values where p.isRunning { p.terminate() }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !running.isEmpty {
+            if !condition.wait(until: deadline) { break }
+        }
+        return running.isEmpty
+    }
+
+    /// Starts `process` unless a stop came first, and registers it in the same critical section.
+    func launch(_ process: Process) throws {
+        condition.lock()
+        defer { condition.unlock() }
+        guard !stopped else { throw ChildProcessesStopped() }
+        try process.run()
+        running[ObjectIdentifier(process)] = process
+    }
+
+    func exited(_ process: Process) {
+        condition.withLock {
+            running[ObjectIdentifier(process)] = nil
+            condition.broadcast()
+        }
+    }
+}
+
+struct ChildProcessesStopped: Error, CustomStringConvertible {
+    var description: String { "not started: the app is quitting and stopped this operation's commands" }
+}
 
 /// Splits a byte stream into lines at `\n`, `\r\n` or a lone `\r` (progress output rewrites its line with `\r`). Bytes
 /// are kept until a line ends, so a UTF-8 character cut across two reads is decoded whole.
@@ -92,11 +148,18 @@ struct LineSplitter {
 /// **Observation only.** The process is configured exactly as `ProcessCommandRunner` configures it — the same
 /// executable, arguments, environment merge, a null standard input, and both pipes drained concurrently until EOF —
 /// and the `CommandResult` returned is built from the whole of each pipe's bytes, decoded the same way, independently
-/// of how the lines were split for the observer. A launch failure throws the same `CommandError`. The observer's
-/// return type is `Void`, so nothing it does is read back.
+/// of how the lines were split for the observer. A launch failure throws the same `CommandError`. The observer must not
+/// block and cannot alter results (`LogObserver`).
+///
+/// With `children`, every process is registered there, so `ChildProcesses.stopAndWait` can terminate it; after a stop,
+/// a launch throws a `CommandError` instead of starting. Without it, nothing differs from `ProcessCommandRunner`.
 public struct StreamingCommandRunner: CommandRunning {
     let observer: LogObserver
-    public init(observer: @escaping LogObserver) { self.observer = observer }
+    let children: ChildProcesses?
+    public init(observer: @escaping LogObserver, children: ChildProcesses? = nil) {
+        self.observer = observer
+        self.children = children
+    }
 
     public func run(_ executable: String, _ arguments: [String], environment: [String: String]?) throws -> CommandResult {
         observer(LogLine(.command, LogLine.commandLine(executable, arguments)))
@@ -110,9 +173,12 @@ public struct StreamingCommandRunner: CommandRunning {
         process.standardOutput = outPipe
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch {
-            observer(LogLine(.stderr, error.localizedDescription))
-            throw CommandError(executable: executable, arguments: arguments, result: nil, underlying: error.localizedDescription)
+        do {
+            if let children { try children.launch(process) } else { try process.run() }
+        } catch {
+            let why = (error as? ChildProcessesStopped)?.description ?? error.localizedDescription
+            observer(LogLine(.stderr, why))
+            throw CommandError(executable: executable, arguments: arguments, result: nil, underlying: why)
         }
         let out = PipeDrain(), err = PipeDrain()
         let group = DispatchGroup()
@@ -126,6 +192,7 @@ public struct StreamingCommandRunner: CommandRunning {
         }
         process.waitUntilExit()
         group.wait()
+        children?.exited(process)
         observer(LogLine(.exit, String(process.terminationStatus)))
         return CommandResult(
             status: process.terminationStatus,

@@ -59,7 +59,10 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   Undo for Locations; the interrupted-migration banner; the quit guard. Written and tested with fakes only — **never
   run against real data in a real window**. Waiting on the migration-safety review (dispatched by the controller), then
   a manual run in the app: Archives to a vault and Remove Original, a DerivedData change and Undo, an offload with
-  Export Installer First. Translations are drafts (`needs_review`).
+  Export Installer First. Translations are drafts (`needs_review`). Review round 1 (2026-10-04) applied the safety
+  review's M1 and L1–L6 and the quality review's I1–I5 and minors. **Manual check, open:** whether
+  `xcodebuild -downloadPlatform -exportPath` grows its destination folder during the download (until measured, the
+  export shows elapsed time only), and the folder panel as a sheet on the Run sheet.
 
 ## Blocked / pending — manual (ask the user)
 

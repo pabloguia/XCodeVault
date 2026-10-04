@@ -87,21 +87,33 @@ it changes is journaled and shows in History.
    understand that unit tests may fail for projects built there" (`--i-understand-tests-may-fail`). The sheet shows
    where the data comes from and goes, its size, what undoing it costs, Core's warnings, and the experimental badge
    where the strategy is experimental. Anything that stops it — Xcode running, the vault offline, too little space, no
-   installer in the library yet — disables the button and says why. For an offload whose library has no installer,
+   installer in the library yet, and for an offload or a runtime deletion a simulator, `simctl` or a test run still
+   running — disables the button and says why; **Check Again** reviews it again once that has changed. For an offload
+   whose library has no installer,
    **Export Installer First** runs the export in the same sheet and comes back to the offload.
 2. **Confirm.** One button whose title is the exact action, such as "Copy 18 GB of Archives to the vault PABLO". When
    it deletes something on this Mac it is styled as destructive and is not the default: Return cancels.
 3. **Running.** The stage (checking, copying, verifying, deleting, exporting, applying), a progress bar — measured
-   while copying to the vault, with the bytes written so far while exporting, otherwise moving without a measure — and
-   the time elapsed. **Show Details** opens the live log: each command as it runs and everything it prints. **Copy
-   Log** copies it; the whole log is also kept in a file whose path the sheet shows. It cannot be stopped once it
-   starts, and quitting asks first, because quitting may leave it interrupted.
+   while copying to the vault, otherwise moving without a measure (an export shows only the time elapsed: whether its
+   folder grows during the download has not been measured) — and the time elapsed. **Show Details** opens the live
+   log: each command as it runs and everything it prints, following the newest line while **Follow output** is on.
+   **Copy Log** copies it; the whole log is also kept in a file whose path the sheet shows, also after it ends. It
+   cannot be stopped from the app once it starts, and there is no rescan while it runs. Quitting depends on what it is
+   doing: while it copies, verifies or removes an original, or exports an installer, the app offers only **Keep
+   Running** — stopping there would leave a half-written copy, or an export nobody has tested stopping. While it
+   deletes a runtime or changes a folder, **Stop and Quit** stops the command, waits for it to end, records the
+   operation as failed, and then quits.
 
 When it ends the sheet says what happened, with **Show in History**. After Archives are copied and verified, **Remove
 Original…** frees their space on this Mac: it needs the checkbox "I confirm deleting non-regenerable data (Archives)"
-and a confirmation, compares the original with the vault copy again, and deletes nothing if they differ. After a
-folder change, **Undo** sets Xcode back to its default folder. One operation runs at a time. Restoring from the vault,
-and resuming or aborting an interrupted migration, are still command-line only: the banner gives the commands.
+and a confirmation, compares the original with the vault copy again, and deletes nothing if they differ. **Remove
+Original…** is offered only in this sheet: once you close it, the originals stay where they are, and neither the app
+nor `externalize` removes them later (`externalize` refuses because the vault copy already exists) — delete them
+yourself once you have checked the vault copy, or keep both. After a folder change, **Undo** puts back the folder Xcode used before, or resets it to the default when it
+used the default; the button says which. If a copy fails, the originals are untouched; when part of the copy may still
+be on the vault, the sheet and the banner give the `migration abort <id>` command that removes it. One operation runs
+at a time. Restoring from the vault, and resuming or aborting an interrupted migration, are still command-line only:
+the banner gives the commands.
 
 ### Details
 

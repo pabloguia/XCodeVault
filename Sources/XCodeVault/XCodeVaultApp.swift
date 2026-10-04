@@ -35,7 +35,7 @@ struct XCodeVaultApp: App {
                 // removed. XCodeVault has no document model, so "New" would have nothing to make.
             }
             CommandMenu(L10n.tr("app.menu.scan")) {
-                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r").disabled(model.isOperationRunning)
             }
         }
     }
@@ -47,16 +47,32 @@ struct XCodeVaultApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
 
+    /// The decision is `AppModel.quitChoice`, per stage (review M1): copy, verify, remove and export only keep running;
+    /// a runtime deletion or a folder change can be stopped — its command terminated and waited for — before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard model.quitNeedsConfirmation else { return .terminateNow }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L10n.tr("app.quit.title")
-        alert.informativeText = L10n.tr("app.quit.message")
         // The safe choice is the default (HIG): Return keeps the operation running.
         alert.addButton(withTitle: L10n.tr("app.quit.keepRunning"))
-        alert.addButton(withTitle: L10n.tr("app.quit.quitAnyway")).hasDestructiveAction = true
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        switch model.quitChoice {
+        case .quitNow:
+            return .terminateNow
+        case .keepRunningOnly(let reason):
+            alert.informativeText =
+                reason == .migration ? L10n.tr("app.quit.keepRunningOnly.migration") : L10n.tr("app.quit.keepRunningOnly.export")
+            alert.runModal()
+            return .terminateCancel
+        case .stopThenQuit:
+            alert.informativeText = L10n.tr("app.quit.message")
+            alert.addButton(withTitle: L10n.tr("app.quit.stopAndQuit")).hasDestructiveAction = true
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            Task { @MainActor in
+                await model.stopOperationForQuit()
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        }
     }
 }
 
@@ -128,6 +144,9 @@ final class AppModel {
     /// Does not clear `lastError`: the alert clears it when dismissed, and `perform(_:)` reports an outcome and
     /// then asks for a rescan, which would otherwise erase the error before it was seen.
     func refresh() async {
+        // No scan while an operation runs (review M3): it would walk the trees a copy is writing, on the same disk, and
+        // read a half-done journal. Every operation rescans when it ends.
+        guard !isOperationRunning else { return }
         guard scanGate.requestScan() else { return }
         let survey = environment.survey  // nil in the app: the real scan below runs
         repeat {
@@ -158,6 +177,7 @@ final class AppModel {
             updateBucketViews()
             revalidateDetailState()
             updateAccessBanner()
+            revalidateOperationAfterScan()
         } while scanGate.scanEnded()
     }
 
@@ -172,6 +192,8 @@ final class AppModel {
     var awakeActivity: (any NSObjectProtocol)?
     /// The running operation's full log, when the environment keeps one.
     var operationLogFile: OperationLogFile?
+    /// The running operation's child processes, which **Stop and Quit** stops (review M1).
+    var activeChildren: ChildProcesses?
 
     // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
 

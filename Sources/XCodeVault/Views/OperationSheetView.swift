@@ -7,8 +7,16 @@ import XCodeVaultCore
 /// interruptible from here (rule 4).
 struct OperationSheetView: View {
     @Bindable var model: AppModel
-    @State private var showsLog = false
+    @State private var showsLog: Bool
     @State private var confirmsRemoval = false
+    /// Whether the log follows its newest line (review M2): off, the user can read and select earlier lines.
+    @State private var followsOutput = true
+
+    /// `showsLog` is for `R3SheetFitTests`, which measures the log expanded; the app starts it folded.
+    init(model: AppModel, showsLog: Bool = false) {
+        _model = Bindable(model)
+        _showsLog = State(initialValue: showsLog)
+    }
 
     var body: some View {
         if let s = model.operationSheet {
@@ -33,6 +41,8 @@ struct OperationSheetView: View {
             .onChange(of: s.stage) { _, stage in
                 // Phase changes and the end, never every line or percent (HIG review §4).
                 AccessibilityNotification.Announcement(OperationText.stage(stage)).post()
+                // The raw error is in the log, not the message (review M8): a failure opens it.
+                if stage == .failed { showsLog = true }
             }
             .confirmationDialog(
                 L10n.tr("app.run.removeOriginal.dialog", s.row.categoryName), isPresented: $confirmsRemoval
@@ -71,6 +81,10 @@ struct OperationSheetView: View {
             }
         } else if let p = s.preview {
             facts(s, p)
+            if !p.blockers.isEmpty {
+                // The fix for a precondition the world changes — Xcode quit, the vault reconnected (review I3).
+                Button(L10n.tr("app.run.checkAgain")) { model.checkOperationAgain() }
+            }
             ForEach(Array(p.warnings.enumerated()), id: \.offset) { _, w in
                 Label {
                     InlineCodeText(w).font(.callout).fixedSize(horizontal: false, vertical: true)
@@ -132,7 +146,7 @@ struct OperationSheetView: View {
                         Text(verbatim: s.inputs.folder ?? L10n.tr("app.run.choose.none"))
                             .font(.system(.body, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                             .foregroundStyle(s.inputs.folder == nil ? .secondary : .primary)
-                        Button(L10n.tr("app.run.choose")) { model.chooseOperationFolder() }.disabled(s.offloadToReturnTo != nil)
+                        Button(L10n.tr("app.run.choose")) { Task { await model.chooseOperationFolder() } }.disabled(s.offloadToReturnTo != nil)
                     }
                 }
             }
@@ -150,7 +164,7 @@ struct OperationSheetView: View {
             if let bytes = p.bytes { fact(L10n.tr("app.run.label.size"), ByteCount.format(bytes), mono: false) }
             GridRow {
                 Text.l10n(L10n.tr("app.run.label.undo")).foregroundStyle(.secondary)
-                Text.l10n(OperationText.undo(s.kind)).fixedSize(horizontal: false, vertical: true)
+                Text.l10n(OperationText.undo(s.kind, current: p.source)).fixedSize(horizontal: false, vertical: true)
             }
         }
         .font(.callout)
@@ -207,18 +221,30 @@ struct OperationSheetView: View {
     @ViewBuilder
     private func finished(_ s: OperationSheetState) -> some View {
         switch s.phase {
-        case .failed(let why):
+        case .failed:
             Label {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text.l10n(L10n.tr("app.run.failed.title")).bold()
+                    Text(verbatim: OperationText.failedTitle(s.kind)).bold()
                     if s.kind == .externalizeArchives {
                         // copyAndVerify never touches the source; a failed copy leaves the original where it was.
-                        Text.l10n(L10n.tr("app.run.failed.originalUntouched"))
+                        Text.l10n(L10n.tr("app.run.failed.originalUntouched")).fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(verbatim: why).font(.callout).foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    Text.l10n(L10n.tr("app.run.failed.seeDetails")).font(.callout).foregroundStyle(.secondary)
                 }
             } icon: {
                 Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+            }
+            if let id = model.failedCopyLeftoverID {
+                // The partial copy the failure left on the vault, and the exact command that removes it (review I4).
+                let command = "xcodevaultctl migration abort \(id)"
+                VStack(alignment: .leading, spacing: 4) {
+                    Text.l10n(L10n.tr("app.run.failed.leftover")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Text(verbatim: command).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                        Spacer()
+                        Button(L10n.tr("app.plan.copyCommand")) { model.environment.copy(command) }
+                    }
+                }
             }
         default:
             if let r = s.result {
@@ -226,6 +252,10 @@ struct OperationSheetView: View {
             }
         }
         secondStep(s)
+        if let url = s.logFileURL, s.phase != .running {
+            Text(verbatim: L10n.tr("app.run.logFile", url.path)).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     @ViewBuilder
@@ -235,9 +265,10 @@ struct OperationSheetView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
                     Text.l10n(L10n.tr("app.run.removeOriginal.detail")).font(.callout).fixedSize(horizontal: false, vertical: true)
-                    if case .removeFailed(let why) = s.secondStep {
+                    if case .removeFailed = s.secondStep {
                         Label {
-                            Text(verbatim: L10n.tr("app.run.removeOriginal.failed") + " " + why).font(.callout).fixedSize(horizontal: false, vertical: true)
+                            Text.l10n(L10n.tr("app.run.removeOriginal.failed") + " " + L10n.tr("app.run.failed.seeDetails")).font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
                         } icon: {
                             Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
                         }
@@ -255,14 +286,15 @@ struct OperationSheetView: View {
                 }
             }
         case .undo, .undoing, .undoFailed:
+            let previous = model.undoRestores ?? nil
             HStack {
-                if case .undoFailed(let why) = s.secondStep {
-                    Text(verbatim: L10n.tr("app.run.undoFailed") + " " + why).font(.callout).foregroundStyle(.secondary)
+                if case .undoFailed = s.secondStep {
+                    Text.l10n(L10n.tr("app.run.undoFailed") + " " + L10n.tr("app.run.failed.seeDetails")).font(.callout).foregroundStyle(.secondary)
                 }
-                Button(L10n.tr("app.run.undoAction")) { Task { await model.undoLocation() } }.disabled(model.isOperationRunning)
+                Button(OperationText.undoAction(restoring: previous)) { Task { await model.undoLocation() } }.disabled(model.isOperationRunning)
             }
         case .undone:
-            Label(L10n.tr("app.run.undone"), systemImage: "arrow.uturn.backward.circle")
+            Label(OperationText.undone(restored: model.undoRestores ?? nil), systemImage: "arrow.uturn.backward.circle")
         case .originalRemoved, .none:
             EmptyView()
         }
@@ -270,16 +302,18 @@ struct OperationSheetView: View {
 
     // MARK: - Log
 
-    /// Behind **Show Details**, collapsed by default (HIG review §4): monospaced, selectable, following the end.
+    /// Behind **Show Details**, collapsed by default (HIG review §4): monospaced, selectable, following the end while
+    /// **Follow Output** is on. Each row is identified by its sequence number, which the cap never shifts (review I1).
     private func log(_ s: OperationSheetState) -> some View {
         DisclosureGroup(isExpanded: $showsLog) {
             VStack(alignment: .leading, spacing: 6) {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 1) {
-                            ForEach(Array(s.log.lines.enumerated()), id: \.offset) { i, line in
+                            ForEach(s.log.droppedCount..<s.log.total, id: \.self) { n in
+                                let line = s.log.lines[n - s.log.droppedCount]
                                 Text(verbatim: line.rendered).font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(line.stream == .stderr ? Color.red : Color.primary).id(i)
+                                    .foregroundStyle(line.stream == .stderr ? Color.red : Color.primary)
                             }
                         }
                         .textSelection(.enabled)
@@ -287,16 +321,14 @@ struct OperationSheetView: View {
                     }
                     .frame(height: 180)
                     .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 4))
-                    .onChange(of: s.log.lines.count) { _, count in
-                        if count > 0 { proxy.scrollTo(count - 1, anchor: .bottom) }
+                    .onChange(of: s.log.total) { _, total in
+                        if followsOutput && total > 0 { proxy.scrollTo(total - 1, anchor: .bottom) }
                     }
                 }
                 HStack {
+                    Toggle(L10n.tr("app.run.followOutput"), isOn: $followsOutput).toggleStyle(.checkbox)
+                    Spacer()
                     Button(L10n.tr("app.run.copyLog")) { model.copyOperationLog() }
-                    if let url = model.operationLogFile?.url {
-                        Text(verbatim: L10n.tr("app.run.logFile", url.path)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            .truncationMode(.middle).textSelection(.enabled)
-                    }
                 }
             }
         } label: {
@@ -329,6 +361,9 @@ struct OperationSheetView: View {
             case .running:
                 EmptyView()
             case .succeeded, .failed:
+                if model.offersBackToOffload {
+                    Button(L10n.tr("app.run.backToOffload")) { model.backToOffload() }
+                }
                 Button(L10n.tr("app.run.showInHistory")) { model.showHistoryFromOperation() }.disabled(model.isOperationRunning)
                 Button(L10n.tr("app.run.done")) { model.closeOperationSheet() }.keyboardShortcut(.defaultAction).disabled(model.isOperationRunning)
             }

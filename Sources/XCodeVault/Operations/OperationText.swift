@@ -16,12 +16,13 @@ enum OperationText {
         }
     }
 
-    /// What undoing it costs, in one line.
-    static func undo(_ kind: OperationKind) -> String {
+    /// What undoing it costs, in one line. For a folder change, `current` is the folder Xcode uses now, which **Undo**
+    /// puts back; nil means its default (review L4).
+    static func undo(_ kind: OperationKind, current: String? = nil) -> String {
         switch kind {
         case .externalizeArchives: L10n.tr("app.run.undo.externalizeArchives")
         case .offloadRuntime: L10n.tr("app.run.undo.offloadRuntime")
-        case .setDerivedData, .setArchives: L10n.tr("app.run.undo.location")
+        case .setDerivedData, .setArchives: current.map { L10n.tr("app.run.undo.locationRestore", $0) } ?? L10n.tr("app.run.undo.location")
         case .exportRuntime: L10n.tr("app.run.undo.exportRuntime")
         case .deleteRuntime: L10n.tr("app.run.undo.deleteRuntime")
         }
@@ -39,6 +40,28 @@ enum OperationText {
         case .done: L10n.tr("app.run.stage.done")
         case .failed: L10n.tr("app.run.stage.failed")
         }
+    }
+
+    /// The failure's title: what did not happen (review M8).
+    static func failedTitle(_ kind: OperationKind) -> String {
+        switch kind {
+        case .externalizeArchives: L10n.tr("app.run.failed.title.externalizeArchives")
+        case .offloadRuntime: L10n.tr("app.run.failed.title.offloadRuntime")
+        case .setDerivedData: L10n.tr("app.run.failed.title.setDerivedData")
+        case .setArchives: L10n.tr("app.run.failed.title.setArchives")
+        case .exportRuntime: L10n.tr("app.run.failed.title.exportRuntime")
+        case .deleteRuntime: L10n.tr("app.run.failed.title.deleteRuntime")
+        }
+    }
+
+    /// **Undo**'s title: what it puts back (review L4).
+    static func undoAction(restoring previous: String?) -> String {
+        previous.map { L10n.tr("app.run.undoAction.restore", $0) } ?? L10n.tr("app.run.undoAction.reset")
+    }
+
+    /// After **Undo**.
+    static func undone(restored previous: String?) -> String {
+        previous.map { L10n.tr("app.run.undone.restored", $0) } ?? L10n.tr("app.run.undone")
     }
 
     /// The success line for a result.
@@ -64,6 +87,8 @@ extension AppModel {
     /// The confirm button's title: the exact action, with its size and target (R3 §3).
     var operationConfirmTitle: String {
         guard let s = operationSheet else { return "" }
+        // No size or names until the review has them (review M10): VoiceOver reads the disabled button too.
+        guard !s.isPreviewing, s.preview?.prepared != nil else { return L10n.tr("app.run.confirm.pending") }
         let p = s.preview
         let size = ByteCount.format(p?.bytes ?? 0)
         let folder = s.inputs.folder ?? ""
@@ -80,13 +105,10 @@ extension AppModel {
         }
     }
 
-    /// The progress line under the bar: copied of total while copying, written so far while exporting.
+    /// The progress line under the bar: copied of total while copying. An export shows only its elapsed time: whether
+    /// its folder grows during the download is unmeasured (review M4).
     var operationProgressText: String? {
-        guard let s = operationSheet else { return nil }
-        if s.stage == .copying, case .migration(let plan)? = s.preview?.prepared, let done = s.progressBytes {
-            return L10n.tr("app.run.progress.copied", ByteCount.format(min(done, plan.sourceBytes)), ByteCount.format(plan.sourceBytes))
-        }
-        if let written = operationDownloadedBytes { return L10n.tr("app.run.progress.written", ByteCount.format(written)) }
-        return nil
+        guard let s = operationSheet, s.stage == .copying, case .migration(let plan)? = s.preview?.prepared, let done = s.progressBytes else { return nil }
+        return L10n.tr("app.run.progress.copied", ByteCount.format(min(done, plan.sourceBytes)), ByteCount.format(plan.sourceBytes))
     }
 }

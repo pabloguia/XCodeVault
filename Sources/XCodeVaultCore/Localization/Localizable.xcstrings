@@ -5419,70 +5419,138 @@
         }
       }
     },
+    "app.quit.keepRunningOnly.export" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An installer is being exported. Stopping xcodebuild part-way has not been tested, so XCodeVault can’t quit until the export finishes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se está exportando un instalador. Detener xcodebuild a medias no se ha probado, así que XCodeVault no puede salir hasta que termine la exportación."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "インストーラを書き出しています。xcodebuild を途中で止める動作は検証されていないため、書き出しが終わるまで XCodeVault は終了できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Um instalador está sendo exportado. Parar o xcodebuild no meio não foi testado, então o XCodeVault não pode encerrar até a exportação terminar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在导出安装器。中途停止 xcodebuild 的情况未经测试,因此在导出完成前 XCodeVault 无法退出。"
+          }
+        }
+      }
+    },
+    "app.quit.keepRunningOnly.migration" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault is copying, verifying or removing data. Quitting now would leave a copy half-written while the journal calls it interrupted, so it can’t quit until this finishes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault está copiando, verificando o eliminando datos. Salir ahora dejaría una copia a medio escribir mientras el registro la da por interrumpida, así que no puede salir hasta que termine."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault はデータのコピー、検証、または削除を行っています。今終了すると、ジャーナルが中断と記録している間もコピーが書きかけのまま残るため、完了するまで終了できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault está copiando, verificando ou removendo dados. Encerrar agora deixaria uma cópia pela metade enquanto o registro a chama de interrompida, então ele não pode encerrar até isso terminar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 正在拷贝、验证或移除数据。现在退出会在日志将其记为中断时留下写了一半的拷贝,因此在完成之前无法退出。"
+          }
+        }
+      }
+    },
     "app.quit.message" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quitting may leave it interrupted."
+            "value" : "Quitting stops the running command, waits for it to end, and records the operation as failed. Nothing it did is undone."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Salir puede dejarla interrumpida."
+            "value" : "Salir detiene el comando en curso, espera a que termine y registra la operación como fallida. No se deshace nada de lo que hizo."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "終了すると中断されたままになる可能性があります。"
+            "value" : "終了すると実行中のコマンドを停止し、終わるのを待ってから、操作を失敗として記録します。それまでに行われた処理は元に戻りません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Encerrar pode deixá-la interrompida."
+            "value" : "Encerrar para o comando em andamento, espera ele terminar e registra a operação como falha. Nada do que ele fez é desfeito."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "退出可能会使其中断。"
+            "value" : "退出会停止正在运行的命令,等待其结束,并将该操作记为失败。已完成的部分不会被撤销。"
           }
         }
       }
     },
-    "app.quit.quitAnyway" : {
+    "app.quit.stopAndQuit" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quit Anyway"
+            "value" : "Stop and Quit"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Salir de todos modos"
+            "value" : "Detener y salir"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "それでも終了"
+            "value" : "停止して終了"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Encerrar Mesmo Assim"
+            "value" : "Parar e Encerrar"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "仍要退出"
+            "value" : "停止并退出"
           }
         }
       }
@@ -5551,6 +5619,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "我了解在那里构建的项目的单元测试可能会失败"
+          }
+        }
+      }
+    },
+    "app.run.backToOffload" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to Offload"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Volver a la descarga"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避に戻る"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Voltar ao Descarregamento"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "返回移出"
           }
         }
       }
@@ -5691,36 +5793,104 @@
         }
       }
     },
-    "app.run.cannotStop" : {
+    "app.run.blocker.simulatorWork" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This can’t be stopped once it starts. Quitting may leave it interrupted."
+            "value" : "A simulator, simctl or a test run is running. Wait for it to end, then check again."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No se puede detener una vez iniciada. Salir puede dejarla interrumpida."
+            "value" : "Hay un simulador, simctl o una ejecución de pruebas en curso. Espera a que termine y vuelve a comprobar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "開始すると停止できません。終了すると中断されたままになる可能性があります。"
+            "value" : "シミュレータ、simctl、またはテストの実行中です。終了するのを待ってから、もう一度確認してください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Depois de começar, não é possível parar. Encerrar o app pode deixar a operação interrompida."
+            "value" : "Um simulador, o simctl ou uma execução de testes está em andamento. Espere terminar e verifique de novo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "开始后无法停止。退出可能会使其中断。"
+            "value" : "有模拟器、simctl 或测试正在运行。请等待其结束后再次检查。"
+          }
+        }
+      }
+    },
+    "app.run.cannotStop" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This can’t be stopped from the app once it starts."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Una vez iniciada, no se puede detener desde la app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "開始すると、アプリから停止することはできません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Depois de começar, não é possível parar pelo app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "开始后无法从应用中停止。"
+          }
+        }
+      }
+    },
+    "app.run.checkAgain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Again"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Volver a comprobar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "もう一度確認"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Verificar de Novo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "再次检查"
           }
         }
       }
@@ -5925,6 +6095,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "从这台 Mac 删除运行时 %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "app.run.confirm.pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ejecutar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "実行"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Executar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "运行"
           }
         }
       }
@@ -6371,6 +6575,40 @@
         }
       }
     },
+    "app.run.failed.leftover" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A partial copy may still be on the vault, and it blocks the next try. This command removes it; the originals are never touched:"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Puede quedar una copia parcial en el disco bóveda, y bloquea el siguiente intento. Este comando la elimina; los originales nunca se tocan:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保管庫に途中までのコピーが残っている可能性があり、次の試行を妨げます。次のコマンドで削除できます。元のデータには触れません:"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Uma cópia parcial pode ainda estar no disco-cofre e impede a próxima tentativa. Este comando a remove; os originais nunca são mexidos:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保险库中可能仍有部分拷贝,它会阻止下一次尝试。此命令可移除它;原件永远不会被改动:"
+          }
+        }
+      }
+    },
     "app.run.failed.originalUntouched" : {
       "localizations" : {
         "en" : {
@@ -6405,36 +6643,274 @@
         }
       }
     },
-    "app.run.failed.title" : {
+    "app.run.failed.seeDetails" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Couldn’t finish"
+            "value" : "Show Details has the full error."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No se pudo terminar"
+            "value" : "El error completo está en Mostrar detalles."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "完了できませんでした"
+            "value" : "エラーの全文は「詳細を表示」にあります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Não foi possível concluir"
+            "value" : "O erro completo está em Mostrar Detalhes."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "无法完成"
+            "value" : "完整错误见“显示详细信息”。"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.deleteRuntime" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t delete the runtime"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo eliminar el runtime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ランタイムを削除できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível apagar o runtime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法删除运行时"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.exportRuntime" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t export the installer"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo exportar el instalador"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "インストーラを書き出せませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível exportar o instalador"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法导出安装器"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.externalizeArchives" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t copy Archives"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudieron copiar los Archives"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Archives をコピーできませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível copiar Archives"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法拷贝 Archives"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.offloadRuntime" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t offload the runtime"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo descargar el runtime del Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ランタイムを退避できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível descarregar o runtime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法移出运行时"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.setArchives" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t change the Archives folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo cambiar la carpeta de Archives"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Archives のフォルダを変更できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível mudar a pasta de Archives"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法更改 Archives 文件夹"
+          }
+        }
+      }
+    },
+    "app.run.failed.title.setDerivedData" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t change the DerivedData folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo cambiar la carpeta de DerivedData"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "DerivedData のフォルダを変更できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível mudar a pasta de DerivedData"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法更改 DerivedData 文件夹"
+          }
+        }
+      }
+    },
+    "app.run.followOutput" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow output"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Seguir la salida"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "出力を追う"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Acompanhar a saída"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "跟随输出"
           }
         }
       }
@@ -6546,31 +7022,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An earlier migration was interrupted"
+            "value" : "An earlier migration needs finishing"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Una migración anterior se interrumpió"
+            "value" : "Una migración anterior necesita terminarse"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "以前の移行が中断されています"
+            "value" : "以前の移行の後処理が必要です"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Uma migração anterior foi interrompida"
+            "value" : "Uma migração anterior precisa ser concluída"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "之前的迁移被中断"
+            "value" : "之前的一次迁移需要收尾"
           }
         }
       }
@@ -6911,40 +7387,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "%1$@ / %2$@"
-          }
-        }
-      }
-    },
-    "app.run.progress.written" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ written"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ escritos"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ 書き込み済み"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ gravados"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "已写入 %@"
           }
         }
       }
@@ -7901,6 +8343,40 @@
         }
       }
     },
+    "app.run.undo.locationRestore" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo puts back the folder Xcode uses now, %@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Deshacer vuelve a poner la carpeta que Xcode usa ahora, %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "取り消すと、Xcode が現在使用しているフォルダ %@ に戻ります。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desfazer devolve a pasta que o Xcode usa agora, %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "撤销会恢复 Xcode 当前使用的文件夹 %@。"
+          }
+        }
+      }
+    },
     "app.run.undo.offloadRuntime" : {
       "localizations" : {
         "en" : {
@@ -7935,36 +8411,70 @@
         }
       }
     },
-    "app.run.undoAction" : {
+    "app.run.undoAction.reset" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Undo"
+            "value" : "Undo: Reset to Default"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Deshacer"
+            "value" : "Deshacer: restablecer el valor predeterminado"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "取り消す"
+            "value" : "取り消す: デフォルトに戻す"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Desfazer"
+            "value" : "Desfazer: Voltar ao Padrão"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "撤销"
+            "value" : "撤销:恢复默认"
+          }
+        }
+      }
+    },
+    "app.run.undoAction.restore" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo: Use %@ Again"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Deshacer: volver a usar %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "取り消す: %@ に戻す"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desfazer: Usar %@ de Novo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "撤销:重新使用 %@"
           }
         }
       }
@@ -8033,6 +8543,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Xcode 已恢复为默认文件夹。"
+          }
+        }
+      }
+    },
+    "app.run.undone.restored" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode uses %@ again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode vuelve a usar %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode は再び %@ を使用します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O Xcode usa %@ de novo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode 重新使用 %@。"
           }
         }
       }

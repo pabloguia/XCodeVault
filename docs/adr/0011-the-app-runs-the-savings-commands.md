@@ -29,19 +29,32 @@ watch a command while it runs: `ProcessCommandRunner` blocks and returns the out
 3. **Observation only, and no new parameter on any existing Core operation.** Core gains `StreamingCommandRunner` —
    configured exactly as `ProcessCommandRunner`, result built from the whole of each pipe, each line also handed to an
    observer — and `ObservingCommandRunner`, a decorator. They reach the operations the way every runner already does:
-   as the `runner` the operation is constructed with. `MigrationEngine` takes no observer; the copy-to-verify stage is
-   read from `ditto`'s exit line in the log (`OperationStage.after`), so no caller-supplied code runs inside a migration.
-   Tests show a run through an observing runner journals and returns exactly what a plain run does.
+   as the `runner` the operation is constructed with. `MigrationEngine` takes no observer parameter; the copy-to-verify
+   stage is read from `ditto`'s exit line in the log (`OperationStage.after`). The observer does run while a command
+   runs — synchronously, on the threads that drain its pipes — so it **must not block** (a slow observer delays the
+   operation, and a test shows exactly that) and it **cannot alter results**: it returns `Void`, throws nothing, and
+   the result is built from the pipe bytes. Tests show a run through an observing runner journals and returns exactly
+   what a plain run does, for `copyAndVerify`, `offload`, `delete`, `export` and a Locations change.
 4. **Rule 4 and 5 hold.** Run on Archives copies and verifies and keeps the source. Only after a verified copy does the
    sheet offer **Remove Original…**, a separate step behind the checkbox "I confirm deleting non-regenerable data
    (Archives)" and a confirmation; the checkbox's value is what `removeSource(confirmNonRegenerable:)` receives, and that
    function re-verifies first. There is no cancel during copy, verify or remove; export has none either this round.
-5. One operation at a time (`AppModel.operationSheet`). Quitting while one runs asks first; closing the window does not
-   interrupt it, because the model lives in the app delegate.
-6. A migration the journal shows interrupted puts a banner on Park, Run externally and History with the exact recovery
-   commands (`migration status`, then `resume` or `abort` as Core accepts at that phase). The app does not resume or
-   abort this round.
-7. Rule 10: every strategy keeps its label. The sheet shows the experimental badge in its title where the row is
+5. One operation at a time (`AppModel.operationSheet`), and no scan while it runs. Quitting while one runs depends on the
+   stage (`AppModel.quitChoice`, review round 1): while copying, verifying or removing an original, and while exporting,
+   the alert offers only **Keep Running** — stopping `ditto` would leave a half-written copy the journal calls
+   interrupted, which a later `abort` could delete while `ditto` still wrote into it, and stopping `xcodebuild`
+   part-way is untested. While deleting a runtime or changing a folder, **Stop and Quit** terminates the command
+   (`ChildProcesses`), refuses any later one, and waits until the operation has journaled how it ended before the app
+   quits. Closing the window does not interrupt an operation, because the model lives in the app delegate.
+6. Offload and runtime delete wait while simulator work runs (`CleanExecutor.simulatorWorkIsRunning`), checked in the
+   review and again at the moment of use.
+7. **Undo** after a folder change puts back the folder Xcode used before — the value the journal records as
+   `previous` — and resets to the default only when there was none; its title says which.
+8. A migration the journal shows interrupted puts a banner on Park, Run externally and History with the exact recovery
+   commands (`migration status`, then `resume` or `abort` as Core accepts at that phase); so does a failed one whose
+   partial copy may still be on the vault, and the failed sheet itself shows its `migration abort <id>`. The app does
+   not resume or abort this round.
+9. Rule 10: every strategy keeps its label. The sheet shows the experimental badge in its title where the row is
    experimental; nothing here makes a strategy supported.
 
 ## Consequences

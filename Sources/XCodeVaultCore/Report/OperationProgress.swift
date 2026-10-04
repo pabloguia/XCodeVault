@@ -22,8 +22,9 @@ public enum OperationStage: String, Sendable, Equatable, CaseIterable {
     /// while copying. `copyAndVerify` runs one command, `ditto`, and verification runs none, so that exit is the copy
     /// finishing and the engine verifying. Every other line leaves the stage alone; the app sets the rest.
     ///
-    /// Derived from the log on purpose: `MigrationEngine` takes no observer, so nothing caller-supplied runs inside a
-    /// migration, and a wrong stage here can only be wrong about what the sheet shows.
+    /// Derived from the log on purpose: `MigrationEngine` takes no observer parameter. The runner's observer does run
+    /// while `ditto` copies, on the pipe-draining threads, but it cannot alter results (`LogObserver`), and a wrong
+    /// stage here can only be wrong about what the sheet shows.
     public static func after(_ line: LogLine, from current: OperationStage) -> OperationStage {
         guard current == .copying, line.stream == .exit, line.text == "0" else { return current }
         return .verifying
@@ -37,18 +38,11 @@ public enum OperationProgress {
         guard let done, let total, total > 0 else { return nil }
         return min(1, Double(done) / Double(total))
     }
-
-    /// Bytes added to a folder since it was first measured: what an export has downloaded so far. Never negative —
-    /// a folder that shrank (another installer removed) shows 0, not a wrapped-around number.
-    public static func added(baseline: UInt64?, current: UInt64?) -> UInt64? {
-        guard let current else { return nil }
-        guard let baseline else { return current }
-        return current > baseline ? current - baseline : 0
-    }
 }
 
-/// An operation's log as kept in memory: the newest `limit` lines, and how many older ones were dropped. The app keeps
-/// the full log in a file; this bound is what stops a chatty `xcodebuild` from growing the window's memory without end.
+/// An operation's log as kept in memory: the newest lines, and how many older ones were dropped. The app keeps the full
+/// log in a file; this bound is what stops a chatty `xcodebuild` from growing the window's memory without end. Lines are
+/// dropped in chunks of a tenth of the limit, so a full log costs one shift per chunk rather than one per line.
 public struct OperationLog: Sendable, Equatable {
     public static let defaultLimit = 5_000
     public let limit: Int
@@ -57,20 +51,33 @@ public struct OperationLog: Sendable, Equatable {
 
     public init(limit: Int = OperationLog.defaultLimit) { self.limit = max(1, limit) }
 
+    /// Every line ever appended, kept or dropped. `lines[i]`'s sequence number is `droppedCount + i`: a stable identity
+    /// for a row, which the cap does not shift.
+    public var total: Int { droppedCount + lines.count }
+
     public mutating func append(_ line: LogLine) {
         lines.append(line)
-        if lines.count > limit {
+        if lines.count > limit + limit / 10 {
             let excess = lines.count - limit
             lines.removeFirst(excess)
             droppedCount += excess
         }
     }
 
-    /// The kept lines as text, as **Copy log** copies them: a first line saying how many were dropped, if any.
-    public var text: String {
-        let body = lines.map(\.rendered).joined(separator: "\n")
-        return droppedCount == 0 ? body : "[\(droppedCount) earlier lines not kept in memory]\n" + body
+    public mutating func append(contentsOf more: [LogLine]) {
+        for l in more { append(l) }
     }
+
+    /// The kept lines as text, as **Copy log** copies them: a first line saying how many were dropped, if any, and
+    /// where the whole log is.
+    public func text(fullLogAt path: String? = nil) -> String {
+        let body = lines.map(\.rendered).joined(separator: "\n")
+        guard droppedCount > 0 else { return body }
+        let whole = path.map { "; the full log is at \($0)" } ?? ""
+        return "[\(droppedCount) earlier lines not kept in memory\(whole)]\n" + body
+    }
+
+    public var text: String { text() }
 }
 
 /// What to tell the user about a migration the journal shows interrupted, and the exact commands that recover it (R3:
@@ -91,6 +98,26 @@ public enum MigrationRecovery {
     /// the phase reached: `resume` once a CLEANUP has begun (the original may be renamed aside), `abort` before
     /// verification. Between the two (`VERIFIED`, nothing renamed) neither is offered and `status` says why. `resume`
     /// is given without `--i-confirm-deleting-non-regenerable-data`: Core asks for it, and the user types it.
+    /// Failed or interrupted migrations whose partial copy may still be on disk: `MigrationEngine.leftoverPartialCopies`'s
+    /// rule over records already read — a PLAN line with two paths, a last state of `failed` or `started`, no phase at
+    /// which `abort` is unsafe, and a destination `mayBePresent` says may exist. Returns the PLAN lines, oldest first.
+    public static func leftoverPartialCopies(
+        _ entries: [JournalEntry], mayBePresent: (String) -> Bool = { MigrationEngine.presence(of: $0).mayBePresent }
+    ) -> [JournalEntry] {
+        var last: [String: JournalEntry] = [:]
+        var planned: [String: JournalEntry] = [:]
+        var unsafe: Set<String> = []
+        for e in entries.sorted(by: { $0.sequence < $1.sequence }) where e.kind == .migration {
+            if planned[e.id] == nil, e.state == .planned, e.paths.count == 2 { planned[e.id] = e }
+            last[e.id] = e
+            if let ph = e.detail["phase"], MigrationEngine.phasesWhereAbortIsUnsafe.contains(ph) { unsafe.insert(e.id) }
+        }
+        return last.values.compactMap { e -> JournalEntry? in
+            guard !unsafe.contains(e.id), e.state == .failed || e.state == .started, let p = planned[e.id], mayBePresent(p.paths[1]) else { return nil }
+            return p
+        }.sorted { $0.sequence < $1.sequence }
+    }
+
     public static func commands(for id: String, in entries: [JournalEntry]) -> [String] {
         let phases = Set(entries.filter { $0.id == id }.compactMap { $0.detail["phase"] })
         var out = ["xcodevaultctl migration status"]
