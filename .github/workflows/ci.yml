@@ -88,6 +88,10 @@ jobs:
         # The control for SECURITY_MODEL.md, checked over the files as committed. The editor hooks
         # that carry the same rules are a convenience and are bypassable several ways; this is not.
         run: bash scripts/helper-invariants.sh
+      - name: Design-system invariants (UI lint)
+        # docs/design/DESIGN_SYSTEM.md §5.1: rules U1–U10 over the app's views — no capsule outside the design system, no
+        # ad-hoc status tints, no unstyled buttons in list rows — and a self-test that each rule still catches its own.
+        run: bash scripts/ui-invariants.sh && bash scripts/ui-invariants.sh --self-test
       - name: Release hygiene (ADR-0010)
         # What keeps the CI signing key in release.yml's `sign` job: no tracked signing material, no
         # pull_request_target, actions pinned by SHA, signing secrets and the `release` environment

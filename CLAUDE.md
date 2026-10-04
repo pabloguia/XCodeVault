@@ -16,6 +16,7 @@ this file short and update it only when a pointer or non-negotiable changes.
   before writing any code that touches mounts, deletion, or the privileged helper.
 - `docs/product/STORAGE_CATALOG.md` — the data model for storage categories and strategies.
 - `docs/product/UX_AND_CLI.md` — GUI/CLI UX spec, `xcodevaultctl` command surface.
+- `docs/design/DESIGN_SYSTEM.md` — the app's controls and status markers: what is a button, what is a tag.
 - `docs/research/FINDINGS-2026-09-05.md` — **read this early.** A sourced desk-research
   pass done before any code, with confidence tags. It corrects several assumptions the
   original brief made. Items tagged GATING/[UNKNOWN] are the research backlog.
@@ -55,6 +56,7 @@ daemon's logic, in a library so it is testable) + `Sources/XCodeVaultHelper` (ro
 bootstrap, allowlisted verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
 `Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
 `scripts/helper-invariants.sh` / `scripts/check-doc-mirror.sh` (the two controls that run in CI) ·
+`scripts/ui-invariants.sh` (the design system's UI lint, U1–U10; a CI gate) ·
 `scripts/preflight.sh` (runs every CI gate locally, in CI's order — run it before pushing; three of
 the four gates passing is not "the gates passed") ·
 `scripts/l10n.sh` (String Catalogs → compiled tables; `check` is a CI gate; see `docs/process/LOCALIZATION.md`) ·
