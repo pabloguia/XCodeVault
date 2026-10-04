@@ -51,8 +51,11 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The bucket views use their bucket's S5 symbol.
+    /// The sidebar's symbols. Park and Run Externally use their bucket's S5 symbol; Delete uses `trash` here, as a sidebar
+    /// item's symbol is its meaning and the bucket's counter-clockwise arrow reads as Undo next to "Delete" (R5, HIG review
+    /// N6; BRAND.md records the split — the bucket symbol stays wherever the bucket's title is shown).
     var symbol: String {
+        if self == .delete { return "trash" }
         if let bucket { return bucket.symbolName }
         return switch self {
         case .overview: "square.grid.2x2"
@@ -95,28 +98,42 @@ struct MainView: View {
                 if let feedback = model.feedback { FeedbackBanner(feedback: feedback) { model.dismissFeedback() } }
             }
             .toolbar {
-                // Back (R1): only when there is somewhere to go back to (`AppModel.canGoBack`); ⌘[ as in Safari and Finder.
-                if model.canGoBack {
-                    ToolbarItem(placement: .navigation) {
-                        Button {
-                            model.goBack()
-                        } label: {
-                            Label(L10n.tr("app.action.back"), systemImage: "chevron.backward").labelStyle(.titleAndIcon)
-                        }
-                        .keyboardShortcut("[", modifiers: .command)
-                        .accessibilityLabel(Text(verbatim: L10n.tr("app.action.back")))
+                // Back and Forward (R5, HIG review N1): icon-only chevrons with tooltips, ⌘[ and ⌘] as in Safari and
+                // Finder, always shown and disabled when there is nowhere to go, so the title never shifts.
+                ToolbarItemGroup(placement: .navigation) {
+                    Button {
+                        model.goBack()
+                    } label: {
+                        Label(L10n.tr("app.action.back"), systemImage: "chevron.backward")
                     }
+                    .labelStyle(.iconOnly).help(L10n.tr("app.action.back"))
+                    .keyboardShortcut("[", modifiers: .command).disabled(!model.canGoBack)
+                    Button {
+                        model.goForward()
+                    } label: {
+                        Label(L10n.tr("app.action.forward"), systemImage: "chevron.forward")
+                    }
+                    .labelStyle(.iconOnly).help(L10n.tr("app.action.forward"))
+                    .keyboardShortcut("]", modifiers: .command).disabled(!model.canGoForward)
                 }
                 ToolbarItem(placement: .primaryAction) {
+                    // One item whose content swaps while scanning (HIG review N9): no item pops in beside it.
                     Button {
                         Task { await model.refresh() }
                     } label: {
-                        Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
-                    }.disabled(model.isScanning || model.isOperationRunning)
+                        if model.isScanning {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .help(L10n.tr("app.action.rescan"))
+                    .disabled(model.isScanning || model.isOperationRunning)
                 }
-                if model.isScanning { ToolbarItem { ProgressView().controlSize(.small) } }
             }
             .navigationTitle(model.section.title)
+            // The Mac and its disk, or the scan in progress, quietly on every screen (HIG review N2).
+            .navigationSubtitle(model.windowSubtitle)
         }
         // The title says what failed, the message why and what to do (R5, HIG review N10).
         .alert(model.lastError?.title ?? "", isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {

@@ -467,7 +467,8 @@ extension AppModelTests {
         XCTAssertEqual(SidebarSection.details, [.storage, .simulators, .drives, .health, .history, .access])
         XCTAssertEqual(SidebarSection.allCases, SidebarSection.saveSpace + SidebarSection.details)
         // The bucket views carry the bucket's own S5 symbol; the others have one each.
-        XCTAssertEqual(SidebarSection.delete.symbol, SavingsBucket.deleteAndRegenerate.symbolName)
+        // R5 (HIG review N6): the sidebar's Delete is `trash`; the bucket's symbol stays with the bucket's title (BRAND.md).
+        XCTAssertEqual(SidebarSection.delete.symbol, "trash")
         XCTAssertEqual(SidebarSection.park.symbol, SavingsBucket.parkExternally.symbolName)
         XCTAssertEqual(SidebarSection.runExternally.symbol, SavingsBucket.runFromExternal.symbolName)
         XCTAssertEqual(Set(SidebarSection.allCases.map(\.symbol)).count, SidebarSection.allCases.count)

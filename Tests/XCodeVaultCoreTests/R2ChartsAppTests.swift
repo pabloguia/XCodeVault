@@ -23,19 +23,27 @@ final class R2ChartsAppTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(bars.count, 2, "the fixture has rows in several buckets")
         let bar = bars[1]
         model.clickStorageBar(bar.id)
-        XCTAssertEqual(model.storageBucketFilter, bar.bucket)
+        XCTAssertEqual(model.storageBucketFilter, [bar.bucket])
+        XCTAssertTrue(model.storageIsFiltered)
         XCTAssertEqual(model.storageRows(report), all.filter { $0.bucket == bar.bucket })
         XCTAssertEqual(model.storageRows(report).count, bar.rowCount)
         XCTAssertEqual(model.storageBars(report), bars, "the chart keeps every bar while filtered")
         model.clickStorageBar(nil)
-        XCTAssertEqual(model.storageBucketFilter, bar.bucket, "a click outside the bars keeps the filter")
+        XCTAssertEqual(model.storageBucketFilter, [bar.bucket], "a click outside the bars keeps the filter")
         model.clickStorageBar(bar.id)
-        XCTAssertNil(model.storageBucketFilter, "the selected bar again clears it")
+        XCTAssertEqual(model.storageBucketFilter, [], "the only bar shown, clicked again, shows every bucket")
         model.clickStorageBar(bars[0].id)
-        model.clickStorageBar(bars[1].id)
-        XCTAssertEqual(model.storageBucketFilter, bars[1].bucket, "another bar moves the filter")
+        model.clickStorageBar(bars[1].id, extending: true)
+        XCTAssertEqual(model.storageBucketFilter, [bars[0].bucket, bars[1].bucket], "⌘-click adds a bucket")
+        XCTAssertEqual(model.storageFilterBuckets, [bars[0].bucket, bars[1].bucket], "in the chart's order")
+        model.toggleStorageBucket(bars[0].bucket)
+        XCTAssertEqual(model.storageBucketFilter, [bars[1].bucket], "a chip takes one away")
+        model.storageQuery = "zzz-nothing"
+        XCTAssertEqual(model.storageRows(report), [], "the search combines with the buckets")
         model.clearStorageFilter()
-        XCTAssertNil(model.storageBucketFilter, "the chip's × and All clear it")
+        XCTAssertEqual(model.storageBucketFilter, [], "Show All")
+        XCTAssertEqual(model.storageQuery, "", "Show All clears the search too")
+        XCTAssertFalse(model.storageIsFiltered)
         XCTAssertEqual(model.storageRows(report), all)
     }
 
@@ -50,6 +58,14 @@ final class R2ChartsAppTests: XCTestCase {
         XCTAssertEqual(sizes, sizes.sorted())
     }
 
+    func testStorageSelectionGivesPathsForShowInFinder() async throws {
+        let (model, _) = await model()
+        let report = try XCTUnwrap(model.report)
+        let row = try XCTUnwrap(model.storageRows(report).first)
+        XCTAssertEqual(model.storagePaths([row.id], report: report), [row.item.path], "a row's id is not its path; the paths are")
+        XCTAssertEqual(model.storagePaths(["no-such-row"], report: report), [])
+    }
+
     func testClickingASimulatorBarSelectsItsRowAndScrollsToIt() async throws {
         let (model, _) = await model()
         let report = try XCTUnwrap(model.report)
@@ -58,79 +74,50 @@ final class R2ChartsAppTests: XCTestCase {
         let device = try XCTUnwrap(bars.first { $0.kind == .device })
         let runtime = try XCTUnwrap(bars.first { $0.kind == .runtime })
         model.clickSimulatorBar(device.id)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(deviceID: device.rowID))
-        XCTAssertEqual(model.simulatorScrollTarget(report)?.table, .device)
+        XCTAssertEqual(model.simulatorSelection, [device.id])
+        XCTAssertEqual(model.simulatorScrollTarget(report), device.id)
+        XCTAssertEqual(model.simulatorScrollRequests, 1)
+        model.simulatorQuery = "zzz-nothing"
         model.clickSimulatorBar(runtime.id)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(runtimeID: runtime.rowID))
-        let target = try XCTUnwrap(model.simulatorScrollTarget(report))
-        XCTAssertEqual(target.table, .runtime)
-        XCTAssertGreaterThan(target.anchor, 0)
-        XCTAssertLessThanOrEqual(target.anchor, 1)
-        // A row selected in the table itself scrolls too; one that is not listed does not.
-        model.selectDeviceRow("no-such-device")
+        XCTAssertEqual(model.simulatorSelection, [runtime.id])
+        XCTAssertEqual(model.simulatorQuery, "", "a search that would hide the clicked row is cleared")
+        XCTAssertEqual(model.simulatorScrollTarget(report), runtime.id)
+        model.clickSimulatorBar(nil)
+        XCTAssertEqual(model.simulatorScrollRequests, 2, "a click outside the bars does nothing")
+        XCTAssertEqual(model.simulatorSelection, [runtime.id])
+        model.clearSimulatorSelection()
+        XCTAssertEqual(model.simulatorSelection, [])
         XCTAssertNil(model.simulatorScrollTarget(report))
     }
 
-    /// Review I1 and M8: one selection across the two tables, and only a chart click scrolls the page.
-    func testATableClickSelectsOneRowAcrossBothTablesAndDoesNotScroll() async throws {
-        let (model, _) = await model()
-        let report = try XCTUnwrap(model.report)
-        let runtime = try XCTUnwrap(model.simulatorRuntimes(report).first), device = try XCTUnwrap(model.simulatorDevices(report).first)
-        model.selectRuntimeRow(runtime.id)
-        model.selectDeviceRow(device.id)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(deviceID: device.id), "the runtime is no longer selected")
-        XCTAssertEqual(model.simulatorScrollTarget(report)?.table, .device)
-        model.selectRuntimeRow(nil)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(deviceID: device.id), "the other table deselecting keeps it")
-        XCTAssertEqual(model.simulatorScrollRequests, 0, "a click in a table never scrolls the page")
-        let bar = try XCTUnwrap(SimulatorsChart.bars(report: report).first { $0.kind == .runtime })
-        model.clickSimulatorBar(bar.id)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(runtimeID: bar.rowID))
-        XCTAssertEqual(model.simulatorScrollRequests, 1, "a chart click does")
-        model.clickSimulatorBar(nil)
-        XCTAssertEqual(model.simulatorScrollRequests, 1, "a click outside the bars does not")
-    }
-
-    /// Review M5: the bucket menu sets the same filter a bar click does.
-    func testTheBucketMenuSetsTheFilter() async throws {
-        let (model, _) = await model()
-        let report = try XCTUnwrap(model.report)
-        let bar = try XCTUnwrap(model.storageBars(report).last)
-        model.chooseStorageFilter(bar.bucket)
-        XCTAssertEqual(model.storageBucketFilter, bar.bucket)
-        XCTAssertEqual(model.storageRows(report).count, bar.rowCount)
-        model.chooseStorageFilter(nil)
-        XCTAssertNil(model.storageBucketFilter)
-    }
-
-    /// Review M6: after a rescan, a filter whose bucket has no bar and a row no longer listed are cleared; valid ones stay.
+    /// Review M6: after a rescan, buckets with no bar and rows no longer listed leave the filter and the selections.
     func testARescanClearsAStaleFilterAndSelection() async throws {
         let (model, _) = await model()
         let report = try XCTUnwrap(model.report)
         let bars = model.storageBars(report)
         let absent = try XCTUnwrap(SavingsBucket.allCases.first { b in !bars.contains { $0.bucket == b } }, "a bucket with no rows")
-        model.chooseStorageFilter(absent)
-        model.selectDeviceRow("gone")
+        model.storageBucketFilter = [absent, bars[0].bucket]
+        model.simulatorSelection = ["device:gone"]
+        model.storageSelection = ["gone"]
         await model.refresh()
-        XCTAssertNil(model.storageBucketFilter)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection())
-        let device = try XCTUnwrap(model.simulatorDevices(report).first)
-        model.chooseStorageFilter(bars[0].bucket)
-        model.selectDeviceRow(device.id)
+        XCTAssertEqual(model.storageBucketFilter, [bars[0].bucket])
+        XCTAssertEqual(model.simulatorSelection, [])
+        XCTAssertEqual(model.storageSelection, [])
+        let device = try XCTUnwrap(model.simulatorRows(report, kind: .device).first)
+        model.simulatorSelection = [device.id]
         await model.refresh()
-        XCTAssertEqual(model.storageBucketFilter, bars[0].bucket)
-        XCTAssertEqual(model.simulatorSelection, SimulatorSelection(deviceID: device.id))
+        XCTAssertEqual(model.simulatorSelection, [device.id])
     }
 
-    func testTheSimulatorTablesFollowTheirSortOrders() async throws {
+    func testTheSimulatorTableFollowsItsSortOrder() async throws {
         let (model, _) = await model()
         let report = try XCTUnwrap(model.report)
-        XCTAssertEqual(model.simulatorRuntimes(report), SimulatorsTable.runtimes(report: report))
-        XCTAssertEqual(model.simulatorDevices(report), SimulatorsTable.devices(report: report))
-        model.runtimeSortOrder = [SimulatorsTable.RuntimeColumn.platform.comparator()]
-        XCTAssertEqual(model.simulatorRuntimes(report).map(\.platformDisplayName), ["iOS", "tvOS", "watchOS"])
-        model.deviceSortOrder = [SimulatorsTable.DeviceColumn.name.comparator(.reverse)]
-        XCTAssertEqual(model.simulatorDevices(report).map(\.device.name), ["iPhone 17 Pro", "iPad Air", "Apple Watch"])
+        XCTAssertEqual(model.simulatorRows(report, kind: .runtime), SimulatorsTable.listRows(report: report, kind: .runtime))
+        model.simulatorSortOrder = [SimulatorsTable.ListColumn.name.comparator()]
+        let platforms = model.simulatorRows(report, kind: .runtime).map { $0.name.split(separator: " ").first.map(String.init) ?? "" }
+        XCTAssertEqual(platforms, ["iOS", "tvOS", "watchOS"])
+        model.simulatorSortOrder = [SimulatorsTable.ListColumn.name.comparator(.reverse)]
+        XCTAssertEqual(model.simulatorRows(report, kind: .device).map(\.name), ["iPhone 17 Pro", "iPad Air", "Apple Watch"])
     }
 
     func testEveryMeasuredDriveGetsItsBar() async throws {

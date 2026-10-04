@@ -45,20 +45,23 @@ this of XCodeVault has not been observed or measured.
 
 The app shows the same numbers and runs the same checks as the command line, in the language macOS uses for it
 (English, Brazilian Portuguese, Spanish, Japanese or Simplified Chinese; every translation except English is still
-awaiting native review). Rescan with ⌘R. The sidebar has two groups: **Save space** — what you can reclaim, and how —
-and **Details** — everything the scan, the doctor and the journal recorded. **Back** (⌘[) in the toolbar returns to the
-screen you were on before — after **Review** on an Overview card, or a click in the sidebar — like a browser's Back.
+awaiting native review). Rescan with ⌘R (View menu); ⌘1–⌘4 open the Save Space views. The sidebar has two groups: **Save
+Space** — what you can reclaim, and how — and **Details** — everything the scan, the doctor and the journal recorded. The
+toolbar's **Back** (⌘[) and **Forward** (⌘]) chevrons move through the screens you visited, like a browser's. The window's
+subtitle shows the Mac and its internal disk, or "Scanning…" while a scan runs. When an action finishes, its result shows
+in a line above the screen until the next action or its ×; an error says what failed and why.
 
 ### Save space
 
 **Overview** draws the internal disk as one bar: other data, developer data split by the way each item can be
-reclaimed, and free space. Under it are three cards, one per way of reclaiming space, each with an "up to" amount (or, when some folders could not be read, "at least"), how
-much of it uses verified strategies, what it promises, what undoing it costs, and **Review**, which opens that way's
-view. The cards are alternatives for the same files — DerivedData, for example, can be deleted *or* moved — so they
+reclaimed, and free space. Under it are three cards, one per way of reclaiming space, each with whether the space
+comes back or stays free, an "up to" amount (or, when some folders could not be read, "at least"), how much of it is
+verified, and **Review**, which opens that way's view; what it promises and what undoing it costs are in the title's
+tooltip and at the top of that view. The cards are alternatives for the same files — DerivedData, for example, can be deleted *or* moved — so they
 overlap; the total under them counts each file once. The bar counts each item once too, under its main option.
 Simulator runtime images that `simctl` measured but the catalog does not count yet are on their own line. The Overview
 also shows at most one access row (see [How access is asked for](#how-access-is-asked-for)), scan warnings, and doctor
-findings of error severity or worse.
+findings of error severity or worse, with **Show in Health**.
 
 What each way costs to undo:
 
@@ -66,14 +69,14 @@ What each way costs to undo:
 |---|---|---|---|
 | **Delete — comes back on demand** (Temporary) | Space now; it grows back as Xcode rebuilds or downloads it again | Rebuild or re-download time. Simulator devices are the exception: deleting one deletes its apps and their data, and they do not come back | **Delete** deletes the rows you select (see below) |
 | **Park on an external drive** (Temporary) | Space until you bring it back: a verified copy waits on your vault drive | Copy it back when you need it — no download | **Park** shows the commands; **Run…** runs them in the app (see [Running a command from the app](#running-a-command-from-the-app)) |
-| **Run from an external drive** (Permanent) | Space for good: the data lives on the external drive and stops growing on this Mac | Nothing to download, but the drive must be connected while you work | **Run externally** shows the commands; **Run…** runs them in the app |
+| **Run from an external drive** (Permanent) | Space for good: the data lives on the external drive and stops growing on this Mac | Nothing to download, but the drive must be connected while you work | **Run Externally** shows the commands; **Run…** runs them in the app |
 
 Everything that stays on this Mac — Archives among it, which nothing here ever offers to delete — is counted in the
 bar, never in a card.
 
 | View | What it shows | What it changes | How to undo |
 |---|---|---|---|
-| Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its markers (*experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…**; the confirmation shows the exact count. Above the table, the helper's row when a row needs root. Below it, in one panel folded by default (open when the table is empty): the planner's warnings, the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command** — and, for runtimes, **Run…** — and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted by **Delete Selected…**: **Copy Command** puts the command on the clipboard, and you run it — or, for a runtime, **Run…** runs `runtime delete` in the Run sheet | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
+| Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its notes (*Experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…** (or ⌘⌫, or right-click ▸ **Delete Selected…**; right-click also has **Show in Finder** and **Copy Path**); the confirmation shows the exact count and what undoing costs for exactly those rows. **Move to Trash** is on by default. Above the table, the helper's row when a row needs root. Below it, in one panel folded by default (open when the table is empty): the planner's warnings, the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command** — and, for runtimes, **Run…** — and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted by **Delete Selected…**: **Copy Command** puts the command on the clipboard, and you run it — or, for a runtime, **Run…** runs `runtime delete` in the Run sheet | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
 | Park | The categories that can be parked, each with its size, markers, the command, **Copy Command** and **Run…**, and the vault drive's state: none registered, not connected, connected but not usable, or ready. A migration that was interrupted shows a banner with the commands that recover it | **Copy Command** copies the command for Terminal. **Run…** opens the Run sheet (below): Archives are copied to the vault and verified, the originals kept; a runtime is offloaded (deleted here, its installer kept on the drive) | Archives: nothing to undo until you remove the originals, a separate step. Runtime: import its installer again |
 | Run externally | The categories that can run from an external drive, with the same rows | DerivedData and Archives: Xcode's folder setting, with **Undo**. Runtime Library: exports an installer | **Undo** in the sheet resets Xcode to its default folder; an exported installer is a file you can delete |
 
@@ -120,34 +123,37 @@ the banner gives the commands.
 
 | Screen | What it shows | What it changes |
 |---|---|---|
-| Storage | A chart of the size in each way of reclaiming, for items on all drives (its symbol, name and size; each item counted once, so a per-device breakdown and a symlink are listed but not added). Click a bar to show only that bucket's rows; the **Bucket** menu does the same without a pointer; a chip names the filter, and its × or **All** clears it, as does clicking the bar again. The Overview's bar counts only the internal disk, so its amounts can be smaller. Below it, every storage item the scan found, largest first, sortable by any column: size, the way of reclaiming it is counted under (its symbol and name), category, outcome, strategy and path; symlinks and mount points flagged | Nothing |
-| Simulators | A chart of every measured runtime and device, coloured and marked by kind (runtime or device) and labelled by name; one not measured has no bar, and a line under the chart says how many. Click a bar to select its row in the table below and scroll to it. Then the installed simulator runtimes, largest first, with their total; the simulator devices with the size of their data, the runtime each one runs (iOS, watchOS, tvOS, visionOS and its version), and their total — each device's data folder as `simctl` reports it, so it can differ from the Delete view's "Simulator devices" row, which measures the whole `Devices` folder. A size the scan did not measure says "not measured". Both tables sort by any column | Nothing: runtimes and devices are deleted with `simctl`, whose commands the Delete view lists |
-| Drives | One row per drive — the running system's System and Data volumes as one "Internal disk (boot)" row — with whether it qualifies as a vault (blockers shown, warnings folded behind their count) and, on a registered vault's own row, its state as a badge. Each drive whose size was measured has a bar of its space: other data, the developer data the scan found on it by way of reclaiming, and free space, with a legend that names each part and its size. On a vault the bar shows what the scan found there; XCodeVault's records keep no sizes of what was placed on it. Registered vaults that are not connected have a section of their own | Nothing; registering a vault is `xcodevaultctl vault init` |
+| Storage | A chart of the size in each option, for items on all drives (its symbol, name and size; each item counted once, so a per-device breakdown and a symlink are listed but not added). Click a bar to show only that option's rows; ⌘-click a bar, or click the buttons under the chart, to show several. While anything narrows the table, "Filtering: Delete and Park ×" and **Show All** say so and clear it. The search field in the toolbar finds rows by name or path, together with the options. The Overview's bar counts only the internal disk, so its amounts can be smaller. Below it, every storage item the scan found, largest first, sortable by any column: size, option, category, outcome, strategy (by name, with its *Experimental* badge) and path; symlinks and mount points are marked with a symbol and a word. Right-click a row for **Show in Finder** and **Copy Path** | Nothing |
+| Simulators | A chart of every measured runtime and device, coloured and marked by kind (runtime or device) and labelled by name; one not measured has no bar, and a line under the chart says how many. Click a bar to select its row in the table below and scroll to it; **Clear Selection** clears it. One table, in two sections: the installed simulator runtimes with their total, then the simulator devices with the size of their data and their total — each device's data folder as `simctl` reports it, so it can differ from the Delete view's "Simulator devices" row, which measures the whole `Devices` folder. Columns: size ("Not measured" when the scan did not measure it), name, version or runtime, state ("Mounted" for a runtime whose image is), path; "—" where `simctl` gave nothing. It sorts by any column, and the search field finds rows by name, runtime or path | Nothing: runtimes and devices are deleted with `simctl`, whose commands the Delete view lists |
+| Drives | One row per drive — the running system's System and Data volumes as one "Internal disk (boot)" row, marked only "Boot volume" — with whether it can be a vault (what stops it shown, warnings folded behind their count) and, on a registered vault's own row, one verdict: Ready, Ready with warnings, Needs attention (the drive no longer qualifies) or Can't be used, with why under it. Each drive whose size was measured has a bar of its space: other data, the developer data the scan found on it by way of reclaiming, and free space, with a legend that names each part and its size. On a vault the bar shows what the scan found there; XCodeVault's records keep no sizes of what was placed on it. Registered vaults that are not connected have a section of their own | Nothing; registering a vault is `xcodevaultctl vault init` |
 | Health | A line of counts by severity ("1 warning · 3 info"), then one card per doctor finding, most severe first, then largest: the severity as a symbol and a word, the title, one short sentence, the size when the finding has one, and the fix — or, where the privileged helper can fix it (the vault folder a drive refused), its control. **Details** unfolds the full explanation, the per-device sizes, why `clean` does not offer it, the whole fix, the path and the evidence. The findings' own text stays English | Nothing by itself: the doctor proposes, it never applies a fix. The control, where it is a button, creates the vault folder through the helper; remove the folder if you no longer want it |
-| History | One row per operation — not one per journal record — grouped by the day it started (Today, Yesterday, then the date), newest first, the newest 100: the time, a badge for its kind (a symbol, a color and a short name: Cleanup, Runtime deleted, Runtime parked, Runtime export, Runtime import, Migration, Xcode location, Privileged helper, Other), its state as a symbol and a word (Completed, Failed, Interrupted, Rolled back, Skipped, Planned — recorded but never started), the summary — whole in its tooltip, with how it ended — and the size when one was recorded. **Interrupted** means the journal records a start and no end, as `xcodevaultctl doctor` counts it; an operation another `xcodevaultctl` is running at that moment shows so too until it ends. A failed or interrupted row shows how it ended under its summary; every step of an operation, such as which path a
-cleanup could not delete, is in `xcodevaultctl journal`. **Kinds** hides kinds; **Show all** brings them back. The
-summaries are the journal's own English | Nothing |
-| Access | One row per permission — Full Disk Access and the privileged helper — each with its state as a symbol and a word, one sentence of why, and one button | See below |
+| History | A table, one row per operation — not one per journal record — in sections by the day it started (Today, Yesterday, then the date), newest first, the newest 100: the time, a badge for its kind (a symbol, a color and a short name: Cleanup, Runtime deleted, Runtime parked, Runtime export, Runtime import, Migration, Xcode location, Privileged helper, Other), its state as a symbol and a word (Completed, Failed, Interrupted, Rolled back, Skipped, Planned — recorded but never started), the summary — whole in its tooltip, with how it ended — and the size when one was recorded. **Interrupted** means the journal records a start and no end, as `xcodevaultctl doctor` counts it; an operation another `xcodevaultctl` is running at that moment shows so too until it ends. A failed or interrupted row shows how it ended under its summary; every step of an operation, such as which path a
+cleanup could not delete, is in `xcodevaultctl journal`. The kinds menu ("All Kinds", or "3 of 5 Kinds") hides kinds; **Show All**, inside it,
+brings them back. Right-click ▸ **Copy Summary** copies the selected rows' summaries. The summaries are the journal's own English | Nothing |
+| Permissions | One row per permission — Full Disk Access and the privileged helper — each with its state as a symbol and a word ("Off" with a neutral symbol when nothing needs it), one sentence of why, and one button | See below |
 
 ### How access is asked for
 
-Access is asked for where it matters, and in one place you can always open: the **Access** screen. The Overview shows
+Access is asked for where it matters, and in one place you can always open: the **Permissions** screen. The Overview shows
 the one row that holds back something the scan measured — Full Disk Access when folders could not be read, the helper
 when rows only root can delete wait on it and this build can reach it — and the Delete view shows the helper's row above its table when a row in it
-needs root. Each row has one button: **Open Full Disk Access Settings** (or **Check again** when the check could not
-tell), and **Install the Helper…** or **Approve in System Settings…** for the helper; once the helper is enabled, Access
-offers **Uninstall…**, with a confirmation. **Open Full Disk Access Settings** first makes one attempt to open a folder macOS
-guards with Full Disk Access (`~/Library/Safari`; it reads nothing), which should put XCodeVault in the pane's list,
-then opens System Settings ▸ Privacy & Security ▸ Full Disk Access. XCodeVault should now be in the list — turn its
-switch on. If it isn't there, add it with **+** (that step is not yet verified on every macOS version; H16). Whenever
-you come back to the app it checks again and updates the Access row, the banner and the Overview; it rescans once if Full
-Disk Access was just granted — if macOS asks you to quit and reopen XCodeVault, do so. A build you made yourself (ad hoc
+needs root. Each row has one button: **Open System Settings** (or **Check Again** when the check could not tell), and
+**Install Helper…** or **Approve in System Settings…** for the helper; once the helper is enabled, Permissions offers
+**Uninstall…**, with a confirmation. **Open System Settings** first makes one attempt to open a folder macOS guards with
+Full Disk Access (`~/Library/Safari`; it reads nothing), which puts XCodeVault in the pane's list, then opens System
+Settings ▸ Privacy & Security ▸ Full Disk Access. After that the row says: XCodeVault is now in the list — turn its
+switch on; if it isn't there, click **+** and choose XCodeVault (verified on macOS 26.7.1 by a user on 2026-10-04;
+other versions are unmeasured, hence the fallback; H16). Whenever you come back to the app it checks again and updates
+the row, the banner and the Overview; it rescans once if Full Disk Access was just granted. If the app still does not
+see it — macOS may ask you to relaunch — the row offers **Relaunch XCodeVault**, which opens a new copy and quits this
+one (asking first if an operation is running). A build you made yourself (ad hoc
 signed, not a release) may appear in the list under its path, such as `…/XCodeVault.app`, rather than under its name and
-icon; it is the same app. **Install the Helper…**
-registers the helper and opens Login Items & Extensions, where you approve it. In a build that cannot reach the helper —
+icon; it is the same app. **Install Helper…**
+registers the helper and opens Login Items & Extensions, where you approve it; the sheet waits for your approval, with
+**Open System Settings** and **Stop Waiting**. In a build that cannot reach the helper —
 every build made today — its row says "Not in this build" and, instead of a button, a condition: the helper needs a signed
-build that includes it, and none is released yet (issue #30); where there is a manual route, run the step that
-`xcodevaultctl doctor` or `xcodevaultctl vault init` prints. In such a build the Overview does not show the helper's row:
+build that includes it, and none is released yet (issue #30); its tooltip says that where there is a manual route, you
+run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints. In such a build the Overview does not show the helper's row:
 it stays on the Access screen and above the Delete table, with the bytes it holds back. To undo, switch the permission
 off in System Settings; for the helper, **Uninstall…**.
 

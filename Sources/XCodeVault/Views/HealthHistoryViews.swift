@@ -13,7 +13,14 @@ struct HealthView: View {
 
     var body: some View {
         if model.findings.isEmpty {
-            ContentUnavailableView(L10n.tr("app.doctor.empty"), systemImage: "checkmark.seal")
+            // An empty state that explains and offers the next step (HIG review H3).
+            ContentUnavailableView {
+                Label(L10n.tr("app.doctor.empty"), systemImage: "checkmark.seal")
+            } description: {
+                Text.l10n(L10n.tr("app.doctor.empty.detail"))
+            } actions: {
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.disabled(model.isScanning || model.isOperationRunning)
+            }
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
@@ -149,19 +156,14 @@ struct HealthDetailsView: View {
     }
 }
 
-/// History: one row per operation, grouped by the day it started (Today, Yesterday, then the date), newest first. Each
-/// row has the time, the kind's badge, the state as a symbol and a word, the summary (whole in its tooltip) and the size
-/// when one was recorded. The kinds menu hides kinds.
+/// History (R5, HIG review HI1–HI3): one table, one row per operation, in sections by the day it started (Today,
+/// Yesterday, then the date), newest first. Real columns — the time, the kind's badge, the state as a symbol and a word,
+/// the summary (whole in its tooltip, how it ended under it when it did not end well) and the size when one was recorded —
+/// with headers VoiceOver reads, keyboard selection and Copy Summary. The kinds menu says the filter's state and hides
+/// kinds; **Show All** is inside it.
 struct HistoryView: View {
     @Bindable var model: AppModel
-
-    /// The columns' widths, shared by the header and the rows so they line up.
-    enum Width {
-        static let time: CGFloat = 72
-        static let kind: CGFloat = 176
-        static let state: CGFloat = 128
-        static let size: CGFloat = 80
-    }
+    @State private var selection = Set<String>()
 
     var body: some View {
         if model.historyRows.isEmpty {
@@ -170,90 +172,100 @@ struct HistoryView: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 InterruptedMigrationsBanner(items: model.interruptedMigrations) { model.environment.copy($0) }.padding(.horizontal)
-                filterBar
-                header
+                HStack {
+                    Spacer(minLength: 0)
+                    filterMenu
+                }
+                .padding(.horizontal)
                 let sections = model.historySections()
                 if sections.isEmpty {
-                    Text.l10n(L10n.tr("app.history.filter.none")).foregroundStyle(.secondary).padding(.horizontal)
-                    Spacer(minLength: 0)
-                } else {
-                    List {
-                        ForEach(sections) { section in
-                            Section {
-                                ForEach(section.rows) { HistoryRowView(row: $0) }
-                            } header: {
-                                Text(verbatim: AppText.historyDay(section.day))
-                            }
-                        }
+                    ContentUnavailableView {
+                        Label(L10n.tr("app.history.filter.none"), systemImage: "line.3.horizontal.decrease.circle")
+                    } actions: {
+                        Button(L10n.tr("app.history.filter.all")) { model.showAllHistoryKinds() }
                     }
-                    .listStyle(.inset)
+                } else {
+                    table(sections)
                 }
             }
             .padding(.top, 8)
         }
     }
 
-    private var filterBar: some View {
-        HStack(spacing: 8) {
-            Spacer(minLength: 0)
-            Menu(L10n.tr("app.history.filter.menu")) {
-                ForEach(model.historyKinds, id: \.self) { kind in
-                    Toggle(isOn: Binding(get: { model.historyShows(kind) }, set: { _ in model.toggleHistoryKind(kind) })) {
-                        Label(AppText.historyKind(kind), systemImage: kind.symbolName)
-                    }
+    private var filterMenu: some View {
+        Menu(model.historyFilterTitle) {
+            ForEach(model.historyKinds, id: \.self) { kind in
+                Toggle(isOn: Binding(get: { model.historyShows(kind) }, set: { _ in model.toggleHistoryKind(kind) })) {
+                    Label(AppText.historyKind(kind), systemImage: kind.symbolName)
                 }
             }
-            .fixedSize()
-            Button(L10n.tr("app.history.filter.all")) { model.showAllHistoryKinds() }
-                .disabled(model.historyHiddenKinds.isEmpty)
+            Divider()
+            Button(L10n.tr("app.history.filter.all")) { model.showAllHistoryKinds() }.disabled(model.historyHiddenKinds.isEmpty)
         }
-        .padding(.horizontal)
+        .fixedSize()
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Text.l10n(L10n.tr("app.column.when")).frame(width: Width.time, alignment: .leading)
-            Text.l10n(L10n.tr("app.column.kind")).frame(width: Width.kind, alignment: .leading)
-            Text.l10n(L10n.tr("app.column.state")).frame(width: Width.state, alignment: .leading)
-            Text.l10n(L10n.tr("app.column.summary")).frame(maxWidth: .infinity, alignment: .leading)
-            Text.l10n(L10n.tr("app.column.size")).frame(width: Width.size, alignment: .trailing)
+    private func table(_ sections: [JournalTimeline.DaySection]) -> some View {
+        Table(of: JournalTimeline.Row.self, selection: $selection) {
+            TableColumn(L10n.tr("app.column.when")) { Text(verbatim: AppText.time($0.started)).monospacedDigit() }.width(min: 56, ideal: 72)
+            TableColumn(L10n.tr("app.column.kind")) { HistoryKindBadge(kind: $0.kind) }.width(min: 100, ideal: 140)
+            TableColumn(L10n.tr("app.column.state")) { HistoryOutcomeLabel(outcome: $0.outcome) }.width(min: 90, ideal: 120)
+            TableColumn(L10n.tr("app.column.summary")) { HistorySummaryCell(row: $0) }
+            TableColumn(L10n.tr("app.column.size")) { row in
+                Text(verbatim: row.bytes.map { ByteCount.format($0) } ?? "").monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 60, ideal: 80)
+        } rows: {
+            ForEach(sections) { section in
+                Section {
+                    ForEach(section.rows) { TableRow($0) }
+                } header: {
+                    Text(verbatim: AppText.historyDay(section.day))
+                }
+            }
         }
-        .font(.caption).bold().foregroundStyle(.secondary).lineLimit(1)
-        .padding(.horizontal, 26)
-        .accessibilityHidden(true)
+        .contextMenu(forSelectionType: String.self) { ids in
+            Button(L10n.tr("app.history.copySummary")) { model.copyHistorySummaries(ids) }.disabled(ids.isEmpty)
+        }
     }
 }
 
-/// One operation. The summary is the journal's English; the tooltip gives it whole, with how it ended.
-struct HistoryRowView: View {
+/// A History row's state: its symbol, tinted for a failed (red) or interrupted (orange) operation (HIG review HI2), and its
+/// word, which always says it.
+struct HistoryOutcomeLabel: View {
+    let outcome: JournalTimeline.Outcome
+
+    var body: some View {
+        Label {
+            Text(verbatim: AppText.historyOutcome(outcome)).lineLimit(1)
+        } icon: {
+            Image(systemName: outcome.symbolName).foregroundStyle(Self.tint(outcome)).accessibilityHidden(true)
+        }
+    }
+
+    static func tint(_ outcome: JournalTimeline.Outcome) -> Color {
+        switch outcome {
+        case .failed: .red
+        case .interrupted: .orange
+        default: .secondary
+        }
+    }
+}
+
+/// One operation's summary: the journal's English, whole in its tooltip with how it ended; how it ended under it when it
+/// did not end well (R4 review M5); every step is in `xcodevaultctl journal`.
+struct HistorySummaryCell: View {
     let row: JournalTimeline.Row
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(verbatim: AppText.time(row.started)).monospacedDigit().lineLimit(1).frame(width: HistoryView.Width.time, alignment: .leading)
-            HistoryKindBadge(kind: row.kind).frame(width: HistoryView.Width.kind, alignment: .leading)
-            Label {
-                Text(verbatim: AppText.historyOutcome(row.outcome)).lineLimit(1)
-            } icon: {
-                Image(systemName: row.outcome.symbolName).accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 1) {
+            Text(verbatim: row.summary).lineLimit(1).truncationMode(.middle)
+            if row.showsEndSummary, let end = row.endSummary {
+                Text(verbatim: end).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
-            .frame(width: HistoryView.Width.state, alignment: .leading)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(verbatim: row.summary).lineLimit(1).truncationMode(.middle)
-                // How it ended, under it, when it did not end well (R4 review M5); every step is in `xcodevaultctl journal`.
-                if row.showsEndSummary, let end = row.endSummary {
-                    Text(verbatim: end).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .help(fullSummary)
-            Text(verbatim: row.bytes.map { ByteCount.format($0) } ?? "").monospacedDigit().lineLimit(1)
-                .frame(width: HistoryView.Width.size, alignment: .trailing)
         }
-        .accessibilityElement(children: .combine)
+        .help([row.summary, row.endSummary].compactMap { $0 }.joined(separator: "\n"))
     }
-
-    private var fullSummary: String { [row.summary, row.endSummary].compactMap { $0 }.joined(separator: "\n") }
 }
 
 /// A kind at a glance: its symbol in its color and its short name, on a tinted capsule. The name is `.primary` text.

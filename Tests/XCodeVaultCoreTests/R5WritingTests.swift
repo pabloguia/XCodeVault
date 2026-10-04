@@ -52,7 +52,7 @@ final class R5WritingTests: XCTestCase {
         }
         XCTAssertEqual(L10n.tr("app.section.access"), "Permissions", "the familiar name (HIG review N7)")
         XCTAssertEqual(AppText.severity(.critical), "Critical")
-        XCTAssertEqual(L10n.tr("app.value.no"), "No")
+        XCTAssertEqual(L10n.tr("app.history.filter.allKinds"), "All Kinds")
     }
 
     /// HIG review ST4: a strategy shows its name, never its identifier, in every language.

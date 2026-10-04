@@ -52,6 +52,15 @@ The CLI colors bucket titles only, and only on a terminal: 24-bit when `COLORTER
 - Bucket colors are fills and icon tints, never text color.
 - Tokens must be appearance-aware (light and dark) before GUI use.
 - Do not use `Brand.indigo` as a foreground in dark mode or `Brand.teal` on light surfaces.
+- **The sidebar's Delete row uses `trash`** (R5, HIG review N6): in a sidebar the symbol is the item's meaning, and the
+  bucket's counter-clockwise arrow reads as Undo beside "Delete". The bucket keeps `arrow.counterclockwise.circle`
+  wherever its title is shown — cards, charts, legends, the Delete view's header — where "comes back on demand"
+  explains the arrow. Park and Run Externally use their bucket symbols in the sidebar too.
+- **Increase Contrast** (R5, HIG review X9): each bucket has a darker light variant and a lighter dark variant
+  (`highContrastLightColorHex`, `highContrastDarkColorHex`, ≥ 4.5:1 on white and the dark background), and the card
+  stripe and bar segments get a hairline.
+- **The Simulators chart** keeps system indigo and teal (runtime, device), with a legend and a symbol per bar: the brand
+  teal is not for light surfaces, so it is not used there (R5, HIG review C1).
 - In selected rows the symbol uses the selection style.
 - Never place the mark next to toolbar or menu actions, where it could read as "log out".
 

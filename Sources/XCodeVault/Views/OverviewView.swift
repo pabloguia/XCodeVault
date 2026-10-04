@@ -19,11 +19,7 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text.l10n(
-                    L10n.tr(
-                        "app.overview.host", report.host.macOSVersion, report.host.architecture, ByteCount.format(report.host.dataVolumeFreeBytes),
-                        ByteCount.format(report.host.dataVolumeTotalBytes))
-                ).font(.headline)
+                // The host line is the window's subtitle (HIG review N2): what can be reclaimed comes first.
                 if let access { GroupBox { AccessRowView(row: access, act: act) } }
                 if report.sizesMeasured {
                     DiskBarView(bar: DiskBar(host: report.host, savings: report.savings))
@@ -110,6 +106,7 @@ struct OverviewView: View {
 struct OverviewCardView: View {
     let card: OverviewCards.Card
     let review: @MainActor () -> Void
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -147,7 +144,7 @@ struct OverviewCardView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
         .overlay(alignment: .top) {
             // The bucket color as a fill, never as text.
-            UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(card.bucket.color).frame(height: 4)
+            UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(card.bucket.color).frame(height: contrast == .increased ? 6 : 4)
         }
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor)))
     }
@@ -157,6 +154,8 @@ struct OverviewCardView: View {
 /// names every segment with a symbol, a title and a size, so no segment is told by color alone.
 struct DiskBarView: View {
     let bar: DiskBar
+    /// Increase Contrast outlines every segment and chip (R5, HIG review X9).
+    @Environment(\.colorSchemeContrast) private var contrast
     /// Under the bar; the Overview's says the bar counts each item once. Nil for none.
     var caption: String? = L10n.tr("app.overview.bar.caption")
     var accessibilityTitle: String = L10n.tr("app.overview.bar.a11y")
@@ -169,12 +168,15 @@ struct DiskBarView: View {
                 HStack(spacing: 1) {
                     ForEach(Array(bar.segments.enumerated()), id: \.offset) { _, segment in
                         Rectangle().fill(Self.fill(segment.kind))
+                            .overlay { if contrast == .increased { Rectangle().strokeBorder(Color(nsColor: .separatorColor)) } }
                             .frame(width: max(geometry.size.width * Double(segment.bytes) / Double(total) - 1, 0))
                     }
                 }
             }
             .frame(height: barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 5))
+            // A hairline around the bar, so the Free part never disappears into a dark window (HIG review O6).
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
             // The legend says the same thing in words.
             .accessibilityHidden(true)
             // The bar counts each item once, the cards every option: say so, or the same title shows two numbers.
@@ -196,7 +198,9 @@ struct DiskBarView: View {
 
     private func legendItem(_ segment: DiskBar.Segment) -> some View {
         HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10).accessibilityHidden(true)
+            RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10)
+                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color(nsColor: .separatorColor)))
+                .accessibilityHidden(true)
             switch segment.kind {
             case .bucket(let bucket): BucketSymbol(bucket: bucket, decorative: true)
             case .otherData: Image(systemName: "doc.on.doc").foregroundStyle(.secondary).accessibilityHidden(true)
@@ -221,7 +225,7 @@ struct DiskBarView: View {
         switch kind {
         case .bucket(let bucket): bucket.color
         case .otherData: Color(nsColor: .systemGray).opacity(0.55)
-        case .free: Color(nsColor: .quaternaryLabelColor)
+        case .free: Color(nsColor: .tertiarySystemFill)
         }
     }
 }

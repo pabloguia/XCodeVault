@@ -8,9 +8,9 @@ import Foundation
 extension StorageRow {
     /// The bucket column's order: `SavingsBucket`'s, most durable saving first; a row with no bucket last.
     public var bucketSortKey: Int { bucket.flatMap { SavingsBucket.allCases.firstIndex(of: $0) } ?? SavingsBucket.allCases.count }
-    /// The strategy column's order. The cell shows the strategy's identifier verbatim — an identifier, never translated —
-    /// with a localized "experimental" suffix, so identifier order is the order on screen; the experimental one of two
-    /// equal identifiers sorts after the plain one, as its longer label does. A row with no strategy first.
+    /// The strategy column's order: by the strategy's identifier, a fixed order whatever the language (the cell shows the
+    /// strategy's name in words since R5); the experimental one of two equal identifiers sorts after the plain one, as its
+    /// badge follows its name. A row with no strategy first.
     public var strategySortKey: String { (strategy?.rawValue ?? "") + (isExperimental ? " ~" : "") }
 }
 
@@ -38,28 +38,49 @@ extension StorageTable {
         }
     }
 
-    /// The rows the table shows: all of them, or only `bucket`'s when the chart filters it. In `rows(report:)`'s order.
-    public static func rows(report: ScanReport, bucket: SavingsBucket?) -> [StorageRow] {
-        let all = rows(report: report)
-        guard let bucket else { return all }
-        return all.filter { $0.bucket == bucket }
+    /// The rows the table shows (R5): those in any of `buckets` — every row when the set is empty — whose name or path
+    /// contains `query` (`matches`). In `rows(report:)`'s order.
+    public static func rows(report: ScanReport, buckets: Set<SavingsBucket>, query: String = "") -> [StorageRow] {
+        rows(report: report).filter { row in
+            (buckets.isEmpty || row.bucket.map(buckets.contains) == true) && matches(row, query: query)
+        }
+    }
+
+    /// The search (R5, the user's feedback of 2026-10-04): the category's name or the item's path contains the text,
+    /// ignoring case and diacritics, after trimming. An empty search matches every row.
+    public static func matches(_ row: StorageRow, query: String) -> Bool {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return true }
+        return row.categoryName.localizedStandardContains(text) || row.item.path.localizedStandardContains(text)
+    }
+
+    /// Whether anything narrows the table: a bucket chosen or a search typed. The view shows **Show All** and the filter's
+    /// summary exactly then.
+    public static func isFiltered(buckets: Set<SavingsBucket>, query: String) -> Bool {
+        !buckets.isEmpty || !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// The bucket a chart value names; nil for anything else.
     public static func bucket(forBarID id: String?) -> SavingsBucket? { id.flatMap(SavingsBucket.init(rawValue:)) }
 
-    /// The filter after a click: the clicked bucket; no filter when the click is on the bar already selected; unchanged
-    /// when the click is outside every bar (nil).
-    public static func filter(after current: SavingsBucket?, clicked: SavingsBucket?) -> SavingsBucket? {
+    /// The buckets after a click on the chart (R5): a plain click shows only the clicked bucket, or every bucket when it
+    /// was the only one shown; ⌘-click (`extending`) adds the bucket or takes it away, as a legend chip does; a click
+    /// outside every bar (nil) changes nothing.
+    public static func filter(after current: Set<SavingsBucket>, clicked: SavingsBucket?, extending: Bool) -> Set<SavingsBucket> {
         guard let clicked else { return current }
-        return clicked == current ? nil : clicked
+        if extending { return toggled(current, clicked) }
+        return current == [clicked] ? [] : [clicked]
     }
 
-    /// The filter after a new scan: kept while its bucket still has a bar, cleared otherwise, so the chip never names a
-    /// filter no bar can toggle.
-    public static func filter(_ current: SavingsBucket?, validIn bars: [BucketBar]) -> SavingsBucket? {
-        guard let current, bars.contains(where: { $0.bucket == current }) else { return nil }
-        return current
+    /// A legend chip's toggle: the bucket added to the filter, or taken out of it.
+    public static func toggled(_ current: Set<SavingsBucket>, _ bucket: SavingsBucket) -> Set<SavingsBucket> {
+        current.contains(bucket) ? current.subtracting([bucket]) : current.union([bucket])
+    }
+
+    /// The filter after a new scan: only the buckets that still have a bar, so the summary never names a bucket no bar or
+    /// chip can toggle.
+    public static func filter(_ current: Set<SavingsBucket>, validIn bars: [BucketBar]) -> Set<SavingsBucket> {
+        current.intersection(bars.map(\.bucket))
     }
 
     /// The table's sortable columns, and the comparator each one sorts by.
@@ -130,40 +151,6 @@ extension SimulatorBar.Kind {
     }
 }
 
-/// What the Simulators screen's tables have selected: at most one row, in one of the two tables.
-public struct SimulatorSelection: Sendable, Equatable {
-    public var runtimeID: String?
-    public var deviceID: String?
-
-    public init(runtimeID: String? = nil, deviceID: String? = nil) {
-        self.runtimeID = runtimeID
-        self.deviceID = deviceID
-    }
-
-    /// The selection after a click in the runtimes table (R2 review I1): that row, and nothing in the devices table. A nil
-    /// (the runtimes table deselecting) clears only the runtime, so it never undoes a device just selected.
-    public func selecting(runtimeID id: String?) -> SimulatorSelection {
-        guard let id else { return SimulatorSelection(runtimeID: nil, deviceID: deviceID) }
-        return SimulatorSelection(runtimeID: id)
-    }
-
-    /// The selection after a click in the devices table: that row, and nothing in the runtimes table. A nil clears only
-    /// the device.
-    public func selecting(deviceID id: String?) -> SimulatorSelection {
-        guard let id else { return SimulatorSelection(runtimeID: runtimeID, deviceID: nil) }
-        return SimulatorSelection(deviceID: id)
-    }
-
-    /// The selection a click on the bar `barID` makes: that bar's row, in its table, and nothing in the other. A value
-    /// that names no bar (a click outside the bars) keeps the selection as it was.
-    public func selecting(barID: String?) -> SimulatorSelection {
-        guard let barID, let colon = barID.firstIndex(of: ":"), let kind = SimulatorBar.Kind(rawValue: String(barID[..<colon])) else { return self }
-        let rowID = String(barID[barID.index(after: colon)...])
-        guard !rowID.isEmpty else { return self }
-        return kind == .runtime ? SimulatorSelection(runtimeID: rowID) : SimulatorSelection(deviceID: rowID)
-    }
-}
-
 public enum SimulatorsChart {
     /// The measured runtimes and devices, largest first; equal sizes runtimes first, then by name and id. An unmeasured
     /// one has no bar (`unmeasuredCount`), never a zero bar.
@@ -194,13 +181,37 @@ public enum SimulatorsChart {
         max(minimum, Double(barCount) * band + axis)
     }
 
-    /// Where a table's row sits inside the table, as a fraction of its height, for scrolling the page to it: the row's
-    /// middle under `SimulatorsTable.fittedTableHeight`'s header. Nil when the row is not in the table.
-    public static func rowAnchor(index: Int?, rowCount: Int, rowHeight: Double = 24, headerHeight: Double = 28) -> Double? {
-        guard let index, index >= 0, index < rowCount else { return nil }
-        let height = SimulatorsTable.fittedTableHeight(rowCount: rowCount, rowHeight: rowHeight, headerHeight: headerHeight)
-        return min(1, (headerHeight + (Double(index) + 0.5) * rowHeight) / height)
+    /// The selection after a click on the chart (R5): the clicked bar's row — a bar's id is its row's id in the one table
+    /// (`SimulatorListRow.id`) — and nothing else; a click outside every bar (nil) changes nothing.
+    public static func selection(after current: Set<String>, clicked barID: String?) -> Set<String> {
+        guard let barID else { return current }
+        return [barID]
     }
+}
+
+/// One row of the Simulators screen's one table (R5, HIG review SI1): a runtime or a device, under shared columns.
+public struct SimulatorListRow: Sendable, Equatable, Identifiable {
+    public let kind: SimulatorBar.Kind
+    /// `SimulatorRuntime.id` or `SimulatorDeviceRow.id`.
+    public let rowID: String
+    /// The runtime's platform and version ("iOS 26.0") or the device's name: simctl's records, never translated.
+    public let name: String
+    /// The runtime's version and build ("26.0 (23A343)"), or the runtime a device runs ("iOS 26.0").
+    public let detail: String
+    /// simctl's state, nil when it gave none.
+    public let state: String?
+    /// Whether a runtime's image is mounted; nil for a device, which has none.
+    public let isMounted: Bool?
+    /// The runtime's image or the device's data folder; nil when simctl gave none.
+    public let path: String?
+    /// Nil when the scan did not measure it.
+    public let bytes: UInt64?
+
+    /// The same id as the row's chart bar (`SimulatorBar.id`), so a click on a bar selects this row.
+    public var id: String { kind.rawValue + ":" + rowID }
+    public var sizeSortKey: UInt64 { bytes ?? 0 }
+    public var stateSortKey: String { state ?? "" }
+    public var pathSortKey: String { path ?? "" }
 }
 
 extension SimulatorRuntime {
@@ -248,6 +259,54 @@ extension SimulatorsTable {
             case .path: KeyPathComparator(\SimulatorDeviceRow.pathSortKey, order: order)
             }
         }
+    }
+
+    /// The one table's columns (R5).
+    public enum ListColumn: CaseIterable, Sendable {
+        case size, name, detail, state, path
+
+        public func comparator(_ order: SortOrder = .forward) -> KeyPathComparator<SimulatorListRow> {
+            switch self {
+            case .size: KeyPathComparator(\SimulatorListRow.sizeSortKey, order: order)
+            case .name: KeyPathComparator(\SimulatorListRow.name, order: order)
+            case .detail: KeyPathComparator(\SimulatorListRow.detail, order: order)
+            case .state: KeyPathComparator(\SimulatorListRow.stateSortKey, order: order)
+            case .path: KeyPathComparator(\SimulatorListRow.pathSortKey, order: order)
+            }
+        }
+    }
+
+    public static var defaultListSortOrder: [KeyPathComparator<SimulatorListRow>] { [ListColumn.size.comparator(.reverse)] }
+
+    /// The rows of one section of the table — the installed runtimes or the devices — whose name, detail or path contains
+    /// `query` (ignoring case and diacritics; empty matches all), sorted by `order`, ties by name then id.
+    public static func listRows(
+        report: ScanReport, kind: SimulatorBar.Kind, query: String = "", using order: [KeyPathComparator<SimulatorListRow>] = defaultListSortOrder
+    ) -> [SimulatorListRow] {
+        let rows: [SimulatorListRow] =
+            switch kind {
+            case .runtime:
+                runtimes(report: report).map { r in
+                    SimulatorListRow(
+                        kind: .runtime, rowID: r.id, name: r.chartName,
+                        detail: [r.version, r.build.map { "(" + $0 + ")" }].compactMap { $0 }.joined(separator: " "),
+                        state: r.state, isMounted: r.isMounted, path: r.path, bytes: r.sizeBytes)
+                }
+            case .device:
+                devices(report: report).map { d in
+                    SimulatorListRow(
+                        kind: .device, rowID: d.id, name: d.device.name, detail: d.runtime, state: d.device.state, isMounted: nil, path: d.device.dataPath,
+                        bytes: d.bytes)
+                }
+            }
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching =
+            text.isEmpty
+            ? rows
+            : rows.filter { row in
+                row.name.localizedStandardContains(text) || row.detail.localizedStandardContains(text) || (row.path?.localizedStandardContains(text) ?? false)
+            }
+        return matching.sorted(using: order + [KeyPathComparator(\SimulatorListRow.name), KeyPathComparator(\SimulatorListRow.id)])
     }
 
     public static var defaultRuntimeSortOrder: [KeyPathComparator<SimulatorRuntime>] { [RuntimeColumn.size.comparator(.reverse)] }

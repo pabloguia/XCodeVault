@@ -42,6 +42,31 @@ enum AppText {
         }
     }
 
+    /// A bucket's short name, where its full title does not fit (the Storage chart, chips and column; R5): the name of
+    /// its sidebar view.
+    static func bucketShortName(_ bucket: SavingsBucket) -> String {
+        switch bucket {
+        case .deleteAndRegenerate: L10n.tr("app.section.delete")
+        case .parkExternally: L10n.tr("app.section.park")
+        case .runFromExternal: L10n.tr("app.section.runExternally")
+        case .keepLocal: L10n.tr("app.bucket.keepLocal.short")
+        }
+    }
+
+    /// The Storage filter's summary (R5, the user's feedback): "Filtering: Delete, Park", with the search in quotes.
+    static func storageFilterSummary(_ buckets: [SavingsBucket], query: String) -> String {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = buckets.map(bucketShortName) + (text.isEmpty ? [] : [L10n.tr("app.storage.filter.query", text)])
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: L10n.locale)
+        return L10n.tr("app.storage.filter.summary", formatter.string(from: parts) ?? parts.joined(separator: ", "))
+    }
+
+    /// A Simulators row's state: simctl's word, "—" when it gave none, and "Mounted" for a runtime whose image is.
+    static func simulatorState(_ row: SimulatorListRow) -> String {
+        [row.state ?? "—", row.isMounted == true ? L10n.tr("app.simulators.mounted") : nil].compactMap { $0 }.joined(separator: " · ")
+    }
+
     /// The Overview card's eyebrow (R5, HIG review O1): what happens to the space, not to the deletion.
     static func cardEyebrow(permanent: Bool) -> String {
         permanent ? L10n.tr("app.overview.card.eyebrow.permanent") : L10n.tr("app.overview.card.eyebrow.temporary")

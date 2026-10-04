@@ -60,11 +60,45 @@ extension SavingsBucket {
     /// The dark-appearance variant: the S5 token itself, which already clears 3:1 on the dark backgrounds.
     var darkColorHex: String { colorHex }
 
-    /// Resolves per appearance; the high-contrast appearances follow their light or dark base.
+    /// Increase Contrast, light (R5, HIG review X9): the light variant darker still.
+    var highContrastLightColorHex: String {
+        switch self {
+        case .deleteAndRegenerate: "#875408"
+        case .parkExternally: "#1A5BC4"
+        case .runFromExternal: "#146B47"
+        case .keepLocal: "#565B70"
+        }
+    }
+
+    /// Increase Contrast, dark: the dark variant lighter.
+    var highContrastDarkColorHex: String {
+        switch self {
+        case .deleteAndRegenerate: "#E3A64A"
+        case .parkExternally: "#7AAAF9"
+        case .runFromExternal: "#4CC793"
+        case .keepLocal: "#B0B4C3"
+        }
+    }
+
+    /// The hex for an appearance: light, dark, or their Increase Contrast variants.
+    func colorHex(for appearance: NSAppearance.Name) -> String {
+        switch appearance {
+        case .darkAqua: darkColorHex
+        case .accessibilityHighContrastAqua: highContrastLightColorHex
+        case .accessibilityHighContrastDarkAqua: highContrastDarkColorHex
+        default: lightColorHex
+        }
+    }
+
+    /// Resolves per appearance, Increase Contrast included.
     var nsColor: NSColor {
-        let light = lightColorHex, dark = darkColorHex
+        let bucket = self
         return NSColor(name: NSColor.Name("XCodeVault.bucket." + rawValue)) { appearance in
-            NSColor(hex: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
+            // The Increase Contrast names first: `bestMatch` answers a high-contrast appearance with its base when the base
+            // comes first in the list.
+            let match =
+                appearance.bestMatch(from: [.accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua, .aqua, .darkAqua]) ?? .aqua
+            return NSColor(hex: bucket.colorHex(for: match))
         }
     }
 

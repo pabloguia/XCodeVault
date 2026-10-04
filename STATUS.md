@@ -3267,3 +3267,97 @@ M2 (vault records stay "Other": honest, and the review marks it optional); M3 (t
 the guide says a concurrent `xcodevaultctl` operation shows as Interrupted until it ends); M7's second half ("Today" goes
 stale across midnight until the next redraw). One new key, `app.history.outcome.planned`.
 **Still needs a real window:** H16's manual check, and the History row's second line.
+
+## 2026-10-04 — R5: every finding of the independent HIG review, and the user's real-window feedback
+
+Branch `feat/r5-hig` (stacked on R3, with R3's two later safety commits merged in before the last commit). Requirements:
+`.superpowers/sdd/hig/brief.md`; the review `.superpowers/sdd/hig/report.md` (72 findings) and the user's feedback of
+2026-10-04. Three commits, as the review's §5 plans them: feedback and destructive actions; writing and typography (with
+H16 and **Relaunch XCodeVault**); Mac-native structure and polish (with the Storage/Simulators filtering the user asked
+for). Wording and presentation only: what Delete and Run delete or run, their confirmations and the two-step remove are
+unchanged. The R3 Run sheets (§4) were already done in R3; only cross-cutting writing applies to them, and none of their
+strings needed it beyond the shared ones. **H16 is verified** on macOS 26.7.1 · Intel by the user's manual check
+(HYPOTHESES, COMPATIBILITY_MATRIX); other versions stay unmeasured.
+
+| Finding | Disposition |
+|---|---|
+| N1 | Fixed — chevron Back and Forward, icon-only with tooltips, ⌘[ ⌘], disabled not hidden (`NavigationHistory.forward`) |
+| N2 | Fixed — `navigationSubtitle`: the host line, or "Scanning…"; removed from the Overview body |
+| N3 | Fixed — `Window` scene, `defaultSize` 1100×720. The 960×620 minimum is kept: it is what `ScreenFitTests` proves |
+| N4 | Fixed — `SidebarCommands`, `ToolbarCommands`, Rescan in the View menu, ⌘1–⌘4 for Save Space |
+| N5 | Fixed — "Save Space", "Run Externally" |
+| N6 | Fixed — the compliant alternative: `trash` in the sidebar only; BRAND.md records the split |
+| N7 | Fixed — "Permissions" |
+| N8 | Fixed — a labelled progress while scanning; Delete without a plan offers Rescan |
+| N9 | Fixed — one Rescan item whose content swaps to a spinner |
+| N10 | Fixed — `AppError`: a title per action, the error's description and recovery as the message |
+| N11 | Fixed — inline result (`AppModel.feedback`), announced, cleared by the next action |
+| N12 | Fixed — the wait is the helper sheet's second state, with Open System Settings and Stop Waiting |
+| S1 | Fixed — Cancel and Stop Waiting are `.cancelAction`; a `lock.shield` glyph |
+| S2 | Fixed — "Install Helper…" |
+| O1 | Fixed — "Space comes back" / "Space stays free" (app keys; the CLI keeps Temporary/Permanent) |
+| O2 | Fixed — promise and undo cost moved to the title's tooltip and the bucket view's header |
+| O3 | Fixed — primary text, tinted symbol |
+| O4 | Fixed — "issues need attention", severity symbols, Show in Health |
+| O5 | Fixed — no "Definition of Done" |
+| O6 | Fixed — `tertiarySystemFill` with a separator hairline on the bar and chips |
+| O7 | Skipped — the product deliberately recommends no option; the review allows keeping three equal Review buttons |
+| D1 | Fixed — context menu (Show in Finder, Copy Path, Delete Selected…), ⌘⌫ and Delete, destructive role. Same confirmation |
+| D2 | Fixed — "Move to Trash", explanation as tooltip and in the confirmation |
+| D3 | Fixed — the message names the undo cost of exactly the selected rows (`DeleteList.undoCosts`); no "journaled" |
+| D4 | Fixed — a question title keeping "experimental"; no H14 |
+| D5 | Fixed — why and guidance run full width under the status |
+| D6 | Fixed — one-line header; details in its tooltip |
+| D7 | Fixed — "Cost to Undo", "Notes" |
+| D8 | Fixed — name, size trailing in secondary |
+| P1 | Fixed — shorter intro |
+| P2 | Fixed — status row, tinted symbol, Copy for the set-up command (no in-app vault set-up exists to offer) |
+| P3 | Fixed — one "Experimental" badge app-wide |
+| P4 | Fixed — small bordered "Copy" |
+| ST1 | Fixed — one filter model: a set of options shown by the bars, toggle chips and a summary with Show All (chips, not a Picker: the user asked for several at once) |
+| ST2 | Fixed — horizontal padding, leading y-axis labels |
+| ST3 | Fixed — selection, Show in Finder, Copy Path |
+| ST4 | Fixed — strategy names (`AppText.strategy`) with the badge; symlink and mount point as symbol and word |
+| ST5 | Fixed — "Option" |
+| ST6 | Fixed — the caption under the chart, wrapping, and a persistent hint |
+| SI1 | Fixed — one Table with Runtimes and Devices sections; the chart's box is bounded |
+| SI2 | Fixed — "Yes"/"No" gone (state says "Mounted"), "—" for unknowns, "Not measured" |
+| SI3 | Fixed — hover highlight and pointing hand on both charts |
+| SI4 | Fixed — scrolling respects Reduce Motion |
+| DR1 | Fixed — the boot volume shows "Boot volume" only (`DriveRow.showsQualificationDetail`) |
+| DR2 | Fixed — symbol-tinted labels with primary text |
+| DR3 | Fixed — one vault verdict (`DriveRow.vaultVerdict`) |
+| DR4 | Fixed — headline name, one secondary facts line |
+| DR5 | Fixed — only the symbol is tinted |
+| DR6 | Fixed — "Vaults" |
+| H1 | Fixed — title-case severities |
+| H2 | Fixed — wrench symbol, not "→" |
+| H3 | Fixed — description and Rescan |
+| H4 | Already done — informational; the symbols were distinct |
+| HI1 | Fixed — a Table with day sections, kept badges and filter, Copy Summary |
+| HI2 | Fixed — red failed, orange interrupted symbols |
+| HI3 | Fixed — "All Kinds" / "n of m Kinds", Show All inside the menu |
+| A1 | Fixed — "Off" with a neutral symbol when nothing needs it (`Row.isNeeded`) |
+| A2 | Fixed — hint only after the trip to the pane (`AccessChecklist.showsHint`) |
+| A3 | Fixed — "Open System Settings" |
+| A4 | Fixed — "Check Again", "Install Helper…" |
+| C1 | Fixed — system indigo/teal kept, recorded in BRAND.md |
+| C2 | Fixed — "0" at the origin |
+| X1 | Fixed — no ids or internal words; `R5WritingTests` scans every app/perm/savings string in every language |
+| X2 | Fixed — no ALL CAPS (same test) |
+| X3 | Fixed — SF Symbols |
+| X4 | Fixed — prose trimmed on every screen |
+| X5 | Fixed — title case for buttons, menus, headers, sidebar |
+| X6 | Fixed — one-line guidance, the manual route as its tooltip (`Row.helpKey`) |
+| X7 | Fixed — Delete's table takes focus; chips and menus reach every filter. Full Keyboard Access not exercised in a window |
+| X8 | Fixed — min/ideal widths; fixed caption widths removed; the helper sheet flexible |
+| X9 | Fixed — Increase Contrast variants and hairlines. Off a window `NSAppearance(named:)` gives the base, so only the mapping is tested |
+| X10 | Fixed — tooltips on icon-only controls, badges, the chart, truncated cells |
+
+Totals: 70 fixed, 1 skipped (O7), 1 already done (H4). The user's feedback: H16 recorded; hint un-hedged with the +
+fallback; Relaunch XCodeVault behind `AppEnvironment.relaunch`; Storage multi-select (⌘-click, chips), Show All with a
+summary, hover and pointer, a persistent hint, search in Core (`StorageTable.matches`); Simulators search and a
+clearable selection.
+**Still needs a real window:** hover/pointer and ⌘-click on the charts; the Simulators table scrolling to a clicked row
+(`ScrollViewReader` on a `Table`); History rows of two lines in a `Table`; the search fields' placement; Relaunch
+XCodeVault (a new instance, then quit); Increase Contrast; Full Keyboard Access.

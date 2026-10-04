@@ -1001,6 +1001,40 @@
         }
       }
     },
+    "app.action.forward" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forward"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Adelante"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "進む"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Avançar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "前进"
+          }
+        }
+      }
+    },
     "app.action.ok" : {
       "localizations" : {
         "en" : {
@@ -1099,6 +1133,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "在访达中显示"
+          }
+        }
+      }
+    },
+    "app.bucket.keepLocal.short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Conservar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保持"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Manter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保留"
           }
         }
       }
@@ -1859,40 +1927,6 @@
         }
       }
     },
-    "app.column.image" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Image"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Imagen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "イメージ"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Imagem"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "映像"
-          }
-        }
-      }
-    },
     "app.column.kind" : {
       "localizations" : {
         "en" : {
@@ -1923,40 +1957,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "类型"
-          }
-        }
-      }
-    },
-    "app.column.mounted" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mounted"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Montado"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "マウント"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Montado"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "已挂载"
           }
         }
       }
@@ -2059,74 +2059,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "路径"
-          }
-        }
-      }
-    },
-    "app.column.platform" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Platform"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Plataforma"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "プラットフォーム"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Plataforma"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "平台"
-          }
-        }
-      }
-    },
-    "app.column.runtime" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Runtime"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtime"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "ランタイム"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtime"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "运行时"
           }
         }
       }
@@ -3067,6 +2999,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "未发现问题"
+          }
+        }
+      }
+    },
+    "app.doctor.empty.detail" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault found nothing that needs attention."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault no encontró nada que requiera atención."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault は対応が必要な項目を見つけませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault não encontrou nada que precise de atenção."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 未发现需要注意的内容。"
           }
         }
       }
@@ -4325,6 +4291,40 @@
         }
       }
     },
+    "app.history.copySummary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Summary"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar resumen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "概要をコピー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar Resumo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "拷贝摘要"
+          }
+        }
+      }
+    },
     "app.history.day.today" : {
       "localizations" : {
         "en" : {
@@ -4427,36 +4427,36 @@
         }
       }
     },
-    "app.history.filter.menu" : {
+    "app.history.filter.allKinds" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kinds"
+            "value" : "All Kinds"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tipos"
+            "value" : "Todos los tipos"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "種類"
+            "value" : "すべての種類"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tipos"
+            "value" : "Todos os Tipos"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "类型"
+            "value" : "所有类型"
           }
         }
       }
@@ -4491,6 +4491,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "没有所显示类型的操作。"
+          }
+        }
+      }
+    },
+    "app.history.filter.someKinds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld of %2$lld Kinds"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$lld de %2$lld tipos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%2$lld 種類中 %1$lld"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$lld de %2$lld Tipos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%2$lld 种类型中的 %1$lld 种"
           }
         }
       }
@@ -5137,40 +5171,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "实验性"
-          }
-        }
-      }
-    },
-    "app.menu.scan" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scan"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Análisis"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "スキャン"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Análise"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "扫描"
           }
         }
       }
@@ -6719,40 +6719,6 @@
         }
       }
     },
-    "app.quit.keepRunningOnly.offload" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A runtime is being offloaded. Stopping simctl part-way could leave the runtime deleted while the history says the offload failed, so XCodeVault can’t quit until it finishes."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Se está descargando un runtime. Detener simctl a medias podría dejar el runtime eliminado mientras el historial dice que la descarga falló, así que XCodeVault no puede salir hasta que termine."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "ランタイムをオフロードしています。simctl を途中で止めると、履歴では失敗となっているのにランタイムが削除されたままになる可能性があるため、終わるまで XCodeVault は終了できません。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Um runtime está sendo descarregado. Parar o simctl no meio pode deixar o runtime apagado enquanto o histórico diz que a operação falhou, então o XCodeVault não pode encerrar até ela terminar."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "正在卸载一个运行时。中途停止 simctl 可能导致运行时已被删除而历史记录显示卸载失败,因此在完成前 XCodeVault 无法退出。"
-          }
-        }
-      }
-    },
     "app.quit.keepRunningOnly.migration" : {
       "localizations" : {
         "en" : {
@@ -6783,6 +6749,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "XCodeVault 正在拷贝、验证或移除数据。现在退出会留下写了一半的副本，因此需要等它完成后才能退出。"
+          }
+        }
+      }
+    },
+    "app.quit.keepRunningOnly.offload" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A runtime is being offloaded. Stopping simctl part-way could leave the runtime deleted while the history says the offload failed, so XCodeVault can’t quit until it finishes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se está descargando un runtime. Detener simctl a medias podría dejar el runtime eliminado mientras el historial dice que la descarga falló, así que XCodeVault no puede salir hasta que termine."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ランタイムをオフロードしています。simctl を途中で止めると、履歴では失敗となっているのにランタイムが削除されたままになる可能性があるため、終わるまで XCodeVault は終了できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Um runtime está sendo descarregado. Parar o simctl no meio pode deixar o runtime apagado enquanto o histórico diz que a operação falhou, então o XCodeVault não pode encerrar até ela terminar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在卸载一个运行时。中途停止 simctl 可能导致运行时已被删除而历史记录显示卸载失败,因此在完成前 XCodeVault 无法退出。"
           }
         }
       }
@@ -9949,6 +9949,108 @@
         }
       }
     },
+    "app.search.none" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Results"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Sin resultados"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "結果なし"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nenhum Resultado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无结果"
+          }
+        }
+      }
+    },
+    "app.search.simulators" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name, runtime or path"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nombre, runtime o ruta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名前、ランタイム、パス"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nome, runtime ou caminho"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名称、运行时或路径"
+          }
+        }
+      }
+    },
+    "app.search.storage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name or path"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nombre o ruta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名前またはパス"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nome ou caminho"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名称或路径"
+          }
+        }
+      }
+    },
     "app.section.access" : {
       "localizations" : {
         "en" : {
@@ -10498,31 +10600,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Click a bar to select its row in the table below."
+            "value" : "Click a bar to select its row."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Haz clic en una barra para seleccionar su fila en la tabla de abajo."
+            "value" : "Haz clic en una barra para seleccionar su fila."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "バーをクリックすると、下の表の該当する行を選択します。"
+            "value" : "バーをクリックすると、その行を選択します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Clique numa barra para selecionar a linha dela na tabela abaixo."
+            "value" : "Clique em uma barra para selecionar a linha dela."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "点按一个条形即可在下方表格中选择其行。"
+            "value" : "点按条形以选择其所在行。"
           }
         }
       }
@@ -10779,6 +10881,40 @@
         }
       }
     },
+    "app.simulators.clearSelection" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Selection"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Borrar selección"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "選択を解除"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Limpar Seleção"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "清除选择"
+          }
+        }
+      }
+    },
     "app.simulators.devices.caption" : {
       "localizations" : {
         "en" : {
@@ -10809,40 +10945,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "每个设备的数据，以 Simulator 报告为准。“删除”测量的是整个 Devices 文件夹，因此总计可能不同。"
-          }
-        }
-      }
-    },
-    "app.simulators.devices.none" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No simulator devices."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "No hay dispositivos de simulador."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "シミュレータデバイスはありません。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Nenhum dispositivo de simulador."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "没有模拟器设备。"
           }
         }
       }
@@ -10915,36 +11017,70 @@
         }
       }
     },
-    "app.simulators.runtimes.none" : {
+    "app.simulators.mounted" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No simulator runtimes are installed."
+            "value" : "Mounted"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No hay runtimes de simulador instalados."
+            "value" : "Montado"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "シミュレータランタイムはインストールされていません。"
+            "value" : "マウント済み"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Nenhum runtime de simulador instalado."
+            "value" : "Montado"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "未安装模拟器运行时。"
+            "value" : "已挂载"
+          }
+        }
+      }
+    },
+    "app.simulators.none" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No simulator runtimes or devices"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No hay runtimes ni dispositivos de simulador"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "シミュレータのランタイムもデバイスもありません"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nenhum runtime ou dispositivo de simulador"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "没有模拟器运行时或设备"
           }
         }
       }
@@ -10988,31 +11124,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Items on all drives, each counted once. Click a bar to show only its rows."
+            "value" : "Click a bar to filter; ⌘-click or use the buttons below to choose several. Items on every drive, each counted once."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Elementos de todas las unidades, cada uno contado una vez. Haz clic en una barra para ver solo sus filas."
+            "value" : "Haz clic en una barra para filtrar; usa ⌘-clic o los botones de abajo para elegir varias. Elementos de todas las unidades, contados una vez."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "すべてのドライブ上の項目を、それぞれ一度だけ数えます。バーをクリックすると、その行だけを表示します。"
+            "value" : "バーをクリックすると絞り込みます。複数選ぶには ⌘-クリックするか下のボタンを使います。すべてのドライブの項目を 1 回ずつ数えています。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Itens em todos os discos, cada um contado uma vez. Clique numa barra para ver só as linhas dela."
+            "value" : "Clique em uma barra para filtrar; use ⌘-clique ou os botões abaixo para escolher várias. Itens de todas as unidades, contados uma vez."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "所有驱动器上的项目，每个只计算一次。点按一个条形即可只显示其行。"
+            "value" : "点按条形以筛选；按住 ⌘ 点按或使用下方按钮可选择多个。包含所有驱动器上的项目，每项只计一次。"
           }
         }
       }
@@ -11085,74 +11221,6 @@
         }
       }
     },
-    "app.storage.filter.active" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Showing: %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Mostrando: %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "表示中: %@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Mostrando: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "正在显示：%@"
-          }
-        }
-      }
-    },
-    "app.storage.filter.all" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Todo"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "すべて"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Tudo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "全部"
-          }
-        }
-      }
-    },
     "app.storage.filter.clear" : {
       "localizations" : {
         "en" : {
@@ -11187,36 +11255,70 @@
         }
       }
     },
-    "app.storage.filter.menu" : {
+    "app.storage.filter.query" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bucket"
+            "value" : "“%@”"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Grupo"
+            "value" : "«%@»"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "グループ"
+            "value" : "「%@」"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Grupo"
+            "value" : "“%@”"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "分组"
+            "value" : "“%@”"
+          }
+        }
+      }
+    },
+    "app.storage.filter.summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtering: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Filtrando: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "絞り込み: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Filtrando: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "筛选：%@"
           }
         }
       }
@@ -11663,40 +11765,6 @@
         }
       }
     },
-    "app.value.no" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "No"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "いいえ"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Não"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "否"
-          }
-        }
-      }
-    },
     "app.value.notMeasured" : {
       "localizations" : {
         "en" : {
@@ -11727,40 +11795,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "未测量"
-          }
-        }
-      }
-    },
-    "app.value.yes" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yes"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Sí"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "はい"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Sim"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "是"
           }
         }
       }

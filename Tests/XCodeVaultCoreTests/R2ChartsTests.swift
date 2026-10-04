@@ -56,26 +56,52 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(StorageTable.bucketBars(rows: []), [])
     }
 
-    func testFilteringByBucketKeepsOnlyThatBucketsRowsInOrder() {
+    func testFilteringByBucketsKeepsOnlyThoseBucketsRowsInOrder() {
         let r = storageReport()
         let all = StorageTable.rows(report: r)
-        XCTAssertEqual(StorageTable.rows(report: r, bucket: nil), all)
+        XCTAssertEqual(StorageTable.rows(report: r, buckets: []), all, "no bucket chosen: every row")
         for b in SavingsBucket.allCases {
-            let filtered = StorageTable.rows(report: r, bucket: b)
-            XCTAssertEqual(filtered, all.filter { $0.bucket == b })
+            XCTAssertEqual(StorageTable.rows(report: r, buckets: [b]), all.filter { $0.bucket == b })
         }
-        XCTAssertFalse(StorageTable.rows(report: r, bucket: bucket("derivedData")).isEmpty)
+        let two: Set<SavingsBucket> = [.deleteAndRegenerate, .parkExternally]
+        XCTAssertEqual(StorageTable.rows(report: r, buckets: two), all.filter { $0.bucket.map(two.contains) == true }, "several at once (R5)")
+        XCTAssertFalse(StorageTable.rows(report: r, buckets: [bucket("derivedData")]).isEmpty)
     }
 
-    func testAClickTogglesTheFilter() {
+    /// R5 (the user's feedback): a plain click shows one bucket, ⌘-click and a chip add or remove one, a click outside the
+    /// bars changes nothing.
+    func testAClickChoosesOneBucketAndCommandClickSeveral() {
         let a = SavingsBucket.deleteAndRegenerate, b = SavingsBucket.parkExternally
-        XCTAssertEqual(StorageTable.filter(after: nil, clicked: a), a)
-        XCTAssertEqual(StorageTable.filter(after: a, clicked: b), b)
-        XCTAssertNil(StorageTable.filter(after: a, clicked: a), "the selected bar again clears the filter")
-        XCTAssertEqual(StorageTable.filter(after: a, clicked: nil), a, "a click outside the bars changes nothing")
-        XCTAssertNil(StorageTable.filter(after: nil, clicked: nil))
+        XCTAssertEqual(StorageTable.filter(after: [], clicked: a, extending: false), [a])
+        XCTAssertEqual(StorageTable.filter(after: [a], clicked: b, extending: false), [b], "a plain click moves the filter")
+        XCTAssertEqual(StorageTable.filter(after: [a], clicked: a, extending: false), [], "the only one shown again: every bucket")
+        XCTAssertEqual(StorageTable.filter(after: [a, b], clicked: a, extending: false), [a], "a plain click on one of several: only it")
+        XCTAssertEqual(StorageTable.filter(after: [a], clicked: b, extending: true), [a, b], "⌘-click adds")
+        XCTAssertEqual(StorageTable.filter(after: [a, b], clicked: b, extending: true), [a], "⌘-click removes")
+        XCTAssertEqual(StorageTable.filter(after: [a], clicked: nil, extending: true), [a], "outside the bars: unchanged")
+        XCTAssertEqual(StorageTable.toggled([a], b), [a, b])
+        XCTAssertEqual(StorageTable.toggled([a, b], a), [b])
         XCTAssertNil(StorageTable.bucket(forBarID: "nonsense"))
         XCTAssertNil(StorageTable.bucket(forBarID: nil))
+    }
+
+    /// R5: the search matches a category name or a path, ignoring case and diacritics, and combines with the buckets.
+    func testTheSearchMatchesNameOrPathAndCombinesWithTheBuckets() {
+        let r = storageReport()
+        let all = StorageTable.rows(report: r)
+        let derived = all.first { $0.item.categoryID == "derivedData" }!
+        XCTAssertTrue(StorageTable.matches(derived, query: ""))
+        XCTAssertTrue(StorageTable.matches(derived, query: "  deriveddata "), "case and spaces")
+        XCTAssertTrue(StorageTable.matches(derived, query: String(derived.item.path.suffix(6))), "by path")
+        XCTAssertFalse(StorageTable.matches(derived, query: "no such thing"))
+        let found = StorageTable.rows(report: r, buckets: [], query: "deriveddata")
+        XCTAssertTrue(found.contains(derived))
+        XCTAssertTrue(found.allSatisfy { StorageTable.matches($0, query: "deriveddata") })
+        let other = SavingsBucket.allCases.first { $0 != derived.bucket }!
+        XCTAssertFalse(StorageTable.rows(report: r, buckets: [other], query: "deriveddata").contains(derived), "both must hold")
+        XCTAssertFalse(StorageTable.isFiltered(buckets: [], query: "  "))
+        XCTAssertTrue(StorageTable.isFiltered(buckets: [], query: "x"))
+        XCTAssertTrue(StorageTable.isFiltered(buckets: [other], query: ""))
     }
 
     func testSortingByEachColumnOrdersTheRows() {
@@ -174,12 +200,12 @@ final class R2ChartsTests: XCTestCase {
     func testAValidFilterSurvivesAndAStaleOneDoesNot() {
         let bars = StorageTable.bucketBars(rows: StorageTable.rows(report: storageReport()))
         let present = bars[0].bucket
-        XCTAssertEqual(StorageTable.filter(present, validIn: bars), present)
+        XCTAssertEqual(StorageTable.filter([present], validIn: bars), [present])
         if let absent = SavingsBucket.allCases.first(where: { b in !bars.contains { $0.bucket == b } }) {
-            XCTAssertNil(StorageTable.filter(absent, validIn: bars))
+            XCTAssertEqual(StorageTable.filter([present, absent], validIn: bars), [present], "only the stale one leaves")
         }
-        XCTAssertNil(StorageTable.filter(present, validIn: []))
-        XCTAssertNil(StorageTable.filter(nil, validIn: bars))
+        XCTAssertEqual(StorageTable.filter([present], validIn: []), [])
+        XCTAssertEqual(StorageTable.filter([], validIn: bars), [])
     }
 
     // MARK: - Simulators chart and selection
@@ -215,37 +241,36 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(SimulatorsChart.height(barCount: 80), 80 * 34 + 34)
     }
 
-    func testAClickOnABarSelectsItsRowInItsTable() {
-        let none = SimulatorSelection()
-        XCTAssertEqual(none.selecting(barID: "runtime:R1"), SimulatorSelection(runtimeID: "R1"))
-        XCTAssertEqual(none.selecting(barID: "device:D2"), SimulatorSelection(deviceID: "D2"))
-        let picked = SimulatorSelection(runtimeID: "R1")
-        XCTAssertEqual(picked.selecting(barID: "device:D1"), SimulatorSelection(deviceID: "D1"), "one selection, never one per table")
-        XCTAssertEqual(picked.selecting(barID: nil), picked, "outside the bars: unchanged")
-        XCTAssertEqual(picked.selecting(barID: "volume:X"), picked)
-        XCTAssertEqual(picked.selecting(barID: "device:"), picked)
-        XCTAssertEqual(picked.selecting(barID: "device:a:b"), SimulatorSelection(deviceID: "a:b"), "only the first colon separates")
-        // The tables' own setters keep one selection across both (review I1).
-        XCTAssertEqual(picked.selecting(deviceID: "D1"), SimulatorSelection(deviceID: "D1"))
-        XCTAssertEqual(SimulatorSelection(deviceID: "D1").selecting(runtimeID: "R2"), SimulatorSelection(runtimeID: "R2"))
-        XCTAssertEqual(picked.selecting(deviceID: nil), picked, "the devices table deselecting keeps the runtime")
-        XCTAssertEqual(picked.selecting(runtimeID: nil), SimulatorSelection())
-        XCTAssertEqual(SimulatorSelection(deviceID: "D1").selecting(runtimeID: nil), SimulatorSelection(deviceID: "D1"))
-        // Every bar's id selects that bar's row.
-        for bar in SimulatorsChart.bars(report: simulatorsReport()) {
-            let s = none.selecting(barID: bar.id)
-            XCTAssertEqual(bar.kind == .runtime ? s.runtimeID : s.deviceID, bar.rowID)
+    /// R5 (HIG review SI1): one table, two sections; a bar's id is its row's id, so a click selects that row.
+    func testAClickOnABarSelectsItsRowInTheOneTable() {
+        let r = simulatorsReport()
+        let rows = SimulatorBar.Kind.allCases.flatMap { SimulatorsTable.listRows(report: r, kind: $0) }
+        for bar in SimulatorsChart.bars(report: r) {
+            XCTAssertEqual(SimulatorsChart.selection(after: [], clicked: bar.id), [bar.id])
+            XCTAssertTrue(rows.contains { $0.id == bar.id }, "\(bar.id) has its row")
         }
+        XCTAssertEqual(SimulatorsChart.selection(after: ["runtime:R1"], clicked: nil), ["runtime:R1"], "outside the bars: unchanged")
+        XCTAssertEqual(SimulatorsChart.selection(after: ["runtime:R1", "device:D1"], clicked: "device:D2"), ["device:D2"])
     }
 
-    func testTheRowAnchorPlacesTheRowInsideItsTable() {
-        XCTAssertNil(SimulatorsChart.rowAnchor(index: nil, rowCount: 3))
-        XCTAssertNil(SimulatorsChart.rowAnchor(index: 3, rowCount: 3))
-        let first = SimulatorsChart.rowAnchor(index: 0, rowCount: 10)!
-        let last = SimulatorsChart.rowAnchor(index: 9, rowCount: 10)!
-        XCTAssertGreaterThan(first, 0)
-        XCTAssertLessThan(first, last)
-        XCTAssertLessThanOrEqual(last, 1)
+    func testTheSimulatorRowsAreSearchedAndSorted() {
+        let r = simulatorsReport()
+        let runtimes = SimulatorsTable.listRows(report: r, kind: .runtime)
+        XCTAssertEqual(runtimes.map(\.id), ["runtime:R1", "runtime:R2", "runtime:R3"], "largest first, unmeasured last")
+        XCTAssertEqual(runtimes.first?.detail, "26.0")
+        XCTAssertNil(runtimes.last?.bytes)
+        let devices = SimulatorsTable.listRows(report: r, kind: .device)
+        XCTAssertEqual(devices.map(\.rowID), ["D1", "D2", "D3"])
+        XCTAssertEqual(devices.first?.detail, "iOS 26.0", "a device's detail is its runtime")
+        XCTAssertNil(devices.first?.isMounted)
+        XCTAssertEqual(SimulatorsTable.listRows(report: r, kind: .device, query: "watch").map(\.rowID), ["D3"], "by name")
+        XCTAssertEqual(SimulatorsTable.listRows(report: r, kind: .device, query: "/d/D2").map(\.rowID), ["D2"], "by path")
+        XCTAssertEqual(SimulatorsTable.listRows(report: r, kind: .runtime, query: "WATCHOS").map(\.rowID), ["R2"], "by name, any case")
+        let byName = SimulatorsTable.listRows(report: r, kind: .device, using: [SimulatorsTable.ListColumn.name.comparator()])
+        XCTAssertEqual(byName.map(\.name), ["Apple Watch", "iPhone 17", "iPhone 17"])
+        for column in SimulatorsTable.ListColumn.allCases {
+            XCTAssertEqual(Set(SimulatorsTable.listRows(report: r, kind: .device, using: [column.comparator(.reverse)]).map(\.id)), Set(devices.map(\.id)))
+        }
     }
 
     func testBothSimulatorTablesSortByEachColumn() {
