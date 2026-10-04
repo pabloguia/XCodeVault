@@ -266,13 +266,12 @@ enum LiveOperations {
         }
     }
 
-    /// The operations whose commands **Stop and Quit** may terminate (`AppModel.quitChoice`): deleting a runtime (offload
-    /// and delete) and changing a folder. A copy (`ditto`) and an export (`xcodebuild`) get a runner nothing can stop.
+    /// The operations whose commands **Stop and Quit** may terminate (`AppModel.quitChoice`): deleting a runtime and changing
+    /// a folder. A copy (`ditto`), an export (`xcodebuild`) and an offload get a runner nothing can stop. Offload is out because
+    /// `simctl` only asks CoreSimulatorService to delete: a stopped client can leave the runtime deleted while the journal says
+    /// `failed`, which Doctor reads as "the delete did not happen" and so would lose the offload's recovery route (R3 safety check).
     static func stoppableChildren(for prepared: PreparedOperation, _ children: ChildProcesses) -> ChildProcesses? {
-        switch prepared {
-        case .deleteRuntime, .offload, .location: children
-        case .migration, .export: nil
-        }
+        prepared.kind.canBeStopped ? children : nil
     }
 
     /// Offload and delete wait while simulator work runs (review L3).

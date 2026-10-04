@@ -180,12 +180,23 @@ extension AppModel {
         case migration
         /// `xcodebuild -downloadPlatform`: stopping it part-way has not been tested.
         case export
+        /// Offload's `simctl runtime delete`: the service may finish the delete after the client is stopped, and the journal
+        /// would then say `failed` for a runtime that is gone — Doctor would no longer offer the offload's way back.
+        case offload
     }
 
-    /// The decision per stage. Copying, verifying and removing an original keep running; so does an export. Deleting a
-    /// runtime and applying a folder can be stopped: their commands are short, and a stopped one is recorded as failed.
-    static func quitChoice(running: Bool, stage: OperationStage) -> QuitChoice {
+    /// The decision per stage and kind. Copying, verifying and removing an original keep running; so do an export and an
+    /// offload. Deleting a runtime and applying a folder can be stopped: their commands are short, and a stopped one is
+    /// recorded as failed.
+    static func quitChoice(running: Bool, stage: OperationStage, kind: OperationKind? = nil) -> QuitChoice {
         guard running else { return .quitNow }
+        if let kind, !kind.canBeStopped {
+            switch kind {
+            case .exportRuntime: return .keepRunningOnly(.export)
+            case .offloadRuntime: return .keepRunningOnly(.offload)
+            default: return .keepRunningOnly(.migration)
+            }
+        }
         switch stage {
         case .copying, .verifying, .removing: return .keepRunningOnly(.migration)
         case .exporting: return .keepRunningOnly(.export)
@@ -193,7 +204,9 @@ extension AppModel {
         }
     }
 
-    var quitChoice: QuitChoice { Self.quitChoice(running: isOperationRunning, stage: operationSheet?.stage ?? .done) }
+    var quitChoice: QuitChoice {
+        Self.quitChoice(running: isOperationRunning, stage: operationSheet?.stage ?? .done, kind: operationSheet?.kind)
+    }
 
     /// Kept for the guard's callers: whether quitting asks first.
     var quitNeedsConfirmation: Bool { quitChoice != .quitNow }

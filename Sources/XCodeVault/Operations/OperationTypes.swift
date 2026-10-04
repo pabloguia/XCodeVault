@@ -27,6 +27,11 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
     var asksTestsAcknowledgement: Bool { self == .setDerivedData }
     /// Deletes data on this Mac when it runs: the confirm button is destructive and not the default (HIG).
     var deletesData: Bool { self == .offloadRuntime || self == .deleteRuntime }
+    /// Whether **Stop and Quit** may terminate this operation's command: the one rule behind `AppModel.quitChoice` and
+    /// `LiveOperations.stoppableChildren`. A copy (`ditto`) and an export (`xcodebuild`) are never stopped, and neither is
+    /// an offload: its `simctl` only asks CoreSimulatorService to delete, so a stopped client can leave the runtime gone while
+    /// the journal says `failed` — which Doctor reads as "the delete did not happen", losing the offload's way back.
+    var canBeStopped: Bool { [.deleteRuntime, .setDerivedData, .setArchives].contains(self) }
 
     /// The stage the sheet shows from the moment the operation starts.
     var runningStage: OperationStage {
@@ -92,6 +97,17 @@ enum PreparedOperation: Sendable {
     case location(XcodeLocations.Change, acknowledgeTests: Bool)
     case export(RuntimeOperations.ExportRequest, XcodeInstallation, HostEnvironment)
     case deleteRuntime(identifier: String, XcodeInstallation, HostEnvironment)
+
+    /// The kind this prepared operation runs as.
+    var kind: OperationKind {
+        switch self {
+        case .migration: .externalizeArchives
+        case .offload: .offloadRuntime
+        case .location(let change, _): change.key == .archives ? .setArchives : .setDerivedData
+        case .export: .exportRuntime
+        case .deleteRuntime: .deleteRuntime
+        }
+    }
 
     /// The journal id the operation will use, when it is known before it runs (a migration's plan carries it): the
     /// interrupted banner must not list the operation that is running right now.

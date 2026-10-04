@@ -59,8 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .quitNow:
             return .terminateNow
         case .keepRunningOnly(let reason):
-            alert.informativeText =
-                reason == .migration ? L10n.tr("app.quit.keepRunningOnly.migration") : L10n.tr("app.quit.keepRunningOnly.export")
+            switch reason {
+            case .migration: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.migration")
+            case .export: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.export")
+            case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
+            }
             alert.runModal()
             return .terminateCancel
         case .stopThenQuit:

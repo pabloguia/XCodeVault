@@ -928,6 +928,13 @@ extension L10nCatalog {
                 "ja": "XCodeVault はデータのコピー、検証、または削除を行っています。今終了すると、ジャーナルが中断と記録している間もコピーが書きかけのまま残るため、完了するまで終了できません。",
                 "zh-Hans": "XCodeVault 正在拷贝、验证或移除数据。现在退出会在日志将其记为中断时留下写了一半的拷贝,因此在完成之前无法退出。",
             ],
+            "app.quit.keepRunningOnly.offload": [
+                "en": "A runtime is being offloaded. Stopping simctl part-way could leave the runtime deleted while the history says the offload failed, so XCodeVault can’t quit until it finishes.",
+                "pt-BR": "Um runtime está sendo descarregado. Parar o simctl no meio pode deixar o runtime apagado enquanto o histórico diz que a operação falhou, então o XCodeVault não pode encerrar até ela terminar.",
+                "es": "Se está descargando un runtime. Detener simctl a medias podría dejar el runtime eliminado mientras el historial dice que la descarga falló, así que XCodeVault no puede salir hasta que termine.",
+                "ja": "ランタイムをオフロードしています。simctl を途中で止めると、履歴では失敗となっているのにランタイムが削除されたままになる可能性があるため、終わるまで XCodeVault は終了できません。",
+                "zh-Hans": "正在卸载一个运行时。中途停止 simctl 可能导致运行时已被删除而历史记录显示卸载失败,因此在完成前 XCodeVault 无法退出。",
+            ],
             "app.quit.message": [
                 "en": "Quitting stops the running command, waits for it to end, and records the operation as failed. Nothing it did is undone.",
                 "pt-BR": "Encerrar para o comando em andamento, espera ele terminar e registra a operação como falha. Nada do que ele fez é desfeito.",

@@ -555,6 +555,11 @@ final class R3RunInAppTests: XCTestCase {
         for stage in [OperationStage.deleting, .applying] {
             XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage), .stopThenQuit, "\(stage)")
         }
+        // R3 safety check: an offload is never stopped, whatever its stage; a plain runtime delete still can be.
+        for stage in [OperationStage.planning, .deleting, .done] {
+            XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage, kind: .offloadRuntime), .keepRunningOnly(.offload), "\(stage)")
+        }
+        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .deleting, kind: .deleteRuntime), .stopThenQuit)
     }
 
     func testACopyCannotBeStoppedForQuitAndARuntimeDeletionIsStoppedAndRecorded() async {
@@ -793,6 +798,11 @@ final class R3RunInAppTests: XCTestCase {
         let x = Self.xcode(), h = Self.host()
         XCTAssertNil(LiveOperations.stoppableChildren(for: .migration(Self.plan()), children))
         XCTAssertNil(LiveOperations.stoppableChildren(for: .export(.init(platform: "iOS", destination: "/x"), x, h), children))
+        // R3 safety check: offload's delete may complete in CoreSimulatorService after its client is stopped. An offload
+        // plan can only come from Core's preflight, so the rule is pinned on the kind both callers read.
+        XCTAssertEqual(OperationKind.allCases.filter(\.canBeStopped), [.setDerivedData, .setArchives, .deleteRuntime])
+        XCTAssertEqual(PreparedOperation.migration(Self.plan()).kind, .externalizeArchives)
+        XCTAssertEqual(PreparedOperation.location(.init(key: .archives, newValue: "/x"), acknowledgeTests: false).kind, .setArchives)
         XCTAssertTrue(LiveOperations.stoppableChildren(for: .deleteRuntime(identifier: "R", x, h), children) === children)
         XCTAssertTrue(
             LiveOperations.stoppableChildren(for: .location(.init(key: .derivedData, newValue: "/x"), acknowledgeTests: true), children) === children)

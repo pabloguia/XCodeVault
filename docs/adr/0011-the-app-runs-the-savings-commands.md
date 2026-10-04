@@ -43,7 +43,11 @@ watch a command while it runs: `ProcessCommandRunner` blocks and returns the out
    stage (`AppModel.quitChoice`, review round 1): while copying, verifying or removing an original, and while exporting,
    the alert offers only **Keep Running** — stopping `ditto` would leave a half-written copy the journal calls
    interrupted, which a later `abort` could delete while `ditto` still wrote into it, and stopping `xcodebuild`
-   part-way is untested. While deleting a runtime or changing a folder, **Stop and Quit** terminates the command
+   part-way is untested. An offload keeps running too (R3 safety check): its `simctl runtime delete` only asks
+   CoreSimulatorService to delete, so a stopped client can leave the runtime deleted while the journal says `failed`,
+   which Doctor reads as "the delete did not happen" and would no longer offer the offload's way back. One rule,
+   `OperationKind.canBeStopped`, decides both the alert and which runner can be stopped. While deleting a runtime
+   (from Delete) or changing a folder, **Stop and Quit** terminates the command
    (`ChildProcesses`), refuses any later one, and waits until the operation has journaled how it ended before the app
    quits. Closing the window does not interrupt an operation, because the model lives in the app delegate.
 6. Offload and runtime delete wait while simulator work runs (`CleanExecutor.simulatorWorkIsRunning`), checked in the
