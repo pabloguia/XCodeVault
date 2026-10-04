@@ -202,6 +202,8 @@ struct DeleteView: View {
     @State private var confirmPrivileged: CleanAction?
     /// The notes panel's state once the user opened or closed it; until then `DeleteNotes.startsExpanded` decides.
     @State private var notesExpanded: Bool?
+    /// The table has the keyboard on arrival, so the arrow keys and ⌘⌫ work at once (HIG review X7).
+    @FocusState private var tableFocused: Bool
 
     /// `notesInitiallyExpanded` is for `ScreenFitTests`, which measures the panel opened while the table has rows; the app
     /// passes nil and `DeleteNotes.startsExpanded` decides.
@@ -230,6 +232,7 @@ struct DeleteView: View {
                 // A rescan keeps only the rows still listed selected (`DeleteList.retained`).
                 if let newList { selection = newList.retained(selection) } else { selection = [] }
             }
+            .defaultFocus($tableFocused, true)
             .confirmationDialog(
                 useTrash
                     ? L10n.plural("app.clean.confirm.trash", count: list.deletable(selected: selection).count)
@@ -243,10 +246,11 @@ struct DeleteView: View {
                     }
                 }
             } message: {
-                Text.l10n(L10n.tr("app.clean.confirm.message"))
+                // What undoing costs for exactly these rows (HIG review D3), never a claim about the whole list.
+                Text.l10n(AppText.deleteConfirmation(costs: list.undoCosts(selected: selection), useTrash: useTrash))
             }
             .confirmationDialog(
-                confirmPrivileged?.privilegedAction?.title(in: L10n.locale) ?? "",
+                confirmPrivileged?.privilegedAction.map(AppText.privilegedConfirmTitle) ?? "",
                 isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
                 presenting: confirmPrivileged
             ) { a in
@@ -256,8 +260,18 @@ struct DeleteView: View {
             } message: { _ in
                 Text.l10n(L10n.tr("app.clean.privileged.message"))
             }
+        } else if model.isScanning {
+            // A labelled progress while the plan is being made (HIG review N8), never a bare spinner.
+            ScanningView()
         } else {
-            ProgressView()
+            // No plan and no scan running (a scan that failed): say so, and offer the scan again.
+            ContentUnavailableView {
+                Label(L10n.tr("app.delete.unavailable.title"), systemImage: "arrow.clockwise")
+            } description: {
+                Text.l10n(L10n.tr("app.delete.unavailable.detail"))
+            } actions: {
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }
+            }
         }
     }
 
@@ -281,10 +295,30 @@ struct DeleteView: View {
                 Section {
                     ForEach(group.actions) { TableRow($0) }
                 } header: {
-                    Text.l10n(L10n.tr("app.delete.group.header", group.categoryName, ByteCount.format(group.bytes)))
+                    // The name, and the size trailing in secondary (HIG review D8).
+                    HStack {
+                        Text(verbatim: group.categoryName)
+                        Spacer()
+                        Text(verbatim: ByteCount.format(group.bytes)).monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
         }
+        // Right-click and ⌘⌫ (HIG review D1): the same confirmation as the footer's button, for the rows clicked or selected.
+        .contextMenu(forSelectionType: String.self) { paths in
+            Button(L10n.tr("app.action.showInFinder")) { model.showInFinder(paths) }
+            Button(L10n.tr("app.action.copyPath")) { model.copyPaths(paths) }
+            Divider()
+            Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) {
+                selection = paths
+                confirm = true
+            }
+            .disabled(list.deletable(selected: paths).isEmpty)
+        }
+        .onDeleteCommand {
+            if !list.deletable(selected: selection).isEmpty { confirm = true }
+        }
+        .focused($tableFocused)
     }
 
     /// Everything below the table, in one panel folded by default (R1): the planner's warnings, the root rows, the rows
@@ -388,9 +422,12 @@ struct DeleteView: View {
             Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
             // The CLI has --trash; without this the GUI was strictly more destructive than
             // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
-            Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash)
+            Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash).help(L10n.tr("app.clean.useTrash.help"))
             Spacer()
-            Button(L10n.tr("app.clean.deleteSelected")) { confirm = true }.disabled(chosen.isEmpty)
+            // A destructive verb with ⌘⌫ (HIG review D1); it only opens the confirmation.
+            Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) { confirm = true }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(chosen.isEmpty)
         }
         .padding()
     }

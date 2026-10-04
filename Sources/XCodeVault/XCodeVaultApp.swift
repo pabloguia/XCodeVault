@@ -105,8 +105,12 @@ final class AppModel {
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
     var isScanning: Bool { scanGate.isScanning }
-    var lastError: String?
+    /// The error alert's content (R5, HIG review N10): what failed as the title, why and what to do as the message.
+    var lastError: AppError?
     var lastCleanResult: CleanResult?
+    /// The last action's result, shown inline above the screen until the next action or its × (R5, HIG review N11),
+    /// instead of a modal "Done" alert.
+    var feedback: AppFeedback?
     var fullDiskAccess: FullDiskAccessState = .unknown
     var helperState: HelperState = .unavailableInThisBuild
     /// Set when the app sends the user to System Settings, so coming back can rescan once if Full Disk Access was
@@ -127,9 +131,17 @@ final class AppModel {
     func openFullDiskAccessSettings() {
         guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
         returningFromSettings = true
+        openedFullDiskAccessSettings = true
         environment.registerForFullDiskAccess()
         environment.open(url)
     }
+
+    /// Set once the user opened the Full Disk Access pane from the app; it stays set, unlike `returningFromSettings`,
+    /// which one activation consumes. The hint next to the button shows only after it (R5, HIG review A2).
+    private(set) var openedFullDiskAccessSettings = false
+
+    /// Whether `row` shows its hint (`AccessChecklist.showsHint`).
+    func showsAccessHint(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.showsHint(row, openedSettings: openedFullDiskAccessSettings) }
 
     /// Every activation re-checks the permissions, so the Access row, the banner and the Overview follow what the user did
     /// in System Settings. A rescan follows only when Full Disk Access became granted, and only after a scan or a trip to
@@ -216,6 +228,7 @@ final class AppModel {
     /// Every button that runs a root action comes through here and decides by `helperState.actionControl`, the
     /// tested function, never on its own.
     func request(_ action: PrivilegedAction) {
+        feedback = nil
         switch helperState.actionControl {
         case .run:
             Task { await perform(action) }
@@ -243,17 +256,18 @@ final class AppModel {
             helperProgress = nil
             approvalTask = nil
             refreshPermissions()
+            let title = L10n.tr("app.error.helper.title")
             switch outcome {
             case .enabled:
                 if let action { await perform(action) }
             case .notAvailableInThisBuild:
-                lastError = HelperState.unavailableInThisBuild.why(in: L10n.locale)
+                lastError = AppError(title: title, message: HelperState.unavailableInThisBuild.why(in: L10n.locale))
             case .timedOut:
-                lastError = L10n.tr("app.helper.error.timedOut")
+                lastError = AppError(title: title, message: L10n.tr("app.helper.error.timedOut"))
             case .cancelled:
                 break
             case .failed(let why):
-                lastError = why
+                lastError = AppError(title: title, message: why)
             }
         }
     }
@@ -266,16 +280,39 @@ final class AppModel {
         refreshPermissions()
     }
 
+    /// **Open System Settings** in the helper sheet's waiting state: the Login Items & Extensions pane again, where the
+    /// switch is (`PrivilegedHelper.openApprovalSettings`).
+    func openHelperApprovalSettings() { environment.helper.openApprovalSettings() }
+
+    /// The helper sheet is up while a root action waits for the user's choice (`showsHelperSheet`) and, after **Install
+    /// Helper…**, while the approval is awaited (`helperProgress`): the wait is the sheet's second state, never a floating
+    /// overlay (R5, HIG review N12).
+    var helperSheetIsPresented: Bool { showsHelperSheet || helperProgress != nil }
+
+    /// The sheet closed by **Cancel**, **Stop Waiting** or Escape: no action stays pending, and a wait stops.
+    func dismissHelperSheet() {
+        showsHelperSheet = false
+        pendingPrivilegedAction = nil
+        if helperProgress != nil { stopWaitingForApproval() }
+    }
+
     func perform(_ action: PrivilegedAction) async {
+        feedback = nil
         switch await environment.runner(environment.helper).run(action) {
-        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
-        case .refused(let why), .failed(let why): lastError = why
+        case .done(let reply):
+            lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
+            // A step left to the user (the vault folder's `vault init`) makes it a notice, not a plain success.
+            let next = action.afterSuccess(in: L10n.locale)
+            feedback = AppFeedback(
+                kind: next == nil ? .success : .notice, title: AppText.privilegedDone(action), detail: [reply.message, next].compactMap { $0 })
+        case .refused(let why), .failed(let why):
+            lastError = AppError(title: AppText.privilegedFailed(action), message: why)
         }
         await refresh()
     }
 
     func uninstallHelper() async {
-        do { try await environment.helper.unregister() } catch { lastError = "\(error)" }
+        do { try await environment.helper.unregister() } catch { lastError = AppError(title: L10n.tr("app.error.uninstall.title"), error: error) }
         refreshPermissions()
     }
 
@@ -523,14 +560,69 @@ final class AppModel {
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
+        feedback = nil
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
         let clean = environment.clean
         do {
             let result = try await Task.detached { try clean(selected, useTrash) }.value
             lastCleanResult = result
+            feedback = AppText.cleanFeedback(result, useTrash: useTrash)
+            if let failure = AppText.cleanFailures(result) { lastError = failure }
             await refresh()
-        } catch { lastError = "\(error)" }
+        } catch {
+            lastError = AppError(title: useTrash ? L10n.tr("app.error.clean.trash.title") : L10n.tr("app.error.clean.delete.title"), error: error)
+        }
     }
+
+    /// The inline result's ×.
+    func dismissFeedback() { feedback = nil }
+
+    /// **Show in Finder** on a table's selection (R5, HIG review D1, ST3): the paths selected in Finder. Reads nothing.
+    func showInFinder(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        environment.reveal(paths.sorted())
+    }
+
+    /// **Copy Path**: the selected paths, one per line, in path order.
+    func copyPaths(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        environment.copy(paths.sorted().joined(separator: "\n"))
+    }
+}
+
+/// An alert's content (R5, HIG review N10): the title says what failed, the message why and what to do. The raw text of
+/// an error that has no description of its own is the message's last resort, never the title.
+struct AppError: Equatable {
+    let title: String
+    let message: String
+
+    init(title: String, message: String) {
+        self.title = title
+        self.message = message
+    }
+
+    /// A thrown error under `title`: its description and recovery suggestion when it is a `LocalizedError`, else its text.
+    init(title: String, error: any Error) {
+        self.title = title
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            message = [description, localized.recoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
+        } else {
+            message = "\(error)"
+        }
+    }
+}
+
+/// An action's result shown inline (R5, HIG review N11): a symbol, one line, and its details under it.
+struct AppFeedback: Equatable {
+    enum Kind: Equatable {
+        case success
+        /// Done, with something the user should read (part of it failed, or a step is left).
+        case notice
+    }
+
+    let kind: Kind
+    let title: String
+    var detail: [String] = []
 }
 
 /// What stands next to a root action. `HelperState.actionControl` decides; this only renders it, and never
@@ -542,9 +634,10 @@ struct PrivilegedActionControlView: View {
     var showsGuidance = true
     let perform: @MainActor () -> Void
     var body: some View {
+        // Title case, in the app's own words (HIG review X5); `PrivilegedAction.title` stays the journal's record.
         switch state.actionControl {
-        case .run: Button(action.title(in: L10n.locale), action: perform)
-        case .requestHelper: Button(action.title(in: L10n.locale) + "…", action: perform)
+        case .run: Button(AppText.privilegedButton(action), action: perform)
+        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform)
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
             if showsGuidance {
@@ -554,23 +647,48 @@ struct PrivilegedActionControlView: View {
     }
 }
 
-/// Spec §3: one sentence of why, and **Allow**.
+/// Spec §3, with the HIG review's S1, S2 and N12 (R5): the request — what will happen, one sentence of why, **Cancel**
+/// (Escape) and **Install Helper…** (Return) — and then, in the same sheet, the wait for the user's approval in System
+/// Settings, with **Open System Settings** and **Stop Waiting** (Escape).
 struct HelperRequestSheet: View {
     @Bindable var model: AppModel
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: model.pendingPrivilegedAction?.title(in: L10n.locale) ?? L10n.tr("app.helper.sheet.installTitle")).font(.headline)
-            Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
-            HStack {
-                Spacer()
-                Button(L10n.tr("app.action.cancel")) {
-                    model.showsHelperSheet = false
-                    model.pendingPrivilegedAction = nil
-                }
-                Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: "lock.shield").font(.system(size: 40)).foregroundStyle(.secondary).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 10) {
+                if let progress = model.helperProgress { waiting(progress) } else { request }
             }
         }
-        .padding()
-        .frame(width: 460)
+        .padding(20)
+        .frame(minWidth: 420, idealWidth: 480, maxWidth: 560)
+    }
+
+    @ViewBuilder
+    private var request: some View {
+        Text(verbatim: L10n.tr("app.helper.sheet.installTitle")).font(.headline)
+        if let action = model.pendingPrivilegedAction {
+            Text(verbatim: action.title(in: L10n.locale)).font(.callout).foregroundStyle(.secondary)
+        }
+        Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
+            .font(.callout).fixedSize(horizontal: false, vertical: true)
+        HStack {
+            Spacer()
+            Button(L10n.tr("app.action.cancel"), role: .cancel) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
+            Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+        }
+    }
+
+    @ViewBuilder
+    private func waiting(_ progress: String) -> some View {
+        Text(verbatim: L10n.tr("app.helper.sheet.waitingTitle")).font(.headline)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(verbatim: progress).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
+        HStack {
+            Spacer()
+            Button(L10n.tr("app.helper.stopWaiting")) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
+            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }
+        }
     }
 }

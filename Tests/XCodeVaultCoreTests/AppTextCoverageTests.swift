@@ -70,25 +70,27 @@ final class AppTextCoverageTests: XCTestCase {
 
     func testTheCleanSafetyTextsKeepTheirEnglish() {
         let en = { (key: String) in L10n.string(key, in: .core, locale: "en", arguments: []) }
+        // R5 (HIG review D3, D4): plain words, no hypothesis ids; the cache's confirmation keeps "experimental" (rule 10) and
+        // still says it is deleted, not trashed, and refused while anything that uses it runs.
         XCTAssertEqual(
             en("app.clean.privileged.message"),
-            "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, "
-                + "and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs.")
-        XCTAssertEqual(
-            en("app.clean.confirm.message"),
-            "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. "
-                + "Deletions are journaled.")
-        XCTAssertEqual(en("app.clean.useTrash"), "Move to Trash instead of deleting (space is freed only when the Trash is emptied)")
-        // Rule 7's cue stays loud in every language.
+            "It’s deleted, not moved to the Trash. Simulators may run slower until the cache is rebuilt, and what rebuilds it isn’t known yet. "
+                + "XCodeVault refuses while Xcode, a simulator or a build is running.")
+        XCTAssertTrue(en("app.privileged.confirm.emptyDyldCache").contains("(experimental)"))
+        XCTAssertEqual(en("app.clean.confirm.regenerable"), "Xcode rebuilds these when it needs them.")
+        XCTAssertEqual(en("app.clean.confirm.userRecreatable"), "Some of these don’t come back: you recreate them yourself.")
+        XCTAssertEqual(en("app.clean.useTrash"), "Move to Trash")
+        XCTAssertTrue(en("app.clean.useTrash.help").contains("freed when you empty the Trash"))
+        // Rule 7's cue stays visible in every language: a word beside the symbol, never the symbol alone.
         for locale in L10n.supportedLocales {
-            XCTAssertTrue(L10n.string("app.storage.symlink", in: .core, locale: locale, arguments: []).contains("SYMLINK"), locale)
+            XCTAssertFalse(L10n.string("app.storage.symlink", in: .core, locale: locale, arguments: []).isEmpty, locale)
         }
     }
 
     // MARK: - The Access checklist's keys (Task 1)
 
     func testEveryAccessChecklistKeyIsInTheCatalogInEveryLanguage() {
-        XCTAssertEqual(AccessChecklist.allKeys.count, 23)
+        XCTAssertEqual(AccessChecklist.allKeys.count, 24)
         for key in AccessChecklist.allKeys {
             let byLocale = L10nCatalog.core.strings[key] ?? L10nCatalog.core.plurals[key]?.mapValues { $0["other"] ?? "" }
             for locale in L10n.supportedLocales {

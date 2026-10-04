@@ -100,6 +100,13 @@ public struct DeleteList: Sendable, Equatable {
     /// The cost to undo deleting `action`: its group's. Nil for an action the list does not show.
     public func undo(of action: CleanAction) -> Regenerability? { groups.first { $0.categoryID == action.categoryID }?.undo }
 
+    /// What undoing the deletion costs, for the rows **Delete Selected…** acts on (`deletable(selected:)`): the
+    /// confirmation names each cost present, so it never says "rebuilt automatically" of a row that is not (R5, HIG
+    /// review D3).
+    public func undoCosts(selected: Set<String>) -> Set<Regenerability> {
+        Set(deletable(selected: selected).compactMap(undo(of:)))
+    }
+
     /// Re-applies a rescan to a selection: only rows still listed stay selected, so a path that comes back later is not
     /// silently selected again (migration-safety review LOW-1).
     public func retained(_ selection: Set<String>) -> Set<String> {

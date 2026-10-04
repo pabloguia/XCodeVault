@@ -7,36 +7,41 @@ import XCodeVaultCore
 /// row, its keys and its action are Core's, and the button hands the action to `AppModel.handle(_:)`.
 struct AccessRowView: View {
     let row: AccessChecklist.Row
+    /// The hint next to the Full Disk Access button, once the user opened the pane from the app (`AppModel.showsAccessHint`,
+    /// HIG review A2). Off by default: the banner and Delete's row never show it.
+    var showsHint = false
     let act: @MainActor (AccessChecklist.Action) -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: text(row.titleKey)).bold()
-                Label {
-                    Text(verbatim: text(row.statusKey))
-                } icon: {
-                    // The status word is next to it: the symbol is not said twice.
-                    Image(systemName: Self.symbol(row.state)).accessibilityHidden(true)
-                }
-                .font(.callout)
-                Text(verbatim: text(row.whyKey)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            if let key = row.actionKey, let action = row.action {
-                if action == .guidanceOnly {
-                    // What to do instead (spec §6.3), with its commands in monospace; text, never a button.
-                    InlineCodeText(text(key)).font(.caption).foregroundStyle(.secondary).frame(maxWidth: 300, alignment: .trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Button(text(key)) { act(action) }
-                        // What is left after the button (R4): the app should be in the pane's list (H16, unverified); the user turns its switch on.
-                        if let hint = row.hintKey {
-                            Text(verbatim: text(hint)).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
-                                .frame(maxWidth: 260, alignment: .trailing).fixedSize(horizontal: false, vertical: true)
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: text(row.titleKey)).font(.headline)
+                    Label {
+                        Text(verbatim: text(row.statusKey))
+                    } icon: {
+                        // The status word is next to it: the symbol is not said twice.
+                        Image(systemName: Self.symbol(for: row)).accessibilityHidden(true)
                     }
+                    .font(.callout)
+                }
+                Spacer(minLength: 8)
+                if let key = row.actionKey, let action = row.action, action != .guidanceOnly {
+                    Button(text(key)) { act(action) }
+                }
+            }
+            // Full width under the status, not a narrow column beside it (HIG review D5).
+            Text(verbatim: text(row.whyKey)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let key = row.actionKey, row.action == .guidanceOnly {
+                // What to do instead (spec §6.3), with its commands in monospace; text, never a button.
+                InlineCodeText(text(key)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            // What is left after the button (R4): the user turns the app's switch on in the pane.
+            if showsHint, let hint = row.hintKey {
+                Label {
+                    Text(verbatim: text(hint)).font(.callout).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "hand.point.right").foregroundStyle(.secondary).accessibilityHidden(true)
                 }
             }
         }
@@ -54,6 +59,10 @@ struct AccessRowView: View {
         case .unavailableInThisBuild: "minus.circle"
         }
     }
+
+    /// A row's symbol: its state's, except a neutral one when the access is optional (`Row.isNeeded`, HIG review A1) —
+    /// an xmark would read as a failure where nothing is missing.
+    static func symbol(for row: AccessChecklist.Row) -> String { row.isNeeded ? symbol(row.state) : "circle.dashed" }
 }
 
 /// Access (spec §6.3): the checklist, one section per need, each with its one button; the helper, once enabled, can be
@@ -67,7 +76,7 @@ struct AccessView: View {
         Form {
             ForEach(model.accessRows, id: \.need) { row in
                 Section {
-                    AccessRowView(row: row) { model.handle($0) }
+                    AccessRowView(row: row, showsHint: model.showsAccessHint(row)) { model.handle($0) }
                     if model.offersUninstall(row) {
                         Button(L10n.tr("app.permissions.uninstallEllipsis")) { confirmUninstall = true }
                     }

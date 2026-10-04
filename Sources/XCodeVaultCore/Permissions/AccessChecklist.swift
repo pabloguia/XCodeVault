@@ -55,11 +55,18 @@ public enum AccessChecklist {
         /// The need's name: the titles `xcodevaultctl permissions` prints.
         public var titleKey: String { need == .fullDiskAccess ? Key.fdaTitle : Key.helperTitle }
 
+        /// Whether the missing access holds anything back (R5, HIG review A1). Full Disk Access that is off while every
+        /// folder the scan reached was read (`fdaWhyProtected`) is optional: the row says "Off" with a neutral symbol, not
+        /// a failure. Every other row is needed or met.
+        public var isNeeded: Bool { !(need == .fullDiskAccess && state == .missing && whyKey == Key.fdaWhyProtected) }
+
         /// The row's status word, shown beside a symbol (never color alone).
         public var statusKey: String {
             switch (need, state) {
             case (.fullDiskAccess, .granted): Key.fdaStatusGranted
             case (.fullDiskAccess, .unknown): Key.fdaStatusUnknown
+            // Optional, not missing: nothing the scan reached was refused (`isNeeded`).
+            case (.fullDiskAccess, .missing) where whyKey == Key.fdaWhyProtected: Key.fdaStatusOff
             // Full Disk Access has no approval step and is in every build: only "missing" is left.
             case (.fullDiskAccess, _): Key.fdaStatusMissing
             case (.privilegedHelper, .granted): Key.helperStatusEnabled
@@ -77,6 +84,8 @@ public enum AccessChecklist {
         public static let fdaStatusGranted = "app.access.status.fda.granted"
         public static let fdaStatusMissing = "app.access.status.fda.missing"
         public static let fdaStatusUnknown = "app.access.status.fda.unknown"
+        /// Full Disk Access off while nothing needs it (`Row.isNeeded`).
+        public static let fdaStatusOff = "app.access.status.fda.off"
         public static let helperStatusEnabled = "app.access.status.helper.enabled"
         public static let helperStatusMissing = "app.access.status.helper.missing"
         public static let helperStatusAwaitingApproval = "app.access.status.helper.awaitingApproval"
@@ -107,8 +116,12 @@ public enum AccessChecklist {
         Key.fdaActionOpenSettings, Key.fdaActionRecheck, Key.helperWhyEnabled, Key.helperWhyRootOnlyBytes, Key.helperWhyRootActions,
         Key.helperActionInstall, Key.helperActionApprove, Key.helperActionSignedReleaseOrCLI, Key.fdaTitle, Key.helperTitle, Key.fdaStatusGranted,
         Key.fdaStatusMissing, Key.fdaStatusUnknown, Key.helperStatusEnabled, Key.helperStatusMissing, Key.helperStatusAwaitingApproval,
-        Key.helperStatusUnavailable, Key.fdaHintInList,
+        Key.helperStatusUnavailable, Key.fdaHintInList, Key.fdaStatusOff,
     ]
+
+    /// Whether the hint next to the Full Disk Access button shows (R5, HIG review A2): only once the user has opened the
+    /// pane from the app, when the next step is theirs. Before that the button says enough.
+    public static func showsHint(_ row: Row, openedSettings: Bool) -> Bool { row.hintKey != nil && openedSettings }
 
     /// - Parameters:
     ///   - savings: `ScanReport.savings`; its `isLowerBound` says some counted item could not be fully read.

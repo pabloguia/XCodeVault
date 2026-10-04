@@ -313,19 +313,19 @@ final class AppModelTests: XCTestCase {
         let unavailable = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t)
         unavailable.installHelper(then: vault)
         await eventually("the unavailable build is reported") { unavailable.lastError != nil }
-        XCTAssertEqual(unavailable.lastError, HelperState.unavailableInThisBuild.why)
+        XCTAssertEqual(unavailable.lastError?.message, HelperState.unavailableInThisBuild.why)
 
         let slow = SwitchableHelper(.awaitingApproval)
         let timedOut = makeModel(slow, journal: t, maxPolls: 3)
         timedOut.installHelper(then: vault)
         await eventually("the wait times out") { timedOut.lastError != nil }
-        XCTAssertTrue(timedOut.lastError?.contains("has not approved the helper") == true, timedOut.lastError ?? "")
+        XCTAssertTrue(timedOut.lastError?.message.contains("has not approved the helper") == true, timedOut.lastError?.message ?? "")
 
         let refused = SwitchableHelper(.notInstalled, registerError: Refusal(description: "no plist"))
         let failed = makeModel(refused, journal: t)
         failed.installHelper(then: vault)
         await eventually("the failed registration is reported") { failed.lastError != nil }
-        XCTAssertEqual(failed.lastError, "no plist")
+        XCTAssertEqual(failed.lastError?.message, "no plist")
         XCTAssertEqual(slow.performed + refused.performed, [], "no action runs without the helper")
     }
 
@@ -401,11 +401,11 @@ final class AppModelTests: XCTestCase {
         let t = TempDir()
         let waiting = makeModel(SwitchableHelper(.awaitingApproval), journal: t)
         await waiting.perform(vault)
-        XCTAssertEqual(waiting.lastError, "The privileged helper is not enabled.")
+        XCTAssertEqual(waiting.lastError?.message, "The privileged helper is not enabled.")
 
         let failing = makeModel(SwitchableHelper(.enabled, reply: PrivilegedActionReply(ok: false, message: "nope")), journal: t)
         await failing.perform(vault)
-        XCTAssertEqual(failing.lastError, "nope")
+        XCTAssertEqual(failing.lastError?.message, "nope")
 
         let cache = makeModel(SwitchableHelper(.enabled), journal: t)
         await cache.perform(.emptyCoreSimulatorDyldCache)
@@ -421,7 +421,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(fine.lastError)
         let refused = makeModel(SwitchableHelper(.enabled, unregisterError: Refusal(description: "busy")), journal: t)
         await refused.uninstallHelper()
-        XCTAssertEqual(refused.lastError, "busy")
+        XCTAssertEqual(refused.lastError?.message, "busy")
     }
 
     func testApplyCleanStoresTheResultOrTheError() async {
@@ -446,7 +446,7 @@ final class AppModelTests: XCTestCase {
         let failing = makeModel(SwitchableHelper(.enabled), journal: t, clean: { _, _ in throw Refusal(description: "Xcode.app is running") })
         await failing.refresh()
         await failing.applyClean(actions: [], useTrash: false)
-        XCTAssertEqual(failing.lastError, "Xcode.app is running")
+        XCTAssertEqual(failing.lastError?.message, "Xcode.app is running")
     }
 }
 

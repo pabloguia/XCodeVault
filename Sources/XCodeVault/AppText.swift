@@ -80,6 +80,79 @@ enum AppText {
         }
     }
 
+    /// The error alert's title when a root action did not run or failed (R5, HIG review N10).
+    static func privilegedFailed(_ action: PrivilegedAction) -> String {
+        switch action {
+        case .createVaultDirectory: L10n.tr("app.error.createVaultDirectory.title")
+        case .emptyCoreSimulatorDyldCache: L10n.tr("app.error.emptyDyldCache.title")
+        }
+    }
+
+    /// The inline result's line when a root action succeeded (R5, HIG review N11).
+    static func privilegedDone(_ action: PrivilegedAction) -> String {
+        switch action {
+        case .createVaultDirectory: L10n.tr("app.feedback.createVaultDirectory")
+        case .emptyCoreSimulatorDyldCache: L10n.tr("app.feedback.emptyDyldCache")
+        }
+    }
+
+    /// A root action's button, title case (HIG review X5). The cache's keeps "Experimental" (rule 10).
+    static func privilegedButton(_ action: PrivilegedAction) -> String {
+        switch action {
+        case .createVaultDirectory: L10n.tr("app.privileged.button.createVaultDirectory")
+        case .emptyCoreSimulatorDyldCache: L10n.tr("app.privileged.button.emptyDyldCache")
+        }
+    }
+
+    /// The root action's confirmation, as a question (R5, HIG review D4). The cache's keeps "experimental" (rule 10).
+    static func privilegedConfirmTitle(_ action: PrivilegedAction) -> String {
+        switch action {
+        case .createVaultDirectory: L10n.tr("app.privileged.confirm.createVaultDirectory")
+        case .emptyCoreSimulatorDyldCache: L10n.tr("app.privileged.confirm.emptyDyldCache")
+        }
+    }
+
+    /// What a clean did, inline: how many items, how much, and where the space went.
+    static func cleanFeedback(_ result: CleanResult, useTrash: Bool) -> AppFeedback? {
+        guard !result.deleted.isEmpty else { return nil }
+        let size = ByteCount.format(result.bytesFreed)
+        if useTrash {
+            return AppFeedback(
+                kind: .success, title: L10n.plural("app.feedback.clean.trash", count: result.deleted.count, size), detail: [L10n.tr("app.clean.trashNote")])
+        }
+        return AppFeedback(kind: .success, title: L10n.plural("app.feedback.clean.deleted", count: result.deleted.count, size))
+    }
+
+    /// The items a clean could not delete, as an alert: the count as the title, each path and why as the message.
+    static func cleanFailures(_ result: CleanResult) -> AppError? {
+        guard !result.failedPairs.isEmpty else { return nil }
+        return AppError(
+            title: L10n.plural("app.error.clean.partial", count: result.failedPairs.count),
+            message: result.failedPairs.map { $0.path + "\n" + $0.error }.joined(separator: "\n\n"))
+    }
+
+    /// The Delete confirmation's message for the rows it acts on (R5, HIG review D2, D3): each undo cost present, where
+    /// the deletion is recorded, and where the space goes with the Trash.
+    static func deleteConfirmation(costs: Set<Regenerability>, useTrash: Bool) -> String {
+        var lines: [String] = []
+        if costs.contains(.regenerable) { lines.append(L10n.tr("app.clean.confirm.regenerable")) }
+        if costs.contains(.redownloadable) { lines.append(L10n.tr("app.clean.confirm.redownloadable")) }
+        if costs.contains(.userRecreatable) || costs.contains(.nonRegenerable) { lines.append(L10n.tr("app.clean.confirm.userRecreatable")) }
+        lines.append(L10n.tr("app.clean.confirm.history"))
+        if useTrash { lines.append(L10n.tr("app.clean.trashNote")) }
+        return lines.joined(separator: " ")
+    }
+
+    /// A drive's vault verdict, one line (R5, HIG review DR3).
+    static func vaultVerdict(_ verdict: DriveRow.VaultVerdict) -> String {
+        switch verdict {
+        case .ready: L10n.tr("app.volumes.vault.ready")
+        case .readyWithWarnings: L10n.tr("app.volumes.vault.readyWithWarnings")
+        case .needsAttention: L10n.tr("app.volumes.vault.needsAttention")
+        case .notUsable: L10n.tr("app.volumes.vault.notUsable")
+        }
+    }
+
     /// A date in the app's language.
     static func date(_ date: Date) -> String {
         date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: L10n.locale)))
@@ -162,6 +235,7 @@ enum AppText {
         case K.fdaStatusGranted: return L10n.tr("app.access.status.fda.granted")
         case K.fdaStatusMissing: return L10n.tr("app.access.status.fda.missing")
         case K.fdaStatusUnknown: return L10n.tr("app.access.status.fda.unknown")
+        case K.fdaStatusOff: return L10n.tr("app.access.status.fda.off")
         case K.helperStatusEnabled: return L10n.tr("app.access.status.helper.enabled")
         case K.helperStatusMissing: return L10n.tr("app.access.status.helper.missing")
         case K.helperStatusAwaitingApproval: return L10n.tr("app.access.status.helper.awaitingApproval")

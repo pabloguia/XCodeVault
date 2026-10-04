@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import SwiftUI
 import XCodeVaultCore
@@ -81,15 +82,18 @@ struct MainView: View {
                 } else if model.section == .access {
                     AccessView(model: model)  // needs no scan
                 } else {
-                    ContentUnavailableView(
-                        L10n.tr("app.scanning.title"), systemImage: "magnifyingglass",
-                        description: Text.l10n(L10n.tr("app.scanning.detail")))
+                    // A scan in progress, labelled (HIG review N8): not an empty state.
+                    ScanningView()
                 }
             }
             // The detail takes the column it is given and proposes no height of its own to the window. Without this a screen
             // whose wrapped text is measured at the split view's near-zero ideal width (Delete's header, access row and footer)
             // asked the window for ~4000 pt; the window, centred on that, showed neither the sidebar nor the table (R1, measured).
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, idealHeight: 0, maxHeight: .infinity, alignment: .top)
+            // The last action's result, inline above the screen until the next action or its × (HIG review N11).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let feedback = model.feedback { FeedbackBanner(feedback: feedback) { model.dismissFeedback() } }
+            }
             .toolbar {
                 // Back (R1): only when there is somewhere to go back to (`AppModel.canGoBack`); ⌘[ as in Safari and Finder.
                 if model.canGoBack {
@@ -114,42 +118,24 @@ struct MainView: View {
             }
             .navigationTitle(model.section.title)
         }
-        .alert(L10n.tr("app.alert.error.title"), isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
+        // The title says what failed, the message why and what to do (R5, HIG review N10).
+        .alert(model.lastError?.title ?? "", isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
             Button(L10n.tr("app.action.ok")) {
                 // Dismissing is the whole action: SwiftUI clears the binding that presents this
                 // alert, which the `set:` closure above turns into `lastError = nil`.
             }
         } message: {
-            Text(verbatim: model.lastError ?? "")
+            Text(verbatim: model.lastError?.message ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.appDidBecomeActive() }
         }
-        .sheet(isPresented: $model.showsHelperSheet) { HelperRequestSheet(model: model) }
+        // The request and, after Install Helper…, the wait for approval: one sheet, two states (HIG review N12).
+        .sheet(isPresented: Binding(get: { model.helperSheetIsPresented }, set: { if !$0 { model.dismissHelperSheet() } })) {
+            HelperRequestSheet(model: model)
+        }
         .sheet(isPresented: Binding(get: { model.operationSheet != nil }, set: { if !$0 { model.closeOperationSheet() } })) {
             OperationSheetView(model: model)
-        }
-        .overlay(alignment: .top) {
-            if let progress = model.helperProgress {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text(verbatim: progress)
-                    Button(L10n.tr("app.helper.stopWaiting")) { model.stopWaitingForApproval() }
-                }
-                .padding(8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding()
-            }
-        }
-        .alert(
-            L10n.tr("app.alert.done.title"),
-            isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })
-        ) {
-            Button(L10n.tr("app.action.ok")) {
-                // Dismissing is the whole action, as with the error alert above.
-            }
-        } message: {
-            Text(verbatim: model.lastPrivilegedResult ?? "")
         }
     }
 
@@ -179,6 +165,54 @@ struct MainView: View {
         case .history: HistoryView(model: model)
         case .access: AccessView(model: model)
         }
+    }
+}
+
+/// A scan in progress (R5, HIG review N8): an indeterminate progress with what is happening, never a bare spinner.
+struct ScanningView: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView().controlSize(.large)
+            Text(verbatim: L10n.tr("app.scanning.title")).font(.headline)
+            Text(verbatim: L10n.tr("app.scanning.detail")).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// An action's result (R5, HIG review N11): its symbol, one line and the details under it, with an × that clears it. Said
+/// to VoiceOver once when it appears. The commands in a detail line are monospaced and selectable.
+struct FeedbackBanner: View {
+    let feedback: AppFeedback
+    let dismiss: @MainActor () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: feedback.kind == .success ? "checkmark.circle.fill" : "info.circle.fill")
+                .foregroundStyle(feedback.kind == .success ? Color.green : Color.accentColor)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: feedback.title).font(.callout).bold()
+                ForEach(Array(feedback.detail.enumerated()), id: \.offset) { _, line in
+                    InlineCodeText(line).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            Button(action: dismiss) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: L10n.tr("app.feedback.dismiss")))
+            .help(L10n.tr("app.feedback.dismiss"))
+        }
+        .padding(.horizontal).padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+        .task(id: feedback) { AccessibilityNotification.Announcement(feedback.title).post() }
     }
 }
 

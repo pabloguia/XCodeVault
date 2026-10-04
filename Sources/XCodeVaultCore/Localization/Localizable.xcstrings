@@ -593,6 +593,40 @@
         }
       }
     },
+    "app.access.status.fda.off" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desactivado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "オフ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Desativado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
     "app.access.status.fda.unknown" : {
       "localizations" : {
         "en" : {
@@ -831,6 +865,40 @@
         }
       }
     },
+    "app.action.copyPath" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Path"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar ruta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "パスをコピー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar Caminho"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "拷贝路径"
+          }
+        }
+      }
+    },
     "app.action.ok" : {
       "localizations" : {
         "en" : {
@@ -899,70 +967,36 @@
         }
       }
     },
-    "app.alert.done.title" : {
+    "app.action.showInFinder" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Done"
+            "value" : "Show in Finder"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Hecho"
+            "value" : "Mostrar en el Finder"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "完了"
+            "value" : "Finder に表示"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Concluído"
+            "value" : "Mostrar no Finder"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "完成"
-          }
-        }
-      }
-    },
-    "app.alert.error.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Error"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Error"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "エラー"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Erro"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "错误"
+            "value" : "在访达中显示"
           }
         }
       }
@@ -1117,36 +1151,104 @@
         }
       }
     },
-    "app.clean.confirm.message" : {
+    "app.clean.confirm.history" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. Deletions are journaled."
+            "value" : "You can see this deletion in History."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Aquí solo aparecen datos que se pueden regenerar. Xcode los vuelve a crear cuando los necesita. Los datos que no se pueden regenerar (Archives) nunca aparecen en esta lista. Las eliminaciones quedan registradas."
+            "value" : "Puedes ver esta eliminación en Historial."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ここには再生成できるデータだけが表示されます。Xcode が必要に応じて作り直します。再生成できないデータ（Archives）はこの一覧に表示されません。削除はジャーナルに記録されます。"
+            "value" : "この削除は「履歴」で確認できます。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Só dados regeneráveis aparecem aqui. O Xcode os recria quando precisar. Dados que não podem ser regenerados (Archives) nunca aparecem nesta lista. As exclusões ficam registradas."
+            "value" : "Você pode ver esta exclusão no Histórico."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "这里只列出可以重新生成的数据，Xcode 会在需要时重建。无法重新生成的数据（Archives）绝不会出现在此列表中。删除操作都会记入日志。"
+            "value" : "你可以在“历史记录”中查看此次删除。"
+          }
+        }
+      }
+    },
+    "app.clean.confirm.redownloadable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloaded items come back when they’re needed again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Los elementos descargados vuelven a descargarse cuando se necesitan."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ダウンロードされた項目は、再び必要になったときに戻ります。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Os itens baixados voltam quando forem necessários de novo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "下载的项目会在再次需要时重新下载。"
+          }
+        }
+      }
+    },
+    "app.clean.confirm.regenerable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode rebuilds these when it needs them."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode los vuelve a generar cuando los necesita."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "これらは Xcode が必要なときに作り直します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O Xcode os recria quando precisar deles."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode 需要时会重新生成这些项目。"
           }
         }
       }
@@ -1233,6 +1335,40 @@
         }
       }
     },
+    "app.clean.confirm.userRecreatable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some of these don’t come back: you recreate them yourself."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Algunos no vuelven: tendrás que volver a crearlos tú."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "一部は元に戻りません。自分で作り直す必要があります。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Alguns não voltam: você mesmo precisa recriá-los."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "其中一些不会恢复：需要你自己重新创建。"
+          }
+        }
+      }
+    },
     "app.clean.deleteSelected" : {
       "localizations" : {
         "en" : {
@@ -1306,31 +1442,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs."
+            "value" : "It’s deleted, not moved to the Trash. Simulators may run slower until the cache is rebuilt, and what rebuilds it isn’t known yet. XCodeVault refuses while Xcode, a simulator or a build is running."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Experimental. Se elimina, no se traslada a la papelera. Los simuladores funcionan sin caché compartida hasta que algo la vuelve a crear, y no se sabe qué recrea una caché eliminada (H14). Se rechaza mientras se ejecutan Xcode, un simulador, simctl, xcodebuild o el generador de la caché."
+            "value" : "Se elimina, no se traslada a la papelera. Los simuladores pueden ir más lentos hasta que la caché se vuelva a generar, y aún no se sabe qué la regenera. XCodeVault se niega mientras se ejecutan Xcode, un simulador o una compilación."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "実験的。ゴミ箱には入れず、削除します。何かが作り直すまでシミュレータは共有キャッシュなしで動作します。削除したキャッシュを何が作り直すかは特定されていません（H14）。Xcode、シミュレータ、simctl、xcodebuild、キャッシュ生成処理のいずれかが実行中の場合は拒否されます。"
+            "value" : "ゴミ箱には入れず、削除します。キャッシュが作り直されるまでシミュレータの動作が遅くなることがあり、何が作り直すかはまだわかっていません。Xcode、シミュレータ、ビルドのいずれかが実行中の場合、XCodeVault は実行しません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Experimental. É apagado, não movido para o Lixo. Os simuladores rodam sem cache compartilhado até que algo o recrie, e não se sabe o que recria um cache apagado (H14). Recusado enquanto o Xcode, um simulador, simctl, xcodebuild ou o gerador do cache estiver em execução."
+            "value" : "É apagado, não movido para o Lixo. Os simuladores podem ficar mais lentos até o cache ser recriado, e ainda não se sabe o que o recria. O XCodeVault recusa enquanto o Xcode, um simulador ou uma compilação estiver em execução."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "实验性。它会被删除，而不是移到废纸篓。在有程序重建共享缓存之前，模拟器将在没有它的情况下运行；而重建已删除缓存的是什么尚未确定（H14）。当 Xcode、模拟器、simctl、xcodebuild 或缓存生成程序正在运行时会被拒绝。"
+            "value" : "它会被删除，而不是移到废纸篓。在缓存重建之前，模拟器可能运行较慢，而由什么重建它尚不清楚。当 Xcode、模拟器或构建正在运行时，XCodeVault 会拒绝执行。"
           }
         }
       }
@@ -1451,36 +1587,104 @@
         }
       }
     },
-    "app.clean.useTrash" : {
+    "app.clean.trashNote" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Move to Trash instead of deleting (space is freed only when the Trash is emptied)"
+            "value" : "Space is freed when you empty the Trash."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Trasladar a la papelera en lugar de eliminar (el espacio solo se libera al vaciar la papelera)"
+            "value" : "El espacio se libera al vaciar la papelera."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "削除せずにゴミ箱に入れる（ゴミ箱を空にするまで空き容量は増えません）"
+            "value" : "空き領域はゴミ箱を空にしたときに増えます。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Mover para o Lixo em vez de apagar (o espaço só é liberado quando o Lixo for esvaziado)"
+            "value" : "O espaço é liberado quando você esvazia o Lixo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "移到废纸篓而不是删除（清倒废纸篓后才会释放空间）"
+            "value" : "清倒废纸篓后才会释放空间。"
+          }
+        }
+      }
+    },
+    "app.clean.useTrash" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move to Trash"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Trasladar a la papelera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ゴミ箱に入れる"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mover para o Lixo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "移到废纸篓"
+          }
+        }
+      }
+    },
+    "app.clean.useTrash.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When this is on, the items go to the Trash instead of being deleted, and the space is freed when you empty the Trash."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Si está activado, los elementos van a la papelera en lugar de eliminarse, y el espacio se libera al vaciarla."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "オンにすると、項目は削除されずにゴミ箱に入り、ゴミ箱を空にしたときに領域が解放されます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Quando ativado, os itens vão para o Lixo em vez de serem apagados, e o espaço é liberado quando você esvazia o Lixo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "开启后，项目会移到废纸篓而不是被删除，清倒废纸篓后才会释放空间。"
           }
         }
       }
@@ -2097,40 +2301,6 @@
         }
       }
     },
-    "app.delete.group.header" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ — %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ — %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ — %@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ — %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%@ — %@"
-          }
-        }
-      }
-    },
     "app.delete.notes.more" : {
       "localizations" : {
         "en" : {
@@ -2561,6 +2731,74 @@
         }
       }
     },
+    "app.delete.unavailable.detail" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The last scan didn’t finish. Scan again to see what you can delete."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El último análisis no terminó. Vuelve a analizar para ver qué puedes eliminar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "前回のスキャンは完了しませんでした。もう一度スキャンすると、削除できる項目が表示されます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A última análise não terminou. Analise de novo para ver o que você pode apagar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "上次扫描未完成。重新扫描以查看可以删除的内容。"
+          }
+        }
+      }
+    },
+    "app.delete.unavailable.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing to show yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Aún no hay nada que mostrar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "まだ表示する項目がありません"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nada para mostrar ainda"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "暂无内容"
+          }
+        }
+      }
+    },
     "app.delete.undo.nonRegenerable" : {
       "localizations" : {
         "en" : {
@@ -2761,6 +2999,558 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "依据：%@"
+          }
+        }
+      }
+    },
+    "app.error.clean.delete.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t delete the items"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudieron eliminar los elementos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "項目を削除できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível apagar os itens"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法删除项目"
+          }
+        }
+      }
+    },
+    "app.error.clean.partial" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item couldn’t be deleted"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items couldn’t be deleted"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "No se pudo eliminar %lld elemento"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "No se pudieron eliminar %lld elementos"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld 項目を削除できませんでした"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Não foi possível apagar %lld item"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Não foi possível apagar %lld itens"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld 个项目无法删除"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "app.error.clean.trash.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t move the items to the Trash"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudieron trasladar los elementos a la papelera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "項目をゴミ箱に入れられませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível mover os itens para o Lixo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法将项目移到废纸篓"
+          }
+        }
+      }
+    },
+    "app.error.createVaultDirectory.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t create the vault folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo crear la carpeta de la bóveda"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先のフォルダを作成できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível criar a pasta do cofre"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法创建保险库文件夹"
+          }
+        }
+      }
+    },
+    "app.error.emptyDyldCache.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t empty the dyld cache"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo vaciar la caché dyld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "dyld キャッシュを空にできませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível esvaziar o cache dyld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法清空 dyld 缓存"
+          }
+        }
+      }
+    },
+    "app.error.helper.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t set up the helper"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo configurar el asistente"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ヘルパーを設定できませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível configurar o auxiliar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法设置助手"
+          }
+        }
+      }
+    },
+    "app.error.uninstall.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t uninstall the helper"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo desinstalar el asistente"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ヘルパーをアンインストールできませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível desinstalar o auxiliar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法卸载助手"
+          }
+        }
+      }
+    },
+    "app.feedback.clean.deleted" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted %lld item · %@ freed"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted %lld items · %@ freed"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Se eliminó %lld elemento · %@ liberados"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Se eliminaron %lld elementos · %@ liberados"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld 項目を削除しました · %@ を解放"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld item apagado · %@ liberados"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld itens apagados · %@ liberados"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "已删除 %lld 个项目 · 释放了 %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "app.feedback.clean.trash" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Moved %lld item to the Trash · %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Moved %lld items to the Trash · %@"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Se trasladó %lld elemento a la papelera · %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "Se trasladaron %lld elementos a la papelera · %@"
+                }
+              }
+            }
+          }
+        },
+        "ja" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld 項目をゴミ箱に入れました · %@"
+                }
+              }
+            }
+          }
+        },
+        "pt-BR" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld item movido para o Lixo · %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "%lld itens movidos para o Lixo · %@"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans" : {
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "needs_review",
+                  "value" : "已将 %lld 个项目移到废纸篓 · %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "app.feedback.createVaultDirectory" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The vault folder was created."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se creó la carpeta de la bóveda."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先のフォルダを作成しました。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A pasta do cofre foi criada."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已创建保险库文件夹。"
+          }
+        }
+      }
+    },
+    "app.feedback.dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Descartar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "閉じる"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Dispensar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "app.feedback.emptyDyldCache" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The dyld cache was emptied."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se vació la caché dyld."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "dyld キャッシュを空にしました。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O cache dyld foi esvaziado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已清空 dyld 缓存。"
           }
         }
       }
@@ -3229,36 +4019,70 @@
         }
       }
     },
-    "app.helper.progress.waiting" : {
+    "app.helper.openSettings" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waiting for you to approve XCodeVault in System Settings ▸ General ▸ Login Items & Extensions…"
+            "value" : "Open System Settings"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esperando a que apruebes XCodeVault en Ajustes del Sistema ▸ General ▸ Ítems de inicio y extensiones…"
+            "value" : "Abrir Ajustes del Sistema"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "システム設定 ▸ 一般 ▸ ログイン項目と機能拡張 で XCodeVault を承認するのを待っています…"
+            "value" : "システム設定を開く"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Aguardando você aprovar o XCodeVault em Ajustes do Sistema ▸ Geral ▸ Itens de Início e Extensões…"
+            "value" : "Abrir Ajustes do Sistema"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "正在等待你在系统设置 ▸ 通用 ▸ 登录项与扩展中批准 XCodeVault…"
+            "value" : "打开系统设置"
+          }
+        }
+      }
+    },
+    "app.helper.progress.waiting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In System Settings ▸ General ▸ Login Items & Extensions, turn on XCodeVault. This sheet closes when it’s approved."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "En Ajustes del Sistema ▸ General ▸ Ítems de inicio y extensiones, activa XCodeVault. Esta hoja se cierra cuando se aprueba."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "システム設定 ▸ 一般 ▸ ログイン項目と機能拡張 で XCodeVault をオンにしてください。承認されるとこのシートは閉じます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Em Ajustes do Sistema ▸ Geral ▸ Itens de Início e Extensões, ative o XCodeVault. Esta janela se fecha quando for aprovado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "请在系统设置 ▸ 通用 ▸ 登录项与扩展中打开 XCodeVault。批准后此面板会关闭。"
           }
         }
       }
@@ -3268,31 +4092,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allow"
+            "value" : "Install Helper…"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Permitir"
+            "value" : "Instalar asistente…"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "許可"
+            "value" : "ヘルパーをインストール…"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Permitir"
+            "value" : "Instalar Auxiliar…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "允许"
+            "value" : "安装助手…"
           }
         }
       }
@@ -3302,31 +4126,65 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install the privileged helper"
+            "value" : "XCodeVault needs its privileged helper"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Instalar el asistente privilegiado"
+            "value" : "XCodeVault necesita su asistente privilegiado"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "特権ヘルパーをインストール"
+            "value" : "XCodeVault には特権ヘルパーが必要です"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Instalar o auxiliar privilegiado"
+            "value" : "O XCodeVault precisa do seu auxiliar privilegiado"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "安装特权助手"
+            "value" : "XCodeVault 需要其特权助手"
+          }
+        }
+      }
+    },
+    "app.helper.sheet.waitingTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for your approval"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esperando tu aprobación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "承認を待っています"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Aguardando sua aprovação"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在等待你的批准"
           }
         }
       }
@@ -5381,6 +6239,142 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "%@ 上的 vault 已就绪。"
+          }
+        }
+      }
+    },
+    "app.privileged.button.createVaultDirectory" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Vault Folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Crear carpeta de la bóveda"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先のフォルダを作成"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Criar Pasta do Cofre"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "创建保险库文件夹"
+          }
+        }
+      }
+    },
+    "app.privileged.button.emptyDyldCache" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty dyld Cache (Experimental)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Vaciar caché dyld (experimental)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "dyld キャッシュを空にする（実験的）"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esvaziar Cache dyld (Experimental)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "清空 dyld 缓存（实验性）"
+          }
+        }
+      }
+    },
+    "app.privileged.confirm.createVaultDirectory" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create the vault folder?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "¿Crear la carpeta de la bóveda?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先のフォルダを作成しますか？"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Criar a pasta do cofre?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "要创建保险库文件夹吗？"
+          }
+        }
+      }
+    },
+    "app.privileged.confirm.emptyDyldCache" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty the CoreSimulator dyld cache (experimental)?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "¿Vaciar la caché dyld de CoreSimulator (experimental)?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "CoreSimulator の dyld キャッシュを空にしますか？（実験的）"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esvaziar o cache dyld do CoreSimulator (experimental)?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "要清空 CoreSimulator 的 dyld 缓存吗？（实验性）"
           }
         }
       }
@@ -10198,13 +11192,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ABSENT"
+            "value" : "Not Connected"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AUSENTE"
+            "value" : "No conectada"
           }
         },
         "ja" : {
@@ -10216,7 +11210,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AUSENTE"
+            "value" : "Não Conectado"
           }
         },
         "zh-Hans" : {
@@ -10232,31 +11226,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AMBIGUOUS"
+            "value" : "Local Folder in Its Place"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AMBIGUO"
+            "value" : "Carpeta local en su lugar"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "判別不能"
+            "value" : "その場所にローカルフォルダがあります"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AMBÍGUO"
+            "value" : "Pasta Local no Lugar"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "无法判定"
+            "value" : "其位置上是本地文件夹"
           }
         }
       }
@@ -10266,31 +11260,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "FOREIGN"
+            "value" : "Different Drive in Its Place"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "OTRO VOLUMEN"
+            "value" : "Otra unidad en su lugar"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "別のボリューム"
+            "value" : "別のドライブがその場所にあります"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "OUTRO VOLUME"
+            "value" : "Outra Unidade no Lugar"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "其他卷"
+            "value" : "其位置上是另一个驱动器"
           }
         }
       }
@@ -10300,31 +11294,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MOVED MOUNT POINT"
+            "value" : "Moved"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "PUNTO DE MONTAJE CAMBIADO"
+            "value" : "Movida"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "マウントポイント変更"
+            "value" : "移動済み"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "PONTO DE MONTAGEM MUDOU"
+            "value" : "Movido"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "挂载点已变更"
+            "value" : "已移动"
           }
         }
       }
@@ -10334,31 +11328,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SENTINEL MISSING"
+            "value" : "Not Recognized"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "FALTA EL CENTINELA"
+            "value" : "No reconocida"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "センチネルなし"
+            "value" : "認識できません"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "SENTINELA AUSENTE"
+            "value" : "Não Reconhecido"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "标记文件缺失"
+            "value" : "无法识别"
           }
         }
       }
@@ -10368,13 +11362,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "VERIFIED"
+            "value" : "Verified"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "VERIFICADO"
+            "value" : "Verificada"
           }
         },
         "ja" : {
@@ -10386,7 +11380,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "VERIFICADO"
+            "value" : "Verificado"
           }
         },
         "zh-Hans" : {
@@ -10504,13 +11498,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "boot volume"
+            "value" : "Boot volume"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "volumen de arranque"
+            "value" : "Volumen de arranque"
           }
         },
         "ja" : {
@@ -10522,13 +11516,13 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "volume de inicialização"
+            "value" : "Volume de inicialização"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "启动卷"
+            "value" : "启动宗卷"
           }
         }
       }
@@ -10538,25 +11532,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "external"
+            "value" : "External"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "externo"
+            "value" : "Externo"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "外部"
+            "value" : "外付け"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "externo"
+            "value" : "Externo"
           }
         },
         "zh-Hans" : {
@@ -10606,13 +11600,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "internal"
+            "value" : "Internal"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "interno"
+            "value" : "Interno"
           }
         },
         "ja" : {
@@ -10624,7 +11618,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "interno"
+            "value" : "Interno"
           }
         },
         "zh-Hans" : {
@@ -10669,6 +11663,142 @@
         }
       }
     },
+    "app.volumes.vault.needsAttention" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault: Needs attention — this drive no longer qualifies"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Bóveda: requiere atención; esta unidad ya no cumple los requisitos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先: 要確認 — このドライブは条件を満たさなくなりました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cofre: Precisa de atenção — esta unidade não atende mais aos requisitos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保险库：需要注意 — 此驱动器已不再符合条件"
+          }
+        }
+      }
+    },
+    "app.volumes.vault.notUsable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault: Can’t be used"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Bóveda: no se puede usar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先: 使用できません"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cofre: Não pode ser usado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保险库：无法使用"
+          }
+        }
+      }
+    },
+    "app.volumes.vault.ready" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault: Ready"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Bóveda: lista"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先: 使用可能"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cofre: Pronto"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保险库：就绪"
+          }
+        }
+      }
+    },
+    "app.volumes.vault.readyWithWarnings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault: Ready, with warnings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Bóveda: lista, con avisos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先: 使用可能（警告あり）"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Cofre: Pronto, com avisos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保险库：就绪，有警告"
+          }
+        }
+      }
+    },
     "app.volumes.vaultBadge" : {
       "localizations" : {
         "en" : {
@@ -10708,31 +11838,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vault volumes (identified by UUID + sentinel)"
+            "value" : "Vaults"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Volúmenes de bóveda (identificados por UUID + centinela)"
+            "value" : "Bóvedas"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "退避先ボリューム（UUID とセンチネルで識別）"
+            "value" : "退避先"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Discos-cofre (identificados por UUID + sentinela)"
+            "value" : "Cofres"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "保险库卷（以 UUID + 标记文件识别）"
+            "value" : "保险库"
           }
         }
       }
@@ -10742,31 +11872,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "None registered. To register one, run: xcodevaultctl vault init /Volumes/<name>"
+            "value" : "No vault yet. To set one up, run `xcodevaultctl vault init /Volumes/<name>` in Terminal."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Ninguno registrado. Para registrar uno, ejecuta: xcodevaultctl vault init /Volumes/<nombre>"
+            "value" : "Aún no hay ninguna bóveda. Para configurar una, ejecuta `xcodevaultctl vault init /Volumes/<nombre>` en Terminal."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "登録されていません。登録するには次を実行します: xcodevaultctl vault init /Volumes/<名前>"
+            "value" : "退避先はまだありません。設定するには、ターミナルで `xcodevaultctl vault init /Volumes/<名前>` を実行します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Nenhum registrado. Para registrar um, execute: xcodevaultctl vault init /Volumes/<nome>"
+            "value" : "Nenhum cofre ainda. Para configurar um, execute `xcodevaultctl vault init /Volumes/<nome>` no Terminal."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "尚未注册。要注册，请运行：xcodevaultctl vault init /Volumes/<名称>"
+            "value" : "尚无保险库。要设置一个，请在终端中运行 `xcodevaultctl vault init /Volumes/<名称>`。"
           }
         }
       }
@@ -10810,31 +11940,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "suitable"
+            "value" : "Can be a vault"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "apto"
+            "value" : "Puede ser una bóveda"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "使用可"
+            "value" : "退避先にできます"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "adequado"
+            "value" : "Pode ser um cofre"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "适用"
+            "value" : "可用作保险库"
           }
         }
       }
@@ -10844,31 +11974,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "suitable, with warnings"
+            "value" : "Can be a vault, with warnings"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "apto, con advertencias"
+            "value" : "Puede ser una bóveda, con avisos"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "使用可（警告あり）"
+            "value" : "退避先にできます（警告あり）"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "adequado, com avisos"
+            "value" : "Pode ser um cofre, com avisos"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "适用（有警告）"
+            "value" : "可用作保险库，有警告"
           }
         }
       }
@@ -10878,31 +12008,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "unsuitable"
+            "value" : "Can’t be a vault"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "no apto"
+            "value" : "No puede ser una bóveda"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "使用不可"
+            "value" : "退避先にはできません"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "inadequado"
+            "value" : "Não pode ser um cofre"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "不适用"
+            "value" : "不能用作保险库"
           }
         }
       }
