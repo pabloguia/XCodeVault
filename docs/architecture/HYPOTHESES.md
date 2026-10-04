@@ -2016,3 +2016,39 @@ isn't there, add it with +."
    whether its switch is off.
 4. Record macOS version and build, the signing, and the result in `COMPATIBILITY_MATRIX.md` and here. A
    negative result removes the "should now be in the list" sentence and the attempt (ADR-0007 note).
+
+## H17 — `diskutil` prepares an external disk without `sudo` *(new, 2026-10-04; **VERIFIED on disk images only**, macOS 26.7.1 · Intel; a physical disk is **unmeasured**)*
+
+**Claim.** As the logged-in user, with no `sudo`, `diskutil apfs addVolume` (case-insensitive, case-sensitive, and with
+`-quota`), `diskutil addPartition … APFS` into free space after an existing partition, `diskutil eraseVolume APFS` (on an
+APFS volume and on an exFAT partition, the other partitions kept) and `diskutil eraseDisk APFS … GPT` all succeed. R6
+(ADR-0012) wires these into Core only because of this result, and only these.
+
+**How it was tested.** E-diskprep (`scripts/experiments/e-diskprep.sh`): two sparse disk images under `/private/tmp`,
+attached `-nomount`; every mutating call is preceded by a guard that refuses any device `hdiutil attach` did not just
+return or that `diskutil info` does not report as `BusProtocol = Disk Image`, `VirtualOrPhysical = Virtual`. A trap
+detaches and deletes both images on every exit path. Evidence:
+`docs/research/evidence/e-diskprep-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+
+| Command (no sudo) | Result |
+|---|---|
+| `diskutil apfs addVolume <container> APFS <name>` | works |
+| `diskutil apfs addVolume <container> "Case-sensitive APFS" <name>` | works |
+| `diskutil apfs addVolume <container> APFS <name> -quota 200m` | works |
+| `diskutil apfs addVolume <container> APFS <name> -reserve 100m` | failed — `-69493: You can't add any more APFS Volumes to its APFS Container`: the 2 GB test container's volume limit, **not** a privilege refusal. Inconclusive; the product does not offer `-reserve`. |
+| `diskutil addPartition <partition> APFS <name> 0` (into the free space after it) | works — a new `Apple_APFS` partition and its container |
+| `diskutil eraseVolume APFS <name> <APFS volume>` | works — case-sensitive → case-insensitive, container kept |
+| `diskutil eraseVolume APFS <name> <exFAT partition>` | works — the other partitions kept |
+| `diskutil eraseDisk APFS <name> GPT <disk>` | works |
+| `diskutil partitionDisk <disk> GPT ExFAT … "Free Space" …` (set-up only) | works |
+
+**The limit.** A disk image the user attached is owned by the user. `diskutil` authorises a change to a physical disk
+by the console user's ownership of the media too, which is why this is *probable* for a USB or Thunderbolt disk — but
+that is unmeasured, and the product treats it so: when a command fails on a real disk, the app shows the exact command
+to copy into Terminal (ADR-0012) and changes nothing else. `sudo diskutil enableOwnership` is known to need root and is
+only ever shown as a copyable command; the app never asks for a password.
+
+**Status: VERIFIED for disk images, one combination (macOS 26.7.1 25G241 · x86_64), 2026-10-04. Physical external
+disks: PENDING.** Manual procedure for the physical case: in the app, on a spare external disk whose data you do not
+need, run **Add Volume** on its APFS container, then **Erase Volume** on that new volume; record the outcome and the
+log here and in `COMPATIBILITY_MATRIX.md`.

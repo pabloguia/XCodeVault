@@ -346,4 +346,42 @@ final class ExperimentScriptSafetyTests: XCTestCase {
             "the E6b allowlist and HelperCleanupTarget have drifted. The scripts mount over these paths under sudo, "
                 + "so the shell set must not name one the helper would refuse, nor miss one it allows.")
     }
+
+    /// E-diskprep (H17, R6) erases and partitions disks. Its whole safety argument is that every mutating `diskutil`
+    /// verb goes through `dp_mutate`, which runs `xcv_dp_guard` first — the guard that refuses anything but a disk image
+    /// this script attached. A mutating line written outside that wrapper would reach whatever device it names.
+    static let diskMutatingVerbs = ["eraseDisk", "eraseVolume", "addPartition", "partitionDisk", "addVolume", "deleteVolume", "deleteContainer",
+        "resizeVolume", "reformat", "zeroDisk", "randomDisk", "secureErase", "mergePartitions", "splitPartition"]
+
+    static func unguardedDiskMutations(in body: String) -> [Int] {
+        var lines: [Int] = []
+        let all = body.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        for (i, raw) in all.enumerated() {
+            let text = raw.trimmingCharacters(in: .whitespaces)
+            guard !text.hasPrefix("#"), text.contains("diskutil") else { continue }
+            guard diskMutatingVerbs.contains(where: { text.contains(" \($0) ") || text.hasSuffix(" \($0)") }) else { continue }
+            // The call may continue a `dp_mutate "label" "$TARGET" \` from the line above.
+            let previous = i > 0 ? all[i - 1].trimmingCharacters(in: .whitespaces) : ""
+            if text.hasPrefix("dp_mutate ") || (previous.hasPrefix("dp_mutate ") && previous.hasSuffix("\\")) { continue }
+            lines.append(i + 1)
+        }
+        return lines
+    }
+
+    func testEveryDiskMutationInTheDiskPrepExperimentIsGuarded() throws {
+        let body = try String(contentsOfFile: experimentsDirectory + "/e-diskprep.sh", encoding: .utf8)
+        XCTAssertEqual(Self.unguardedDiskMutations(in: body), [], "a diskutil verb that changes a disk runs outside dp_mutate (and its guard)")
+        XCTAssertTrue(body.contains("dp_mutate() {") && body.contains("xcv_dp_guard \"$target\""), "dp_mutate no longer runs the guard first")
+        XCTAssertTrue(body.contains("\"Disk Image\"") && body.contains("\"Virtual\""), "the guard no longer checks that the target is a disk image")
+        XCTAssertTrue(body.contains("trap 'on_exit' EXIT INT TERM HUP"), "the cleanup trap is gone")
+        XCTAssertFalse(body.split(separator: "\n").contains { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") && $0.contains("sudo diskutil") },
+            "the experiment measures what runs WITHOUT sudo; it must never call sudo")
+    }
+
+    func testTheDiskMutationLintGoesRedOnAnUnwrappedErase() {
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "x\n  diskutil eraseDisk APFS N GPT disk4\n"), [2])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" \"$D\" diskutil eraseDisk APFS N GPT \"$D\"\n"), [])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" \"$D\" \\\n  diskutil partitionDisk \"$D\" GPT x\n"), [])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "# diskutil eraseDisk in a comment\n"), [])
+    }
 }

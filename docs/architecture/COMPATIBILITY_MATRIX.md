@@ -1170,3 +1170,21 @@ substitution may not be waved through. Issue #29 stays open.
 - Notes: protocol (USB) and removability (Fixed) differ from the disk images together; physical
   removable media is untested. The donor's standing mount carried no `mounted by` attribution
   (descriptive). Does not reopen ADR-0004.
+
+### E-diskprep — disk preparation without `sudo`, on scratch disk images — macOS 26.7.1 (25G241) · Xcode 26.5 · x86_64
+
+- Date tested: 2026-10-04.
+- Hypothesis reference: H17.
+- Test performed: `scripts/experiments/e-diskprep.sh` — `apfs addVolume` (case-insensitive, case-sensitive,
+  `-quota`, `-reserve`), `addPartition … APFS` into free space, `eraseVolume APFS` on an APFS volume and on an exFAT
+  partition, `eraseDisk APFS … GPT`, each as the logged-in user with no sudo, each behind a guard that refuses any
+  device that is not a disk image the script attached; `diskutil list -plist` recorded after each.
+- Result: every command **works without sudo** except `-reserve`, which failed on the 2 GB container's volume limit
+  (`-69493`), not on privilege — inconclusive, and not offered by the product.
+- Evidence: `docs/research/evidence/e-diskprep-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: N/A (no developer data written).
+- Verdict: **verified for disk images**. Physical external disks (USB, Thunderbolt): **pending** — see H17's manual
+  procedure. Until then the app labels every preparation option experimental (rule 10) and, if a command fails, shows
+  the command to copy instead.
+- Notes: the images were attached `-nomount`; the product lets `diskutil` mount what it creates, which E-diskprep's
+  `eraseVolume` and `eraseDisk` did without sudo too.

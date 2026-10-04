@@ -16,7 +16,7 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
    | Class | What it means | Scripts |
    |---|---|---|
    | **read-only** | Observes; changes nothing. Run freely. | `e1`, `e8`, `e14a` |
-   | **scratch-only** | Creates its own `mktemp` set or `hdiutil` image and destroys only that. | `e1b`, `e2`, `e11`, `e12`, `e14b-control-internal`, `e18` |
+   | **scratch-only** | Creates its own `mktemp` set or `hdiutil` image and destroys only that. | `e1b`, `e2`, `e11`, `e12`, `e14b-control-internal`, `e18`, `e-diskprep` (erases and partitions only disk images it attached, behind a guard; H17) |
    | **guarded, on a volume you name** | Writes to a real external volume the caller passes, behind `--i-understand` and a containment guard that refuses anything under `Library/Developer`, anything not under `/Volumes/<vol>/`, and any parent not on the volume's own device. Safe by construction, not by scratch. | `e14b-device-set-external`, `e14c` |
    | **root-required** | Needs `sudo`. If `sudo -n true` fails, write the exact commands into the evidence file as "pending — manual" and stop. | `e4b`, `e13` |
    | **destructive** | Mutates the user's real environment. **Ask before running, every time.** | `e6`, `e6c-item4-attach-owner`, `e8b`, `e8c`, `e9`, `e13b`, `e15` |
