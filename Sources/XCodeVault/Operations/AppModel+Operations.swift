@@ -198,16 +198,19 @@ extension AppModel {
     /// Kept for the guard's callers: whether quitting asks first.
     var quitNeedsConfirmation: Bool { quitChoice != .quitNow }
 
-    /// **Stop and Quit**: stops the running command (`ChildProcesses.stopAndWait`), then waits for the operation to end
-    /// and journal how it ended. Returns when nothing runs, or after `timeout`.
-    func stopOperationForQuit(timeout: Duration = .seconds(30)) async {
-        guard quitChoice == .stopThenQuit else { return }
+    /// **Stop and Quit**: stops the running command — SIGTERM, then SIGKILL if it is still there — then waits for the
+    /// operation to end and journal how it ended. True only when nothing runs any more: the app never quits with a child
+    /// alive (R3 re-review L-B).
+    func stopOperationForQuit(timeout: Duration = .seconds(30), termWait: TimeInterval = 20, killWait: TimeInterval = 10) async -> Bool {
+        guard quitChoice == .stopThenQuit else { return !isOperationRunning }
         if let children = activeChildren {
-            _ = await Self.offThePool { children.stopAndWait(timeout: 20) }
+            let gone = await Self.offThePool { children.stopAndWait(timeout: termWait) || children.killAndWait(timeout: killWait) }
+            guard gone else { return false }
         }
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while isOperationRunning && clock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return !isOperationRunning
     }
 
     /// The confirm button: runs what the review prepared, streaming its log. No cancel (rule 4): Core's copy, verify and

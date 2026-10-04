@@ -422,4 +422,64 @@ final class R3StreamingTests: XCTestCase {
         XCTAssertEqual(observed.2, plain.2)
         XCTAssertEqual(seen.of(.command).count, 2, "hdiutil, then simctl")
     }
+
+    // MARK: - Final round: failures always journaled, stop never outlives the app
+
+    /// L-A: a runtime delete that cannot start records `failed`, not a `started` left open.
+    func testARefusedRuntimeDeleteLaunchIsJournaledAsFailed() throws {
+        let t = TempDir()
+        let url = URL(fileURLWithPath: t.path + "/j.jsonl")
+        let runner = RecordingRunner()
+        runner.unstartable = ["xcrun simctl runtime delete"]
+        let ops = RuntimeOperations(runner: runner, journal: Journal(url: url), xcode: xcode(), host: host())
+        XCTAssertThrowsError(try ops.delete(identifier: "RT"))
+        XCTAssertEqual(try Journal(url: url).entries().map(\.state), [.started, .failed])
+        XCTAssertEqual(try Journal(url: url).interrupted(), [], "nothing is left looking in flight")
+        // A dry run journals nothing, refused or not.
+        XCTAssertThrowsError(try ops.delete(identifier: "RT", dryRun: true))
+        XCTAssertEqual(try Journal(url: url).entries().count, 2)
+    }
+
+    /// L-A: a Locations write that cannot start records `failed`; a read that cannot run records no `previous`.
+    func testARefusedLocationsLaunchIsJournaledAsFailedAndClaimsNoPrevious() throws {
+        let t = TempDir()
+        let url = URL(fileURLWithPath: t.path + "/j.jsonl")
+        let runner = RecordingRunner()
+        runner.unstartable = ["defaults"]
+        XCTAssertThrowsError(try XcodeLocations.apply(.init(key: .derivedData, newValue: "/x"), runner: runner, journal: Journal(url: url)))
+        let entries = try Journal(url: url).entries()
+        XCTAssertEqual(entries.map(\.state), [.started, .failed])
+        XCTAssertNil(entries.first?.detail["previous"], "an unread previous value is not recorded as the default")
+        XCTAssertEqual(entries.first?.detail["new"], "/x")
+
+        // A read that ran and found no value still records the default, as before.
+        let url2 = URL(fileURLWithPath: t.path + "/j2.jsonl")
+        let ok = RecordingRunner(responses: [
+            "defaults read": CommandResult(status: 1, stdout: "", stderr: "does not exist"),
+            "defaults write": CommandResult(status: 0, stdout: "", stderr: ""),
+        ])
+        try XcodeLocations.apply(.init(key: .derivedData, newValue: "/x"), runner: ok, journal: Journal(url: url2))
+        XCTAssertEqual(try Journal(url: url2).entries().first?.detail["previous"], "")
+    }
+
+    /// L-B: a child that ignores SIGTERM is not waited out: SIGKILL ends it.
+    func testAChildIgnoringSIGTERMIsKilled() throws {
+        let children = ChildProcesses()
+        let runner = StreamingCommandRunner(observer: { _ in }, children: children)
+        let done = expectation(description: "returned")
+        let box = Seen()
+        DispatchQueue.global().async {
+            let r = try? runner.run("/bin/sh", ["-c", "trap '' TERM; exec /bin/sleep 30"])
+            box.observer(LogLine(.exit, r.map { String($0.status) } ?? "threw"))
+            done.fulfill()
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while children.count == 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        Thread.sleep(forTimeInterval: 0.2)  // the trap is set before `exec`
+        XCTAssertFalse(children.stopAndWait(timeout: 0.5), "SIGTERM is ignored")
+        XCTAssertTrue(children.killAndWait(timeout: 5))
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(box.of(.exit), ["9"])
+        XCTAssertEqual(children.count, 0)
+    }
 }

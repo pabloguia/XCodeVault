@@ -162,12 +162,23 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         // One resolution of the key, used for the read, the journal and the write. Three separate
         // `change.key` reads would be three chances for them to name different keys.
         let key = change.key.defaultsKey
-        let previous = (try? runner.run(Tools.defaults, ["read", domain, key]))?.stdout.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // A read that could not run says nothing about the previous value, so no `previous` is recorded for it (R3
+        // review): an empty one would read as "the default", which nothing established.
+        let read = try? runner.run(Tools.defaults, ["read", domain, key])
+        var detail = ["key": key, "new": change.newValue ?? ""]
+        if let read { detail["previous"] = read.stdout.trimmingCharacters(in: .whitespacesAndNewlines) }
         try journal.record(
             id: op, kind: .xcodeLocationChange, state: .started, summary: "\(key) → \(change.newValue ?? "<default>")",
-            detail: ["key": key, "previous": previous, "new": change.newValue ?? ""])
+            detail: detail)
         let args = change.newValue.map { ["write", domain, key, "-string", $0] } ?? ["delete", domain, key]
-        let r = try runner.run(Tools.defaults, args)
+        let r: CommandResult
+        do {
+            r = try runner.run(Tools.defaults, args)
+        } catch {
+            // A write that could not start is a failure, not an operation left `started` (R3 review).
+            try journal.record(id: op, kind: .xcodeLocationChange, state: .failed, summary: "\(error)")
+            throw error
+        }
         try journal.record(id: op, kind: .xcodeLocationChange, state: r.succeeded ? .completed : .failed, summary: r.succeeded ? "applied" : r.stderr)
         guard r.succeeded else { throw CommandError(executable: Tools.defaults, arguments: args, result: r, underlying: nil) }
     }

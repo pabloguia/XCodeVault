@@ -107,7 +107,7 @@ The app is a projection of Core: every number and every decision a screen shows 
   shows the stage, a progress bar and the live log (`StreamingCommandRunner`), and the result. The flags become
   controls: the vault picker, a folder panel, the runtime and platform pickers, the tests checkbox for DerivedData;
   `--yes` becomes the confirm button. Removing an original is a second step after a verified copy, behind the
-  non-regenerable checkbox; a Locations change offers **Undo** (Core's reset). No cancel while copying, verifying or
+  non-regenerable checkbox; a Locations change offers **Undo** (the previous folder, or Core's reset when there was none). No cancel while copying, verifying or
   removing; one operation at a time, and no scan while it runs. Quitting follows `AppModel.quitChoice`: only **Keep
   Running** while copying, verifying, removing or exporting; **Stop and Quit** (terminate the command, wait, journal
   the failure) while deleting a runtime or changing a folder. Offload and runtime delete wait for simulator work.

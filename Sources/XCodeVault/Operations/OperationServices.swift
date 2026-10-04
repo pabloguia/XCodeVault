@@ -166,6 +166,8 @@ enum LiveOperations {
                 ? try XcodeLocations.preflightDerivedData(path: folder, volumes: volumes, xcodeRunning: xcodeRunning, acknowledgeExternalTests: ack)
                 : try XcodeLocations.preflightArchives(path: folder, volumes: volumes, xcodeRunning: xcodeRunning)
         }
+        // `source` is nil when Xcode uses its default (`XcodeLocations.read` returns nil for an unset key), so the review's
+        // undo line and **Undo**'s title, which reads the same key just before the change, both say "default" (N4).
         return OperationPreview(
             source: key == .derivedData ? current.derivedData : current.archives, destination: folder, warnings: warnings, blockers: blockers,
             prepared: blockers.isEmpty ? .location(XcodeLocations.Change(key: key, newValue: folder), acknowledgeTests: inputs.acknowledgeTests) : nil)
@@ -194,7 +196,7 @@ enum LiveOperations {
     }
 
     static func run(_ prepared: PreparedOperation, children: ChildProcesses, observer: @escaping LogObserver) throws -> OperationResult {
-        let runner = StreamingCommandRunner(observer: observer, children: children)
+        let runner = StreamingCommandRunner(observer: observer, children: stoppableChildren(for: prepared, children))
         switch prepared {
         case .migration(let plan):
             return .copied(try MigrationEngine(runner: runner).copyAndVerify(plan))
@@ -261,6 +263,15 @@ enum LiveOperations {
         } catch {
             if !acknowledged, let warnings = try? preflight(true) { return (warnings, [.acknowledgeTests]) }
             return ([], [.core("\(error)")])
+        }
+    }
+
+    /// The operations whose commands **Stop and Quit** may terminate (`AppModel.quitChoice`): deleting a runtime (offload
+    /// and delete) and changing a folder. A copy (`ditto`) and an export (`xcodebuild`) get a runner nothing can stop.
+    static func stoppableChildren(for prepared: PreparedOperation, _ children: ChildProcesses) -> ChildProcesses? {
+        switch prepared {
+        case .deleteRuntime, .offload, .location: children
+        case .migration, .export: nil
         }
     }
 

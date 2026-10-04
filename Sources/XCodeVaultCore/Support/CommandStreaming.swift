@@ -82,6 +82,22 @@ public final class ChildProcesses: @unchecked Sendable {
         return running.isEmpty
     }
 
+    /// The last resort after `stopAndWait` returned false: SIGKILL to every child still running, then wait up to
+    /// `timeout` again. True when none is left running; false means a child outlived SIGKILL and the caller must not
+    /// act as if it were gone.
+    @discardableResult
+    public func killAndWait(timeout: TimeInterval) -> Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        stopped = true
+        for p in running.values where p.isRunning { kill(p.processIdentifier, SIGKILL) }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !running.isEmpty {
+            if !condition.wait(until: deadline) { break }
+        }
+        return running.isEmpty
+    }
+
     /// Starts `process` unless a stop came first, and registers it in the same critical section.
     func launch(_ process: Process) throws {
         condition.lock()

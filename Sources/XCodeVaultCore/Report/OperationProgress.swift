@@ -94,10 +94,6 @@ public enum MigrationRecovery {
             .sorted { $0.sequence < $1.sequence }
     }
 
-    /// The commands for one interrupted migration, `migration status` first. The second is the one Core accepts at
-    /// the phase reached: `resume` once a CLEANUP has begun (the original may be renamed aside), `abort` before
-    /// verification. Between the two (`VERIFIED`, nothing renamed) neither is offered and `status` says why. `resume`
-    /// is given without `--i-confirm-deleting-non-regenerable-data`: Core asks for it, and the user types it.
     /// Failed or interrupted migrations whose partial copy may still be on disk: `MigrationEngine.leftoverPartialCopies`'s
     /// rule over records already read — a PLAN line with two paths, a last state of `failed` or `started`, no phase at
     /// which `abort` is unsafe, and a destination `mayBePresent` says may exist. Returns the PLAN lines, oldest first.
@@ -118,6 +114,10 @@ public enum MigrationRecovery {
         }.sorted { $0.sequence < $1.sequence }
     }
 
+    /// The commands for one interrupted migration, `migration status` first. The second is the one Core accepts at
+    /// the phase reached: `resume` once a CLEANUP has begun (the original may be renamed aside), `abort` before
+    /// verification. Between the two (`VERIFIED`, nothing renamed) neither is offered and `status` says why. `resume`
+    /// is given without `--i-confirm-deleting-non-regenerable-data`: Core asks for it, and the user types it.
     public static func commands(for id: String, in entries: [JournalEntry]) -> [String] {
         let phases = Set(entries.filter { $0.id == id }.compactMap { $0.detail["phase"] })
         var out = ["xcodevaultctl migration status"]

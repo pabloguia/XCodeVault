@@ -571,7 +571,8 @@ final class R3RunInAppTests: XCTestCase {
         let copying = Task { await c.runOperation() }
         await eventually("copying") { c.operationSheet?.phase == .running }
         XCTAssertEqual(c.quitChoice, .keepRunningOnly(.migration))
-        await c.stopOperationForQuit(timeout: .milliseconds(50))
+        let copyStopped = await c.stopOperationForQuit(timeout: .milliseconds(50))
+        XCTAssertFalse(copyStopped, "the quit is cancelled")
         XCTAssertTrue(c.isOperationRunning, "a copy is never stopped for quit")
         copy.release()
         await copying.value
@@ -589,7 +590,8 @@ final class R3RunInAppTests: XCTestCase {
         let deleting = Task { await d.runOperation() }
         await eventually("deleting") { d.operationSheet?.phase == .running && d.activeChildren != nil }
         XCTAssertEqual(d.quitChoice, .stopThenQuit)
-        await d.stopOperationForQuit()
+        let deleteStopped = await d.stopOperationForQuit()
+        XCTAssertTrue(deleteStopped)
         XCTAssertFalse(d.isOperationRunning, "quitting waits until the operation ended")
         XCTAssertEqual(d.operationSheet?.phase, .failed("terminated: exit 15"))
         XCTAssertEqual(d.quitChoice, .quitNow)
@@ -782,6 +784,27 @@ final class R3RunInAppTests: XCTestCase {
         XCTAssertEqual(m.operationSheet?.kind, .offloadRuntime)
         XCTAssertEqual(m.operationSheet?.phase, .review)
         XCTAssertEqual(m.operationSheet?.inputs.runtimeID, "R")
+    }
+
+    /// L-C: Stop and Quit can reach only a runtime deletion's or a folder change's commands; a copy and an export get a
+    /// runner nothing can stop.
+    func testOnlyDeletionsAndFolderChangesGetStoppableCommands() {
+        let children = ChildProcesses()
+        let x = Self.xcode(), h = Self.host()
+        XCTAssertNil(LiveOperations.stoppableChildren(for: .migration(Self.plan()), children))
+        XCTAssertNil(LiveOperations.stoppableChildren(for: .export(.init(platform: "iOS", destination: "/x"), x, h), children))
+        XCTAssertTrue(LiveOperations.stoppableChildren(for: .deleteRuntime(identifier: "R", x, h), children) === children)
+        XCTAssertTrue(
+            LiveOperations.stoppableChildren(for: .location(.init(key: .derivedData, newValue: "/x"), acknowledgeTests: true), children) === children)
+    }
+
+    /// N4: the review and the button agree when Xcode uses its default.
+    func testTheReviewAndTheUndoButtonAgreeOnTheDefault() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        XCTAssertTrue(OperationText.undo(.setDerivedData, current: nil).contains("default"))
+        XCTAssertTrue(OperationText.undoAction(restoring: nil).contains("Default"))
+        XCTAssertTrue(OperationText.undo(.setArchives, current: "/A").contains("/A"))
+        XCTAssertTrue(OperationText.undoAction(restoring: "/A").contains("/A"))
     }
 
     /// Safety L3: offload and delete wait for simulator work, in the preview and again at the moment of use.

@@ -5385,6 +5385,74 @@
         }
       }
     },
+    "app.quit.couldNotStop.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The running command did not stop, even when forced. XCodeVault stays open so nothing goes on running unseen; the operation is still shown in its sheet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El comando en curso no se detuvo, ni siquiera forzándolo. XCodeVault sigue abierto para que nada siga ejecutándose sin que se vea; la operación sigue en su hoja."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "実行中のコマンドは強制しても停止しませんでした。気づかないまま実行が続かないよう XCodeVault は開いたままです。操作はシートに表示されたままです。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O comando em andamento não parou, nem quando forçado. O XCodeVault continua aberto para que nada continue rodando sem ser visto; a operação ainda aparece na sua janela."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在运行的命令即使强制也未停止。XCodeVault 保持打开,以免有任何内容在不被察觉的情况下继续运行;该操作仍显示在其表单中。"
+          }
+        }
+      }
+    },
+    "app.quit.couldNotStop.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault did not quit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault no se cerró"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault は終了しませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault não foi encerrado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 未退出"
+          }
+        }
+      }
+    },
     "app.quit.keepRunning" : {
       "localizations" : {
         "en" : {
@@ -6988,31 +7056,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No new migration can start until it is resolved. Run these in Terminal; the app does not resume or abort migrations yet."
+            "value" : "It was interrupted, or it failed and part of its copy may still be on disk. Run these in Terminal to see its state and resolve it; the app does not resume or abort migrations yet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No puede empezar ninguna migración nueva hasta resolverla. Ejecuta estos comandos en Terminal; la app aún no reanuda ni anula migraciones."
+            "value" : "Se interrumpió, o falló y parte de su copia puede seguir en el disco. Ejecuta estos comandos en Terminal para ver su estado y resolverla; la app aún no reanuda ni anula migraciones."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "解決するまで新しい移行は開始できません。ターミナルで次のコマンドを実行してください。アプリはまだ移行の再開や中止を行いません。"
+            "value" : "中断されたか、失敗してコピーの一部がディスクに残っている可能性があります。ターミナルで次のコマンドを実行して状態を確認し、解決してください。アプリはまだ移行の再開や中止を行いません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Nenhuma nova migração pode começar até que ela seja resolvida. Execute estes comandos no Terminal; o app ainda não retoma nem cancela migrações."
+            "value" : "Ela foi interrompida, ou falhou e parte da cópia pode ainda estar no disco. Execute estes comandos no Terminal para ver o estado e resolvê-la; o app ainda não retoma nem cancela migrações."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "解决之前无法开始新的迁移。请在“终端”中运行以下命令;应用尚不能继续或中止迁移。"
+            "value" : "它被中断,或已失败且部分拷贝可能仍在磁盘上。请在“终端”中运行以下命令查看其状态并解决;应用尚不能继续或中止迁移。"
           }
         }
       }
@@ -7022,31 +7090,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An earlier migration needs finishing"
+            "value" : "An earlier migration needs attention"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Una migración anterior necesita terminarse"
+            "value" : "Una migración anterior necesita atención"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "以前の移行の後処理が必要です"
+            "value" : "以前の移行に対応が必要です"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Uma migração anterior precisa ser concluída"
+            "value" : "Uma migração anterior precisa de atenção"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "之前的一次迁移需要收尾"
+            "value" : "之前的一次迁移需要处理"
           }
         }
       }

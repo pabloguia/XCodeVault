@@ -68,8 +68,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: L10n.tr("app.quit.stopAndQuit")).hasDestructiveAction = true
             guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
             Task { @MainActor in
-                await model.stopOperationForQuit()
-                sender.reply(toApplicationShouldTerminate: true)
+                let stopped = await model.stopOperationForQuit()
+                sender.reply(toApplicationShouldTerminate: stopped)
+                guard !stopped else { return }
+                // Never quit with a command still alive: say so, and stay.
+                let failed = NSAlert()
+                failed.alertStyle = .critical
+                failed.messageText = L10n.tr("app.quit.couldNotStop.title")
+                failed.informativeText = L10n.tr("app.quit.couldNotStop.message")
+                failed.runModal()
             }
             return .terminateLater
         }
