@@ -364,10 +364,29 @@ final class ExperimentScriptSafetyTests: XCTestCase {
             guard diskMutatingVerbs.contains(where: { text.contains(" \($0) ") || text.hasSuffix(" \($0)") }) else { continue }
             // The call may continue a `dp_mutate "label" "$TARGET" \` from the line above.
             let previous = i > 0 ? all[i - 1].trimmingCharacters(in: .whitespaces) : ""
-            if text.hasPrefix("dp_mutate ") || (previous.hasPrefix("dp_mutate ") && previous.hasSuffix("\\")) { continue }
+            let call = text.hasPrefix("dp_mutate ") ? text : (previous.hasPrefix("dp_mutate ") && previous.hasSuffix("\\") ? previous + " " + text : nil)
+            // Through dp_mutate, naming the device only as @TARGET@ (substituted with the guarded value), with the variable
+            // passed by NAME — never "$VAR", which would put an unguarded value on the diskutil line.
+            if let call, call.contains("@TARGET@"), !text.contains("\"$"), Self.dpMutateVariable(call) != nil { continue }
             lines.append(i + 1)
         }
         return lines
+    }
+
+    /// The second word of a `dp_mutate "label" NAME …` call, when it is a bare upper-case variable name.
+    static func dpMutateVariable(_ call: String) -> String? {
+        guard let close = call.range(of: "\" ", range: call.index(call.startIndex, offsetBy: min(11, call.count))..<call.endIndex) else { return nil }
+        let rest = call[close.upperBound...].split(separator: " ", maxSplits: 1).first.map(String.init) ?? ""
+        return rest.range(of: "^[A-Z_][A-Z0-9_]*$", options: .regularExpression) != nil ? rest : nil
+    }
+
+    /// Lines (1-based) that name a literal device (`disk4`, `/dev/disk4s1`) outside a comment.
+    static func literalDeviceLines(in body: String) -> [Int] {
+        body.split(separator: "\n", omittingEmptySubsequences: false).enumerated().compactMap { i, line in
+            let text = line.trimmingCharacters(in: .whitespaces)
+            guard !text.hasPrefix("#"), text.range(of: "disk[0-9]+", options: .regularExpression) != nil else { return nil }
+            return i + 1
+        }
     }
 
     func testEveryDiskMutationInTheDiskPrepExperimentIsGuarded() throws {
@@ -375,7 +394,13 @@ final class ExperimentScriptSafetyTests: XCTestCase {
         XCTAssertEqual(Self.unguardedDiskMutations(in: body), [], "a diskutil verb that changes a disk runs outside dp_mutate (and its guard)")
         XCTAssertTrue(body.contains("dp_mutate() {") && body.contains("xcv_dp_guard \"$target\""), "dp_mutate no longer runs the guard first")
         XCTAssertTrue(body.contains("\"Disk Image\"") && body.contains("\"Virtual\""), "the guard no longer checks that the target is a disk image")
-        XCTAssertTrue(body.contains("trap 'on_exit' EXIT INT TERM HUP"), "the cleanup trap is gone")
+        XCTAssertTrue(body.contains("trap 'on_exit' EXIT"), "the cleanup trap is gone")
+        for signal in ["INT", "TERM", "HUP"] {
+            XCTAssertNotNil(body.range(of: "trap 'on_exit; exit [0-9]+' \(signal)", options: .regularExpression), "\(signal) must clean up AND exit")
+        }
+        XCTAssertEqual(Self.literalDeviceLines(in: body), [], "a literal disk<N> outside a comment could reach a real disk")
+        XCTAssertTrue(body.contains("dp_backing_image"), "the guard no longer checks the image file behind the device")
+        XCTAssertTrue(body.contains("*..*"), "image paths with '..' are no longer refused")
         XCTAssertFalse(
             body.split(separator: "\n").contains { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") && $0.contains("sudo diskutil") },
             "the experiment measures what runs WITHOUT sudo; it must never call sudo")
@@ -383,8 +408,11 @@ final class ExperimentScriptSafetyTests: XCTestCase {
 
     func testTheDiskMutationLintGoesRedOnAnUnwrappedErase() {
         XCTAssertEqual(Self.unguardedDiskMutations(in: "x\n  diskutil eraseDisk APFS N GPT disk4\n"), [2])
-        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" \"$D\" diskutil eraseDisk APFS N GPT \"$D\"\n"), [])
-        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" \"$D\" \\\n  diskutil partitionDisk \"$D\" GPT x\n"), [])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" D diskutil eraseDisk APFS N GPT @TARGET@\n"), [])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" D \\\n  diskutil partitionDisk @TARGET@ GPT x\n"), [])
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" D diskutil eraseDisk APFS N GPT \"$D\"\n"), [1], "a value, not @TARGET@")
+        XCTAssertEqual(Self.unguardedDiskMutations(in: "dp_mutate \"l\" \"$D\" diskutil eraseDisk APFS N GPT @TARGET@\n"), [1], "the name, not $D")
+        XCTAssertEqual(Self.literalDeviceLines(in: "a\n  x=disk4\n# disk4 in a comment\ncase \"$w\" in disk[0-9]*) ;;\n"), [2])
         XCTAssertEqual(Self.unguardedDiskMutations(in: "# diskutil eraseDisk in a comment\n"), [])
     }
 }

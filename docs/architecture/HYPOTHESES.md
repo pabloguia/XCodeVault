@@ -2042,6 +2042,14 @@ detaches and deletes both images on every exit path. Evidence:
 | `diskutil eraseDisk APFS <name> GPT <disk>` | works |
 | `diskutil partitionDisk <disk> GPT ExFAT … "Free Space" …` (set-up only) | works |
 
+**Script hardened after the run (R6 fix round 1, 2026-10-04; not re-run, the evidence stands).** The safety review
+asked for a guard that cannot be bypassed by the call site: `dp_mutate` now takes the device as a variable NAME and
+substitutes the guarded value for one `@TARGET@` placeholder itself, so no device value is ever written on a `diskutil`
+line; the image paths are canonicalised (no `..`, resolved under `/private/tmp`); the image file `hdiutil info` reports
+behind each device is recorded at attach and re-checked by the guard; and a signal now cleans up and exits. The evidence
+file was produced by the earlier version, whose guard checked the same device facts; the commands and outcomes are
+unchanged. `ExperimentScriptSafetyTests` lints the new shape (no literal `disk<N>`, every mutation through `@TARGET@`).
+
 **The limit.** A disk image the user attached is owned by the user. `diskutil` authorises a change to a physical disk
 by the console user's ownership of the media too, which is why this is *probable* for a USB or Thunderbolt disk — but
 that is unmeasured, and the product treats it so: when a command fails on a real disk, the app shows the exact command
