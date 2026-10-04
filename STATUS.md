@@ -92,6 +92,17 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   Report: `.superpowers/sdd/r7/a-report.md`. **Manual check, open:** the charts, the sheet and the Drives buttons in a
   real window, light and dark. Next: R7-B (design system).
 
+- **R7-B — the design system applied app-wide** (branch `feat/r7-polish-plan`, on R7-A; brief
+  `.superpowers/sdd/r7/brief-b.md`, spec `docs/design/DESIGN_SYSTEM.md`, rulings `.superpowers/sdd/r7/rulings.md`). The
+  user: "precisa ficar claro o que é botão acionável / desabilitado". Components in `Sources/XCodeVault/DesignSystem/`
+  (tokens, `Tag`, `FilterChipStyle`, `StatusIcon`/`StatusLabel` with the domain-to-kind mappings, `NoticeRow`,
+  `CopyCommandButton`, `SheetFooter`, `actionButton`); all 32 audit rows applied, none skipped. Ruling B-2: a destructive
+  review keeps Cancel as the default and Escape closes it (`onExitCommand`). The chart's label column is the longest
+  label as measured (`ChartLabelMetrics`, `BarChartLayout.labelColumnWidth`). `scripts/ui-invariants.sh` (U1–U10, with a
+  mutation self-test) is a CI gate: preflight is 14 gates. Gallery: `DesignSystemSnapshotTests`. Report:
+  `.superpowers/sdd/r7/b-report.md`. **Manual check, open:** the gallery and every screen in a real window, light, dark
+  and Increase Contrast; whether a bordered destructive button needs a red tint on this macOS.
+
 ## Blocked / pending — manual (ask the user)
 
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
