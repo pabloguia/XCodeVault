@@ -87,6 +87,18 @@ struct MainView: View {
                 }
             }
             .toolbar {
+                // Back (R1): only when there is somewhere to go back to (`AppModel.canGoBack`); ⌘[ as in Safari and Finder.
+                if model.canGoBack {
+                    ToolbarItem(placement: .navigation) {
+                        Button {
+                            model.goBack()
+                        } label: {
+                            Label(L10n.tr("app.action.back"), systemImage: "chevron.backward").labelStyle(.titleAndIcon)
+                        }
+                        .keyboardShortcut("[", modifiers: .command)
+                        .accessibilityLabel(Text(verbatim: L10n.tr("app.action.back")))
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.refresh() }
@@ -139,8 +151,8 @@ struct MainView: View {
         ForEach(sections) { s in Label(s.title, systemImage: s.symbol).tag(s) }
     }
 
-    /// The selected section's screen. Internal, not private, so the review snapshots can draw a screen on its own: inside the
-    /// split view, off screen, some are not drawn.
+    /// The selected section's screen. Internal, not private, so the review snapshots can draw a screen on its own and
+    /// `ScreenFitTests` can measure each screen's minimum height, which must fit the window (R1).
     @ViewBuilder
     func detail(_ r: ScanReport) -> some View {
         switch model.section {
@@ -151,7 +163,7 @@ struct MainView: View {
         case .runExternally: PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) }
         case .storage: StorageView(report: r)
         case .simulators: SimulatorsView(report: r)
-        case .drives: DrivesView(report: r, checks: model.vaultChecks)
+        case .drives: DrivesView(list: model.drivesList(r))
         case .health: HealthView(model: model)
         case .history: HistoryView(entries: model.journal)
         case .access: AccessView(model: model)

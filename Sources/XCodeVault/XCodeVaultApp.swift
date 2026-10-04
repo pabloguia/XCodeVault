@@ -197,12 +197,41 @@ final class AppModel {
 
     // MARK: - Navigation and the Overview (S4 Task 3)
 
-    /// The sidebar's selection. The Overview's **Review** buttons set it through `review(_:)`.
-    var section: SidebarSection = .overview
+    /// The sidebar's selection. The Overview's **Review** buttons set it through `review(_:)`. Every change — a sidebar
+    /// click, **Review**, any other code — records the section left in `history`, so **Back** works like a browser's (R1).
+    var section: SidebarSection {
+        get { currentSection }
+        set {
+            history.moved(from: currentSection, to: newValue)
+            currentSection = newValue
+        }
+    }
+    private var currentSection: SidebarSection = .overview
+    /// The sections left behind, newest last (`NavigationHistory`, in Core and tested).
+    private(set) var history = NavigationHistory<SidebarSection>()
+
+    /// Whether the toolbar shows **Back**.
+    var canGoBack: Bool { history.canGoBack }
+
+    /// **Back** (⌘[): the section shown before this one. Going back records nothing, so Back again goes further back.
+    func goBack() {
+        guard let previous = history.back() else { return }
+        currentSection = previous
+    }
 
     /// **Review** on an Overview card: that bucket's view. Keeping has no view, so it changes nothing.
     func review(_ bucket: SavingsBucket) {
         if let target = SidebarSection(reviewing: bucket) { section = target }
+    }
+
+    /// The Drives screen's rows (`DrivesList.make`): one row per drive, the boot volume group as one, a vault as a badge on
+    /// its own volume's row, and a section only for the vaults that are not connected.
+    func drivesList(_ report: ScanReport) -> DrivesList { DrivesList.make(volumes: report.volumes, checks: vaultChecks) }
+
+    /// The Delete screen's notes panel (`DeleteNotes.make`); nil until there is a plan and a list.
+    var deleteNotes: DeleteNotes? {
+        guard let plan = cleanPlan, let list = deleteList else { return nil }
+        return DeleteNotes.make(plan: plan, list: list, hasAccessRow: deleteAccessRow != nil)
     }
 
     /// The Overview's one access banner: the first `AccessChecklist` row that holds back something the scan measured
