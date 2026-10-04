@@ -6,31 +6,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open Full Disk Access Settings"
+            "value" : "Open System Settings"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Abrir los ajustes de Acceso total al disco"
+            "value" : "Abrir Ajustes del Sistema"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "フルディスクアクセスの設定を開く"
+            "value" : "システム設定を開く"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Abrir os Ajustes de Acesso Total ao Disco"
+            "value" : "Abrir Ajustes do Sistema"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "打开完全磁盘访问权限设置"
+            "value" : "打开系统设置"
           }
         }
       }
@@ -40,7 +40,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check again"
+            "value" : "Check Again"
           }
         },
         "es" : {
@@ -58,7 +58,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Verificar de novo"
+            "value" : "Verificar de Novo"
           }
         },
         "zh-Hans" : {
@@ -69,36 +69,104 @@
         }
       }
     },
-    "app.access.fda.hint.inList" : {
+    "app.access.fda.action.relaunch" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "XCodeVault should now be in the list — turn its switch on. If it isn't there, add it with +."
+            "value" : "Relaunch XCodeVault"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault debería aparecer ya en la lista: activa su interruptor. Si no aparece, añádelo con +."
+            "value" : "Volver a abrir XCodeVault"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault が一覧に表示されているはずです。スイッチをオンにしてください。表示されていない場合は + で追加してください。"
+            "value" : "XCodeVault を再起動"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O XCodeVault deve estar na lista agora — ative a chave dele. Se não estiver, adicione-o com +."
+            "value" : "Reabrir o XCodeVault"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault 现在应已出现在列表中——请打开它的开关。如果没有出现，请用 + 添加。"
+            "value" : "重新启动 XCodeVault"
+          }
+        }
+      }
+    },
+    "app.access.fda.hint.inList" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault is now in the list — turn its switch on. If it isn’t there, click + and choose XCodeVault."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault ya está en la lista: activa su interruptor. Si no aparece, haz clic en + y elige XCodeVault."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault がリストに追加されました。スイッチをオンにしてください。表示されない場合は、+ をクリックして XCodeVault を選択します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault agora está na lista — ative a chave dele. Se ele não estiver lá, clique em + e escolha o XCodeVault."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 现已在列表中 — 请打开它的开关。如果没有，请点按 + 并选择 XCodeVault。"
+          }
+        }
+      }
+    },
+    "app.access.fda.hint.relaunch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you turned it on, relaunch XCodeVault so the change takes effect."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Si lo activaste, vuelve a abrir XCodeVault para que el cambio surta efecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "オンにした場合は、変更を反映するために XCodeVault を再起動してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se você ativou, reabra o XCodeVault para a mudança ter efeito."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "如果你已打开，请重新启动 XCodeVault 以使更改生效。"
           }
         }
       }
@@ -142,31 +210,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Every folder this scan reached was read. Grant Full Disk Access only if you want the folders macOS protects measured too; it may add to the totals."
+            "value" : "Every folder the scan reached was read. Turn it on only if you want protected folders measured too; it may add to the totals."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Se leyeron todas las carpetas que alcanzó este análisis. Concede el Acceso total al disco solo si quieres medir también las carpetas que macOS protege; los totales pueden aumentar."
+            "value" : "Se leyeron todas las carpetas que alcanzó el análisis. Actívalo solo si quieres medir también las carpetas protegidas; puede aumentar los totales."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "今回のスキャンで到達したフォルダはすべて読み取れました。macOS が保護するフォルダも計測したい場合にのみフルディスクアクセスを許可してください。合計が増える可能性があります。"
+            "value" : "スキャンで到達したフォルダはすべて読み取れました。保護されたフォルダも計測したい場合にのみオンにしてください。合計が増える場合があります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Todas as pastas que esta análise alcançou foram lidas. Conceda o Acesso Total ao Disco só se quiser medir também as pastas que o macOS protege; os totais podem aumentar."
+            "value" : "Todas as pastas que a análise alcançou foram lidas. Ative só se quiser medir também as pastas protegidas; isso pode aumentar os totais."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "本次扫描到达的文件夹都已读取。只有在你也想计算 macOS 保护的文件夹时才需要授予完全磁盘访问权限；总量可能会增加。"
+            "value" : "扫描到达的每个文件夹都已读取。只有当你也想测量受保护的文件夹时才需要打开；总计可能会增加。"
           }
         }
       }
@@ -176,31 +244,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The check could not tell whether XCodeVault has Full Disk Access. Check again; nothing here needs it unless a size is marked partial."
+            "value" : "XCodeVault couldn’t tell whether it has Full Disk Access. Click Check Again; nothing needs it unless a size is marked partial."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "La comprobación no pudo determinar si XCodeVault tiene Acceso total al disco. Vuelve a comprobarlo; nada aquí lo necesita salvo que un tamaño esté marcado como parcial."
+            "value" : "XCodeVault no pudo saber si tiene acceso total al disco. Haz clic en Volver a comprobar; no hace falta salvo que un tamaño aparezca como parcial."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault にフルディスクアクセスがあるかどうかを判定できませんでした。もう一度確認してください。サイズが部分的と表示されていない限り、ここで必要なものはありません。"
+            "value" : "XCodeVault にフルディスクアクセスがあるか判断できませんでした。「もう一度確認」をクリックしてください。サイズが「部分的」と表示されていない限り必要ありません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "A verificação não conseguiu determinar se o XCodeVault tem Acesso Total ao Disco. Verifique de novo; nada aqui precisa dele, a menos que um tamanho esteja marcado como parcial."
+            "value" : "O XCodeVault não conseguiu saber se tem Acesso Total ao Disco. Clique em Verificar de Novo; nada precisa dele, a menos que um tamanho esteja marcado como parcial."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "检查无法确定 XCodeVault 是否拥有完全磁盘访问权限。请再检查一次；除非某个大小被标记为不完整，否则这里不需要它。"
+            "value" : "XCodeVault 无法判断自己是否拥有完全磁盘访问权限。请点按“重新检查”；除非某个大小标为部分，否则不需要它。"
           }
         }
       }
@@ -360,13 +428,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install the Helper…"
+            "value" : "Install Helper…"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Instalar el asistente…"
+            "value" : "Instalar asistente…"
           }
         },
         "ja" : {
@@ -378,7 +446,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Instalar o auxiliar…"
+            "value" : "Instalar Auxiliar…"
           }
         },
         "zh-Hans" : {
@@ -389,36 +457,70 @@
         }
       }
     },
-    "app.access.helper.action.signedReleaseOrCLI" : {
+    "app.access.helper.action.manualRoute" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This build cannot reach the privileged helper: that needs a signed build that includes it, and none is released yet (issue #30). Where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints."
+            "value" : "Where there is a manual route, run the step that `xcodevaultctl doctor` or `xcodevaultctl vault init` prints."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta compilación no puede acceder al asistente privilegiado: eso requiere una compilación firmada que lo incluya, y todavía no se ha publicado ninguna (issue #30). Cuando haya un camino manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`."
+            "value" : "Cuando hay una vía manual, ejecuta el paso que muestra `xcodevaultctl doctor` o `xcodevaultctl vault init`."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このビルドからは特権ヘルパーを利用できません。利用するにはヘルパーを含む署名済みビルドが必要ですが、まだリリースされていません（issue #30）。手動の手順がある場合は、`xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。"
+            "value" : "手動の方法がある場合は、`xcodevaultctl doctor` または `xcodevaultctl vault init` が表示する手順を実行してください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: isso exige uma versão assinada que o inclua, e nenhuma foi lançada ainda (issue #30). Quando houver um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra."
+            "value" : "Quando há um caminho manual, execute o passo que `xcodevaultctl doctor` ou `xcodevaultctl vault init` mostra."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此版本无法使用特权助手：这需要包含该助手的已签名版本，而目前尚未发布（issue #30）。若有手动步骤，请执行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 列出的步骤。"
+            "value" : "如有手动方法，请运行 `xcodevaultctl doctor` 或 `xcodevaultctl vault init` 显示的步骤。"
+          }
+        }
+      }
+    },
+    "app.access.helper.action.signedReleaseOrCLI" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs a signed build that includes the helper; none is released yet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Requiere una compilación firmada que incluya el asistente; todavía no se ha publicado ninguna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ヘルパーを含む署名済みビルドが必要です。まだ公開されていません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Requer uma versão assinada que inclua o auxiliar; nenhuma foi lançada ainda."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "需要包含助手的已签名版本；目前尚未发布。"
           }
         }
       }
@@ -1558,13 +1660,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "skipped: %@"
+            "value" : "Skipped: %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "omitido: %@"
+            "value" : "Omitido: %@"
           }
         },
         "ja" : {
@@ -1576,7 +1678,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ignorado: %@"
+            "value" : "Ignorado: %@"
           }
         },
         "zh-Hans" : {
@@ -1694,31 +1796,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bucket"
+            "value" : "Option"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Grupo"
+            "value" : "Opción"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "区分"
+            "value" : "オプション"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Grupo"
+            "value" : "Opção"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "分组"
+            "value" : "选项"
           }
         }
       }
@@ -2238,13 +2340,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Markers"
+            "value" : "Notes"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Marcadores"
+            "value" : "Notas"
           }
         },
         "ja" : {
@@ -2256,13 +2358,13 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Marcadores"
+            "value" : "Notas"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "标记"
+            "value" : "备注"
           }
         }
       }
@@ -2272,7 +2374,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cost to undo"
+            "value" : "Cost to Undo"
           }
         },
         "es" : {
@@ -2290,13 +2392,13 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Custo de desfazer"
+            "value" : "Custo para Desfazer"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "撤销的代价"
+            "value" : "撤销成本"
           }
         }
       }
@@ -2586,31 +2688,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "These are never deleted from this list. Copy a command and run it in Terminal; simulator devices lose their apps and the apps' data."
+            "value" : "Never deleted from this list. Copy a command for Terminal, or use Run… for a runtime. Deleting a simulator device deletes its apps’ data."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Estos nunca se borran desde esta lista. Copia un comando y ejecútalo en Terminal; los dispositivos del simulador pierden sus apps y los datos de las apps."
+            "value" : "Nunca se eliminan desde esta lista. Copia un comando para Terminal o usa Ejecutar… para un runtime. Eliminar un dispositivo de simulador elimina los datos de sus apps."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "これらはこの一覧からは削除されません。コマンドをコピーしてターミナルで実行してください。シミュレータのデバイスはアプリとそのデータを失います。"
+            "value" : "この一覧からは削除されません。ターミナル用にコマンドをコピーするか、ランタイムは「実行…」を使います。シミュレータデバイスを削除すると、その App のデータも削除されます。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Estes nunca são apagados por esta lista. Copie um comando e execute-o no Terminal; os dispositivos do simulador perdem os apps e os dados dos apps."
+            "value" : "Nunca são apagados desta lista. Copie um comando para o Terminal ou use Executar… para um runtime. Apagar um dispositivo de simulador apaga os dados dos apps dele."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "这些项目绝不会从此列表中删除。请拷贝命令并在“终端”中运行；模拟器设备会丢失其中的 App 及其数据。"
+            "value" : "不会从此列表中删除。拷贝命令到终端，或对运行时使用“运行…”。删除模拟器设备会删除其 App 的数据。"
           }
         }
       }
@@ -2974,13 +3076,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "evidence: %@"
+            "value" : "Evidence: %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "evidencia: %@"
+            "value" : "Evidencia: %@"
           }
         },
         "ja" : {
@@ -2992,7 +3094,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "evidência: %@"
+            "value" : "Evidência: %@"
           }
         },
         "zh-Hans" : {
@@ -3956,31 +4058,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Not offered by `clean`:"
+            "value" : "Why Delete doesn’t list it:"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "`clean` no lo ofrece:"
+            "value" : "Por qué Eliminar no lo muestra:"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "`clean` では提示されません:"
+            "value" : "「削除」に表示されない理由:"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Não oferecido pelo `clean`:"
+            "value" : "Por que Apagar não o lista:"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "`clean` 不提供："
+            "value" : "“删除”中未列出的原因："
           }
         }
       }
@@ -4296,7 +4398,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show all"
+            "value" : "Show All"
           }
         },
         "es" : {
@@ -4314,7 +4416,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Mostrar tudo"
+            "value" : "Mostrar Tudo"
           }
         },
         "zh-Hans" : {
@@ -5010,31 +5112,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "(experimental)"
+            "value" : "Experimental"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "(experimental)"
+            "value" : "Experimental"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "（実験的）"
+            "value" : "実験的"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "(experimental)"
+            "value" : "Experimental"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "（实验性）"
+            "value" : "实验性"
           }
         }
       }
@@ -5112,31 +5214,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The bar counts each item once, under its main option. The cards below overlap, because an item can have more than one option."
+            "value" : "Each item counted once. The options below overlap."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "La barra cuenta cada elemento una vez, en su opción principal. Las tarjetas de abajo se solapan, porque un elemento puede tener más de una opción."
+            "value" : "Cada elemento se cuenta una vez. Las opciones de abajo se solapan."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "バーは各項目を主な方法の下で一度だけ数えます。1つの項目に複数の方法がありうるため、下のカードは重なります。"
+            "value" : "各項目は 1 回だけ数えています。下のオプションは重複します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "A barra conta cada item uma vez, na sua opção principal. Os cartões abaixo se sobrepõem, porque um item pode ter mais de uma opção."
+            "value" : "Cada item é contado uma vez. As opções abaixo se sobrepõem."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "条形图将每个项目只计一次，归入其主要选项。下方的卡片会有重叠，因为一个项目可能有多个选项。"
+            "value" : "每个项目只计一次。下方的选项会相互重叠。"
           }
         }
       }
@@ -5248,31 +5350,99 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "All of it uses verified strategies."
+            "value" : "All of it is verified."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Todo usa estrategias verificadas."
+            "value" : "Todo está verificado."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "すべて検証済みの方法です。"
+            "value" : "すべて検証済みです。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tudo usa estratégias verificadas."
+            "value" : "Tudo está verificado."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "全部使用已验证的策略。"
+            "value" : "全部已验证。"
+          }
+        }
+      }
+    },
+    "app.overview.card.eyebrow.permanent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Space stays free"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El espacio sigue libre"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "空き領域は維持されます"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O espaço continua livre"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "空间保持空闲"
+          }
+        }
+      }
+    },
+    "app.overview.card.eyebrow.temporary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Space comes back"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El espacio vuelve a ocuparse"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "空き領域は戻ります"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O espaço volta a ser usado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "空间会再次被占用"
           }
         }
       }
@@ -5282,31 +5452,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Of which %@ deletes apps' data and does not come back (simulator devices)."
+            "value" : "%@ of it is simulator devices: their apps’ data doesn’t come back."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "De ello, %@ elimina datos de apps y no vuelve (dispositivos de simulador)."
+            "value" : "%@ son dispositivos de simulador: los datos de sus apps no vuelven."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "うち %@ はアプリのデータを削除し、元に戻りません（シミュレータデバイス）。"
+            "value" : "うち %@ はシミュレータデバイスです。App のデータは元に戻りません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Dos quais %@ apagam dados de apps e não voltam (dispositivos de simulador)."
+            "value" : "%@ são dispositivos de simulador: os dados dos apps deles não voltam."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "其中 %@ 会删除应用数据且无法恢复（模拟器设备）。"
+            "value" : "其中 %@ 是模拟器设备：其 App 的数据无法恢复。"
           }
         }
       }
@@ -5413,40 +5583,6 @@
         }
       }
     },
-    "app.overview.doctor.issue" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: %2$@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%1$@: %2$@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%1$@：%2$@"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%1$@: %2$@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "%1$@：%2$@"
-          }
-        }
-      }
-    },
     "app.overview.doctor.issues" : {
       "localizations" : {
         "en" : {
@@ -5455,13 +5591,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Doctor: %lld issue needs attention"
+                  "value" : "%lld issue needs attention"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Doctor: %lld issues need attention"
+                  "value" : "%lld issues need attention"
                 }
               }
             }
@@ -5473,13 +5609,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "Diagnóstico: %lld problema requiere atención"
+                  "value" : "%lld problema requiere atención"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "Diagnóstico: %lld problemas requieren atención"
+                  "value" : "%lld problemas requieren atención"
                 }
               }
             }
@@ -5491,7 +5627,7 @@
               "other" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "診断: 対応が必要な問題が %lld 件あります"
+                  "value" : "%lld 件の問題に対応が必要です"
                 }
               }
             }
@@ -5503,13 +5639,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "Diagnóstico: %lld problema precisa de atenção"
+                  "value" : "%lld problema precisa de atenção"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "Diagnóstico: %lld problemas precisam de atenção"
+                  "value" : "%lld problemas precisam de atenção"
                 }
               }
             }
@@ -5521,7 +5657,7 @@
               "other" : {
                 "stringUnit" : {
                   "state" : "needs_review",
-                  "value" : "诊断：%lld 个问题需要处理"
+                  "value" : "%lld 个问题需要注意"
                 }
               }
             }
@@ -5534,31 +5670,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Every strategy marked (experimental) has not met the Definition of Done for your macOS/Xcode combination. Nothing in this app deletes non-regenerable data automatically."
+            "value" : "Options marked Experimental haven’t been verified on your versions of macOS and Xcode. XCodeVault never deletes data that can’t be recreated without asking you first."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Toda estrategia marcada como (experimental) aún no cumple la Definición de Hecho para tu combinación de macOS y Xcode. Nada en esta app elimina automáticamente datos que no se pueden regenerar."
+            "value" : "Las opciones marcadas como experimentales no se han verificado en tus versiones de macOS y Xcode. XCodeVault nunca elimina datos que no se pueden volver a crear sin preguntarte antes."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "（実験的）と表示された方法は、お使いの macOS と Xcode の組み合わせでは完了の定義をまだ満たしていません。このアプリが再生成できないデータを自動で削除することはありません。"
+            "value" : "「実験的」と表示されたオプションは、お使いの macOS と Xcode のバージョンでは検証されていません。XCodeVault は、作り直せないデータを確認なしに削除することはありません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Toda estratégia marcada como (experimental) ainda não cumpriu a Definição de Pronto para a sua combinação de macOS e Xcode. Nada neste app apaga automaticamente dados que não podem ser regenerados."
+            "value" : "As opções marcadas como Experimental não foram verificadas nas suas versões do macOS e do Xcode. O XCodeVault nunca apaga dados que não podem ser recriados sem perguntar antes."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "标记为（实验性）的策略尚未在你的 macOS 与 Xcode 组合上满足完成定义。本应用绝不会自动删除无法重新生成的数据。"
+            "value" : "标为“实验性”的选项尚未在你的 macOS 和 Xcode 版本上验证。对于无法重新创建的数据，XCodeVault 在删除前一定会先询问你。"
           }
         }
       }
@@ -5636,31 +5772,65 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Simulator runtimes measured by simctl: %@ — not in these totals yet; see Simulators."
+            "value" : "Simulator runtimes: %@, not in these totals yet. See Simulators."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Runtimes de simulador medidos por simctl: %@ — aún no están en estos totales; consulta Simuladores."
+            "value" : "Runtimes de simulador: %@, aún no incluidos en estos totales. Consulta Simuladores."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "simctl が測定したシミュレータランタイム：%@ — まだこの合計には含まれていません。「シミュレータ」を参照してください。"
+            "value" : "シミュレータランタイム: %@（まだこの合計に含まれていません）。「シミュレータ」を参照してください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Runtimes de simulador medidos pelo simctl: %@ — ainda fora destes totais; veja Simuladores."
+            "value" : "Runtimes de simulador: %@, ainda fora destes totais. Veja Simuladores."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "simctl 测得的模拟器运行时：%@ — 尚未计入这些总量；请参阅“模拟器”。"
+            "value" : "模拟器运行时：%@，尚未计入这些总计。请参阅“模拟器”。"
+          }
+        }
+      }
+    },
+    "app.overview.showInHealth" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Health"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mostrar en Diagnóstico"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "「診断」で表示"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mostrar em Diagnóstico"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "在“健康状况”中显示"
           }
         }
       }
@@ -5937,6 +6107,40 @@
         }
       }
     },
+    "app.plan.copy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "コピー"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Copiar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "拷贝"
+          }
+        }
+      }
+    },
     "app.plan.copyCommand" : {
       "localizations" : {
         "en" : {
@@ -6010,31 +6214,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "XCodeVault does not run these from the app. Copy a command and run it in Terminal: each one shows what it would do before it does it, unless it is marked “acts immediately”."
+            "value" : "Use Run…, or copy a command for Terminal. Each command previews its changes first, unless it’s marked “acts immediately”."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault no ejecuta estos comandos desde la app. Copia un comando y ejecútalo en Terminal: cada uno muestra lo que haría antes de hacerlo, salvo los marcados «actúa de inmediato»."
+            "value" : "Usa Ejecutar… o copia un comando para Terminal. Cada comando muestra antes sus cambios, salvo que esté marcado como “actúa de inmediato”."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault はこれらをアプリから実行しません。コマンドをコピーしてターミナルで実行してください。「すぐに実行されます」と表示されたもの以外は、実行前に何をするかを表示します。"
+            "value" : "「実行…」を使うか、ターミナル用にコマンドをコピーします。「すぐに実行されます」と表示されていない限り、各コマンドは先に変更内容を表示します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O XCodeVault não executa estes comandos pelo app. Copie um comando e execute-o no Terminal: cada um mostra o que faria antes de fazer, a menos que esteja marcado “age imediatamente”."
+            "value" : "Use Executar… ou copie um comando para o Terminal. Cada comando mostra antes o que vai mudar, a menos que esteja marcado como “age imediatamente”."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault 不会在 App 中运行这些命令。请拷贝命令并在“终端”中运行：除标有“立即生效”的命令外，每条命令都会先显示将要执行的操作。"
+            "value" : "使用“运行…”，或拷贝命令到终端。除非标为“立即生效”，每条命令都会先预览更改。"
           }
         }
       }
@@ -6112,31 +6316,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your vault on %@ is connected but not usable; `xcodevaultctl doctor` says what is wrong."
+            "value" : "Your vault on %@ is connected but can’t be used. Drives says why."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tu vault en %@ está conectado pero no se puede usar; `xcodevaultctl doctor` indica qué falla."
+            "value" : "Tu bóveda en %@ está conectada pero no se puede usar. Discos indica el motivo."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "%@ の vault は接続されていますが使用できません。`xcodevaultctl doctor` が原因を示します。"
+            "value" : "%@ の退避先は接続されていますが使用できません。理由は「ドライブ」に表示されます。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Seu disco-cofre em %@ está conectado, mas não pode ser usado; `xcodevaultctl doctor` diz o que está errado."
+            "value" : "Seu cofre em %@ está conectado, mas não pode ser usado. Discos mostra o motivo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "%@ 上的 vault 已连接但无法使用；`xcodevaultctl doctor` 会说明问题所在。"
+            "value" : "%@ 上的保险库已连接但无法使用。原因见“磁盘”。"
           }
         }
       }
@@ -6146,31 +6350,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No vault is registered. Register an external drive first: `xcodevaultctl vault init /Volumes/<name>`"
+            "value" : "No vault yet. Set one up in Terminal with this command, using your drive’s name:"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No hay ningún vault registrado. Registra primero un disco externo: `xcodevaultctl vault init /Volumes/<name>`"
+            "value" : "Aún no hay ninguna bóveda. Configura una en Terminal con este comando, con el nombre de tu unidad:"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "vault が登録されていません。まず外部ドライブを登録してください: `xcodevaultctl vault init /Volumes/<name>`"
+            "value" : "退避先はまだありません。ドライブ名を指定して、ターミナルでこのコマンドを実行して設定します:"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Nenhum disco-cofre registrado. Registre primeiro um disco externo: `xcodevaultctl vault init /Volumes/<name>`"
+            "value" : "Nenhum cofre ainda. Configure um no Terminal com este comando, usando o nome da sua unidade:"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "尚未注册 vault。请先注册一个外置磁盘：`xcodevaultctl vault init /Volumes/<name>`"
+            "value" : "尚无保险库。请在终端中使用此命令设置一个，并填入你的驱动器名称："
           }
         }
       }
@@ -6180,31 +6384,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your vault drive is not connected: connect it, then rescan."
+            "value" : "Your vault drive isn’t connected. Connect it, then rescan."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "El disco de tu vault no está conectado: conéctalo y vuelve a analizar."
+            "value" : "La unidad de tu bóveda no está conectada. Conéctala y vuelve a analizar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "vault のドライブが接続されていません。接続してから再スキャンしてください。"
+            "value" : "退避先のドライブが接続されていません。接続してから再スキャンしてください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O disco do seu disco-cofre não está conectado: conecte-o e verifique de novo."
+            "value" : "A unidade do seu cofre não está conectada. Conecte-a e analise de novo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "你的 vault 磁盘未连接：请连接后重新扫描。"
+            "value" : "你的保险库驱动器未连接。请连接后重新扫描。"
           }
         }
       }
@@ -6486,31 +6690,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An installer is being exported. Stopping xcodebuild part-way has not been tested, so XCodeVault can’t quit until the export finishes."
+            "value" : "An installer is being exported, and stopping an export part-way hasn’t been tested, so XCodeVault can’t quit until it finishes."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Se está exportando un instalador. Detener xcodebuild a medias no se ha probado, así que XCodeVault no puede salir hasta que termine la exportación."
+            "value" : "Se está exportando un instalador y no se ha probado detener una exportación a medias, así que XCodeVault no puede salir hasta que termine."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "インストーラを書き出しています。xcodebuild を途中で止める動作は検証されていないため、書き出しが終わるまで XCodeVault は終了できません。"
+            "value" : "インストーラを書き出しています。途中で止めることはテストされていないため、完了するまで XCodeVault は終了できません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Um instalador está sendo exportado. Parar o xcodebuild no meio não foi testado, então o XCodeVault não pode encerrar até a exportação terminar."
+            "value" : "Um instalador está sendo exportado, e interromper uma exportação no meio não foi testado, então o XCodeVault só pode encerrar quando ela terminar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "正在导出安装器。中途停止 xcodebuild 的情况未经测试,因此在导出完成前 XCodeVault 无法退出。"
+            "value" : "正在导出安装器，而中途停止导出尚未经过测试，因此 XCodeVault 需要等导出完成后才能退出。"
           }
         }
       }
@@ -6520,31 +6724,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "XCodeVault is copying, verifying or removing data. Quitting now would leave a copy half-written while the journal calls it interrupted, so it can’t quit until this finishes."
+            "value" : "XCodeVault is copying, verifying or removing data. Quitting now would leave a half-written copy, so it can’t quit until this finishes."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault está copiando, verificando o eliminando datos. Salir ahora dejaría una copia a medio escribir mientras el registro la da por interrumpida, así que no puede salir hasta que termine."
+            "value" : "XCodeVault está copiando, verificando o eliminando datos. Salir ahora dejaría una copia a medias, así que no puede salir hasta que termine."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault はデータのコピー、検証、または削除を行っています。今終了すると、ジャーナルが中断と記録している間もコピーが書きかけのまま残るため、完了するまで終了できません。"
+            "value" : "XCodeVault はデータをコピー、検証、または削除しています。今終了すると書きかけのコピーが残るため、完了するまで終了できません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O XCodeVault está copiando, verificando ou removendo dados. Encerrar agora deixaria uma cópia pela metade enquanto o registro a chama de interrompida, então ele não pode encerrar até isso terminar."
+            "value" : "O XCodeVault está copiando, verificando ou removendo dados. Encerrar agora deixaria uma cópia pela metade, então ele só pode encerrar quando isso terminar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault 正在拷贝、验证或移除数据。现在退出会在日志将其记为中断时留下写了一半的拷贝,因此在完成之前无法退出。"
+            "value" : "XCodeVault 正在拷贝、验证或移除数据。现在退出会留下写了一半的副本，因此需要等它完成后才能退出。"
           }
         }
       }
@@ -9648,31 +9852,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Discovering Xcodes, runtimes, volumes and measuring storage. Nothing is changed."
+            "value" : "Finding Xcode, simulators and drives, and measuring storage. Nothing is changed."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Buscando Xcodes, runtimes y volúmenes y midiendo el almacenamiento. No se cambia nada."
+            "value" : "Buscando Xcode, simuladores y unidades, y midiendo el almacenamiento. No se cambia nada."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode、ランタイム、ボリュームを検出し、ストレージを計測しています。何も変更しません。"
+            "value" : "Xcode、シミュレータ、ドライブを探し、ストレージを計測しています。何も変更しません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Encontrando Xcodes, runtimes e volumes e medindo o armazenamento. Nada é alterado."
+            "value" : "Procurando o Xcode, simuladores e unidades, e medindo o armazenamento. Nada é alterado."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "正在查找 Xcode、运行时和卷，并计算存储占用。不会更改任何内容。"
+            "value" : "正在查找 Xcode、模拟器和驱动器，并测量存储空间。不会更改任何内容。"
           }
         }
       }
@@ -9716,31 +9920,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Access"
+            "value" : "Permissions"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Acceso"
+            "value" : "Permisos"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "アクセス"
+            "value" : "アクセス権"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Acesso"
+            "value" : "Permissões"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "访问权限"
+            "value" : "权限"
           }
         }
       }
@@ -9954,13 +10158,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Run externally"
+            "value" : "Run Externally"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Usar en externo"
+            "value" : "Ejecutar desde fuera"
           }
         },
         "ja" : {
@@ -9972,13 +10176,13 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Usar no externo"
+            "value" : "Executar Externamente"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "在外部运行"
+            "value" : "外部运行"
           }
         }
       }
@@ -10056,13 +10260,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "CRITICAL"
+            "value" : "Critical"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "CRÍTICO"
+            "value" : "Crítico"
           }
         },
         "ja" : {
@@ -10074,7 +10278,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "CRÍTICO"
+            "value" : "Crítico"
           }
         },
         "zh-Hans" : {
@@ -10090,13 +10294,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ERROR"
+            "value" : "Error"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ERROR"
+            "value" : "Error"
           }
         },
         "ja" : {
@@ -10108,7 +10312,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ERRO"
+            "value" : "Erro"
           }
         },
         "zh-Hans" : {
@@ -10124,13 +10328,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "INFO"
+            "value" : "Info"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "INFO"
+            "value" : "Información"
           }
         },
         "ja" : {
@@ -10142,7 +10346,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "INFO"
+            "value" : "Informação"
           }
         },
         "zh-Hans" : {
@@ -10158,13 +10362,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "WARNING"
+            "value" : "Warning"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AVISO"
+            "value" : "Aviso"
           }
         },
         "ja" : {
@@ -10176,7 +10380,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "AVISO"
+            "value" : "Aviso"
           }
         },
         "zh-Hans" : {
@@ -10226,31 +10430,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Save space"
+            "value" : "Save Space"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Liberar espacio"
+            "value" : "Ahorrar espacio"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "空き容量を増やす"
+            "value" : "空き領域を増やす"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Liberar espaço"
+            "value" : "Liberar Espaço"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "释放空间"
+            "value" : "节省空间"
           }
         }
       }
@@ -10546,31 +10750,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Each device's data folder, as simctl reports it. Delete measures the whole Devices folder, so its total can differ."
+            "value" : "Each device’s data, as Simulator reports it. Delete measures the whole Devices folder, so its total can differ."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "La carpeta de datos de cada dispositivo, tal como la informa simctl. Eliminar mide toda la carpeta Devices, así que su total puede ser distinto."
+            "value" : "Los datos de cada dispositivo, según Simulator. Eliminar mide toda la carpeta Devices, así que su total puede ser distinto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "各デバイスのデータフォルダ（simctl が報告するサイズ）です。「削除」は Devices フォルダ全体を測るため、合計が異なることがあります。"
+            "value" : "各デバイスのデータ（Simulator の報告による）。「削除」は Devices フォルダ全体を計測するため、合計が異なることがあります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "A pasta de dados de cada dispositivo, como o simctl a informa. Apagar mede a pasta Devices inteira, então o total lá pode ser diferente."
+            "value" : "Os dados de cada dispositivo, como o Simulator informa. Apagar mede a pasta Devices inteira, então o total pode ser diferente."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "每台设备的数据文件夹，按 simctl 报告的大小。“删除”测量整个 Devices 文件夹，因此其总量可能不同。"
+            "value" : "每个设备的数据，以 Simulator 报告为准。“删除”测量的是整个 Devices 文件夹，因此总计可能不同。"
           }
         }
       }
@@ -10648,31 +10852,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Runtimes and devices are deleted with simctl, never from this list. Delete shows their commands."
+            "value" : "To delete runtimes and devices, use Delete: it lists their commands."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Los runtimes y los dispositivos se eliminan con simctl, nunca desde esta lista. Eliminar muestra sus comandos."
+            "value" : "Para eliminar runtimes y dispositivos, usa Eliminar: muestra sus comandos."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "ランタイムとデバイスは simctl で削除します。この一覧からは削除しません。コマンドは「削除」に表示されます。"
+            "value" : "ランタイムとデバイスを削除するには「削除」を使います。そのコマンドが一覧にあります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Runtimes e dispositivos são apagados com simctl, nunca por esta lista. Apagar mostra os comandos."
+            "value" : "Para apagar runtimes e dispositivos, use Apagar: lá estão os comandos."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "运行时和设备通过 simctl 删除，不会从此列表删除。“删除”中列出了相应命令。"
+            "value" : "要删除运行时和设备，请使用“删除”：其中列出了相应的命令。"
           }
         }
       }
@@ -10784,31 +10988,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nothing found in any bucket to chart."
+            "value" : "Nothing to chart."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "No se encontró nada en ningún grupo para el gráfico."
+            "value" : "No hay nada que representar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "グラフにするものはどのグループにもありません。"
+            "value" : "グラフにする項目がありません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Nada encontrado em nenhum grupo para o gráfico."
+            "value" : "Nada para mostrar no gráfico."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "任何分组中都没有可绘制的内容。"
+            "value" : "没有可绘制的内容。"
           }
         }
       }
@@ -10818,31 +11022,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Size by bucket"
+            "value" : "Size by option"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tamaño por grupo"
+            "value" : "Tamaño por opción"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "グループ別のサイズ"
+            "value" : "オプション別のサイズ"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Tamanho por grupo"
+            "value" : "Tamanho por opção"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "按分组的大小"
+            "value" : "按选项的大小"
           }
         }
       }
@@ -10920,31 +11124,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show every bucket"
+            "value" : "Show All"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Mostrar todos los grupos"
+            "value" : "Mostrar todo"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "すべてのグループを表示"
+            "value" : "すべて表示"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Mostrar todos os grupos"
+            "value" : "Mostrar Tudo"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "显示所有分组"
+            "value" : "全部显示"
           }
         }
       }
@@ -10988,31 +11192,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "[mount point]"
+            "value" : "Mount point"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[punto de montaje]"
+            "value" : "Punto de montaje"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[マウントポイント]"
+            "value" : "マウントポイント"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[ponto de montagem]"
+            "value" : "Ponto de montagem"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[挂载点]"
+            "value" : "挂载点"
           }
         }
       }
@@ -11022,31 +11226,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "[mount state unreadable]"
+            "value" : "Mount state unknown"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[estado de montaje ilegible]"
+            "value" : "Estado de montaje desconocido"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[マウント状態を読み取れません]"
+            "value" : "マウント状態不明"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[estado de montagem ilegível]"
+            "value" : "Estado de montagem desconhecido"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "[无法读取挂载状态]"
+            "value" : "挂载状态未知"
           }
         }
       }
@@ -11056,31 +11260,371 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "→ SYMLINK"
+            "value" : "Symlink"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ SYMLINK"
+            "value" : "Enlace simbólico"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ SYMLINK"
+            "value" : "シンボリックリンク"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ SYMLINK"
+            "value" : "Link simbólico"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "→ SYMLINK"
+            "value" : "符号链接"
+          }
+        }
+      }
+    },
+    "app.strategy.appleManaged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed by macOS"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Gestionado por macOS"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "macOS が管理"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Gerenciado pelo macOS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "由 macOS 管理"
+          }
+        }
+      }
+    },
+    "app.strategy.canonicalMount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mount in place"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Montar en su sitio"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "その場所にマウント"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Montar no lugar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "原位挂载"
+          }
+        }
+      }
+    },
+    "app.strategy.coldStorage" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Park on a vault"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Guardar en una bóveda"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先に保管"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Guardar em um cofre"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "停放到保险库"
+          }
+        }
+      }
+    },
+    "app.strategy.downloadRepository" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep installers outside"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Guardar instaladores fuera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "インストーラを外部に保管"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Guardar instaladores fora"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "将安装器放在外部"
+          }
+        }
+      }
+    },
+    "app.strategy.nativeConfiguration" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode setting"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ajuste de Xcode"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode の設定"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ajuste do Xcode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Xcode 设置"
+          }
+        }
+      }
+    },
+    "app.strategy.neverMove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep on this Mac"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mantener en este Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "この Mac に保持"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Manter neste Mac"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "保留在此 Mac 上"
+          }
+        }
+      }
+    },
+    "app.strategy.restoreOnDemand" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore when needed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Restaurar cuando haga falta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "必要なときに復元"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Restaurar quando precisar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "需要时恢复"
+          }
+        }
+      }
+    },
+    "app.strategy.safeCleanup" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Eliminar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "削除"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Apagar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "app.strategy.symlinkRelocation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move behind a symlink"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mover tras un enlace simbólico"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "シンボリックリンクで移動"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mover com link simbólico"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "通过符号链接移动"
+          }
+        }
+      }
+    },
+    "app.strategy.userDirectoryRelocation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move the folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mover la carpeta"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "フォルダを移動"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mover a pasta"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "移动文件夹"
           }
         }
       }
@@ -11090,13 +11634,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NO"
+            "value" : "No"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "NO"
+            "value" : "No"
           }
         },
         "ja" : {
@@ -11108,7 +11652,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "NÃO"
+            "value" : "Não"
           }
         },
         "zh-Hans" : {
@@ -11124,25 +11668,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "not measured"
+            "value" : "Not measured"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "sin medir"
+            "value" : "Sin medir"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "未測定"
+            "value" : "未計測"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "não medido"
+            "value" : "Não medido"
           }
         },
         "zh-Hans" : {
@@ -11158,13 +11702,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "yes"
+            "value" : "Yes"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "sí"
+            "value" : "Sí"
           }
         },
         "ja" : {
@@ -11176,7 +11720,7 @@
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "sim"
+            "value" : "Sim"
           }
         },
         "zh-Hans" : {
@@ -11430,31 +11974,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A vault: the bar shows the developer data the scan found on this drive, against other data. XCodeVault’s records keep no sizes."
+            "value" : "On a vault, the bar shows the developer data the scan found on this drive."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Una bóveda: la barra muestra los datos de desarrollo que el análisis encontró en esta unidad, frente a otros datos. Los registros de XCodeVault no guardan tamaños."
+            "value" : "En una bóveda, la barra muestra los datos de desarrollo que el análisis encontró en esta unidad."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "保管庫: バーには、スキャンがこのドライブで見つけた開発データとその他のデータを示します。XCodeVault の記録にはサイズは保存されません。"
+            "value" : "退避先では、スキャンがこのドライブで見つけた開発データをバーに表示します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Um cofre: a barra mostra os dados de desenvolvimento que a varredura encontrou neste disco, contra os outros dados. Os registros do XCodeVault não guardam tamanhos."
+            "value" : "Em um cofre, a barra mostra os dados de desenvolvimento que a análise encontrou nesta unidade."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "保险库：条形显示扫描在此驱动器上找到的开发数据与其他数据。XCodeVault 的记录不保存大小。"
+            "value" : "在保险库上，此条显示扫描在此驱动器上找到的开发数据。"
           }
         }
       }
@@ -14722,31 +15266,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This process can open the one file only Full Disk Access opens (H15's indicator; nothing is read from it)."
+            "value" : "This process can open a file only Full Disk Access opens; nothing is read from it."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este proceso puede abrir el único archivo que solo abre el Acceso total al disco (el indicador de H15; no se lee nada de él)."
+            "value" : "Este proceso puede abrir un archivo que solo abre el acceso total al disco; no se lee nada de él."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このプロセスは、フルディスクアクセスでしか開けないファイルを開けます（H15 の指標。内容は読み取りません）。"
+            "value" : "このプロセスは、フルディスクアクセスでのみ開けるファイルを開けます。内容は読み取りません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este processo consegue abrir o único arquivo que só o Acesso Total ao Disco abre (o indicador do H15; nada é lido dele)."
+            "value" : "Este processo consegue abrir um arquivo que só o Acesso Total ao Disco abre; nada é lido dele."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此进程可以打开只有完全磁盘访问权限才能打开的那个文件（H15 的指示文件；不会读取其中任何内容）。"
+            "value" : "此进程可以打开只有“完全磁盘访问权限”才能打开的文件；不会读取其内容。"
           }
         }
       }
@@ -15232,31 +15776,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This build cannot reach the privileged helper: it is not signed by a usable Apple team, or the helper is not in it. That takes a signed build that includes the helper (issue #30)."
+            "value" : "This build can’t reach the privileged helper: it isn’t signed by a usable Apple team, or the helper isn’t in it. That needs a signed build that includes the helper."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta compilación no puede acceder al asistente privilegiado: no está firmada por un equipo de Apple utilizable, o el asistente no está incluido. Hace falta una compilación firmada que incluya el asistente (issue #30)."
+            "value" : "Esta compilación no puede comunicarse con el asistente privilegiado: no está firmada por un equipo de Apple válido o no incluye el asistente. Hace falta una compilación firmada que lo incluya."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このビルドからは特権ヘルパーを利用できません。使用可能な Apple チームの署名がないか、ヘルパーが含まれていません。ヘルパーを含む署名済みビルドが必要です（issue #30）。"
+            "value" : "このビルドは特権ヘルパーに接続できません。使用可能な Apple チームで署名されていないか、ヘルパーが含まれていません。ヘルパーを含む署名済みビルドが必要です。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: não está assinada por uma equipe Apple utilizável, ou o auxiliar não está nela. É preciso uma versão assinada que inclua o auxiliar (issue #30)."
+            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: ela não é assinada por uma equipe Apple utilizável ou não inclui o auxiliar. É preciso uma versão assinada que inclua o auxiliar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此版本无法使用特权助手：它没有由可用的 Apple 团队签名，或者未包含该助手。需要包含助手的已签名版本（issue #30）。"
+            "value" : "此版本无法连接特权助手：它未由可用的 Apple 团队签名，或未包含助手。需要一个包含助手的已签名版本。"
           }
         }
       }
@@ -15402,31 +15946,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "root with Full Disk Access — privileged helper; its Full Disk Access is unmeasured"
+            "value" : "root with Full Disk Access — privileged helper"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "root con Acceso total al disco — asistente privilegiado; su Acceso total al disco no se ha medido"
+            "value" : "root con acceso total al disco: asistente privilegiado"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "フルディスクアクセス付きの root — 特権ヘルパー。ヘルパーのフルディスクアクセスは未計測"
+            "value" : "フルディスクアクセス付きの root — 特権ヘルパー"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "root com Acesso Total ao Disco — auxiliar privilegiado; o Acesso Total ao Disco dele não foi medido"
+            "value" : "root com Acesso Total ao Disco — auxiliar privilegiado"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "带完全磁盘访问权限的 root — 特权助手；其完全磁盘访问权限尚未测定"
+            "value" : "具有完全磁盘访问权限的 root — 特权助手"
           }
         }
       }
@@ -15436,31 +15980,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This path belongs to root inside a folder where root was refused without Full Disk Access (H15); whether the helper has that access is unmeasured until its first live run (#30)."
+            "value" : "This path belongs to root, inside a folder root can read only with Full Disk Access. Whether the helper has that access isn’t known until it first runs."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta ruta pertenece a root, dentro de una carpeta donde se rechazó a root sin Acceso total al disco (H15); si el asistente tiene ese acceso no se habrá medido hasta su primera ejecución real (#30)."
+            "value" : "Esta ruta pertenece a root, dentro de una carpeta que root solo puede leer con acceso total al disco. No se sabrá si el asistente tiene ese acceso hasta que se ejecute por primera vez."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このパスは、フルディスクアクセスなしでは root でも拒否されたフォルダ内にある root 所有のパスです（H15）。ヘルパーにそのアクセスがあるかは、最初の実運用まで未計測です（#30）。"
+            "value" : "このパスは root が所有し、root がフルディスクアクセスでしか読めないフォルダの中にあります。ヘルパーにそのアクセス権があるかは、初めて実行するまでわかりません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este caminho pertence ao root, dentro de uma pasta onde o root foi recusado sem Acesso Total ao Disco (H15); se o auxiliar tem esse acesso não foi medido até a sua primeira execução real (#30)."
+            "value" : "Este caminho pertence ao root, dentro de uma pasta que o root só lê com Acesso Total ao Disco. Só se sabe se o auxiliar tem esse acesso quando ele rodar pela primeira vez."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此路径归 root 所有，位于一个在没有完全磁盘访问权限时连 root 也被拒绝的文件夹中（H15）；助手是否拥有该权限，在其首次实际运行之前尚未测定（#30）。"
+            "value" : "此路径属于 root，位于 root 只有在具有完全磁盘访问权限时才能读取的文件夹中。助手是否具有该权限，要到它首次运行时才能知道。"
           }
         }
       }

@@ -85,7 +85,12 @@ struct HealthCardView: View {
             if let action = card.finding.action {
                 PrivilegedActionControlView(action: action, state: helperState) { perform(action) }
             } else if let fix = card.fixSentence {
-                InlineCodeText("→ " + fix).font(.callout).fixedSize(horizontal: false, vertical: true)
+                // The fix with a symbol, not an ASCII arrow (HIG review H2, X3).
+                Label {
+                    InlineCodeText(fix).font(.callout).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "wrench.and.screwdriver").foregroundStyle(.secondary).accessibilityLabel(Text(verbatim: L10n.tr("app.health.fix")))
+                }
             }
             if let details = card.details {
                 DisclosureGroup(isExpanded: $showsDetails) {

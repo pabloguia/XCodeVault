@@ -140,6 +140,13 @@ final class AppModel {
     /// which one activation consumes. The hint next to the button shows only after it (R5, HIG review A2).
     private(set) var openedFullDiskAccessSettings = false
 
+    /// Whether `row` offers **Relaunch XCodeVault** (`AccessChecklist.offersRelaunch`).
+    func offersRelaunch(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.offersRelaunch(row, openedSettings: openedFullDiskAccessSettings) }
+
+    /// **Relaunch XCodeVault**: a new instance of this app, then this one quits — through the quit guard, so a running
+    /// operation is never cut short by it (`AppEnvironment.relaunch`).
+    func relaunch() { environment.relaunch() }
+
     /// Whether `row` shows its hint (`AccessChecklist.showsHint`).
     func showsAccessHint(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.showsHint(row, openedSettings: openedFullDiskAccessSettings) }
 
@@ -641,7 +648,9 @@ struct PrivilegedActionControlView: View {
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
             if showsGuidance {
+                // One line; the manual route is its tooltip (HIG review X6).
                 InlineCodeText(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
+                    .help(L10n.tr("app.access.helper.action.manualRoute"))
             }
         }
     }

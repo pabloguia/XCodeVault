@@ -90,7 +90,7 @@ final class AppTextCoverageTests: XCTestCase {
     // MARK: - The Access checklist's keys (Task 1)
 
     func testEveryAccessChecklistKeyIsInTheCatalogInEveryLanguage() {
-        XCTAssertEqual(AccessChecklist.allKeys.count, 24)
+        XCTAssertEqual(AccessChecklist.allKeys.count, 27)
         for key in AccessChecklist.allKeys {
             let byLocale = L10nCatalog.core.strings[key] ?? L10nCatalog.core.plurals[key]?.mapValues { $0["other"] ?? "" }
             for locale in L10n.supportedLocales {
@@ -123,12 +123,14 @@ final class AppTextCoverageTests: XCTestCase {
             XCTAssertFalse(text.contains("will"), text)
         }
         let guidance = AppText.access(AccessChecklist.Key.helperActionSignedReleaseOrCLI, bytes: nil, folders: nil)
-        // A condition, never an instruction to use a release that does not exist (final review I1).
-        XCTAssertTrue(guidance.contains("needs a signed build that includes it") && guidance.contains("none is released yet"), guidance)
+        // A condition, never an instruction to use a release that does not exist (final review I1); one line (R5, X6).
+        XCTAssertTrue(guidance.lowercased().contains("needs a signed build that includes the helper"), guidance)
+        XCTAssertTrue(guidance.contains("none is released yet"), guidance)
         XCTAssertFalse(guidance.lowercased().contains("use the signed release"), guidance)
-        // Hedged like `perm.helper.next.unavailableInThisBuild`: not every action has a manual route.
-        XCTAssertTrue(guidance.lowercased().contains("where there is a manual route"), guidance)
-        XCTAssertTrue(guidance.contains("`xcodevaultctl doctor`") && guidance.contains("`xcodevaultctl vault init`"), guidance)
+        // The manual route moved to the guidance's tooltip (`Row.helpKey`), hedged like `perm.helper.next.unavailableInThisBuild`.
+        let route = AppText.access(AccessChecklist.Key.helperManualRoute, bytes: nil, folders: nil)
+        XCTAssertTrue(route.lowercased().contains("where there is a manual route"), route)
+        XCTAssertTrue(route.contains("`xcodevaultctl doctor`") && route.contains("`xcodevaultctl vault init`"), route)
     }
 
     /// The helper's status in a build without it never stands alone: its row's action says what to do instead (spec §6.3).

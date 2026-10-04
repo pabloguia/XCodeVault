@@ -92,15 +92,15 @@ struct StorageView: View {
             }
             TableColumn(L10n.tr("app.column.category"), sortUsing: StorageTable.Column.category.comparator()) { Text(verbatim: $0.categoryName) }
             TableColumn(L10n.tr("app.column.outcome"), sortUsing: StorageTable.Column.outcome.comparator()) { Text(verbatim: $0.outcome) }
-            TableColumn(L10n.tr("app.column.strategy"), sortUsing: StorageTable.Column.strategy.comparator()) {
-                Text(verbatim: AppText.name($0.strategy?.rawValue ?? "", experimental: $0.isExperimental))
+            TableColumn(L10n.tr("app.column.strategy"), sortUsing: StorageTable.Column.strategy.comparator()) { row in
+                // The strategy's name in words, and the experimental badge every experimental row carries (rule 10).
+                HStack(spacing: 4) {
+                    Text(verbatim: row.strategy.map(AppText.strategy) ?? "")
+                    if row.isExperimental { MarkerBadges(markers: [.experimental]) }
+                }
             }
             TableColumn(L10n.tr("app.column.path"), sortUsing: StorageTable.Column.path.comparator()) { row in
-                let it = row.item
-                let marks =
-                    (it.isSymlink ? "  " + L10n.tr("app.storage.symlink") : "") + (it.isMountPoint ? "  " + L10n.tr("app.storage.mountPoint") : "")
-                    + (it.mountStateUndetermined ? "  " + L10n.tr("app.storage.mountStateUnreadable") : "")
-                Text(verbatim: it.path + marks).font(.system(.body, design: .monospaced))
+                StoragePathCell(item: row.item)
             }
         }
     }
@@ -172,9 +172,11 @@ struct SimulatorsView: View {
                         Text(verbatim: $0.platformDisplayName)
                     }
                     TableColumn(L10n.tr("app.column.version"), sortUsing: SimulatorsTable.RuntimeColumn.version.comparator()) {
-                        Text(verbatim: ($0.version ?? "?") + " (" + ($0.build ?? "?") + ")")
+                        Text(verbatim: [$0.version, $0.build.map { "(" + $0 + ")" }].compactMap { $0 }.joined(separator: " "))
                     }
-                    TableColumn(L10n.tr("app.column.state"), sortUsing: SimulatorsTable.RuntimeColumn.state.comparator()) { Text(verbatim: $0.state ?? "?") }
+                    TableColumn(L10n.tr("app.column.state"), sortUsing: SimulatorsTable.RuntimeColumn.state.comparator()) {
+                        Text(verbatim: $0.state ?? "—").foregroundStyle($0.state == nil ? .secondary : .primary)
+                    }
                     TableColumn(L10n.tr("app.column.mounted"), sortUsing: SimulatorsTable.RuntimeColumn.mounted.comparator()) {
                         Text(verbatim: $0.isMounted ? L10n.tr("app.value.yes") : L10n.tr("app.value.no"))
                     }
@@ -213,5 +215,31 @@ struct SimulatorsView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A Storage path (R5, HIG review ST4, X3): a symlink, a mount point or an unreadable mount state as a symbol and a short
+/// word before the path — the cue stays visible (rule 7) without uppercase text appended to it — and the whole path in
+/// its tooltip.
+struct StoragePathCell: View {
+    let item: StorageItem
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if item.isSymlink { marker("arrow.turn.up.right", L10n.tr("app.storage.symlink")) }
+            if item.isMountPoint { marker("externaldrive.connected.to.line.below", L10n.tr("app.storage.mountPoint")) }
+            if item.mountStateUndetermined { marker("questionmark.circle", L10n.tr("app.storage.mountStateUnreadable")) }
+            Text(verbatim: item.path).font(.system(.body, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+        }
+        .help(item.path)
+    }
+
+    private func marker(_ symbol: String, _ word: String) -> some View {
+        Label {
+            Text(verbatim: word)
+        } icon: {
+            Image(systemName: symbol)
+        }
+        .labelStyle(.titleAndIcon).font(.caption).foregroundStyle(.secondary)
     }
 }

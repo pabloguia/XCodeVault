@@ -1973,7 +1973,7 @@ still 0 entries with its mtime at 2026-09-25 19:19. Two instruments, read separa
 Limits: the tracker says a runtime was used, not by whom or how, so this cannot be counted as
 interactive use. These are the agent's own commands and are not in an evidence file.
 
-## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **UNVERIFIED**, evidence pending)*
+## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **VERIFIED on macOS 26.7.1 · Intel**, 2026-10-04, by the user's manual check; other versions unmeasured)*
 
 **Claim.** One `open(2)` of a directory that TCC guards under Full Disk Access (`SystemPolicyAllFiles`) —
 `~/Library/Safari`, reading nothing — makes macOS list the calling app in System Settings ▸ Privacy &
@@ -1986,14 +1986,28 @@ Support/com.apple.TCC/TCC.db`) on every check, and the user still found it missi
 path is also protected by System Integrity Protection, which may refuse before TCC is asked, so it does not
 falsify the Safari variant — but it shows that "the app touched something guarded" is not enough.
 
-**Status: UNVERIFIED.** No API reports the list; tests replace the attempt with a closure and never touch
-TCC. Until the check below is recorded, the app's copy is hedged: "XCodeVault should now be in the list —
-turn its switch on. If it isn't there, add it with +."
+**Status: VERIFIED on one combination — macOS 26.7.1 · x86_64 (Intel), 2026-10-04.** The user ran the
+manual procedure below in a real window: after the app's button, XCodeVault appeared in System Settings ▸
+Privacy & Security ▸ Full Disk Access with its switch **off**; the user switched it on, and macOS then
+recommended relaunching the app. The signing of that build was not recorded. No API reports the list; tests
+still replace the attempt with a closure and never touch TCC. Every other macOS version is **unmeasured**.
+
+What changed in the app (R5): the hint is no longer hedged — "XCodeVault is now in the list — turn its switch
+on. If it isn't there, click + and choose XCodeVault." — and keeps the **+** fallback for the versions not
+measured. Because macOS asked for a relaunch, the Access screen offers **Relaunch XCodeVault** once the user
+has opened the pane from the app and the running process still cannot open the indicator
+(`AccessChecklist.offersRelaunch`): a grant this process does not see yet looks exactly like no grant, so the
+button comes with "If you turned it on, relaunch XCodeVault so the change takes effect." Whether a relaunch is
+needed on every version, or only sometimes, is not measured.
+
+Before the check, the copy was hedged: "XCodeVault should now be in the list — turn its switch on. If it
+isn't there, add it with +."
 
 **Manual procedure (one macOS version is enough to start).**
 1. Use a build whose app is **not** yet in the Full Disk Access list (`tccutil reset SystemPolicyAllFiles
    <bundle id>` is the user's call, not the agent's), and note how it is signed (ad hoc or Developer ID).
-2. In XCodeVault, click **Open Full Disk Access Settings**.
+2. In XCodeVault, click **Open System Settings** on the Full Disk Access row (named **Open Full Disk Access
+   Settings** before R5).
 3. In the pane that opens, note whether XCodeVault is listed (name, or a path for an ad hoc build) and
    whether its switch is off.
 4. Record macOS version and build, the signing, and the result in `COMPATIBILITY_MATRIX.md` and here. A

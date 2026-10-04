@@ -150,7 +150,9 @@ struct MainView: View {
     func detail(_ r: ScanReport) -> some View {
         switch model.section {
         case .overview:
-            OverviewView(report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) })
+            OverviewView(
+                report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) },
+                showHealth: { model.section = .health })
         case .delete: DeleteView(model: model)
         case .park, .runExternally:
             let bucket: SavingsBucket = model.section == .park ? .parkExternally : .runFromExternal

@@ -214,7 +214,7 @@ final class BucketViewsTests: XCTestCase {
         XCTAssertEqual(InlineCode.runs("``"), [], "an empty span is nothing")
         XCTAssertEqual(InlineCode.runs("a `b` c `d"), [R("a ", isCode: false), R("b", isCode: true), R(" c `d", isCode: false)], "unmatched stays text")
         // Every note and vault line the views show comes apart with no backtick left over.
-        for text in [L10n.tr("cli.plan.note.rootOnly"), L10n.tr("cli.plan.note.exportFirst"), L10n.tr("app.plan.vault.none")] {
+        for text in [L10n.tr("cli.plan.note.rootOnly"), L10n.tr("cli.plan.note.exportFirst"), L10n.tr("app.volumes.vaults.none")] {
             XCTAssertFalse(InlineCode.runs(text).contains { $0.text.contains("`") }, text)
             XCTAssertTrue(InlineCode.runs(text).contains(where: \.isCode), text)
         }

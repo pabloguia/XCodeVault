@@ -14,12 +14,37 @@ enum AppText {
     /// The product name, never translated (docs/process/LOCALIZATION.md).
     static let productName = "XCodeVault"
 
-    /// "(experimental)": translated, and shown wherever the English shows it (CLAUDE.md rule 10).
+    /// "Experimental": the one badge every experimental row, option and action carries (CLAUDE.md rule 10), in title case
+    /// app-wide (R5, HIG review P3).
     static var experimental: String { L10n.tr("app.label.experimental") }
 
-    /// `name (experimental)` when `isExperimental`.
-    static func name(_ name: String, experimental isExperimental: Bool) -> String {
-        isExperimental ? name + " " + experimental : name
+    /// A marker badge's word (R5, HIG review P3, X2): the app's "Experimental"; the others are the `plan` command's
+    /// words, which the app starts with a capital as a label does.
+    static func marker(_ marker: SavingsMarker) -> String {
+        if case .experimental = marker { return experimental }
+        let text = marker.localizedText
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
+    /// A strategy's name in words (R5, HIG review ST4, X1): never its identifier.
+    static func strategy(_ strategy: Strategy) -> String {
+        switch strategy {
+        case .nativeConfiguration: L10n.tr("app.strategy.nativeConfiguration")
+        case .safeCleanup: L10n.tr("app.strategy.safeCleanup")
+        case .coldStorage: L10n.tr("app.strategy.coldStorage")
+        case .userDirectoryRelocation: L10n.tr("app.strategy.userDirectoryRelocation")
+        case .symlinkRelocation: L10n.tr("app.strategy.symlinkRelocation")
+        case .canonicalMount: L10n.tr("app.strategy.canonicalMount")
+        case .downloadRepository: L10n.tr("app.strategy.downloadRepository")
+        case .restoreOnDemand: L10n.tr("app.strategy.restoreOnDemand")
+        case .appleManaged: L10n.tr("app.strategy.appleManaged")
+        case .neverMove: L10n.tr("app.strategy.neverMove")
+        }
+    }
+
+    /// The Overview card's eyebrow (R5, HIG review O1): what happens to the space, not to the deletion.
+    static func cardEyebrow(permanent: Bool) -> String {
+        permanent ? L10n.tr("app.overview.card.eyebrow.permanent") : L10n.tr("app.overview.card.eyebrow.temporary")
     }
 
     static func severity(_ severity: Finding.Severity) -> String {
@@ -241,6 +266,9 @@ enum AppText {
         case K.helperStatusAwaitingApproval: return L10n.tr("app.access.status.helper.awaitingApproval")
         case K.helperStatusUnavailable: return L10n.tr("app.access.status.helper.unavailable")
         case K.fdaHintInList: return L10n.tr("app.access.fda.hint.inList")
+        case K.helperManualRoute: return L10n.tr("app.access.helper.action.manualRoute")
+        case K.fdaActionRelaunch: return L10n.tr("app.access.fda.action.relaunch")
+        case K.fdaHintRelaunch: return L10n.tr("app.access.fda.hint.relaunch")
         default: return key
         }
     }

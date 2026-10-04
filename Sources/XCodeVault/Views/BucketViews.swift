@@ -3,20 +3,19 @@ import AppKit
 import SwiftUI
 import XCodeVaultCore
 
-/// The top of a bucket view: the bucket's symbol, title and color band, what it promises and what undoing it costs.
-/// Never color alone: the symbol and the title say which bucket this is, and the color is a fill.
+/// The top of a bucket view (R5, HIG review D6, X4): one line — the bucket's symbol and what it promises — beside the color
+/// band; the window title already names the view. The bucket's full title and what undoing it costs are its tooltip.
+/// Never color alone: the symbol and the words say which bucket this is, and the color is a fill.
 struct BucketHeaderView: View {
     let bucket: SavingsBucket
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                BucketSymbol(bucket: bucket, decorative: true).font(.title2)
-                Text(verbatim: bucket.localizedTitle).font(.title3).bold()
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            BucketSymbol(bucket: bucket, decorative: true).font(.title3)
             Text(verbatim: bucket.localizedPromise).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: bucket.localizedUndoCost).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.vertical, 2)
         .padding(.leading, 10)
+        .help(bucket.localizedTitle + "\n" + bucket.localizedUndoCost)
         .overlay(alignment: .leading) {
             // The bucket color as a fill, never as text.
             RoundedRectangle(cornerRadius: 2).fill(bucket.color).frame(width: 4).accessibilityHidden(true)
@@ -32,7 +31,7 @@ struct MarkerBadges: View {
         HStack(spacing: 4) {
             ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
                 Label {
-                    Text(verbatim: marker.localizedText)
+                    Text(verbatim: AppText.marker(marker))
                 } icon: {
                     Image(systemName: Self.symbol(marker))
                 }
@@ -40,6 +39,7 @@ struct MarkerBadges: View {
                 .font(.caption)
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
+                .help(AppText.marker(marker))
             }
         }
     }
@@ -106,10 +106,10 @@ struct PlanRowView: View {
                     copies += 1
                     AccessibilityNotification.Announcement(L10n.tr("app.plan.copied")).post()
                 } label: {
-                    Label(
-                        copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copyCommand"),
-                        systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
+                // Secondary to the command beside it (HIG review P4).
+                .buttonStyle(.bordered).controlSize(.small)
                 // Several rows, several buttons: VoiceOver hears whose command each one copies.
                 .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
                 .task(id: copies) {
@@ -153,13 +153,7 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 14) {
                 BucketHeaderView(bucket: bucket)
                 InterruptedMigrationsBanner(items: interrupted, copy: copyCommand)
-                if let vault {
-                    Label {
-                        InlineCodeText(AppText.vaultStatus(vault)).font(.callout)
-                    } icon: {
-                        Image(systemName: Self.vaultSymbol(vault))
-                    }
-                }
+                if let vault { VaultStatusRow(status: vault, copy: copyCommand) }
                 InlineCodeText(L10n.tr("app.plan.intro")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if rows.isEmpty {
                     Text.l10n(L10n.tr("cli.plan.empty")).foregroundStyle(.secondary)
@@ -186,6 +180,47 @@ struct PlanView: View {
         case .offline: "externaldrive.badge.xmark"
         case .needsAttention: "externaldrive.badge.exclamationmark"
         case .ready: "externaldrive.badge.checkmark"
+        }
+    }
+}
+
+/// Park's vault line as a status row (R5, HIG review P2): the state's symbol, tinted only where it means something — ready,
+/// needs attention — beside its words; with no vault, the command that sets one up and a **Copy** button instead of a
+/// command in a sentence.
+struct VaultStatusRow: View {
+    let status: VaultStatus
+    let copy: @MainActor (String) -> Void
+    /// The command `vault init` takes, with the drive's name to fill in. A command is never translated.
+    static let initCommand = "xcodevaultctl vault init /Volumes/<name>"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label {
+                Text(verbatim: AppText.vaultStatus(status)).font(.callout).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: PlanView.vaultSymbol(status)).foregroundStyle(Self.tint(status)).accessibilityHidden(true)
+            }
+            if status == .noVault {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(verbatim: Self.initCommand).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    Button {
+                        copy(Self.initCommand)
+                    } label: {
+                        Label(L10n.tr("app.plan.copy"), systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                }
+                .padding(.leading, 28)
+            }
+        }
+    }
+
+    /// The symbol's tint; the words say the same.
+    static func tint(_ status: VaultStatus) -> Color {
+        switch status {
+        case .ready: .green
+        case .needsAttention: .orange
+        case .noVault, .offline: .secondary
         }
     }
 }

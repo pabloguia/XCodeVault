@@ -884,8 +884,9 @@ final class PrivilegeRequirementTests: XCTestCase {
     }
 
     func testTheDaemonsFullDiskAccessIsSaidToBeUnmeasured() {
-        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.label.contains("unmeasured"))
-        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.why.contains("unmeasured"))
+        // R5 (HIG review X1): the badge is short and the sentence says it in plain words, without ids.
+        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.label.contains("Full Disk Access"))
+        XCTAssertTrue(PrivilegeRequirement.helperWithFullDiskAccess.why.contains("isn’t known until it first runs"))
     }
 
     func testEveryRequirementHasItsOwnText() {

@@ -13,6 +13,8 @@ struct OverviewView: View {
     let access: AccessChecklist.Row?
     var act: @MainActor (AccessChecklist.Action) -> Void = { _ in }
     var review: @MainActor (SavingsBucket) -> Void = { _ in }
+    /// **Show in Health** beside the critical findings (R5, HIG review O4).
+    var showHealth: @MainActor () -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -38,16 +40,33 @@ struct OverviewView: View {
                 if !report.warnings.isEmpty {
                     GroupBox(L10n.tr("app.overview.warnings.title")) {
                         VStack(alignment: .leading) {
-                            ForEach(report.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+                            // Primary text; only the symbol is tinted (HIG review O3).
+                            ForEach(report.warnings, id: \.self) { warning in
+                                Label {
+                                    Text(verbatim: warning).fixedSize(horizontal: false, vertical: true)
+                                } icon: {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                }
+                            }
                         }
                     }
                 }
                 let critical = findings.filter { $0.severity >= .error }
                 if !critical.isEmpty {
+                    // Health, as the sidebar calls it, with a way to go there; each severity as its symbol (HIG review O4).
                     GroupBox(L10n.plural("app.overview.doctor.issues", count: critical.count)) {
-                        VStack(alignment: .leading) {
-                            ForEach(critical) { Text.l10n(L10n.tr("app.overview.doctor.issue", AppText.severity($0.severity), $0.title)) }
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(critical) { finding in
+                                Label {
+                                    Text(verbatim: finding.title).fixedSize(horizontal: false, vertical: true)
+                                } icon: {
+                                    Image(systemName: finding.severity.symbolName).foregroundStyle(HealthCardView.tint(finding.severity))
+                                        .accessibilityLabel(Text(verbatim: AppText.severity(finding.severity)))
+                                }
+                            }
+                            Button(L10n.tr("app.overview.showInHealth"), action: showHealth)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 Text.l10n(L10n.tr("app.overview.footer")).font(.footnote).foregroundStyle(.secondary)
@@ -96,10 +115,11 @@ struct OverviewCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 BucketSymbol(bucket: card.bucket, decorative: true).font(.title3)
-                Text.l10n(card.isPermanent ? L10n.tr("savings.permanent.title") : L10n.tr("savings.temporary.title"))
-                    .font(.caption).bold().foregroundStyle(.secondary)
+                Text.l10n(AppText.cardEyebrow(permanent: card.isPermanent)).font(.caption).bold().foregroundStyle(.secondary)
             }
+            // What it promises and what undoing it costs are the title's tooltip and the bucket view's header (HIG review O2).
             Text(verbatim: card.bucket.localizedTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
+                .help(card.bucket.localizedPromise + "\n" + card.bucket.localizedUndoCost)
             switch card.amount {
             case .none: Text(verbatim: OverviewView.text(card.amount)).font(.title3).foregroundStyle(.secondary)
             case .upTo, .atLeast: Text(verbatim: OverviewView.text(card.amount)).font(.title2).bold().monospacedDigit()
@@ -112,13 +132,11 @@ struct OverviewCardView: View {
             if let lossy = card.losesUserDataBytes {
                 // The Temporary headline is not all recoverable (S3 review): what deleting loses for good, on the card.
                 Label {
-                    Text.l10n(L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout)
+                    Text.l10n(L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout).fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
             }
-            Text(verbatim: card.bucket.localizedPromise).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: card.bucket.localizedUndoCost).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(L10n.tr("app.overview.card.review"), action: review)
                 // Three cards, three buttons: VoiceOver hears which bucket each one reviews.
