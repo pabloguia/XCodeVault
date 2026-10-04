@@ -13,11 +13,14 @@ struct AppEnvironment: Sendable {
     var runner: @Sendable (any PrivilegedHelper) -> PrivilegedActionRunner
     var clean: @Sendable (CleanPlan, Bool) throws -> CleanResult
     var open: @MainActor @Sendable (URL) -> Void
-    /// **Copy command** in the Park, Run externally and Delete views: the string goes to the pasteboard as is.
+    /// **Copy command** and **Copy log** in the Park, Run externally and Delete views: the string goes to the pasteboard as is.
     var copy: @MainActor @Sendable (String) -> Void
     /// Just before the Full Disk Access pane opens: one attempt at a folder Full Disk Access guards, so macOS lists the
     /// app in the pane (`FullDiskAccessRegistration`, R4). A no-op unless set: a test never touches TCC.
     var registerForFullDiskAccess: @Sendable () -> Void = {}
+    /// **Run…** in Park, Run externally and Delete (R3): previews, runs, the second steps and the folder panel. `.inert`
+    /// unless set, so a test that does not supply fakes cannot reach Core's operations.
+    var operations: OperationServices = .inert
 
     static let live = AppEnvironment(
         survey: nil, fullDiskAccess: { FullDiskAccessProbe().state() }, helper: LiveHelper(),
@@ -28,5 +31,5 @@ struct AppEnvironment: Sendable {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         },
-        registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() })
+        registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() }, operations: .live)
 }

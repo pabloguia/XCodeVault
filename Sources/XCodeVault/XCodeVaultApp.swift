@@ -125,8 +125,11 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
-            // records themselves are not kept: nothing else reads them (R4 review M6).
-            self.historyRows = Array(JournalTimeline.rows(journal).prefix(Self.historyLimit))
+            // records themselves are not kept: the interrupted banner (R3) takes what it needs from them here. An operation
+            // the Run sheet is running is in progress, not interrupted.
+            let running = runningJournalIDs
+            self.historyRows = Array(JournalTimeline.rows(journal, running: running).prefix(Self.historyLimit))
+            self.interruptedMigrations = Self.interruptedBanner(journal, running: running)
             // A kind the new rows no longer have cannot stay hidden: the menu would not offer it (R4 review M8).
             self.historyHiddenKinds.formIntersection(JournalTimeline.kinds(in: self.historyRows))
             // The bucket views first: the Delete view's access row reads their list.
@@ -135,6 +138,18 @@ final class AppModel {
             updateAccessBanner()
         } while scanGate.scanEnded()
     }
+
+    // MARK: - Run… (R3; the methods are in AppModel+Operations.swift)
+
+    /// The Run sheet, presented while non-nil. One at a time: there is one sheet, and **Run…** is refused while it runs.
+    var operationSheet: OperationSheetState?
+    /// The migrations the journal shows interrupted, with their recovery commands: the banner on Park, Run externally and
+    /// History.
+    var interruptedMigrations: [InterruptedMigration] = []
+    /// Held while an operation runs, so idle sleep does not interrupt a copy (HIG review §4).
+    var awakeActivity: (any NSObjectProtocol)?
+    /// The running operation's full log, when the environment keeps one.
+    var operationLogFile: OperationLogFile?
 
     // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
 
@@ -451,7 +466,8 @@ final class AppModel {
         deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
     }
 
-    /// **Copy command**: exactly the row's command, never a variant of it. The app runs none of these (spec §6.4).
+    /// **Copy command**: exactly the row's command, never a variant of it. **Run…** (R3) runs the operation through Core
+    /// instead, never this string.
     func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
