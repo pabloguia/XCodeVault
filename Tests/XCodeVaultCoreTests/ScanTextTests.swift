@@ -26,11 +26,13 @@ final class ScanTextTests: XCTestCase {
     }
 
     func testScanLeadsWithTheSavingsAndDropsTheOldSummary() {
-        let out = TextRenderer.scan(report())
+        // One report: `generatedAt` is the scan's clock, so two reports a second apart have different headers (CI flake).
+        let r = report()
+        let out = TextRenderer.scan(r)
         XCTAssertTrue(out.contains("What you can reclaim on this Mac"), out)
         XCTAssertFalse(out.contains("Summary:"), out)
         XCTAssertFalse(out.contains("with verified strategies only"), out)
-        XCTAssertTrue(out.hasPrefix(TextRenderer.status(report())), "status comes first")
+        XCTAssertTrue(out.hasPrefix(TextRenderer.status(r)), "status comes first")
     }
 
     /// `scan --no-sizes` measured nothing, so it has no savings to show; zeros would read as "nothing to reclaim"
