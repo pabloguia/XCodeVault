@@ -32,6 +32,9 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
         }
     }
 
+    /// Every drive preparation is experimental (rule 10, H17 pending on physical disks): the sheet's badge.
+    var isExperimental: Bool { preparationAction != nil }
+
     /// Whether the sheet shows the **Destination** picker (R6): the kinds that write to a vault or a folder.
     var usesDestination: Bool { needsVault || needsFolder }
 
@@ -126,6 +129,9 @@ struct OperationInputs: Sendable, Equatable {
     var acknowledgeTests = false
     /// True when the folder was chosen with **Choose Another Folder…** rather than from a vault's standard layout (R6).
     var folderIsCustom = false
+    /// I1: set when `folder` is a usable vault's standard folder (`VaultLayout`) — the vault directory it belongs to. Only
+    /// then may the run create the folder when it is missing; a folder chosen by hand never is.
+    var standardFolderOf: String?
     /// R6: the whole disk a preparation targets, and which option.
     var diskID: String?
     var driveOption: PreparationOption?
@@ -144,6 +150,8 @@ enum OperationBlocker: Sendable, Equatable {
     case driveGone
     /// R6: an erase waits for the exact name to be typed.
     case typeName(String)
+    /// R6 (H1): the disk at the previewed device id is not the disk that was previewed. Sticky until the sheet closes.
+    case diskChanged
     case core(String)
 }
 
@@ -159,6 +167,8 @@ enum PreparedOperation: Sendable {
     case diskPreparation(DiskPreparationPlan, confirmedName: String)
     /// R6: **Use This Drive** on a mounted volume.
     case useDrive(Volume)
+    /// R6 (I1): first create the vault's missing standard `folder` (only that, inside `vaultDirectory`), then run `then`.
+    indirect case creatingFolder(folder: String, vaultDirectory: String, then: PreparedOperation)
 
     /// The kind this prepared operation runs as.
     var kind: OperationKind {
@@ -176,14 +186,18 @@ enum PreparedOperation: Sendable {
             case .eraseDisk: .eraseDisk
             }
         case .useDrive: .useDrive
+        case .creatingFolder(_, _, let then): then.kind
         }
     }
 
     /// The journal id the operation will use, when it is known before it runs (a migration's plan carries it): the
     /// interrupted banner must not list the operation that is running right now.
     var journalID: String? {
-        if case .migration(let plan) = self { return plan.operationID }
-        return nil
+        switch self {
+        case .migration(let plan): return plan.operationID
+        case .creatingFolder(_, _, let then): return then.journalID
+        default: return nil
+        }
     }
 }
 
@@ -198,6 +212,8 @@ struct OperationPreview: Sendable {
     var prepared: PreparedOperation?
     /// Offload only: the library holds no installer for this runtime, so the sheet offers **Export installer first**.
     var installerMissing = false
+    /// I1: the vault's standard folder does not exist yet; the run creates it first ("Will create folder …").
+    var willCreateFolder: String?
 }
 
 /// How a run ended well.
@@ -240,8 +256,16 @@ struct OperationSheetState: Sendable {
     let row: SavingsPlanRow?
     /// R6: the drive a preparation or **Use This Drive** is for, as assessed when the sheet opened.
     var drive: DriveAssessment?
-    /// R6: what the user typed to confirm an erase. Not an input: typing does not plan again.
+    /// R6: what the user typed to confirm an erase. Not an input: typing does not plan again. Cleared on every re-plan.
     var confirmationText = ""
+    /// R6 (H1): the plan the user previewed. A re-plan after a refresh never replaces it: if the disk or the target is no
+    /// longer the same, the sheet is blocked (`diskChanged`). Reset only when the user changes the option or the form.
+    var previewedPlan: DiskPreparationPlan?
+    /// R6 (H1): the disk changed under the open sheet. Sticky: "Close this and preview again."
+    var diskChanged = false
+
+    /// The experimental badge in the title (rule 10): the plan row's strategy, or any drive preparation.
+    var showsExperimentalBadge: Bool { row?.option.isExperimental == true || kind.isExperimental }
     var kind: OperationKind
     var inputs: OperationInputs
     var preview: OperationPreview?

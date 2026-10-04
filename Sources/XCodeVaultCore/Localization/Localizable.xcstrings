@@ -3450,31 +3450,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "It holds a registered vault, so XCodeVault never offers to erase it."
+            "value" : "Erasing or repartitioning is blocked: this disk holds a vault."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Contiene un disco bóveda registrado, así que XCodeVault nunca ofrece borrarlo."
+            "value" : "Borrar o reparticionar está bloqueado: este disco contiene un disco bóveda."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "登録済みの保管庫があるため、XCodeVault は消去を提案しません。"
+            "value" : "消去と再パーティションはブロックされています: このディスクには保管庫があります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Ele contém um disco-cofre registrado, então o XCodeVault nunca oferece apagá-lo."
+            "value" : "Apagar ou reparticionar está bloqueado: este disco contém um disco-cofre."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "它包含已登记的保险库，因此 XCodeVault 绝不会提供抹掉它的选项。"
+            "value" : "抹掉或重新分区已被阻止：此磁盘包含保险库。"
           }
         }
       }
@@ -3509,6 +3509,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "这是内置磁盘。XCodeVault 绝不会抹掉或分区内置磁盘。"
+          }
+        }
+      }
+    },
+    "app.drives.refusal.mightBeTimeMachine" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An unmounted HFS+ partition might be a Time Machine backup; mount it so XCodeVault can check."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Una partición HFS+ sin montar podría ser una copia de Time Machine; móntala para que XCodeVault pueda comprobarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "マウントされていない HFS+ パーティションは Time Machine のバックアップかもしれません。XCodeVault が確認できるようにマウントしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Uma partição HFS+ não montada pode ser um backup do Time Machine; monte-a para o XCodeVault verificar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "未装载的 HFS+ 分区可能是时间机器备份；请装载它，以便 XCodeVault 检查。"
           }
         }
       }
@@ -7399,6 +7433,40 @@
         }
       }
     },
+    "app.prep.identityWeak" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This disk can't be told apart from another of the same model."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Este disco no se puede distinguir de otro del mismo modelo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このディスクは同じ機種の別のディスクと区別できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Este disco não pode ser distinguido de outro do mesmo modelo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "无法将此磁盘与同型号的另一磁盘区分开。"
+          }
+        }
+      }
+    },
     "app.prep.label.drive" : {
       "localizations" : {
         "en" : {
@@ -8317,6 +8385,40 @@
         }
       }
     },
+    "app.quit.keepRunningOnly.vaultRegistration" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A drive is being registered as a vault. Stopping part-way could leave it registered without its folders, so XCodeVault can’t quit until it finishes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se está registrando un disco como disco bóveda. Detenerlo a medias podría dejarlo registrado sin sus carpetas, así que XCodeVault no puede salir hasta que termine."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ドライブを保管庫として登録しています。途中で止めるとフォルダのない状態で登録が残る可能性があるため、終わるまで XCodeVault は終了できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Um disco está sendo registrado como disco-cofre. Parar no meio pode deixá-lo registrado sem as pastas, então o XCodeVault não pode encerrar até terminar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在将驱动器登记为保险库。中途停止可能会使其已登记但没有文件夹，因此 XCodeVault 在完成之前无法退出。"
+          }
+        }
+      }
+    },
     "app.quit.message" : {
       "localizations" : {
         "en" : {
@@ -8653,6 +8755,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "请选择一个保险库。"
+          }
+        }
+      }
+    },
+    "app.run.blocker.diskChanged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The disk changed. Close this and preview again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El disco cambió. Cierra esto y vuelve a revisarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ディスクが変わりました。閉じてもう一度確認してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O disco mudou. Feche isto e faça a revisão de novo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "磁盘已更改。请关闭此窗口并重新预览。"
           }
         }
       }
@@ -9639,6 +9775,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "该驱动器现在是保险库，并带有标准文件夹。"
+          }
+        }
+      }
+    },
+    "app.run.done.registeredPartial" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registered; the standard folders could not be created."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Registrado; no se pudieron crear las carpetas estándar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "登録しましたが、標準フォルダを作成できませんでした。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Registrado; as pastas padrão não puderam ser criadas."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已登记；但无法创建标准文件夹。"
           }
         }
       }
@@ -12325,6 +12495,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Xcode 重新使用 %@。"
+          }
+        }
+      }
+    },
+    "app.run.willCreateFolder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Will create folder %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se creará la carpeta %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "フォルダ %@ を作成します"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Vai criar a pasta %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "将创建文件夹 %@"
           }
         }
       }

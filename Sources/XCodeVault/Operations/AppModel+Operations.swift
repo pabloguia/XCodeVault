@@ -31,7 +31,7 @@ extension AppModel {
         // R6: the destination starts at the only usable vault, and a folder at that vault's standard folder (`VaultLayout`).
         if kind.usesDestination, let uuid = defaultVaultUUID {
             inputs.vaultUUID = uuid
-            if kind.needsFolder { inputs.folder = Self.defaultFolder(kind, usableVaults.first { $0.volume.volumeUUID == uuid }) }
+            if kind.needsFolder { Self.applyStandardFolder(kind, usableVaults.first { $0.volume.volumeUUID == uuid }, to: &inputs) }
         }
         operationSheet = OperationSheetState(row: row, kind: kind, inputs: inputs)
         Task { await previewOperation() }
@@ -51,9 +51,8 @@ extension AppModel {
     func previewOperation() async {
         guard let sheet = operationSheet, sheet.phase == .review else { return }
         if sheet.kind.isDriveKind {
-            // R6: planned from the Drives snapshot, on this actor — pure Core; the run reads the disks again.
-            operationSheet?.preview = Self.drivePreview(sheet.kind, sheet.inputs, snapshot: driveSnapshot, vaults: vaultChecks)
-            operationSheet?.isPreviewing = false
+            // R6: planned from the Drives snapshot, on this actor — pure Core; the run reads the disks again (H1 inside).
+            previewDriveOperation()
             return
         }
         let missing = Self.inputBlockers(sheet.kind, sheet.inputs)
@@ -103,7 +102,10 @@ extension AppModel {
             updateOperationInputs {
                 $0.vaultUUID = nil
                 // A standard folder of the vault that went away goes with it; a folder the user chose stays.
-                if kind.needsFolder && !$0.folderIsCustom { $0.folder = nil }
+                if kind.needsFolder && !$0.folderIsCustom {
+                    $0.folder = nil
+                    $0.standardFolderOf = nil
+                }
             }
         } else {
             checkOperationAgain()
@@ -117,6 +119,7 @@ extension AppModel {
             $0.folder = path
             // **Choose Another Folder…** overrides the vault's standard folder (R6): the picker says "Other folder".
             $0.folderIsCustom = true
+            $0.standardFolderOf = nil
             $0.vaultUUID = nil
         }
     }
@@ -144,6 +147,7 @@ extension AppModel {
         case .simulatorWorkRunning: L10n.tr("app.run.blocker.simulatorWork")
         case .driveGone: L10n.tr("app.run.blocker.driveGone")
         case .typeName(let name): L10n.tr("app.run.blocker.typeName", name)
+        case .diskChanged: L10n.tr("app.run.blocker.diskChanged")
         case .core(let why): why
         }
     }
@@ -156,7 +160,9 @@ extension AppModel {
         else { return }
         s.offloadToReturnTo = s.inputs
         s.kind = .exportRuntime
-        s.inputs = OperationInputs(folder: s.inputs.folder, platform: platform, buildVersion: runtime.version)
+        s.inputs = OperationInputs(
+            folder: s.inputs.folder, platform: platform, buildVersion: runtime.version, folderIsCustom: s.inputs.folderIsCustom,
+            standardFolderOf: s.inputs.standardFolderOf)
         s.preview = nil
         operationSheet = s
         Task { await previewOperation() }
@@ -220,6 +226,8 @@ extension AppModel {
         /// R6: `diskutil` erasing or partitioning a drive, or registering one: stopping part-way leaves the disk in a state
         /// nobody chose.
         case diskPreparation
+        /// R6: **Use This Drive** writing the registry, the sentinel and the folders: no diskutil, but not stopped half-way.
+        case vaultRegistration
     }
 
     /// The decision per stage and kind. Copying, verifying and removing an original keep running; so do an export and an
@@ -231,7 +239,8 @@ extension AppModel {
             switch kind {
             case .exportRuntime: return .keepRunningOnly(.export)
             case .offloadRuntime: return .keepRunningOnly(.offload)
-            case .addVolume, .addPartition, .eraseVolume, .eraseDisk, .useDrive: return .keepRunningOnly(.diskPreparation)
+            case .addVolume, .addPartition, .eraseVolume, .eraseDisk: return .keepRunningOnly(.diskPreparation)
+            case .useDrive: return .keepRunningOnly(.vaultRegistration)
             default: return .keepRunningOnly(.migration)
             }
         }
@@ -281,7 +290,8 @@ extension AppModel {
     func runOperation() async {
         guard canConfirmOperation, var s = operationSheet, var prepared = s.preview?.prepared else { return }
         // R6: the name as typed goes to Core, which refuses an erase without the exact name whatever was decided here.
-        if case .diskPreparation(let plan, _) = prepared { prepared = .diskPreparation(plan, confirmedName: s.confirmationText) }
+        // H1: always the plan the user previewed, never one derived after the preview.
+        if case .diskPreparation(let plan, _) = prepared { prepared = .diskPreparation(s.previewedPlan ?? plan, confirmedName: s.confirmationText) }
         s.phase = .running
         s.stage = s.kind.runningStage
         s.startedAt = Date()
@@ -539,8 +549,14 @@ extension AppModel {
         guard !isOperationRunning else { return }
         operationSheet = nil
         // R6: back to the Run sheet **Prepare…** came from, its destination reviewed against the drives as they are now.
-        if let back = suspendedOperationSheet {
+        if var back = suspendedOperationSheet {
             suspendedOperationSheet = nil
+            // Minor 3: a vault the preparation just made, when it is the only usable one, becomes the destination.
+            if back.inputs.vaultUUID == nil, !back.inputs.folderIsCustom, back.kind.usesDestination, let uuid = defaultVaultUUID {
+                back.inputs.vaultUUID = uuid
+                if back.kind.needsFolder { Self.applyStandardFolder(back.kind, usableVaults.first { $0.volume.volumeUUID == uuid }, to: &back.inputs) }
+                back.preview = nil
+            }
             operationSheet = back
             revalidateOperationAfterScan()
         }

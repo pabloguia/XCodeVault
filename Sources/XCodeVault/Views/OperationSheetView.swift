@@ -66,7 +66,7 @@ struct OperationSheetView: View {
             Text(verbatim: OperationText.title(s.kind)).font(.headline)
             // Rule 10: where the strategy is experimental, the badge is in the title, not a footnote. Every drive preparation
             // is experimental (R6, H17).
-            if s.row?.option.isExperimental == true || s.kind.preparationAction != nil { MarkerBadges(markers: [.experimental]) }
+            if s.showsExperimentalBadge { MarkerBadges(markers: [.experimental]) }
             Spacer(minLength: 0)
         }
     }
@@ -87,6 +87,13 @@ struct OperationSheetView: View {
         } else if let p = s.preview {
             facts(s, p)
             if s.kind.isDriveKind { drivePlan(s) }
+            if let folder = p.willCreateFolder {
+                Label {
+                    Text(verbatim: L10n.tr("app.run.willCreateFolder", folder)).font(.callout).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "folder.badge.plus").accessibilityHidden(true)
+                }
+            }
             if !p.blockers.isEmpty {
                 // The fix for a precondition the world changes — Xcode quit, the vault reconnected (review I3).
                 Button(L10n.tr("app.run.checkAgain")) { model.checkOperationAgain() }
@@ -194,10 +201,7 @@ struct OperationSheetView: View {
     /// **Prepare…** (`AppModel.prepareFromDestination`), which comes back to this sheet when it closes.
     @ViewBuilder
     private func otherDrives(_ s: OperationSheetState) -> some View {
-        let drives = model.destinationChoices.compactMap { c -> DriveAssessment? in
-            if case .drive(let a) = c.target { return a }
-            return nil
-        }
+        let drives = model.destinationDrives
         ForEach(drives) { a in
             HStack(spacing: 8) {
                 Label {
@@ -274,6 +278,13 @@ struct OperationSheetView: View {
                         ForEach(plan.destroys, id: \.id) { v in Text(verbatim: "• " + DriveText.destroyed(v)).font(.callout) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if model.previewedDiskIsIndistinguishable {
+                Label {
+                    Text.l10n(L10n.tr("app.prep.identityWeak")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).accessibilityHidden(true)
                 }
             }
             if let name = plan.confirmationName {
@@ -354,7 +365,11 @@ struct OperationSheetView: View {
             }
         default:
             if let r = s.result {
-                Label(OperationText.done(r), systemImage: "checkmark.circle.fill").fixedSize(horizontal: false, vertical: true)
+                Label(OperationText.done(r), systemImage: model.registrationFoldersError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let why = model.registrationFoldersError {
+                InlineCodeText(why).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
         }
         secondStep(s)

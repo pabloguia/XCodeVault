@@ -58,12 +58,46 @@ public enum VaultLayout {
     }
 }
 
+extension VaultLayout {
+    /// I1: creates ONE standard folder of a registered vault — `folder` must be exactly `path(purpose, vaultDirectory:)`
+    /// for one purpose, the vault directory must exist, and the folder must resolve inside it. Nothing else is ever
+    /// created; a folder chosen by hand is never passed here. Ownership failures carry `OwnershipAdvice`.
+    public static func createStandardFolder(_ folder: String, vaultDirectory: String, fileManager: FileManager = .default) throws {
+        guard Purpose.allCases.contains(where: { path($0, vaultDirectory: vaultDirectory) == folder }) else {
+            throw VaultError("\(folder) is not a standard folder of the vault \(vaultDirectory). Nothing was created.")
+        }
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: vaultDirectory, isDirectory: &isDir), isDir.boolValue else {
+            throw VaultError("The vault directory \(vaultDirectory) does not exist. Nothing was created.")
+        }
+        let inside: Bool
+        do { inside = try PathSafety.isContainedAllowingMissingParents(folder, in: vaultDirectory) } catch {
+            throw VaultError("Cannot tell where \(folder) would be created: \(error). Nothing was created.")
+        }
+        guard inside else { throw VaultError("\(folder) is not inside \(vaultDirectory). Nothing was created.") }
+        do {
+            try fileManager.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        } catch {
+            var message = "Cannot create \(folder): \(error.localizedDescription)"
+            if VaultDirectoryRefusal.isPermissionRefusal(error) {
+                message += "\n" + OwnershipAdvice.createVaultDirectory(mountPoint: vaultDirectory, relativeDirectory: (folder as NSString).lastPathComponent)
+            }
+            throw VaultError(message)
+        }
+    }
+}
+
 /// **Use This Drive** (R6): register the volume as a vault with the same validations as `vault init`, then create the
 /// standard layout.
 public enum DriveRegistration {
+    /// The vault is registered in both cases; `foldersError` says the standard folders could not all be made (I2) — a
+    /// distinct, partial outcome, never reported as "not registered".
     public struct Outcome: Sendable, Equatable {
         public var vault: VaultVolume
         public var folders: [String]
+        /// Why the standard folders could not be created, with `OwnershipAdvice` when it was a permission refusal.
+        public var foldersError: String?
+        public var isComplete: Bool { foldersError == nil }
     }
 
     public static func useDrive(
@@ -74,8 +108,16 @@ public enum DriveRegistration {
         guard !volume.isNetwork else { throw VaultError("\(volume.volumeName) is a network volume; a vault must be a local disk.") }
         let vault = try registry.register(volume, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
         guard let mp = volume.mountPoint else { throw VaultError("Volume has no mount point.") }
-        let folders = try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp))
-        return Outcome(vault: vault, folders: folders)
+        return outcome(vault: vault) { try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp)) }
+    }
+
+    /// The registered vault and what creating its folders gave: the folders, or the error as a partial outcome.
+    public static func outcome(vault: VaultVolume, createFolders: () throws -> [String]) -> Outcome {
+        do {
+            return Outcome(vault: vault, folders: try createFolders(), foldersError: nil)
+        } catch {
+            return Outcome(vault: vault, folders: [], foldersError: "\(error)")
+        }
     }
 }
 

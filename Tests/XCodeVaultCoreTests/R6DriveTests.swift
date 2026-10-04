@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import XCodeVaultCore
+@testable import xcodevaultctl
 
 /// R6 (ADR-0012): drive discovery, evaluation, the safety guard and preparation — all from redacted fixtures and a
 /// recording fake. No test here runs `diskutil` or `hdiutil`: `DiskRecordingRunner` answers from fixtures and records every
@@ -456,6 +457,163 @@ final class R6DriveTests: XCTestCase {
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: vault) }
         XCTAssertThrowsError(try VaultLayout.createFolders(vaultDirectory: vault)) { XCTAssertTrue("\($0)".contains("Cannot create")) }
     }
+
+    // MARK: - Fix round 1
+
+    /// C1: PABLO's exact shape — case-sensitive APFS, registered as a vault, usable. The new case-insensitive volume is
+    /// offered and recommended; both erase options are refused, and the row says why.
+    func testACaseSensitiveVaultIsOfferedANewVolumeAndNeverAnErase() throws {
+        let snap = try Self.snapshot()
+        let a = try assessment("disk2", snap, vaults: [Self.vaultCheck(uuid: Self.u(301), mount: "/Volumes/Media")])
+        XCTAssertEqual(a.verdict, .ready)
+        XCTAssertEqual(a.options, [.addVolume(container: "disk3")])
+        XCTAssertTrue(a.isRecommended(.addVolume(container: "disk3")))
+        XCTAssertEqual(a.recommendedOption, .addVolume(container: "disk3"))
+        XCTAssertEqual(a.prepareAction, .prepare(.addVolume(container: "disk3")))
+        XCTAssertFalse(a.options.contains(where: \.erases))
+        XCTAssertEqual(a.eraseRefusals, [.holdsVault])
+        XCTAssertEqual(a.shownRefusals, [.holdsVault], "the row says erasing is blocked by the vault")
+        var forged = a
+        forged.options = [.eraseDisk(disk: "disk2")]
+        XCTAssertThrowsError(
+            try DiskPreparation.plan(.eraseDisk(disk: "disk2"), configuration: .init(), on: forged, snapshot: snap, registeredVaultUUIDs: [Self.u(301)]))
+    }
+
+    /// C1: Prepare… beside a case-sensitive drive that can be used opens the recommended new volume, never Use This Drive.
+    func testPrepareRoutesACaseSensitiveDriveToTheNewVolume() throws {
+        let a = try assessment("disk2", try Self.snapshot())
+        XCTAssertEqual(a.verdict, .canBeUsed)
+        XCTAssertEqual(a.prepareAction, .prepare(.addVolume(container: "disk3")))
+        // A plain APFS drive that can be used: registration.
+        var snap = try Self.snapshot()
+        snap.volumes = snap.volumes.map {
+            var v = $0; if v.volumeName == "Media" { v.filesystemPersonality = "APFS" }; return v
+        }
+        XCTAssertEqual(try assessment("disk2", snap).prepareAction, .useDrive)
+    }
+
+    /// M3: a disk holding a vault — mounted or not — is never repartitioned; adding a volume stays allowed.
+    func testAddingAPartitionIsRefusedOnADiskHoldingAVault() throws {
+        let snap = try Self.snapshot()
+        let disk9 = try XCTUnwrap(snap.disks.first { $0.id == "disk9" })
+        let absent = Self.vaultCheck(uuid: Self.u(902), state: .absent, mount: nil)
+        XCTAssertEqual(
+            DiskSafety.refusals(for: .addPartition, target: "disk9s2", on: disk9, in: snap, registeredVaultUUIDs: [Self.u(902)]), [.holdsVault])
+        let a = try assessment("disk9", snap, vaults: [absent])
+        XCTAssertFalse(a.options.contains { if case .addPartition = $0 { true } else { false } })
+        XCTAssertFalse(a.options.contains(where: \.erases))
+        XCTAssertTrue(a.shownRefusals.contains(.holdsVault))
+        var forged = a
+        forged.options = [.addPartition(after: "disk9s2", freeBytes: 1)]
+        XCTAssertThrowsError(
+            try DiskPreparation.plan(
+                .addPartition(after: "disk9s2", freeBytes: 1), configuration: .init(), on: forged, snapshot: snap, registeredVaultUUIDs: [Self.u(902)]))
+        let disk2 = try XCTUnwrap(snap.disks.first { $0.id == "disk2" })
+        XCTAssertEqual(DiskSafety.refusals(for: .addVolume, target: "disk3", on: disk2, in: snap, registeredVaultUUIDs: [Self.u(301)]), [])
+    }
+
+    /// M1: MBR has no partition UUIDs; two sticks of the same model differ by their volume UUIDs.
+    func testMBRSticksOfTheSameModelAreDifferentIdentities() throws {
+        let snap = try Self.snapshot()
+        let stick = try XCTUnwrap(snap.disks.first { $0.id == "disk6" })
+        XCTAssertEqual(stick.identity.partitionUUIDs, [])
+        XCTAssertTrue(stick.identity.isDistinguishable)
+        var twin = stick
+        twin.partitions[0].volumeUUID = Self.u(699)
+        XCTAssertNotEqual(stick.identity, twin.identity)
+        var blank = stick
+        blank.partitions[0].volumeUUID = nil
+        XCTAssertFalse(blank.identity.isDistinguishable, "no file system: media name and size only (ADR-0012 §6)")
+        var weakSnap = snap
+        weakSnap.disks = snap.disks.map { $0.id == "disk6" ? blank : $0 }
+        let a = try assessment("disk6", weakSnap)
+        XCTAssertTrue(a.identityIsWeak)
+        XCTAssertTrue(a.options.contains(.eraseDisk(disk: "disk6")), "erasing stays offered; the confirmation says it")
+    }
+
+    /// M2: the volume is deleted and re-added under the same device id between preview and run: refused.
+    func testRevalidateRefusesATargetReplacedUnderTheSameID() throws {
+        let p = try plan(.eraseVolume(volume: "disk3s1", name: "Media"), "disk2")
+        XCTAssertEqual(p.targetUUID, Self.u(301))
+        XCTAssertEqual(p.targetName, "Media")
+        func with(_ change: (inout APFSVolumeInfo) -> Void) throws -> DriveSnapshot {
+            var snap = try Self.snapshot()
+            snap.disks = snap.disks.map { d in
+                var d = d
+                if d.id == "disk2" { change(&d.containers[0].volumes[0]) }
+                return d
+            }
+            return snap
+        }
+        // The identity includes the volume UUIDs, so a new UUID is caught there; the target check catches a rename.
+        XCTAssertThrowsError(try DiskPreparation.revalidate(p, current: try with { $0.uuid = Self.u(399) }, registeredVaultUUIDs: []))
+        var renamed = try with { $0.name = "Other" }
+        XCTAssertThrowsError(try DiskPreparation.revalidate(p, current: renamed, registeredVaultUUIDs: [])) {
+            XCTAssertTrue("\($0)".contains("no longer the volume"))
+        }
+        renamed = try Self.snapshot()
+        XCTAssertNoThrow(try DiskPreparation.revalidate(p, current: renamed, registeredVaultUUIDs: []))
+    }
+
+    /// Low: an unmounted HFS+ partition might be Time Machine; erasing it or the whole disk is refused, the rest is not.
+    func testAnUnmountedHFSPartitionBlocksErasingItAndTheDisk() throws {
+        var snap = try Self.snapshot()
+        snap.disks = snap.disks.map { d in
+            var d = d
+            if d.id == "disk9" { d.partitions.append(DiskPartition(id: "disk9s3", content: "Apple_HFS", sizeBytes: 100_000_000_000, volumeName: "Old")) }
+            return d
+        }
+        let a = try assessment("disk9", snap)
+        XCTAssertFalse(a.options.contains(.eraseDisk(disk: "disk9")))
+        XCTAssertFalse(a.options.contains(.eraseVolume(volume: "disk9s3", name: "Old")))
+        XCTAssertTrue(a.options.contains(.eraseVolume(volume: "disk9s2", name: "Transfer")))
+        XCTAssertTrue(a.shownRefusals.contains(.mightBeTimeMachine))
+        // Mounted, the marker check can run: no longer refused for that reason.
+        snap.volumes.append(Self.volume("disk9s3", "Old", uuid: Self.u(903), mount: "/Volumes/Old", fs: "Mac OS Extended (Journaled)", type: "hfs"))
+        XCTAssertTrue(try assessment("disk9", snap).options.contains(.eraseDisk(disk: "disk9")))
+    }
+
+    func testInvisibleAndControlCharactersAreRefusedInAName() {
+        for bad in ["a\u{7F}b", "a\u{85}b", "a\u{202E}b", "a\u{200B}b", "a\u{0007}b", "a\nb"] {
+            XCTAssertFalse(VolumeConfiguration(name: bad).problems(for: .addVolume).isEmpty, bad.unicodeScalars.map { String($0.value, radix: 16) }.joined())
+        }
+        XCTAssertEqual(VolumeConfiguration(name: "Café Vault").problems(for: .addVolume), [])
+    }
+
+    func testTheMediaNameIsMatchedTrimmedOnBothSides() throws {
+        var snap = try Self.snapshot()
+        snap.disks = snap.disks.map {
+            var d = $0; if d.id == "disk6" { d.mediaName = " USB Flash Disk  " }; return d
+        }
+        let p = try DiskPreparation.plan(
+            .eraseDisk(disk: "disk6"), configuration: .init(), on: try assessment("disk6", snap), snapshot: snap, registeredVaultUUIDs: [])
+        XCTAssertEqual(p.confirmationName, "USB Flash Disk")
+        XCTAssertTrue(DiskPreparation.confirmationAccepted(typed: "USB Flash Disk", plan: p))
+    }
+
+    /// I2: registered, folders failed — a partial outcome, never "not registered".
+    func testAFolderFailureAfterRegistrationIsAPartialOutcome() {
+        let vault = VaultVolume(volumeUUID: "U", volumeName: "V", lastMountPoint: "/Volumes/V", registeredAt: Date(), sentinelID: "s")
+        let partial = DriveRegistration.outcome(vault: vault) { throw VaultError("Cannot create /Volumes/V/XCodeVault/Archives: denied") }
+        XCTAssertFalse(partial.isComplete)
+        XCTAssertEqual(partial.vault, vault)
+        XCTAssertTrue(partial.foldersError?.contains("Cannot create") ?? false)
+        XCTAssertTrue(DriveRegistration.outcome(vault: vault) { ["/a"] }.isComplete)
+    }
+
+    /// I1: only a vault's standard folder is created, inside an existing vault directory.
+    func testCreateStandardFolderCreatesOnlyThatFolder() throws {
+        let tmp = TempDir()
+        let vault = tmp.path + "/XCodeVault"
+        try FileManager.default.createDirectory(atPath: vault, withIntermediateDirectories: true)
+        try VaultLayout.createStandardFolder(vault + "/DerivedData", vaultDirectory: vault)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vault + "/DerivedData"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vault + "/Archives"))
+        XCTAssertThrowsError(try VaultLayout.createStandardFolder(vault + "/Elsewhere", vaultDirectory: vault))
+        XCTAssertThrowsError(try VaultLayout.createStandardFolder(tmp.path + "/DerivedData", vaultDirectory: vault))
+        XCTAssertThrowsError(try VaultLayout.createStandardFolder(tmp.path + "/Gone/Archives", vaultDirectory: tmp.path + "/Gone"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.path + "/Gone"), "a missing vault directory is never created")
+    }
 }
 
 /// Answers from fixtures by prefix and records every call. Never runs anything.
@@ -472,5 +630,15 @@ final class DiskRecordingRunner: CommandRunning, @unchecked Sendable {
         let key = argv.joined(separator: " ")
         for (k, v) in responses.sorted(by: { $0.key.count > $1.key.count }) where key.hasPrefix(k) { return v }
         return CommandResult(status: 127, stdout: "", stderr: "DiskRecordingRunner: no response for \(key)")
+    }
+}
+
+/// I2 at the CLI: `vault init` exits 3 when the vault was registered but its standard folders were not made.
+final class R6VaultInitExitCodeTests: XCTestCase {
+    func testVaultInitExitCodes() {
+        let vault = VaultVolume(volumeUUID: "U", volumeName: "V", lastMountPoint: "/Volumes/V", registeredAt: Date(), sentinelID: "s")
+        XCTAssertEqual(Vault.Init.exitCode(DriveRegistration.Outcome(vault: vault, folders: ["/a"], foldersError: nil)), 0)
+        XCTAssertEqual(Vault.Init.exitCode(DriveRegistration.Outcome(vault: vault, folders: [], foldersError: "denied")), 3)
+        XCTAssertEqual(Vault.Init.foldersNotCreated, 3)
     }
 }

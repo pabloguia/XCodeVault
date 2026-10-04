@@ -12,7 +12,10 @@ final class ScriptedDrives: @unchecked Sendable {
     private var _snapshot: DriveSnapshot?
     private var _reads = 0
     private var _fire: (@MainActor @Sendable () -> Void)?
+    /// Reads answered in order, each after its delay, before falling back to `snapshot`: out-of-order completion.
+    private var _queue: [(DriveSnapshot?, Double)] = []
     init(_ snapshot: DriveSnapshot?) { _snapshot = snapshot }
+    func enqueue(_ snapshot: DriveSnapshot?, after seconds: Double) { lock.withLock { _queue.append((snapshot, seconds)) } }
     var snapshot: DriveSnapshot? {
         get { lock.withLock { _snapshot } }
         set { lock.withLock { _snapshot = newValue } }
@@ -23,10 +26,15 @@ final class ScriptedDrives: @unchecked Sendable {
     var services: DriveServices {
         DriveServices(
             snapshot: {
-                self.lock.withLock {
+                let next: (DriveSnapshot?, Double)? = self.lock.withLock {
                     self._reads += 1
-                    return self._snapshot
+                    return self._queue.isEmpty ? nil : self._queue.removeFirst()
                 }
+                if let next {
+                    Thread.sleep(forTimeInterval: next.1)
+                    return next.0
+                }
+                return self.lock.withLock { self._snapshot }
             },
             observe: { changed in
                 self.lock.withLock { self._fire = changed }
@@ -46,6 +54,10 @@ final class PreparedRecorder: @unchecked Sendable {
             self.lock.withLock { self._runs.append(prepared) }
             observer(LogLine(.command, "diskutil (scripted)"))
             if case .diskPreparation(let plan, _) = prepared { return .drivePrepared(plan) }
+            if case .useDrive = prepared {
+                let vault = VaultVolume(volumeUUID: "U", volumeName: "Media", lastMountPoint: "/Volumes/Media", registeredAt: Date(), sentinelID: "s")
+                return .driveRegistered(DriveRegistration.Outcome(vault: vault, folders: [], foldersError: "Cannot create /Volumes/Media/XCodeVault/Archives"))
+            }
             throw RuntimeOperationError("scripted: not a drive operation")
         }
         s.chooseFolder = { _ in "/Users/t/Elsewhere" }
@@ -64,12 +76,13 @@ final class R6AppModelTests: XCTestCase {
     }
 
     private func model(
-        drives: ScriptedDrives, ops: OperationServices = .inert, checks: [VaultVolumeCheck]? = nil, copied: CopiedStrings = CopiedStrings()
+        drives: ScriptedDrives, ops: OperationServices = .inert, checks: [VaultVolumeCheck]? = nil, copied: CopiedStrings = CopiedStrings(),
+        box: SurveyBox? = nil
     ) -> AppModel {
         let url = URL(fileURLWithPath: NSTemporaryDirectory() + "xcv-r6-\(UUID().uuidString).jsonl")
         let survey = sampleSurvey(checks: checks ?? [vault()])
         var env = AppEnvironment(
-            survey: { survey }, fullDiskAccess: { .granted }, helper: SwitchableHelper(.unavailableInThisBuild),
+            survey: { box?.survey ?? survey }, fullDiskAccess: { .granted }, helper: SwitchableHelper(.unavailableInThisBuild),
             approvalFlow: { HelperApprovalFlow(helper: $0) },
             runner: { PrivilegedActionRunner(helper: $0, journal: Journal(url: url), isXcodeRunning: { false }, isSimulatorWorkRunning: { false }) },
             clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { copied.strings.append($0) }, operations: ops)
@@ -204,10 +217,14 @@ final class R6AppModelTests: XCTestCase {
     }
 
     func testQuittingNeverStopsADrivePreparation() {
-        for kind in [OperationKind.addVolume, .addPartition, .eraseVolume, .eraseDisk, .useDrive] {
+        for kind in [OperationKind.addVolume, .addPartition, .eraseVolume, .eraseDisk] {
             XCTAssertFalse(kind.canBeStopped, "\(kind)")
             XCTAssertEqual(AppModel.quitChoice(running: true, stage: kind.runningStage, kind: kind), .keepRunningOnly(.diskPreparation), "\(kind)")
         }
+        XCTAssertFalse(OperationKind.useDrive.canBeStopped)
+        XCTAssertEqual(
+            AppModel.quitChoice(running: true, stage: OperationKind.useDrive.runningStage, kind: .useDrive), .keepRunningOnly(.vaultRegistration),
+            "Use This Drive runs no diskutil: its own reason (minor 7)")
         XCTAssertEqual(OperationKind.eraseDisk.runningStage, .preparing)
         XCTAssertNil(OperationKind.forOption(.enableOwnership(mountPoint: "/Volumes/X")), "ownership runs nothing")
     }
@@ -277,7 +294,195 @@ final class R6AppModelTests: XCTestCase {
         XCTAssertEqual(m.operationSheet?.kind, .setDerivedData)
         XCTAssertNil(m.suspendedOperationSheet)
         m.prepareFromDestination(try assessment(m, "disk2"))
-        XCTAssertEqual(m.operationSheet?.kind, .useDrive, "a drive that can be used as it is is registered, not erased")
+        XCTAssertEqual(m.operationSheet?.kind, .addVolume, "a case-sensitive drive gets the recommended new volume (C1), not a registration")
+    }
+
+    // MARK: - Fix round 1
+
+    /// H1: the disk at the same device id, with the same media name, is swapped while the erase review is open.
+    func testADiskSwappedUnderTheOpenSheetBlocksItAndRunningRefuses() async throws {
+        let rec = PreparedRecorder()
+        let drives = ScriptedDrives(try R6DriveTests.snapshot())
+        let m = model(drives: drives, ops: rec.services)
+        await m.refresh()
+        m.openPreparation(try assessment(m, "disk6"), option: .eraseDisk(disk: "disk6"))
+        await eventually("the review") { m.pendingDiskPlan != nil }
+        let previewed = try XCTUnwrap(m.operationSheet?.previewedPlan)
+        m.updateConfirmationText("USB Flash Disk")
+        XCTAssertTrue(m.canConfirmOperation)
+        drives.snapshot?.disks = drives.snapshot!.disks.map { d in
+            var d = d
+            if d.id == "disk6" { d.partitions[0].volumeUUID = R6DriveTests.u(698) }
+            return d
+        }
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationBlockers, [.diskChanged])
+        XCTAssertEqual(m.operationSheet?.confirmationText, "", "what was typed confirmed the other disk")
+        XCTAssertFalse(m.canConfirmOperation)
+        m.updateConfirmationText("USB Flash Disk")
+        XCTAssertFalse(m.canConfirmOperation, "sticky until the sheet closes")
+        await m.runOperation()
+        XCTAssertTrue(rec.runs.isEmpty)
+        XCTAssertEqual(m.operationSheet?.previewedPlan, previewed, "the previewed plan is never replaced")
+        // Swapped back: still blocked — the user closes and previews again.
+        drives.snapshot = try R6DriveTests.snapshot()
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationBlockers, [.diskChanged])
+    }
+
+    /// H1: a re-plan with nothing changed keeps the previewed plan and still clears what was typed.
+    func testEveryReplanClearsTheTypedNameAndKeepsThePreviewedPlan() async throws {
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()))
+        await m.refresh()
+        m.openPreparation(try assessment(m, "disk6"), option: .eraseDisk(disk: "disk6"))
+        await eventually("the review") { m.pendingDiskPlan != nil }
+        let previewed = m.operationSheet?.previewedPlan
+        m.updateConfirmationText("USB Flash Disk")
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationSheet?.confirmationText, "")
+        XCTAssertEqual(m.pendingDiskPlan, previewed)
+        XCTAssertEqual(m.operationBlockers, [.typeName("USB Flash Disk")])
+    }
+
+    /// Minor 4: a read that finishes after a newer one is dropped.
+    func testAnOlderDriveReadNeverOverwritesANewerOne() async throws {
+        let drives = ScriptedDrives(try R6DriveTests.snapshot())
+        var newer = try R6DriveTests.snapshot()
+        newer.disks.removeAll { $0.id == "disk6" }
+        drives.enqueue(try R6DriveTests.snapshot(), after: 0.3)
+        drives.enqueue(newer, after: 0)
+        let m = model(drives: drives)
+        async let slow: Void = m.refreshDrives()
+        try await Task.sleep(for: .milliseconds(50))
+        await m.refreshDrives()
+        await slow
+        XCTAssertEqual(drives.reads, 2)
+        XCTAssertFalse(m.driveAssessments.contains { $0.disk.id == "disk6" }, "the slow, older read was dropped")
+    }
+
+    /// Minor 5: an open preparation sheet gets the drive as it is now.
+    func testARefreshUpdatesTheOpenSheetsDrive() async throws {
+        let drives = ScriptedDrives(try R6DriveTests.snapshot())
+        let m = model(drives: drives)
+        await m.refresh()
+        m.openPreparation(try assessment(m, "disk2"), option: .addVolume(container: "disk3"))
+        await eventually("the review") { m.pendingDiskPlan != nil }
+        drives.snapshot?.volumes = drives.snapshot!.volumes.map {
+            var v = $0; if v.volumeName == "Media" { v.freeBytes = 1 }; return v
+        }
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationSheet?.drive?.volumes.first?.freeBytes, 1)
+    }
+
+    /// Minor 3 and 9: back from Prepare…, the only usable vault is chosen with its standard folder; a vault that goes
+    /// away takes its standard folder with it, but not a folder chosen by hand.
+    func testTheReturnedRunSheetChoosesTheNewVaultAndAGoneVaultClearsItsFolder() async throws {
+        let box = SurveyBox(sampleSurvey(checks: []))
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()), ops: PreparedRecorder().services, box: box)
+        await m.refresh()
+        m.openRun(row("derivedData", .runFromExternal))
+        XCTAssertNil(m.operationSheet?.inputs.vaultUUID)
+        m.prepareFromDestination(try assessment(m, "disk6"))
+        box.survey = sampleSurvey(checks: [vault()])
+        await m.refresh()
+        m.closeOperationSheet()
+        XCTAssertEqual(m.operationSheet?.kind, .setDerivedData)
+        XCTAssertEqual(m.operationSheet?.inputs.vaultUUID, R6DriveTests.u(1101))
+        XCTAssertEqual(m.operationSheet?.inputs.folder, "/Volumes/Vault/XCodeVault/DerivedData")
+        XCTAssertEqual(m.operationSheet?.inputs.standardFolderOf, "/Volumes/Vault/XCodeVault")
+        box.survey = sampleSurvey(checks: [])
+        await m.refresh()
+        XCTAssertNil(m.operationSheet?.inputs.folder)
+        XCTAssertNil(m.operationSheet?.inputs.standardFolderOf)
+        m.updateOperationInputs {
+            $0.folder = "/Users/t/Mine"
+            $0.folderIsCustom = true
+        }
+        box.survey = sampleSurvey(checks: [vault()])
+        await m.refresh()
+        box.survey = sampleSurvey(checks: [])
+        await m.refresh()
+        XCTAssertEqual(m.operationSheet?.inputs.folder, "/Users/t/Mine", "a folder chosen by hand stays")
+    }
+
+    /// I1: the review of a missing standard folder checks the vault directory and says the folder will be created; the
+    /// run creates only that folder, logged. A folder chosen by hand is never substituted or created.
+    func testAMissingStandardFolderIsReviewedAndCreatedByTheRun() throws {
+        var inputs = OperationInputs(folder: "/Volumes/Vault/XCodeVault/DerivedData", standardFolderOf: "/Volumes/Vault/XCodeVault")
+        let plan = LiveOperations.standardFolderPlan(inputs, exists: { $0 == "/Volumes/Vault/XCodeVault" })
+        XCTAssertEqual(plan.inputs.folder, "/Volumes/Vault/XCodeVault")
+        XCTAssertEqual(plan.willCreate, "/Volumes/Vault/XCodeVault/DerivedData")
+        XCTAssertNil(LiveOperations.standardFolderPlan(inputs, exists: { _ in true }).willCreate, "an existing folder is used as is")
+        inputs.folderIsCustom = true
+        XCTAssertNil(LiveOperations.standardFolderPlan(inputs, exists: { _ in false }).willCreate, "a folder chosen by hand is never created")
+        inputs = OperationInputs(folder: "/Users/t/Mine")
+        XCTAssertNil(LiveOperations.standardFolderPlan(inputs, exists: { _ in false }).willCreate)
+
+        let reviewed = OperationPreview(
+            destination: "/Volumes/Vault/XCodeVault",
+            prepared: .location(XcodeLocations.Change(key: .derivedData, newValue: "/Volumes/Vault/XCodeVault"), acknowledgeTests: true))
+        let p = LiveOperations.withNewFolder(reviewed, folder: "/Volumes/Vault/XCodeVault/DerivedData", vaultDirectory: "/Volumes/Vault/XCodeVault")
+        XCTAssertEqual(p.willCreateFolder, "/Volumes/Vault/XCodeVault/DerivedData")
+        XCTAssertEqual(p.destination, "/Volumes/Vault/XCodeVault/DerivedData")
+        guard case .creatingFolder(let folder, let dir, .location(let change, _))? = p.prepared else { return XCTFail("\(String(describing: p.prepared))") }
+        XCTAssertEqual(folder, "/Volumes/Vault/XCodeVault/DerivedData")
+        XCTAssertEqual(dir, "/Volumes/Vault/XCodeVault")
+        XCTAssertEqual(change.newValue, folder, "Xcode is pointed at the folder, not the vault directory")
+        XCTAssertEqual(p.prepared?.kind, .setDerivedData)
+
+        let tmp = TempDir()
+        let vaultDir = tmp.path + "/XCodeVault"
+        try FileManager.default.createDirectory(atPath: vaultDir, withIntermediateDirectories: true)
+        let log = LineBuffer()
+        try LiveOperations.createFolderStep(vaultDir + "/Runtimes", vaultDirectory: vaultDir) { log.add($0) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vaultDir + "/Runtimes"))
+        XCTAssertEqual(log.drain().first?.text, "mkdir -p " + vaultDir + "/Runtimes")
+        XCTAssertThrowsError(try LiveOperations.createFolderStep(tmp.path + "/Mine", vaultDirectory: vaultDir) { _ in })
+    }
+
+    /// I1: the default folder carries its vault directory; Choose Another Folder… drops it.
+    func testOnlyTheStandardFolderMayBeCreated() async throws {
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()), ops: PreparedRecorder().services)
+        await m.refresh()
+        m.openRun(row("derivedData", .runFromExternal))
+        XCTAssertEqual(m.operationSheet?.inputs.standardFolderOf, "/Volumes/Vault/XCodeVault")
+        await m.chooseOperationFolder()
+        XCTAssertNil(m.operationSheet?.inputs.standardFolderOf)
+    }
+
+    /// I2: registered but the folders failed is its own outcome, with the reason, never "not registered".
+    func testUseThisDriveReportsAPartialOutcome() async throws {
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()), ops: PreparedRecorder().services)
+        await m.refresh()
+        var snap = try R6DriveTests.snapshot()
+        snap.volumes = snap.volumes.map {
+            var v = $0; if v.volumeName == "Media" { v.filesystemPersonality = "APFS" }; return v
+        }
+        m.driveSnapshot = snap
+        m.openUseDrive(try assessment(m, "disk2"))
+        await eventually("the review") { m.canConfirmOperation }
+        await m.runOperation()
+        XCTAssertTrue(m.operationSheet?.isSucceeded ?? false)
+        XCTAssertEqual(m.registrationFoldersError, "Cannot create /Volumes/Media/XCodeVault/Archives")
+        if let r = m.operationSheet?.result { XCTAssertEqual(OperationText.done(r), "Registered; the standard folders could not be created.") }
+    }
+
+    /// I4: the decisions the views used to make.
+    func testTheViewsDecisionsAreModelAndCoreFunctions() async throws {
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot(mediaOwners: false)))
+        await m.refresh()
+        XCTAssertEqual(m.destinationDrives.map(\.disk.id), ["disk2", "disk6", "disk9"])
+        let media = try assessment(m, "disk2")
+        XCTAssertEqual(media.ownershipMountPoints, ["/Volumes/Media"])
+        XCTAssertEqual(media.volumeReasons, [], "the ownership block says it, not a second line")
+        XCTAssertEqual(media.commandOptions.count, 3)
+        let stick = try assessment(m, "disk6")
+        XCTAssertEqual(stick.volumeReasons.map(\.volumeName), ["STICK"])
+        XCTAssertEqual(stick.volumeReasons.count, 1, "one reason per volume")
+        XCTAssertEqual(try assessment(m, "disk7").shownRefusals, [.timeMachine])
+        XCTAssertTrue(OperationSheetState(row: nil, kind: .eraseDisk, inputs: OperationInputs()).showsExperimentalBadge)
+        XCTAssertFalse(OperationSheetState(row: nil, kind: .useDrive, inputs: OperationInputs()).showsExperimentalBadge)
+        XCTAssertEqual(DriveText.optionButton(.addVolume(container: "d"), recommended: true), "Add an APFS volume (erases nothing) — recommended…")
     }
 
     // MARK: - Fit (R1's lesson) and words
@@ -289,9 +494,35 @@ final class R6AppModelTests: XCTestCase {
             await m.refresh()
             m.openPreparation(try assessment(m, "disk2"), option: .eraseDisk(disk: "disk2"))
             await eventually("the review") { m.pendingDiskPlan != nil }
-            let sheet = NSHostingController(rootView: OperationSheetView(model: m)).sizeThatFits(in: NSSize(width: 560, height: 1)).height
-            XCTAssertLessThanOrEqual(sheet, R3SheetFitTests.ceiling, "\(language) erase review")
+            func fits(_ what: String) {
+                let h = NSHostingController(rootView: OperationSheetView(model: m)).sizeThatFits(in: NSSize(width: 560, height: 1)).height
+                XCTAssertLessThanOrEqual(h, R3SheetFitTests.ceiling, "\(language) \(what)")
+            }
+            fits("erase review")
             m.closeOperationSheet()
+            m.openPreparation(try assessment(m, "disk2"), option: .addVolume(container: "disk3"))
+            await eventually("the add-volume review") { m.pendingDiskPlan?.action == .addVolume }
+            m.updateVolumeConfiguration { $0.quotaGigabytes = 500 }
+            await eventually("the quota") { m.pendingDiskPlan?.configuration.quotaGigabytes == 500 }
+            fits("add-volume review, quota on")
+            m.closeOperationSheet()
+            m.openPreparation(try assessment(m, "disk6"), option: .eraseDisk(disk: "disk6"))
+            await eventually("the stick review") { m.pendingDiskPlan != nil }
+            m.operationSheet?.diskChanged = true
+            m.previewDriveOperation()
+            XCTAssertEqual(m.operationBlockers, [.diskChanged])
+            fits("disk changed")
+            m.closeOperationSheet()
+            var plain = try R6DriveTests.snapshot()
+            plain.volumes = plain.volumes.map {
+                var v = $0; if v.volumeName == "Media" { v.filesystemPersonality = "APFS" }; return v
+            }
+            m.driveSnapshot = plain
+            m.openUseDrive(try assessment(m, "disk2"))
+            await eventually("the use-drive review") { m.operationSheet?.preview != nil }
+            fits("Use This Drive review")
+            m.closeOperationSheet()
+            m.driveSnapshot = try R6DriveTests.snapshot()
             m.section = .drives
             let report = try XCTUnwrap(m.report)
             let screen = NSHostingController(rootView: MainView(model: m).detail(report)).sizeThatFits(in: NSSize(width: 1000, height: 1)).height

@@ -579,11 +579,11 @@ extension L10nCatalog {
                 "zh-Hans": "这是磁盘映像，不是驱动器。",
             ],
             "app.drives.refusal.holdsVault": [
-                "en": "It holds a registered vault, so XCodeVault never offers to erase it.",
-                "pt-BR": "Ele contém um disco-cofre registrado, então o XCodeVault nunca oferece apagá-lo.",
-                "es": "Contiene un disco bóveda registrado, así que XCodeVault nunca ofrece borrarlo.",
-                "ja": "登録済みの保管庫があるため、XCodeVault は消去を提案しません。",
-                "zh-Hans": "它包含已登记的保险库，因此 XCodeVault 绝不会提供抹掉它的选项。",
+                "en": "Erasing or repartitioning is blocked: this disk holds a vault.",
+                "pt-BR": "Apagar ou reparticionar está bloqueado: este disco contém um disco-cofre.",
+                "es": "Borrar o reparticionar está bloqueado: este disco contiene un disco bóveda.",
+                "ja": "消去と再パーティションはブロックされています: このディスクには保管庫があります。",
+                "zh-Hans": "抹掉或重新分区已被阻止：此磁盘包含保险库。",
             ],
             "app.drives.refusal.internalDisk": [
                 "en": "An internal disk. XCodeVault never erases or partitions an internal disk.",
@@ -591,6 +591,13 @@ extension L10nCatalog {
                 "es": "Un disco interno. XCodeVault nunca borra ni particiona un disco interno.",
                 "ja": "内蔵ディスクです。XCodeVault は内蔵ディスクを消去もパーティション分割もしません。",
                 "zh-Hans": "这是内置磁盘。XCodeVault 绝不会抹掉或分区内置磁盘。",
+            ],
+            "app.drives.refusal.mightBeTimeMachine": [
+                "en": "An unmounted HFS+ partition might be a Time Machine backup; mount it so XCodeVault can check.",
+                "pt-BR": "Uma partição HFS+ não montada pode ser um backup do Time Machine; monte-a para o XCodeVault verificar.",
+                "es": "Una partición HFS+ sin montar podría ser una copia de Time Machine; móntala para que XCodeVault pueda comprobarlo.",
+                "ja": "マウントされていない HFS+ パーティションは Time Machine のバックアップかもしれません。XCodeVault が確認できるようにマウントしてください。",
+                "zh-Hans": "未装载的 HFS+ 分区可能是时间机器备份；请装载它，以便 XCodeVault 检查。",
             ],
             "app.drives.refusal.readOnlyMedia": [
                 "en": "The disk is read-only.",
@@ -1257,6 +1264,13 @@ extension L10nCatalog {
                 "ja": "次の内容がすべて消去されます:",
                 "zh-Hans": "这将抹掉以下各项上的所有内容：",
             ],
+            "app.prep.identityWeak": [
+                "en": "This disk can\'t be told apart from another of the same model.",
+                "pt-BR": "Este disco não pode ser distinguido de outro do mesmo modelo.",
+                "es": "Este disco no se puede distinguir de otro del mismo modelo.",
+                "ja": "このディスクは同じ機種の別のディスクと区別できません。",
+                "zh-Hans": "无法将此磁盘与同型号的另一磁盘区分开。",
+            ],
             "app.prep.label.drive": [
                 "en": "Drive",
                 "pt-BR": "Disco",
@@ -1446,6 +1460,13 @@ extension L10nCatalog {
                 "ja": "ランタイムをオフロードしています。simctl を途中で止めると、履歴では失敗となっているのにランタイムが削除されたままになる可能性があるため、終わるまで XCodeVault は終了できません。",
                 "zh-Hans": "正在卸载一个运行时。中途停止 simctl 可能导致运行时已被删除而历史记录显示卸载失败,因此在完成前 XCodeVault 无法退出。",
             ],
+            "app.quit.keepRunningOnly.vaultRegistration": [
+                "en": "A drive is being registered as a vault. Stopping part-way could leave it registered without its folders, so XCodeVault can’t quit until it finishes.",
+                "pt-BR": "Um disco está sendo registrado como disco-cofre. Parar no meio pode deixá-lo registrado sem as pastas, então o XCodeVault não pode encerrar até terminar.",
+                "es": "Se está registrando un disco como disco bóveda. Detenerlo a medias podría dejarlo registrado sin sus carpetas, así que XCodeVault no puede salir hasta que termine.",
+                "ja": "ドライブを保管庫として登録しています。途中で止めるとフォルダのない状態で登録が残る可能性があるため、終わるまで XCodeVault は終了できません。",
+                "zh-Hans": "正在将驱动器登记为保险库。中途停止可能会使其已登记但没有文件夹，因此 XCodeVault 在完成之前无法退出。",
+            ],
             "app.quit.message": [
                 "en": "Quitting stops the running command, waits for it to end, and records the operation as failed. Nothing it did is undone.",
                 "pt-BR": "Encerrar para o comando em andamento, espera ele terminar e registra a operação como falha. Nada do que ele fez é desfeito.",
@@ -1515,6 +1536,13 @@ extension L10nCatalog {
                 "es": "Elige un disco bóveda.",
                 "ja": "保管庫を選んでください。",
                 "zh-Hans": "请选择一个保险库。",
+            ],
+            "app.run.blocker.diskChanged": [
+                "en": "The disk changed. Close this and preview again.",
+                "pt-BR": "O disco mudou. Feche isto e faça a revisão de novo.",
+                "es": "El disco cambió. Cierra esto y vuelve a revisarlo.",
+                "ja": "ディスクが変わりました。閉じてもう一度確認してください。",
+                "zh-Hans": "磁盘已更改。请关闭此窗口并重新预览。",
             ],
             "app.run.blocker.driveGone": [
                 "en": "The drive is no longer connected, or the disks could not be read. Connect it and click Check Again.",
@@ -1718,6 +1746,13 @@ extension L10nCatalog {
                 "es": "El disco ahora es un disco bóveda, con sus carpetas estándar.",
                 "ja": "ドライブは標準フォルダを備えた保管庫になりました。",
                 "zh-Hans": "该驱动器现在是保险库，并带有标准文件夹。",
+            ],
+            "app.run.done.registeredPartial": [
+                "en": "Registered; the standard folders could not be created.",
+                "pt-BR": "Registrado; as pastas padrão não puderam ser criadas.",
+                "es": "Registrado; no se pudieron crear las carpetas estándar.",
+                "ja": "登録しましたが、標準フォルダを作成できませんでした。",
+                "zh-Hans": "已登记；但无法创建标准文件夹。",
             ],
             "app.run.done.removed": [
                 "en": "The original was deleted after re-verification. The verified copy is on the vault.",
@@ -2271,6 +2306,13 @@ extension L10nCatalog {
                 "es": "Xcode vuelve a usar %@.",
                 "ja": "Xcode は再び %@ を使用します。",
                 "zh-Hans": "Xcode 重新使用 %@。",
+            ],
+            "app.run.willCreateFolder": [
+                "en": "Will create folder %@",
+                "pt-BR": "Vai criar a pasta %@",
+                "es": "Se creará la carpeta %@",
+                "ja": "フォルダ %@ を作成します",
+                "zh-Hans": "将创建文件夹 %@",
             ],
             "app.scanning.detail": [
                 "en": "Finding Xcode, simulators and drives, and measuring storage. Nothing is changed.",

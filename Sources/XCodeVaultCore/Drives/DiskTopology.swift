@@ -79,12 +79,20 @@ public struct DiskIdentity: Sendable, Equatable, Codable {
     public var wholeDisk: String
     public var mediaName: String
     public var sizeBytes: UInt64
-    /// Every partition's UUID, sorted. Empty for a disk without a partition map.
+    /// Every partition's UUID, sorted. Empty for a disk without a partition map, and on MBR (which has none).
     public var partitionUUIDs: [String]
+    /// Every file system's UUID on the disk, sorted: partition volume UUIDs, APFS container UUIDs and APFS volume UUIDs.
+    /// What tells two sticks of the same model apart on MBR, where partitions have no UUID.
+    public var volumeUUIDs: [String]
 
-    public init(wholeDisk: String, mediaName: String, sizeBytes: UInt64, partitionUUIDs: [String]) {
+    public init(wholeDisk: String, mediaName: String, sizeBytes: UInt64, partitionUUIDs: [String], volumeUUIDs: [String] = []) {
         self.wholeDisk = wholeDisk; self.mediaName = mediaName; self.sizeBytes = sizeBytes; self.partitionUUIDs = partitionUUIDs.sorted()
+        self.volumeUUIDs = volumeUUIDs.map { $0.uppercased() }.sorted()
     }
+
+    /// False for the residual case ADR-0012 §6 names: no partition UUID and no file-system UUID (an MBR disk with no
+    /// recognised file system, or a blank disk) — such a disk is told apart by media name and size only.
+    public var isDistinguishable: Bool { !partitionUUIDs.isEmpty || !volumeUUIDs.isEmpty }
 }
 
 /// A whole physical (or disk-image) disk and what is on it. Synthesized APFS container disks are never a
@@ -119,7 +127,9 @@ public struct PhysicalDisk: Sendable, Equatable, Codable, Identifiable {
     public var isDiskImage: Bool { isVirtual || busProtocol == "Disk Image" }
     public var isGPT: Bool { partitionScheme == "GUID_partition_scheme" }
     public var identity: DiskIdentity {
-        DiskIdentity(wholeDisk: id, mediaName: mediaName, sizeBytes: sizeBytes, partitionUUIDs: partitions.compactMap(\.diskUUID))
+        DiskIdentity(
+            wholeDisk: id, mediaName: mediaName, sizeBytes: sizeBytes, partitionUUIDs: partitions.compactMap(\.diskUUID),
+            volumeUUIDs: partitions.compactMap(\.volumeUUID) + containers.compactMap(\.uuid) + containers.flatMap { $0.volumes.compactMap(\.uuid) })
     }
 
     /// GPT keeps its primary and backup tables and the alignment between partitions out of every partition; `diskutil`
@@ -253,7 +263,8 @@ public struct DriveSnapshot: Sendable, Equatable {
         let volumes = try VolumeDiscovery.mountedVolumes(runner: runner)
         var marked = Set<String>()
         for v in volumes {
-            guard let mp = v.mountPoint, mp != "/" else { continue }
+            // Never a network share: a dead server would stall this read, and a share is never a drive to prepare.
+            guard let mp = v.mountPoint, mp != "/", !v.isNetwork else { continue }
             if timeMachineMarkers.contains(where: { fileExists(mp + "/" + $0) }) { marked.insert(deviceID(v.deviceNode)) }
         }
         return DriveSnapshot(disks: disks, volumes: volumes, timeMachineMarkedVolumeIDs: marked)

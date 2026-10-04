@@ -17,7 +17,8 @@ struct Vault: ParsableCommand {
                     to use a folder you can write, or create the default one with the command this prints when it fails.
 
                     It then creates the standard folders inside the vault directory: DerivedData, Archives and Runtimes \
-                    (the destinations the app pre-fills).
+                    (the destinations the app pre-fills). Exit status: 0 when done; 3 when the vault was registered but those \
+                    folders could not be created (the message says why and what to run); 1 when it was not registered.
 
                     Note --directory is a client-side choice: the privileged helper can only ever create the default \
                     \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
@@ -45,12 +46,23 @@ struct Vault: ParsableCommand {
             let vv = try VaultRegistry().register(v, relativeDirectory: directory)
             print("Registered \(vv.volumeName) (\(vv.volumeUUID)) at \(vv.lastVaultDirectory).")
             // The standard layout (R6, `VaultLayout`): the folders the app pre-fills as destinations. The vault is
-            // registered either way; a folder that cannot be made is reported with what to do.
-            do {
-                for folder in try VaultLayout.createFolders(vaultDirectory: vv.vaultDirectory(atMountPoint: mountPoint)) { print("  \(folder)") }
-            } catch {
-                print("! \(error)")
+            // registered either way; folders that cannot be made are a distinct outcome with its own exit code (I2).
+            let outcome = DriveRegistration.outcome(vault: vv) {
+                try VaultLayout.createFolders(vaultDirectory: vv.vaultDirectory(atMountPoint: mountPoint))
             }
+            for folder in outcome.folders { print("  \(folder)") }
+            if let why = outcome.foldersError {
+                print("! Registered; the standard folders could not be created.\n\(why)")
+            }
+            let code = Self.exitCode(outcome)
+            if code != 0 { throw ExitCode(code) }
+        }
+
+        /// Exit 0 when the vault and its standard folders exist; `foldersNotCreated` (3) when the vault was registered but
+        /// the folders could not be made. Any refusal to register is the usual failure (1).
+        static let foldersNotCreated: Int32 = 3
+        static func exitCode(_ outcome: DriveRegistration.Outcome) -> Int32 {
+            outcome.isComplete ? 0 : foldersNotCreated
         }
     }
     struct Status: ParsableCommand {

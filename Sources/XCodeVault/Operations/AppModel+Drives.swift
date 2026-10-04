@@ -26,11 +26,18 @@ extension AppModel {
     }
 
     /// Reads the disks off the main actor and re-plans an open drive sheet against what is there now.
+    /// Reads that finish out of order are dropped: only the newest request's result is kept (minor 4). An open drive
+    /// sheet gets the drive as it is now (its option list, minor 5) and is planned again — never replacing the plan the
+    /// user previewed (H1, `previewOperation`).
     func refreshDrives() async {
+        driveReadGeneration += 1
+        let generation = driveReadGeneration
         let read = environment.drives.snapshot
         let snapshot = await Self.offThePool { read() }
+        guard generation == driveReadGeneration else { return }
         driveSnapshot = snapshot
         if let s = operationSheet, s.kind.isDriveKind, s.phase == .review {
+            if let id = s.drive?.disk.id, let now = driveAssessments.first(where: { $0.disk.id == id }) { operationSheet?.drive = now }
             operationSheet?.preview = nil
             await previewOperation()
         }
@@ -49,7 +56,8 @@ extension AppModel {
     /// and comes back when this one closes.
     func openPreparation(_ assessment: DriveAssessment, option: PreparationOption? = nil) {
         guard !isOperationRunning else { return }
-        guard let chosen = option ?? assessment.options.first(where: \.runsCommand), let kind = OperationKind.forOption(chosen) else { return }
+        guard let chosen = option ?? assessment.recommendedOption ?? assessment.commandOptions.first, let kind = OperationKind.forOption(chosen)
+        else { return }
         var inputs = OperationInputs()
         inputs.diskID = assessment.disk.id
         inputs.driveOption = chosen
@@ -68,7 +76,18 @@ extension AppModel {
     /// **Prepare…** beside a drive in the Destination picker: **Use This Drive** when it can be used as it is, the
     /// preparation sheet otherwise.
     func prepareFromDestination(_ assessment: DriveAssessment) {
-        if assessment.verdict == .canBeUsed { openUseDrive(assessment) } else { openPreparation(assessment) }
+        switch assessment.prepareAction {
+        case .useDrive: openUseDrive(assessment)
+        case .prepare(let option): openPreparation(assessment, option: option)
+        case .nothing: break
+        }
+    }
+
+    /// The drives listed under the Destination picker: those that can be used or need preparation, and a ready drive
+    /// whose vault is not the destination's but has a recommended fix (a case-sensitive vault, C1). Ready vaults are in
+    /// the picker itself.
+    var destinationDrives: [DriveAssessment] {
+        driveAssessments.filter { $0.verdict == .canBeUsed || $0.verdict == .needsPreparation || ($0.verdict == .ready && $0.recommendedOption != nil) }
     }
 
     private func open(_ kind: OperationKind, inputs: OperationInputs, drive: DriveAssessment) {
@@ -85,13 +104,15 @@ extension AppModel {
         s.inputs.driveOption = option
         if kind != .addVolume { s.inputs.volume.quotaGigabytes = nil }
         s.confirmationText = ""
+        // The user chose another plan: it is the one previewed next (H1 never applies to a choice the user made).
+        s.previewedPlan = nil
         s.preview = nil
         operationSheet = s
         Task { await previewOperation() }
     }
 
     /// The options the preparation sheet offers: the drive's options that run a command.
-    var preparationChoices: [PreparationOption] { operationSheet?.drive?.options.filter(\.runsCommand) ?? [] }
+    var preparationChoices: [PreparationOption] { operationSheet?.drive?.commandOptions ?? [] }
 
     /// What the user types to confirm an erase. Never re-plans.
     func updateConfirmationText(_ text: String) {
@@ -188,6 +209,15 @@ extension AppModel {
         return VaultLayout.path(purpose, in: vault)
     }
 
+    /// The vault's standard folder into `inputs`, with the vault directory it belongs to (I1: only such a folder may be
+    /// created by the run); nil clears both.
+    static func applyStandardFolder(_ kind: OperationKind, _ vault: VaultVolumeCheck?, to inputs: inout OperationInputs) {
+        inputs.folder = defaultFolder(kind, vault)
+        inputs.folderIsCustom = false
+        inputs.standardFolderOf =
+            inputs.folder == nil ? nil : vault.flatMap { v in v.currentMountPoint.map { v.volume.vaultDirectory(atMountPoint: $0) } }
+    }
+
     /// A vault chosen in the Destination picker: the vault, and for a folder kind its standard folder (brief §6). Nil
     /// clears both.
     func chooseDestination(vaultUUID: String?) {
@@ -195,10 +225,7 @@ extension AppModel {
         let vault = usableVaults.first { $0.volume.volumeUUID == vaultUUID }
         updateOperationInputs {
             $0.vaultUUID = vault?.volume.volumeUUID
-            if s.kind.needsFolder {
-                $0.folder = Self.defaultFolder(s.kind, vault)
-                $0.folderIsCustom = false
-            }
+            if s.kind.needsFolder { Self.applyStandardFolder(s.kind, vault, to: &$0) }
         }
     }
 
@@ -227,6 +254,50 @@ extension AppModel {
 
     /// A change in the volume form: stored, and planned again.
     func updateVolumeConfiguration(_ change: (inout VolumeConfiguration) -> Void) {
+        guard operationSheet?.phase == .review else { return }
+        operationSheet?.previewedPlan = nil
         updateOperationInputs { change(&$0.volume) }
+    }
+
+    /// H1: the plan a refresh re-planned is the same disk and the same target as the one previewed.
+    static func samePreview(_ previewed: DiskPreparationPlan, _ now: DiskPreparationPlan) -> Bool {
+        previewed.identity == now.identity && previewed.action == now.action && previewed.target == now.target
+            && previewed.targetUUID == now.targetUUID && previewed.targetName == now.targetName
+            && previewed.confirmationName == now.confirmationName
+    }
+
+    /// H1, the drive kinds' review: plan again, clear what was typed, and keep the plan the user previewed — or block the
+    /// sheet for good when the disk or the target is not the one previewed.
+    func previewDriveOperation() {
+        guard var s = operationSheet, s.phase == .review, s.kind.isDriveKind else { return }
+        var preview = Self.drivePreview(s.kind, s.inputs, snapshot: driveSnapshot, vaults: vaultChecks)
+        s.confirmationText = ""
+        if case .diskPreparation(let plan, _)? = preview.prepared {
+            if s.diskChanged || s.previewedPlan.map({ !Self.samePreview($0, plan) }) == true {
+                s.diskChanged = true
+                preview = OperationPreview(source: preview.source, blockers: [.diskChanged])
+            } else if let previewed = s.previewedPlan {
+                preview.prepared = .diskPreparation(previewed, confirmedName: "")
+            } else {
+                s.previewedPlan = plan
+            }
+        } else if s.diskChanged {
+            preview = OperationPreview(source: preview.source, blockers: [.diskChanged])
+        }
+        s.preview = preview
+        s.isPreviewing = false
+        operationSheet = s
+    }
+
+    /// What the erase confirmation adds when the disk can be told apart only by media name and size (M1).
+    var previewedDiskIsIndistinguishable: Bool {
+        guard let plan = pendingDiskPlan, plan.action.erases else { return false }
+        return !plan.identity.isDistinguishable
+    }
+
+    /// I2: the registration succeeded but the standard folders were not created; the reason, with `OwnershipAdvice`.
+    var registrationFoldersError: String? {
+        guard case .driveRegistered(let outcome)? = operationSheet?.result else { return nil }
+        return outcome.foldersError
     }
 }

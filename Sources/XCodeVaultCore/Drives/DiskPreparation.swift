@@ -39,8 +39,11 @@ public struct VolumeConfiguration: Sendable, Equatable, Codable {
         if trimmed.isEmpty { out.append("Give the volume a name.") }
         if trimmed != name { out.append("The name cannot start or end with a space.") }
         if name.hasPrefix("-") || name.hasPrefix(".") { out.append("The name cannot start with “-” or “.”.") }
-        if name.contains(where: { $0 == ":" || $0 == "/" || $0.isNewline || $0.asciiValue.map { $0 < 0x20 } == true }) {
-            out.append("The name cannot contain “:”, “/” or control characters.")
+        // Every Unicode control (Cc: C0, DEL, C1) and format character (Cf: bidi overrides, zero-width spaces): a name the
+        // confirmation shows must be the name diskutil writes, with nothing invisible or reordering in it.
+        let invisible = name.unicodeScalars.contains { [.control, .format].contains($0.properties.generalCategory) }
+        if name.contains(where: { $0 == ":" || $0 == "/" }) || invisible {
+            out.append("The name cannot contain “:”, “/”, control or invisible formatting characters.")
         }
         if name.utf8.count > 255 { out.append("The name is too long.") }
         if let q = quotaGigabytes {
@@ -79,6 +82,11 @@ public struct DiskPreparationPlan: Sendable, Equatable, Codable {
     public var confirmationName: String?
     /// `diskutil` arguments, built from the closed set of verbs below.
     public var arguments: [String]
+    /// What `target` IS, as previewed (M2): its UUID — the APFS volume's or container's, else the partition's volume or
+    /// partition UUID — and its name. `revalidate` re-derives both from the fresh disks and refuses if either changed, so a
+    /// volume deleted and re-added under the same device id is not the one the user confirmed.
+    public var targetUUID: String?
+    public var targetName: String
 
     /// The command, quoted for Terminal: what **Copy Command** copies and what the sheet shows.
     public var command: String { (["diskutil"] + arguments).map(DiskPreparation.shellQuoted).joined(separator: " ") }
@@ -129,10 +137,20 @@ public enum DiskPreparation {
         guard problems.isEmpty else { throw DiskPreparationError(problems.joined(separator: " ")) }
         try refuseUnsafe(action, target: target, disk: disk, snapshot: snapshot, registeredVaultUUIDs: registeredVaultUUIDs)
         let destroys = destroyedVolumes(action, target: target, disk: disk, snapshot: snapshot)
+        let facts = targetFacts(target, on: disk)
         return DiskPreparationPlan(
             action: action, target: target, identity: disk.identity, configuration: configuration, destroys: destroys,
             confirmationName: confirmationName(action, target: target, disk: disk, destroys: destroys),
-            arguments: arguments(action, target: target, configuration: configuration))
+            arguments: arguments(action, target: target, configuration: configuration), targetUUID: facts.uuid, targetName: facts.name)
+    }
+
+    /// The target's UUID and name on `disk`: an APFS volume, a container, a partition, or the disk itself (whose identity
+    /// is `DiskIdentity`, so its UUID is nil and its name the media name).
+    public static func targetFacts(_ target: String, on disk: PhysicalDisk) -> (uuid: String?, name: String) {
+        if let v = disk.containers.flatMap(\.volumes).first(where: { $0.id == target }) { return (v.uuid?.uppercased(), v.name) }
+        if let c = disk.containers.first(where: { $0.reference == target }) { return (c.uuid?.uppercased(), "") }
+        if let p = disk.partitions.first(where: { $0.id == target }) { return ((p.volumeUUID ?? p.diskUUID)?.uppercased(), p.volumeName ?? "") }
+        return (nil, disk.mediaName.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// The `diskutil` arguments. A closed set: these four verb shapes, and nothing else, ever reach `diskutil` from R6.
@@ -156,7 +174,9 @@ public enum DiskPreparation {
         switch action {
         case .addVolume, .addPartition: return nil
         case .eraseVolume: return destroys.first.map { $0.name.isEmpty ? $0.id : $0.name } ?? target
-        case .eraseDisk: return disk.mediaName.isEmpty ? disk.id : disk.mediaName
+        case .eraseDisk:
+            let media = disk.mediaName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return media.isEmpty ? disk.id : media
         }
     }
 
@@ -164,7 +184,7 @@ public enum DiskPreparation {
     /// paste are ignored. Always true when nothing is erased.
     public static func confirmationAccepted(typed: String, plan: DiskPreparationPlan) -> Bool {
         guard let name = plan.confirmationName else { return true }
-        return typed.trimmingCharacters(in: .whitespacesAndNewlines) == name
+        return typed.trimmingCharacters(in: .whitespacesAndNewlines) == name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func destroyedVolumes(_ action: DiskPreparationAction, target: String, disk: PhysicalDisk, snapshot: DriveSnapshot) -> [DestroyedVolume] {
@@ -208,10 +228,10 @@ public enum DiskPreparation {
         case .eraseDisk:
             guard target == disk.id else { throw DiskPreparationError("\(target) is not the whole disk \(disk.id).") }
         }
-        let refusals =
-            action.erases
-            ? DiskSafety.eraseRefusals(disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs) : DiskSafety.changeRefusals(disk, in: snapshot)
-        guard refusals.isEmpty else { throw DiskPreparationError("Refused: " + refusals.map(\.reason).joined(separator: " ") + " Nothing was changed.") }
+        let refusals = DiskSafety.refusals(for: action, target: target, on: disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs)
+        guard refusals.isEmpty else {
+            throw DiskPreparationError("Refused: " + refusals.map(\.reason).joined(separator: " ") + " Nothing was changed.")
+        }
     }
 
     // MARK: - Running
@@ -224,10 +244,21 @@ public enum DiskPreparation {
         }
         guard disk.identity == plan.identity else {
             throw DiskPreparationError(
-                "The disk changed: \(plan.identity.wholeDisk) is not the disk that was previewed (its name, size or partitions differ). Nothing was changed — check the drive and preview again."
-            )
+                "The disk changed: \(plan.identity.wholeDisk) is not the disk that was previewed (its name, size, partitions or volumes "
+                    + "differ). Nothing was changed — check the drive and preview again.")
         }
         try refuseUnsafe(plan.action, target: plan.target, disk: disk, snapshot: current, registeredVaultUUIDs: registeredVaultUUIDs)
+        // The target itself, and the name the user typed, re-derived from the fresh disks (M2).
+        let facts = targetFacts(plan.target, on: disk)
+        guard facts.uuid == plan.targetUUID, facts.name == plan.targetName else {
+            throw DiskPreparationError(
+                "The disk changed: \(plan.target) is no longer the volume that was previewed. Nothing was changed — preview again.")
+        }
+        let fresh = confirmationName(
+            plan.action, target: plan.target, disk: disk, destroys: destroyedVolumes(plan.action, target: plan.target, disk: disk, snapshot: current))
+        guard fresh == plan.confirmationName else {
+            throw DiskPreparationError("The disk changed: its name is no longer “\(plan.confirmationName ?? "")”. Nothing was changed — preview again.")
+        }
         guard plan.arguments == arguments(plan.action, target: plan.target, configuration: plan.configuration),
             plan.configuration.problems(for: plan.action).isEmpty
         else { throw DiskPreparationError("The prepared command does not match its plan. Nothing was changed.") }
@@ -267,8 +298,8 @@ public enum DiskPreparation {
                 id: id, kind: .diskPreparation, state: .failed, summary: "diskutil failed (exit \(result.status)): \(why.prefix(200))", paths: [],
                 detail: detail)
             throw DiskPreparationError(
-                "diskutil failed (exit \(result.status)): \(why)\nXCodeVault did not retry and did not ask for a password. To run it yourself in Terminal:\n\(plan.command)"
-            )
+                "diskutil failed (exit \(result.status)): \(why)\nXCodeVault did not retry and did not ask for a password. "
+                    + "To run it yourself in Terminal:\n\(plan.command)")
         }
         try journal.record(id: id, kind: .diskPreparation, state: .completed, summary: "done: " + summary(plan), paths: [], detail: detail)
         return DiskPreparationOutcome(plan: plan, journalID: id)

@@ -20,6 +20,9 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
     case timeMachine
     /// The disk's media is read-only.
     case readOnlyMedia
+    /// An HFS+ partition that is not mounted: it might be a Time Machine backup, and nothing can tell until it is mounted
+    /// (the marker check reads the volume's root).
+    case mightBeTimeMachine
 
     /// English, for Core's own prose and the journal; the app has its own words.
     public var reason: String {
@@ -27,9 +30,10 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
         case .internalDisk: "This is an internal disk. XCodeVault never erases or partitions an internal disk."
         case .bootDisk: "This disk holds the running system."
         case .diskImage: "This is a disk image, not a drive."
-        case .holdsVault: "This disk holds a registered vault. Erasing it would destroy the vault and everything parked on it."
+        case .holdsVault: "This disk holds a registered vault. Erasing or repartitioning it is blocked: it would destroy or remount the vault."
         case .timeMachine: "This disk holds a Time Machine backup."
         case .readOnlyMedia: "This disk's media is read-only."
+        case .mightBeTimeMachine: "An unmounted HFS+ partition on this disk might be a Time Machine backup; mount it so XCodeVault can check."
         }
     }
 }
@@ -49,12 +53,40 @@ public enum DiskSafety {
         return out
     }
 
-    /// What forbids ERASING anything on `disk` (one volume or the whole disk): every change refusal, plus a registered
-    /// vault on any of its volumes — registered, whether or not it is usable right now.
+    /// What forbids ERASING the whole disk, and what is shown as "why erasing is not offered": every change refusal, a
+    /// registered vault on any of its volumes — registered, whether or not it is usable right now — and an unmounted HFS+
+    /// partition that might be a Time Machine backup.
     public static func eraseRefusals(_ disk: PhysicalDisk, in snapshot: DriveSnapshot, registeredVaultUUIDs: Set<String>) -> [DiskRefusal] {
         var out = changeRefusals(disk, in: snapshot)
         if holdsVault(disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs) { out.append(.holdsVault) }
+        if !unverifiedHFSPartitions(disk, in: snapshot).isEmpty { out.append(.mightBeTimeMachine) }
         return out
+    }
+
+    /// The one question asked before planning and again before running: what forbids `action` on `target` of `disk`.
+    ///   - adding a volume: the change refusals (it does not touch the partition map);
+    ///   - adding a partition: those and a registered vault on the disk — rewriting the map remounts the disk, a window
+    ///     in which the vault is not where it was (rule 6);
+    ///   - erasing a volume: those, and the target being an unmounted HFS+ partition (`mightBeTimeMachine`);
+    ///   - erasing the disk: those, and any unmounted HFS+ partition on it.
+    public static func refusals(
+        for action: DiskPreparationAction, target: String, on disk: PhysicalDisk, in snapshot: DriveSnapshot, registeredVaultUUIDs: Set<String>
+    ) -> [DiskRefusal] {
+        var out = changeRefusals(disk, in: snapshot)
+        guard action != .addVolume else { return out }
+        if holdsVault(disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs) { out.append(.holdsVault) }
+        let hfs = unverifiedHFSPartitions(disk, in: snapshot)
+        switch action {
+        case .eraseVolume where hfs.contains(target), .eraseDisk where !hfs.isEmpty: out.append(.mightBeTimeMachine)
+        default: break
+        }
+        return out
+    }
+
+    /// HFS+ partitions of `disk` that are not mounted: their root, where a Time Machine marker would be, cannot be read.
+    public static func unverifiedHFSPartitions(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [String] {
+        let mounted = Set(snapshot.volumes(on: disk).map { DriveSnapshot.deviceID($0.deviceNode) })
+        return disk.partitions.filter { ($0.content == "Apple_HFS" || $0.content == "Apple_HFSX") && !mounted.contains($0.id) }.map(\.id)
     }
 
     public static func holdsTimeMachine(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> Bool {
@@ -139,12 +171,63 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
     }
 
     /// Whether an option is recommended: adding a volume when the disk's APFS volumes are case-sensitive or ignore
-    /// ownership — the fix that erases nothing.
+    /// ownership — the fix that erases nothing — or when nothing on the disk qualifies.
     public func isRecommended(_ option: PreparationOption) -> Bool {
         guard case .addVolume = option else { return false }
-        return volumes.contains { $0.isAPFS && ($0.filesystemPersonality.lowercased().contains("case-sensitive") || !$0.ownersEnabled) }
-            || verdict == .needsPreparation
+        return DriveEvaluation.wantsANewVolume(volumes) || verdict == .needsPreparation
     }
+
+    /// The option **Prepare…** opens on: the recommended one, else the first that runs a command (least destructive).
+    public var recommendedOption: PreparationOption? { options.first(where: isRecommended) }
+
+    /// What **Prepare…** beside a drive does (the Run sheet's Destination): a drive that can be used as it is but whose
+    /// volume is case-sensitive or ignores ownership gets the recommended new volume, never a registration of that volume.
+    public enum PrepareAction: Equatable, Sendable {
+        case useDrive
+        case prepare(PreparationOption)
+        case nothing
+    }
+
+    public var prepareAction: PrepareAction {
+        if let recommended = recommendedOption { return .prepare(recommended) }
+        if verdict == .canBeUsed { return .useDrive }
+        if let first = commandOptions.first { return .prepare(first) }
+        return .nothing
+    }
+
+    /// The options that run a command, least destructive first: the Drives screen's buttons.
+    public var commandOptions: [PreparationOption] { options.filter(\.runsCommand) }
+
+    /// The volumes whose ownership is off: the Get Info / Copy Command block, drawn before the buttons (least destructive).
+    public var ownershipMountPoints: [String] {
+        options.compactMap {
+            if case .enableOwnership(let mp) = $0 { return mp }
+            return nil
+        }
+    }
+
+    /// The refusals the row says: why nothing can change the disk when that is so, else why erasing is not offered.
+    public var shownRefusals: [DiskRefusal] { changeRefusals.isEmpty ? eraseRefusals : changeRefusals }
+
+    /// One reason per mounted volume that does not qualify — its first blocker — except a volume whose fix is the
+    /// ownership block, which says it with its buttons.
+    public struct VolumeReason: Equatable, Sendable {
+        public var volumeName: String
+        public var reason: String
+    }
+
+    public var volumeReasons: [VolumeReason] {
+        let owned = Set(ownershipMountPoints)
+        return volumes.compactMap { v in
+            guard let q = qualifications[v.deviceNode], q.verdict == .unsuitable, !owned.contains(v.mountPoint ?? ""), let first = q.blockers.first
+            else { return nil }
+            return VolumeReason(volumeName: v.volumeName, reason: first)
+        }
+    }
+
+    /// The disk can be told apart from another of the same model only by media name and size (M1's residual case): an
+    /// MBR disk with no recognised file system. The erase confirmation says so.
+    public var identityIsWeak: Bool { !disk.identity.isDistinguishable }
 }
 
 public enum DriveEvaluation {
@@ -185,7 +268,9 @@ public enum DriveEvaluation {
             quals[v.deviceNode]?.verdict != .unsuitable && !registered.contains(where: { $0.uppercased() == v.volumeUUID?.uppercased() })
         }.max { $0.freeBytes < $1.freeBytes }
 
-        let options = changeRefusals.isEmpty ? Self.options(disk, mounted: mounted, eraseAllowed: eraseRefusals.isEmpty) : []
+        let all =
+            changeRefusals.isEmpty
+            ? Self.options(disk, in: snapshot, mounted: mounted, registeredVaultUUIDs: registered) : []
         let verdict: DriveVerdict
         if vault != nil {
             verdict = .ready
@@ -193,13 +278,16 @@ public enum DriveEvaluation {
             verdict = .cannotBeUsed
         } else if registrable != nil {
             verdict = .canBeUsed
-        } else if !options.isEmpty {
+        } else if !all.isEmpty {
             verdict = .needsPreparation
         } else {
             verdict = .cannotBeUsed
         }
         return DriveAssessment(
-            disk: disk, volumes: mounted, verdict: verdict, options: verdict == .ready ? [] : options, vault: vault,
+            // A ready vault keeps what erases nothing when its volume is case-sensitive or ignores ownership (PABLO's case):
+            // the new case-insensitive volume is the recommended fix. Erasing was never in `all` for it (`.holdsVault`).
+            disk: disk, volumes: mounted, verdict: verdict,
+            options: verdict == .ready ? (wantsANewVolume(mounted) ? all.filter { !$0.erases } : []) : all, vault: vault,
             registrable: verdict == .canBeUsed ? registrable : nil, eraseRefusals: eraseRefusals, changeRefusals: changeRefusals,
             qualifications: quals)
     }
@@ -207,28 +295,38 @@ public enum DriveEvaluation {
     /// The options for a disk `DiskSafety` allows changing, in the brief's order: a (add a volume to each APFS container
     /// that is not Time Machine's; add a partition in free space on a GUID map), b (erase each user volume), c (erase the
     /// disk), d (ownership, per mounted APFS volume that ignores it). b and c only when `eraseAllowed`.
-    static func options(_ disk: PhysicalDisk, mounted: [Volume], eraseAllowed: Bool) -> [PreparationOption] {
+    /// Every option is offered only when `DiskSafety.refusals` for it is empty — the same function `plan` and `revalidate`
+    /// ask.
+    static func options(_ disk: PhysicalDisk, in snapshot: DriveSnapshot, mounted: [Volume], registeredVaultUUIDs: Set<String>)
+        -> [PreparationOption]
+    {
+        func allowed(_ action: DiskPreparationAction, _ target: String) -> Bool {
+            DiskSafety.refusals(for: action, target: target, on: disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs).isEmpty
+        }
         var out: [PreparationOption] = []
-        for c in disk.containers where !c.volumes.contains(where: \.isTimeMachine) {
+        for c in disk.containers where !c.volumes.contains(where: \.isTimeMachine) && allowed(.addVolume, c.reference) {
             out.append(.addVolume(container: c.reference))
         }
-        if disk.isGPT, disk.unpartitionedBytes >= minimumPartitionBytes, let last = disk.partitions.last {
+        if disk.isGPT, disk.unpartitionedBytes >= minimumPartitionBytes, let last = disk.partitions.last, allowed(.addPartition, last.id) {
             out.append(.addPartition(after: last.id, freeBytes: disk.unpartitionedBytes))
         }
-        if eraseAllowed {
-            for p in disk.partitions where !p.isAPFSStore && !p.isSystemPartition {
-                out.append(.eraseVolume(volume: p.id, name: p.volumeName ?? ""))
-            }
-            for c in disk.containers {
-                for v in c.volumes where v.roles.isEmpty {
-                    out.append(.eraseVolume(volume: v.id, name: v.name))
-                }
-            }
-            out.append(.eraseDisk(disk: disk.id))
+        for p in disk.partitions where !p.isAPFSStore && !p.isSystemPartition && allowed(.eraseVolume, p.id) {
+            out.append(.eraseVolume(volume: p.id, name: p.volumeName ?? ""))
         }
+        for c in disk.containers {
+            for v in c.volumes where v.roles.isEmpty && allowed(.eraseVolume, v.id) {
+                out.append(.eraseVolume(volume: v.id, name: v.name))
+            }
+        }
+        if allowed(.eraseDisk, disk.id) { out.append(.eraseDisk(disk: disk.id)) }
         for v in mounted where v.isAPFS && !v.ownersEnabled {
             if let mp = v.mountPoint { out.append(.enableOwnership(mountPoint: mp)) }
         }
         return out
+    }
+
+    /// A mounted APFS volume is case-sensitive or ignores ownership: a new case-insensitive volume is the fix.
+    static func wantsANewVolume(_ mounted: [Volume]) -> Bool {
+        mounted.contains { $0.isAPFS && ($0.filesystemPersonality.lowercased().contains("case-sensitive") || !$0.ownersEnabled) }
     }
 }

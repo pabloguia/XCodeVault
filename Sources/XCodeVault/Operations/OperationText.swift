@@ -90,6 +90,7 @@ enum OperationText {
         case .runtimeDeleted: L10n.tr("app.run.done.deleted")
         case .drivePrepared(let plan) where plan.action.erases: L10n.tr("app.run.done.erased", plan.configuration.name)
         case .drivePrepared(let plan): L10n.tr("app.run.done.volumeAdded", plan.configuration.name)
+        case .driveRegistered(let o) where !o.isComplete: L10n.tr("app.run.done.registeredPartial")
         case .driveRegistered: L10n.tr("app.run.done.registered")
         }
     }
@@ -165,6 +166,7 @@ enum DriveText {
         case .holdsVault: L10n.tr("app.drives.refusal.holdsVault")
         case .timeMachine: L10n.tr("app.drives.refusal.timeMachine")
         case .readOnlyMedia: L10n.tr("app.drives.refusal.readOnlyMedia")
+        case .mightBeTimeMachine: L10n.tr("app.drives.refusal.mightBeTimeMachine")
         }
     }
 
@@ -177,6 +179,11 @@ enum DriveText {
         case .eraseDisk: L10n.tr("app.prep.option.eraseDisk")
         case .enableOwnership: L10n.tr("app.prep.option.enableOwnership")
         }
+    }
+
+    /// A Drives button: the option, "recommended" when it is, and the ellipsis of an action that opens a sheet.
+    static func optionButton(_ o: PreparationOption, recommended: Bool) -> String {
+        option(o) + (recommended ? " — " + L10n.tr("app.prep.recommended") : "") + "…"
     }
 
     /// A volume an erase destroys, with what it holds when known.

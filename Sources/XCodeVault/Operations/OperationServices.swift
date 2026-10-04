@@ -98,10 +98,60 @@ final class OperationLogFile: @unchecked Sendable {
 /// tested.
 enum LiveOperations {
     static func preview(_ kind: OperationKind, _ inputs: OperationInputs) -> OperationPreview {
-        // R6: a folder chosen by hand on a network share is refused before anything else is asked.
-        if kind.needsFolder, let folder = inputs.folder, let why = DestinationFolder.networkRefusal(MountStatus.filesystem(containing: folder)) {
-            return OperationPreview(destination: folder, blockers: [.core(why)])
+        // I1: a vault's missing standard folder is reviewed as its vault directory and created first by the run.
+        let plan = standardFolderPlan(inputs, exists: { FileManager.default.fileExists(atPath: $0) })
+        // R6: a folder on a network share is refused before anything else is asked.
+        if kind.needsFolder, let folder = plan.inputs.folder,
+            let why = DestinationFolder.networkRefusal(MountStatus.filesystem(containing: folder))
+        {
+            return OperationPreview(destination: inputs.folder, blockers: [.core(why)])
         }
+        let reviewed = corePreview(kind, plan.inputs)
+        guard let create = plan.willCreate, let vaultDirectory = inputs.standardFolderOf else { return reviewed }
+        return withNewFolder(reviewed, folder: create, vaultDirectory: vaultDirectory)
+    }
+
+    /// I1, tested: when `inputs.folder` is a vault's standard folder that does not exist, the review checks the vault
+    /// directory instead (it exists, on the same volume) and says the folder will be created. A folder chosen by hand is
+    /// never substituted: it blocks if missing, as before.
+    static func standardFolderPlan(_ inputs: OperationInputs, exists: (String) -> Bool) -> (inputs: OperationInputs, willCreate: String?) {
+        guard let folder = inputs.folder, let vaultDirectory = inputs.standardFolderOf, !inputs.folderIsCustom, !exists(folder) else {
+            return (inputs, nil)
+        }
+        var checked = inputs
+        checked.folder = vaultDirectory
+        return (checked, folder)
+    }
+
+    /// The review of the vault directory, turned back into the standard folder's: the destination named, the prepared
+    /// operation pointed at the folder and wrapped so the run creates it first. Only a folder change and an export are
+    /// retargeted; anything else stays unprepared (an offload's library cannot hold an installer before it exists).
+    static func withNewFolder(_ p: OperationPreview, folder: String, vaultDirectory: String) -> OperationPreview {
+        var out = p
+        out.destination = folder
+        out.willCreateFolder = folder
+        out.prepared = p.prepared.flatMap { retarget($0, to: folder) }.map { .creatingFolder(folder: folder, vaultDirectory: vaultDirectory, then: $0) }
+        return out
+    }
+
+    static func retarget(_ prepared: PreparedOperation, to folder: String) -> PreparedOperation? {
+        switch prepared {
+        case .location(let change, let ack): return .location(XcodeLocations.Change(key: change.key, newValue: folder), acknowledgeTests: ack)
+        case .export(var req, let x, let h):
+            req.destination = folder
+            return .export(req, x, h)
+        default: return nil
+        }
+    }
+
+    /// I1, the run's first step: the one standard folder, logged; `VaultLayout.createStandardFolder` refuses anything else.
+    static func createFolderStep(_ folder: String, vaultDirectory: String, observer: LogObserver) throws {
+        observer(LogLine(.command, "mkdir -p " + DiskPreparation.shellQuoted(folder)))
+        try VaultLayout.createStandardFolder(folder, vaultDirectory: vaultDirectory)
+        observer(LogLine(.stdout, "created " + folder))
+    }
+
+    static func corePreview(_ kind: OperationKind, _ inputs: OperationInputs) -> OperationPreview {
         do {
             switch kind {
             case .externalizeArchives: return try externalizePreview(inputs)
@@ -249,7 +299,11 @@ enum LiveOperations {
             observer(LogLine(.command, "register \(volume.mountPoint ?? volume.deviceNode) as a vault"))
             let outcome = try DriveRegistration.useDrive(volume)
             for folder in outcome.folders { observer(LogLine(.stdout, folder)) }
+            if let why = outcome.foldersError { observer(LogLine(.stderr, why)) }
             return .driveRegistered(outcome)
+        case .creatingFolder(let folder, let vaultDirectory, let then):
+            try createFolderStep(folder, vaultDirectory: vaultDirectory, observer: observer)
+            return try run(then, children: children, observer: observer)
         }
     }
 

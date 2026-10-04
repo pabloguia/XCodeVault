@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
             case .clean: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.clean")
             case .diskPreparation: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.diskPreparation")
+            case .vaultRegistration: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.vaultRegistration")
             }
             alert.runModal()
             model.relaunchRequested = false
@@ -298,6 +299,8 @@ final class AppModel {
     var driveRefreshTask: Task<Void, Never>?
     /// Keeps the mount observation alive.
     var driveObservation: AnyObject?
+    /// Minor 4: each drive read takes a number; a read that finishes after a newer one started is dropped.
+    var driveReadGeneration = 0
 
     // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
 

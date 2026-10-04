@@ -213,54 +213,40 @@ struct ExternalDriveRowView: View {
             } icon: {
                 Image(systemName: DriveText.symbol(a.verdict)).foregroundStyle(a.verdict == .ready ? Color.green : Color.secondary).accessibilityHidden(true)
             }
-            ForEach(a.changeRefusals, id: \.self) { r in
+            // `DriveAssessment.shownRefusals` and `.volumeReasons`: Core chose what to say.
+            ForEach(a.shownRefusals, id: \.self) { r in
                 Text(verbatim: DriveText.refusal(r)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            if a.changeRefusals.isEmpty, a.verdict != .ready, !a.eraseRefusals.isEmpty {
-                ForEach(a.eraseRefusals.filter { !a.changeRefusals.contains($0) }, id: \.self) { r in
-                    Text(verbatim: DriveText.refusal(r)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(a.volumeReasons, id: \.volumeName) { reason in
+                Label {
+                    InlineCodeText(reason.volumeName + ": " + reason.reason).font(.caption).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "xmark.octagon").foregroundStyle(.secondary).accessibilityHidden(true)
                 }
             }
-            // One reason per volume that does not qualify — the first blocker — and none for a volume whose only fix is the
-            // ownership block below, which says it with its buttons.
-            ForEach(
-                a.volumes.filter { v in
-                    a.qualifications[v.deviceNode]?.verdict == .unsuitable && !a.options.contains(.enableOwnership(mountPoint: v.mountPoint ?? ""))
-                }, id: \.deviceNode
-            ) { v in
-                ForEach(Array((a.qualifications[v.deviceNode]?.blockers ?? []).prefix(1)), id: \.self) { b in
-                    Label {
-                        InlineCodeText(v.volumeName + ": " + b).font(.caption).fixedSize(horizontal: false, vertical: true)
-                    } icon: {
-                        Image(systemName: "xmark.octagon").foregroundStyle(.secondary).accessibilityHidden(true)
+            // Least destructive first (minor 1): ownership runs nothing, so it comes before every button that does.
+            ForEach(a.ownershipMountPoints, id: \.self) { mp in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
+                        Button(L10n.tr("app.plan.copyCommand")) { actions.copyOwnershipCommand(mp) }
                     }
+                    .controlSize(.small)
                 }
             }
             if a.verdict == .canBeUsed {
                 Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }
             }
-            let commands = a.options.filter(\.runsCommand)
-            if !commands.isEmpty {
+            if !a.commandOptions.isEmpty {
                 HStack(spacing: 6) {
                     MarkerBadges(markers: [.experimental])
-                    ForEach(commands, id: \.self) { o in
-                        Button(DriveText.option(o) + "…") { actions.prepare(a, o) }
+                    ForEach(a.commandOptions, id: \.self) { o in
+                        Button(DriveText.optionButton(o, recommended: a.isRecommended(o))) { actions.prepare(a, o) }
                     }
                 }
                 .controlSize(.small)
-            }
-            ForEach(a.options.filter { !$0.runsCommand }, id: \.self) { o in
-                if case .enableOwnership(let mp) = o {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack {
-                            Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
-                            Button(L10n.tr("app.plan.copyCommand")) { actions.copyOwnershipCommand(mp) }
-                        }
-                        .controlSize(.small)
-                    }
-                }
             }
         }
         .padding(.vertical, 2)
