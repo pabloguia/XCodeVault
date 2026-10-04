@@ -297,7 +297,7 @@ func packageSource(_ relativePath: String) throws -> String {
         .joined(separator: "\n")
 }
 
-/// `DoctorView` runs a finding's action with no confirmation of its own, so only the vault folder, which deletes
+/// `HealthView` runs a finding's action with no confirmation of its own, so only the vault folder, which deletes
 /// nothing, may be one. The dyld cache is offered in Clean alone, behind a destructive confirmation
 /// (migration-safety review of deliverable 4). Findings are built only in Core, the one domain layer; every
 /// file there that builds one is read.

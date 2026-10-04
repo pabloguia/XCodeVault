@@ -78,6 +78,39 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   `mount status` (no canonical-mount strategy in v1, ADR-0004), `runtime install`
   (= `runtime import`).
 
+## GUI (S4, spec 2026-10-03 §6)
+
+> Status: shipped on `feat/gui-savings` (2026-10-03), rendered and unit-tested off screen, not yet exercised in a
+> signed build. The user-facing description is `docs/USER_GUIDE.md` § The app.
+
+The app is a projection of Core: every number and every decision a screen shows is a Core function with a test, or an
+`AppModel` method tested through `AppEnvironment` fakes. Views decide nothing.
+
+- **Sidebar.** *Save space*: Overview, Delete, Park, Run externally. *Details*: Storage, Simulators, Drives (volumes
+  and vaults), Health (the doctor), History (the journal), Access.
+- **Overview.** The internal-disk bar (`DiskBar`: other data, developer data by primary bucket, free), three cards
+  (`OverviewCards`: an "up to" amount, the verified share, the promise, the cost to undo, **Review**), the note that
+  the cards are alternatives with the union total, the runtime images `simctl` measured outside the catalog on their
+  own line, at most one access row, and the doctor's critical findings. The legacy `ScanSummary` savings numbers
+  (`verifiedSavingsBytes`, `estimatedInternalSavingsBytes`) are not shown anywhere in the app; a test greps for them.
+- **Delete.** The clean plan grouped by category (`DeleteList`), with a cost-to-undo column and markers; the same
+  Trash toggle, exact-count confirmation and journaling as before. The rows another tool deletes (simulator devices,
+  runtimes) are listed with **Copy Command** and are never deleted from the app.
+- **Park, Run externally.** `SavingsPlanner.rows` with **Copy Command** per row and Park's vault state. The app runs
+  none of these commands: a GUI writer for `externalize`, `runtime offload` or `locations set-*` needs its own spec
+  and the migration-safety review.
+- **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
+  Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
+  an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows; the devices total is the sum of
+  simctl's per-device `dataPathSize`, captioned as such, and is a known difference from Delete's "Simulator devices"
+  row, which is the catalog's measure of the whole `Devices` folder); the helper's root-only bytes come from one source,
+  the Delete list when there is one (`AccessChecklist.rootOnlyBytes`), on the Access screen, the banner and Delete; Drives, Health and History
+  are the earlier Volumes, Doctor and Journal views.
+- **Never color alone.** A bucket is always its symbol and its title; its color is a fill or a symbol tint, never a
+  text color. Every state has a word next to its symbol.
+- **Language.** Every string is a catalog key (`docs/process/LOCALIZATION.md`); bytes go through `ByteCount.format`
+  in the app's language.
+
 ## Permissions — asked at the moment of need (spec 2026-09-27, ADR-0007)
 
 > Status: specification. Each item says which deliverable of
@@ -94,19 +127,25 @@ are the only privileged path.
   awaitingApproval | enabled`), each with one sentence of why and one next step. `--json` shape:
   `{"fullDiskAccess": {"state", "why", "nextStep"}, "helper": {"state", "why", "nextStep"}}`.
   `clean`'s tag for a root row points to it.
-- **GUI Permissions section** (shipped 2026-09-28, not yet exercised on screen; buttons for the helper in deliverable 4): two rows —
-  Full Disk Access and the helper — each with a status, one sentence of why, and one button:
-  **Open Settings** for Full Disk Access; **Install…** or **Uninstall…** for the helper. When the app
-  becomes active after the user returns from System Settings, it re-checks and rescans.
-- **Full Disk Access at need** (shipped 2026-09-28, not yet exercised on screen): the Overview says "Some folders could not be read"
-  with **Open Settings** only when a scan reports folders refused with `EPERM`, and only while the
-  grant is not known to be present.
+- **GUI Access screen** (shipped 2026-09-28 as "Permissions", renamed and rebuilt as a checklist in S4 2026-10-03; not
+  yet exercised on screen): two rows — Full Disk Access and the helper — each with its state as a symbol and a word,
+  one sentence of why in terms of what it holds back, and one button: **Open Full Disk Access Settings** (or **Check
+  again** when the probe could not tell) for Full Disk Access; **Install the Helper…** or **Approve in System
+  Settings…** for the helper, and **Uninstall…** (with a confirmation) once it is enabled. When the app becomes active
+  after the user returns from System Settings, it re-checks and rescans. The rows are `AccessChecklist` in Core.
+- **Full Disk Access at need** (shipped 2026-09-28, not yet exercised on screen): the Overview shows the Full Disk
+  Access row only when a scan reports folders refused with `EPERM`, or a size it could not fully read, and only while
+  the grant is not known to be present (`AccessChecklist.banner`; at most one row there).
 - **The helper at need** (shipped 2026-09-28, gated on a signed build; never run live): choosing a root action opens a sheet with one sentence of
   why and **Allow**; then `register()`, `SMAppService.openSystemSettingsLoginItems()`, poll the
-  status, and run the action when it reaches `enabled`. **Uninstall…** calls `unregister()`.
+  status, and run the action when it reaches `enabled`. **Uninstall…** calls `unregister()`. The Delete view shows
+  the helper's row above its table when a listed row needs root and the helper is not enabled.
 - **A button that cannot work is never shown.** A build with no usable team ID, not signed by that
-  team, or without the daemon in its bundle, says "Not available in this build" in the same place and shows the manual route
-  (the text remediation) instead.
+  team, or without the daemon in its bundle, says "Not in this build" and, instead of a button, what to do, as a condition:
+  the helper needs a signed build that includes it, none is released yet (#30), and where there is a manual route
+  `doctor` or `vault init` prints it. Such a build's helper row is not an Overview banner (nothing there can act on it);
+  the Access screen and the Delete view still show it, with the root-only bytes. A screen says it once: where the helper's row is
+  shown, the root action's own control below it does not repeat it.
 - Whether the launchd daemon needs Full Disk Access for `Caches/dyld` is **unmeasured** until the
   helper's first live run (#30).
 

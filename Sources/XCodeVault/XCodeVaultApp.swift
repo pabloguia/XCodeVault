@@ -11,12 +11,17 @@ struct XCodeVaultApp: App {
 
     /// Before any tool runs: once the user grants Full Disk Access, every tool the app starts works inside
     /// that grant, so what `xcrun` resolves must not come from this process's inherited environment.
+    ///
+    /// The language is chosen once, before any view is built: the app's own localization as macOS resolved it
+    /// (`CFBundleLocalizations` lists the five), then the user's preferences. The environment is empty on
+    /// purpose: `XCODEVAULT_LANG` is the CLI's, and the app follows the system.
     init() {
+        L10n.configure(override: nil, environment: [:], preferred: Bundle.main.preferredLocalizations + Locale.preferredLanguages)
         GrantedToolEnvironment.applyToThisProcess()
     }
 
     var body: some Scene {
-        WindowGroup("XCodeVault") {
+        WindowGroup(AppText.productName) {
             MainView(model: model)
                 .frame(minWidth: 960, minHeight: 620)
                 .task { await model.refresh() }
@@ -26,8 +31,8 @@ struct XCodeVaultApp: App {
                 // Deliberately empty — an empty replacement is how AppKit's File > New item is
                 // removed. XCodeVault has no document model, so "New" would have nothing to make.
             }
-            CommandMenu("Scan") {
-                Button("Rescan") { Task { await model.refresh() } }.keyboardShortcut("r")
+            CommandMenu(L10n.tr("app.menu.scan")) {
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
             }
         }
     }
@@ -41,7 +46,11 @@ final class AppModel {
     /// Everything outside the process; `.live` in the app (`AppEnvironment`).
     let environment: AppEnvironment
 
-    init(environment: AppEnvironment = .live) { self.environment = environment }
+    /// Calls nothing outside the process: the checklist starts from the states below until `refreshPermissions()`.
+    init(environment: AppEnvironment = .live) {
+        self.environment = environment
+        updateAccessBanner()
+    }
 
     var report: ScanReport?
     var findings: [Finding] = []
@@ -65,6 +74,7 @@ final class AppModel {
     func refreshPermissions() {
         fullDiskAccess = environment.fullDiskAccess()
         helperState = environment.helper.state()
+        updateAccessBanner()
     }
 
     /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
@@ -102,6 +112,9 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             self.journal = journal.suffix(100).reversed()
+            // The bucket views first: the Delete view's access row reads their list.
+            updateBucketViews()
+            updateAccessBanner()
         } while scanGate.scanEnded()
     }
 
@@ -130,7 +143,7 @@ final class AppModel {
         }
     }
 
-    /// **Allow** in the sheet (with the action) and **Install…** in Permissions (without one).
+    /// **Allow** in the sheet (with the action) and the helper row's button in Access (without one).
     ///
     /// One wait at a time: a second request replaces the running wait instead of adding one, which would run its
     /// own action whenever the helper came up (migration-safety and helper-security reviews of deliverable 4).
@@ -138,7 +151,7 @@ final class AppModel {
         approvalTask?.cancel()
         showsHelperSheet = false
         pendingPrivilegedAction = nil
-        helperProgress = "Waiting for you to approve XCodeVault in System Settings ▸ General ▸ Login Items & Extensions…"
+        helperProgress = L10n.tr("app.helper.progress.waiting")
         approvalTask = Task {
             let outcome = await environment.approvalFlow(environment.helper).run()
             // Cancelled by Stop or by a newer request: this wait no longer owns the progress text, or the action.
@@ -150,9 +163,9 @@ final class AppModel {
             case .enabled:
                 if let action { await perform(action) }
             case .notAvailableInThisBuild:
-                lastError = HelperState.unavailableInThisBuild.why
+                lastError = HelperState.unavailableInThisBuild.why(in: L10n.locale)
             case .timedOut:
-                lastError = "macOS has not approved the helper yet. Approve it in System Settings ▸ General ▸ Login Items & Extensions, then try again."
+                lastError = L10n.tr("app.helper.error.timedOut")
             case .cancelled:
                 break
             case .failed(let why):
@@ -171,7 +184,7 @@ final class AppModel {
 
     func perform(_ action: PrivilegedAction) async {
         switch await environment.runner(environment.helper).run(action) {
-        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess].compactMap { $0 }.joined(separator: "\n\n")
+        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
         case .refused(let why), .failed(let why): lastError = why
         }
         await refresh()
@@ -181,6 +194,90 @@ final class AppModel {
         do { try await environment.helper.unregister() } catch { lastError = "\(error)" }
         refreshPermissions()
     }
+
+    // MARK: - Navigation and the Overview (S4 Task 3)
+
+    /// The sidebar's selection. The Overview's **Review** buttons set it through `review(_:)`.
+    var section: SidebarSection = .overview
+
+    /// **Review** on an Overview card: that bucket's view. Keeping has no view, so it changes nothing.
+    func review(_ bucket: SavingsBucket) {
+        if let target = SidebarSection(reviewing: bucket) { section = target }
+    }
+
+    /// The Overview's one access banner: the first `AccessChecklist` row that holds back something the scan measured
+    /// (`AccessChecklist.banner`, in Core and tested). Nil before the first scan. Stored, not computed: the plan rows it
+    /// reads are re-planned only when the scan or the permissions change, never per redraw.
+    private(set) var accessBanner: AccessChecklist.Row?
+    /// The Access view's checklist (`AccessChecklist.rows`): one row per need. Before the first scan there is nothing
+    /// measured to hold back, so the rows give the general reasons.
+    private(set) var accessRows: [AccessChecklist.Row] = []
+    /// The helper row above the Delete table (`AccessChecklist.deleteRow`): nil unless the list has a root-only row and the
+    /// helper is not enabled.
+    private(set) var deleteAccessRow: AccessChecklist.Row?
+
+    /// Whether the Delete view's dyld control shows its "what to do instead" text: not when `deleteAccessRow` above the
+    /// table already says it (`AccessChecklist.controlShowsGuidance`). The action and its confirmation are unchanged.
+    var deleteControlShowsGuidance: Bool { AccessChecklist.controlShowsGuidance(helper: helperState, besides: deleteAccessRow) }
+
+    /// Whether the Access view offers **Uninstall…** under `row` (`AccessChecklist.offersUninstall`).
+    func offersUninstall(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.offersUninstall(row, helper: helperState) }
+
+    private func updateAccessBanner() {
+        guard let report else {
+            accessBanner = nil
+            deleteAccessRow = nil
+            accessRows = AccessChecklist.rows(fullDiskAccess: fullDiskAccess, helper: helperState, savings: SavingsSummary(), plan: [])
+            return
+        }
+        let plan = SavingsPlanner.rows(report: report, bucket: .deleteAndRegenerate)
+        let refusals = report.summary.privacyRefusalCount
+        // The Delete list, when there is one, is the one source of the root-only bytes on every screen (final review M1).
+        accessRows = AccessChecklist.rows(
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals,
+            deleteList: deleteList)
+        accessBanner = AccessChecklist.banner(
+            fullDiskAccess: fullDiskAccess, helper: helperState, savings: report.savings, plan: plan, privacyRefusalCount: refusals,
+            deleteList: deleteList)
+        deleteAccessRow = deleteList.flatMap { AccessChecklist.deleteRow(helper: helperState, list: $0) }
+    }
+
+    /// A checklist row's button: the existing flows only (ADR-0007) — the Settings pane, a re-check of the probe, the
+    /// `SMAppService` approval. Guidance is text and does nothing.
+    func handle(_ action: AccessChecklist.Action) {
+        switch action {
+        case .openFullDiskAccessSettings: openFullDiskAccessSettings()
+        case .recheckFullDiskAccess: refreshPermissions()
+        case .installHelper: installHelper(then: nil)
+        case .guidanceOnly: break
+        }
+    }
+
+    // MARK: - The bucket views (S4 Task 4)
+
+    /// Park's and Run externally's rows: `SavingsPlanner.rows` for the scan, in its order. Stored like `accessBanner`:
+    /// planned once per scan, never per redraw.
+    private(set) var planRows: [SavingsBucket: [SavingsPlanRow]] = [:]
+    /// The Delete view's list: the clean plan by category, and the rows another tool deletes (`DeleteList.make`).
+    private(set) var deleteList: DeleteList?
+    /// Park's vault line.
+    var vaultStatus: VaultStatus { VaultStatus.make(vaultChecks) }
+
+    func rows(for bucket: SavingsBucket) -> [SavingsPlanRow] { planRows[bucket] ?? [] }
+
+    private func updateBucketViews() {
+        guard let report else {
+            planRows = [:]
+            deleteList = nil
+            return
+        }
+        let buckets: [SavingsBucket] = [.parkExternally, .runFromExternal]
+        planRows = Dictionary(uniqueKeysWithValues: buckets.map { ($0, SavingsPlanner.rows(report: report, bucket: $0)) })
+        deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
+    }
+
+    /// **Copy command**: exactly the row's command, never a variant of it. The app runs none of these (spec §6.4).
+    func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         guard let plan = cleanPlan else { return }
@@ -194,411 +291,23 @@ final class AppModel {
     }
 }
 
-enum SidebarSection: String, CaseIterable, Identifiable {
-    case overview = "Overview", storage = "Storage", doctor = "Doctor", clean = "Clean", volumes = "Volumes", runtimes = "Runtimes",
-        journal = "Journal", permissions = "Permissions"
-    var id: String { rawValue }
-    var symbol: String {
-        switch self {
-        case .overview: "internaldrive";
-        case .storage: "chart.pie";
-        case .doctor: "stethoscope";
-        case .clean: "trash"
-        case .volumes: "externaldrive";
-        case .runtimes: "iphone";
-        case .journal: "list.bullet.rectangle"
-        case .permissions: "lock.shield"
-        }
-    }
-}
-
-struct MainView: View {
-    @Bindable var model: AppModel
-    @State private var section: SidebarSection = .overview
-    var body: some View {
-        NavigationSplitView {
-            List(SidebarSection.allCases, selection: $section) { s in Label(s.rawValue, systemImage: s.symbol).tag(s) }
-                .navigationSplitViewColumnWidth(min: 170, ideal: 190)
-        } detail: {
-            Group {
-                if let r = model.report {
-                    switch section {
-                    case .overview:
-                        OverviewView(
-                            report: r, findings: model.findings, fullDiskAccess: model.fullDiskAccess,
-                            openSettings: { model.openFullDiskAccessSettings() })
-                    case .storage: StorageView(report: r)
-                    case .doctor: DoctorView(model: model)
-                    case .clean: CleanView(model: model)
-                    case .volumes: VolumesView(report: r, checks: model.vaultChecks)
-                    case .runtimes: RuntimesView(report: r)
-                    case .journal: JournalView(entries: model.journal)
-                    case .permissions: PermissionsView(model: model)
-                    }
-                } else if section == .permissions {
-                    PermissionsView(model: model)  // needs no scan
-                } else {
-                    ContentUnavailableView(
-                        "Scanning…", systemImage: "magnifyingglass",
-                        description: Text("Discovering Xcodes, runtimes, volumes and measuring storage. Nothing is changed."))
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.refresh() }
-                    } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise")
-                    }.disabled(model.isScanning)
-                }
-                if model.isScanning { ToolbarItem { ProgressView().controlSize(.small) } }
-            }
-            .navigationTitle(section.rawValue)
-        }
-        .alert("Error", isPresented: Binding(get: { model.lastError != nil }, set: { if !$0 { model.lastError = nil } })) {
-            Button("OK") {
-                // Dismissing is the whole action: SwiftUI clears the binding that presents this
-                // alert, which the `set:` closure above turns into `lastError = nil`.
-            }
-        } message: {
-            Text(model.lastError ?? "")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await model.appDidBecomeActive() }
-        }
-        .sheet(isPresented: $model.showsHelperSheet) { HelperRequestSheet(model: model) }
-        .overlay(alignment: .top) {
-            if let progress = model.helperProgress {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text(progress)
-                    Button("Stop waiting") { model.stopWaitingForApproval() }
-                }
-                .padding(8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding()
-            }
-        }
-        .alert("Done", isPresented: Binding(get: { model.lastPrivilegedResult != nil }, set: { if !$0 { model.lastPrivilegedResult = nil } })) {
-            Button("OK") {
-                // Dismissing is the whole action, as with the error alert above.
-            }
-        } message: {
-            Text(model.lastPrivilegedResult ?? "")
-        }
-    }
-}
-
-struct OverviewView: View {
-    let report: ScanReport; let findings: [Finding]
-    let fullDiskAccess: FullDiskAccessState
-    let openSettings: @MainActor () -> Void
-    var body: some View {
-        let s = report.summary
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(
-                    "macOS \(report.host.macOSVersion) · \(report.host.architecture) · \(ByteCount.format(report.host.dataVolumeFreeBytes)) free of \(ByteCount.format(report.host.dataVolumeTotalBytes)) internal"
-                ).font(.headline)
-                Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
-                    row("Internal developer storage", s.internalDeveloperBytes, s.lowerBound ? "lower bound" : nil)
-                    row("  of which simulator runtime images", s.runtimeImageBytes, "delete with simctl; keep installers external")
-                    row("Safely cleanable", s.cleanableBytes, nil)
-                    row("Relocatable (supported mechanisms)", s.relocatableBytes, nil)
-                    row("Apple-managed (info only)", s.appleManagedBytes, nil)
-                    row("Must remain local", s.mustRemainLocalBytes, nil)
-                    row("Reclaimable from the boot volume", s.estimatedInternalSavingsBytes, "via recommended actions")
-                    row("  with verified strategies only", s.verifiedSavingsBytes, "the rest is experimental")
-                }
-                if PermissionPrompts.shouldAskForFullDiskAccess(privacyRefusalCount: s.privacyRefusalCount, state: fullDiskAccess) {
-                    GroupBox {
-                        HStack {
-                            Label("Some folders could not be read", systemImage: "lock")
-                            Spacer()
-                            Button("Open Settings", action: openSettings)
-                        }
-                        Text(PrivilegeRequirement.appFullDiskAccess.why).font(.callout).foregroundStyle(.secondary)
-                    }
-                }
-                if !report.warnings.isEmpty {
-                    GroupBox("Before you act") {
-                        VStack(alignment: .leading) {
-                            ForEach(report.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
-                        }
-                    }
-                }
-                let critical = findings.filter { $0.severity >= .error }
-                if !critical.isEmpty {
-                    GroupBox("Doctor: \(critical.count) issue(s) need attention") {
-                        VStack(alignment: .leading) { ForEach(critical) { Text("\($0.severity.rawValue.uppercased()): \($0.title)") } }
-                    }
-                }
-                Text(
-                    "Every strategy marked (experimental) has not met the Definition of Done for your macOS/Xcode combination. Nothing in this app deletes non-regenerable data automatically."
-                ).font(.footnote).foregroundStyle(.secondary)
-            }.padding()
-        }
-    }
-    func row(_ label: String, _ bytes: UInt64, _ note: String?) -> some View {
-        GridRow {
-            Text(label); Text(ByteCount.format(bytes)).monospacedDigit().bold(); Text(note ?? "").foregroundStyle(.secondary).font(.caption)
-        }
-    }
-}
-
-struct StorageView: View {
-    let report: ScanReport
-    var body: some View {
-        let items = report.items.filter { $0.exists }.sorted { $0.allocatedBytes > $1.allocatedBytes }
-        Table(items) {
-            TableColumn("Size") { Text(ByteCount.format($0.allocatedBytes)).monospacedDigit() }.width(90)
-            TableColumn("Category") { Text(report.category(for: $0)?.name ?? $0.categoryID) }
-            TableColumn("Outcome") { Text(report.category(for: $0)?.outcomeLabel ?? "") }
-            TableColumn("Strategy") { it in
-                let c = report.category(for: it); Text((c?.recommendedStrategy.rawValue ?? "") + ((c?.isExperimental ?? false) ? " (experimental)" : ""))
-            }
-            TableColumn("Path") { it in
-                Text(
-                    it.path + (it.isSymlink ? "  → SYMLINK" : "") + (it.isMountPoint ? "  [mount point]" : "")
-                        + (it.mountStateUndetermined ? "  [mount state unreadable]" : "")
-                ).font(.system(.body, design: .monospaced))
-            }
-        }
-    }
-}
-
-struct DoctorView: View {
-    @Bindable var model: AppModel
-    var body: some View {
-        if model.findings.isEmpty {
-            ContentUnavailableView("No findings", systemImage: "checkmark.seal")
-        } else {
-            List(model.findings) { f in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(f.severity.rawValue.uppercased()).font(.caption).bold().foregroundStyle(
-                            f.severity >= .error ? .red : (f.severity == .warning ? .orange : .secondary));
-                        Text(f.title).bold()
-                    }
-                    Text(f.detail).font(.callout)
-                    if let p = f.path { Text(p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
-                    if let r = f.remediation { Text("→ " + r).font(.callout) }
-                    // The finding carries the action; the button never re-derives it (carried note 2).
-                    if let action = f.action {
-                        PrivilegedActionControlView(action: action, state: model.helperState) { model.request(action) }
-                    }
-                    if let e = f.evidence { Text("evidence: " + e).font(.caption2).foregroundStyle(.secondary) }
-                }.padding(.vertical, 4)
-            }
-        }
-    }
-}
-
-struct CleanView: View {
-    @Bindable var model: AppModel
-    @State private var selection = Set<String>()
-    @State private var confirm = false
-    @State private var useTrash = true
-    /// The root row whose own button was pressed, waiting on its destructive confirmation.
-    @State private var confirmPrivileged: CleanAction?
-
-    /// The rows that will actually be deleted: selected, and not root-owned. Rows needing root are
-    /// listed and selectable but never acted on by **Delete selected…** (`CleanAction.privilegeRequirement`
-    /// says what they lack); the dyld cache has its own button, through the privileged helper.
-    ///
-    /// This is a single definition on purpose. The confirmation dialog used to title itself with
-    /// `selection.count` while the delete acted on this filtered set, so selecting one root-owned
-    /// row alongside two ordinary ones asked "Delete 3 item(s) permanently?" and deleted two. The
-    /// count in a destructive confirmation is the last thing a user reads before agreeing to it.
-    private func deletable(in plan: CleanPlan) -> [CleanAction] {
-        plan.actions.filter { selection.contains($0.id) && !$0.requiresRoot }
-    }
-
-    var body: some View {
-        if let plan = model.cleanPlan {
-            VStack(alignment: .leading) {
-                Table(plan.actions, selection: $selection) {
-                    TableColumn("Size") { Text(ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
-                    TableColumn("Category") { Text($0.categoryName + ($0.isExperimental ? " (experimental)" : "")) }
-                    TableColumn("Path") { Text($0.path).font(.system(.body, design: .monospaced)) }
-                    TableColumn("Needs") { Text($0.privilegeRequirement?.label ?? "") }
-                }
-                ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
-                ForEach(plan.skipped, id: \.self) { Text("skipped: " + $0).font(.caption).foregroundStyle(.secondary) }
-                let privileged = plan.actions.filter { $0.privilegedAction != nil }
-                if !privileged.isEmpty {
-                    GroupBox("Needs the privileged helper") {
-                        ForEach(privileged) { a in
-                            HStack {
-                                Text("\(a.categoryName) (experimental) — \(ByteCount.format(a.bytes))")
-                                Spacer()
-                                if let action = a.privilegedAction {
-                                    PrivilegedActionControlView(action: action, state: model.helperState) { confirmPrivileged = a }
-                                }
-                            }
-                        }
-                    }
-                }
-                HStack {
-                    let chosen = deletable(in: plan)
-                    Text("\(chosen.count) selected · \(ByteCount.format(chosen.reduce(0) { $0 + $1.bytes }))")
-                    // The CLI has --trash; without this the GUI was strictly more destructive than
-                    // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
-                    Toggle("Move to Trash instead of deleting (space is freed only when the Trash is emptied)", isOn: $useTrash)
-                    Spacer()
-                    Button("Delete selected…") { confirm = true }.disabled(chosen.isEmpty)
-                }.padding()
-            }
-            .confirmationDialog(
-                useTrash
-                    ? "Move \(deletable(in: plan).count) item(s) to the Trash?"
-                    : "Delete \(deletable(in: plan).count) item(s) permanently?",
-                isPresented: $confirm
-            ) {
-                Button(useTrash ? "Move to Trash" : "Delete", role: .destructive) {
-                    Task {
-                        await model.applyClean(actions: deletable(in: plan), useTrash: useTrash)
-                        selection = []
-                    }
-                }
-            } message: {
-                Text(
-                    "Only regenerable data is listed here. Xcode will rebuild it on demand. Non-regenerable data (Archives) never appears in this list. Deletions are journaled."
-                )
-            }
-            .confirmationDialog(
-                confirmPrivileged?.privilegedAction?.title ?? "",
-                isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
-                presenting: confirmPrivileged
-            ) { a in
-                Button("Empty \(ByteCount.format(a.bytes))", role: .destructive) {
-                    if let action = a.privilegedAction { model.request(action) }
-                }
-            } message: { _ in
-                Text(
-                    "Experimental. It is deleted, not moved to the Trash. Simulators run without a shared cache until something rebuilds it, and what rebuilds a deleted cache is not identified (H14). Refused while Xcode, a simulator, simctl, xcodebuild or the cache builder runs."
-                )
-            }
-        } else {
-            ProgressView()
-        }
-    }
-}
-
-struct VolumesView: View {
-    let report: ScanReport; let checks: [VaultVolumeCheck]
-    var body: some View {
-        List {
-            Section("Mounted volumes") {
-                ForEach(report.volumes) { v in
-                    let q = VolumeQualification.evaluate(v)
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(v.volumeName).bold(); Text(v.filesystemPersonality); Text(v.busProtocol); Text(v.isInternal ? "internal" : "external");
-                            Spacer(); Text("free \(ByteCount.format(v.freeBytes))").monospacedDigit()
-                        }
-                        Text(v.isBootVolume ? "boot volume" : q.verdict.rawValue).font(.caption).foregroundStyle(.secondary)
-                        ForEach(q.blockers, id: \.self) { Text("✗ " + $0).font(.caption).foregroundStyle(.red) }
-                        ForEach(q.warnings, id: \.self) { Text("! " + $0).font(.caption).foregroundStyle(.orange) }
-                    }
-                }
-            }
-            Section("Vault volumes (identified by UUID + sentinel)") {
-                if checks.isEmpty { Text("None registered. Use `xcodevaultctl vault init /Volumes/<name>`.").foregroundStyle(.secondary) }
-                ForEach(checks, id: \.volume.volumeUUID) { c in
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(c.state.rawValue.uppercased()).bold().foregroundStyle(c.isUsable ? .green : .red); Text(c.volume.volumeName)
-                        }; Text(c.detail).font(.caption)
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct RuntimesView: View {
-    let report: ScanReport
-    var body: some View {
-        Table(report.runtimes) {
-            TableColumn("Platform") { Text($0.platformName) }
-            TableColumn("Version") { Text(($0.version ?? "?") + " (" + ($0.build ?? "?") + ")") }
-            TableColumn("State") { Text($0.state ?? "?") }
-            TableColumn("Size") { Text(ByteCount.format($0.sizeBytes ?? 0)).monospacedDigit() }
-            TableColumn("Mounted") { Text($0.isMounted ? "yes" : "NO") }
-            TableColumn("Image") { Text($0.path ?? "").font(.system(.caption, design: .monospaced)) }
-        }
-    }
-}
-
-struct JournalView: View {
-    let entries: [JournalEntry]
-    var body: some View {
-        if entries.isEmpty {
-            ContentUnavailableView(
-                "Journal is empty", systemImage: "list.bullet.rectangle", description: Text("Every change XCodeVault makes is recorded here."))
-        } else {
-            Table(entries) {
-                TableColumn("#") { Text("\($0.sequence)") }.width(40)
-                TableColumn("When") { Text($0.timestamp.formatted(date: .abbreviated, time: .shortened)) }
-                TableColumn("Kind") { Text($0.kind.rawValue) }
-                TableColumn("State") { Text($0.state.rawValue) }
-                TableColumn("Summary") { Text($0.summary) }
-            }
-        }
-    }
-}
-
-/// Spec §3: two rows, each with a status, one sentence of why, and one control. The texts come from
-/// `PermissionsReport`, the same the CLI prints; this view decides nothing.
-struct PermissionsView: View {
-    @Bindable var model: AppModel
-    @State private var confirmUninstall = false
-    var body: some View {
-        let report = PermissionsReport(fullDiskAccess: model.fullDiskAccess, helper: model.helperState)
-        Form {
-            Section("Full Disk Access") {
-                LabeledContent("Status", value: report.fullDiskAccess.state.displayName)
-                Text(report.fullDiskAccess.why).font(.callout)
-                if model.fullDiskAccess.offersOpenSettings {
-                    Button("Open Settings") { model.openFullDiskAccessSettings() }
-                }
-            }
-            Section("Privileged helper") {
-                LabeledContent("Status", value: report.helper.state.displayName)
-                Text(report.helper.why).font(.callout)
-                switch model.helperState.rowButton {
-                case .install: Button("Install…") { model.installHelper(then: nil) }
-                case .uninstall: Button("Uninstall…") { confirmUninstall = true }
-                case .none: Text(report.helper.nextStep).font(.callout).foregroundStyle(.secondary)
-                }
-            }
-            Section {
-                Text("XCodeVault never runs a shell and never asks for your password itself.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .task { model.refreshPermissions() }
-        .confirmationDialog("Uninstall the privileged helper?", isPresented: $confirmUninstall) {
-            Button("Uninstall", role: .destructive) { Task { await model.uninstallHelper() } }
-        } message: {
-            Text("Actions that need root are unavailable until you install it again.")
-        }
-    }
-}
-
 /// What stands next to a root action. `HelperState.actionControl` decides; this only renders it, and never
 /// renders a button for a build that cannot reach the helper.
 struct PrivilegedActionControlView: View {
     let action: PrivilegedAction
     let state: HelperState
+    /// False where an access row on the same screen already gives the guidance (`AccessChecklist.controlShowsGuidance`).
+    var showsGuidance = true
     let perform: @MainActor () -> Void
     var body: some View {
         switch state.actionControl {
-        case .run: Button(action.title, action: perform)
-        case .requestHelper: Button(action.title + "…", action: perform)
-        case .notAvailableInThisBuild: Text("Not available in this build.").font(.caption).foregroundStyle(.secondary)
+        case .run: Button(action.title(in: L10n.locale), action: perform)
+        case .requestHelper: Button(action.title(in: L10n.locale) + "…", action: perform)
+        // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
+        case .notAvailableInThisBuild:
+            if showsGuidance {
+                InlineCodeText(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -608,15 +317,15 @@ struct HelperRequestSheet: View {
     @Bindable var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.pendingPrivilegedAction?.title ?? "Install the privileged helper").font(.headline)
-            Text(model.pendingPrivilegedAction?.requirement.why ?? PrivilegeRequirement.helper.why)
+            Text(verbatim: model.pendingPrivilegedAction?.title(in: L10n.locale) ?? L10n.tr("app.helper.sheet.installTitle")).font(.headline)
+            Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(L10n.tr("app.action.cancel")) {
                     model.showsHelperSheet = false
                     model.pendingPrivilegedAction = nil
                 }
-                Button("Allow") { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+                Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
             }
         }
         .padding()

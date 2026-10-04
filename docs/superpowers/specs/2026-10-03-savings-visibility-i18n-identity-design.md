@@ -315,3 +315,21 @@ Sidebar, two groups:
   measured 2026-10-03: 15.84 GB here) are not a catalog category, so the savings model does not count them; `scan`
   prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table) needing the evidence
   and review of a catalog decision (from the S3 whole-branch review).
+
+### 10.1 Carried out of S4 (2026-10-03, recorded in STATUS.md)
+
+- The generated `L10nCatalog.core` literal type-checks in ~400 ms (over the 200 ms budget above) and an incremental
+  build after touching it took 11.2 s; give the generator explicit types or split the table.
+- Runtime images in `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` are still outside the savings model (the item
+  above); the GUI shows them on their own line (Overview) and in the Simulators screen, never in a card or the bar.
+- Category display names: the app shows the catalog's English names and outcomes in every language (S4 Task 2);
+  localizing them needs display names in the catalog.
+- pt-BR, es, ja and zh-Hans app strings are drafts (`needs_review`) awaiting native review.
+- Table and list rows were never seen in a real window (off-screen snapshots cannot draw `NSTableView` rows): the
+  Delete table's grouped rows, Storage's rows (the Bucket column's cells), both Simulators tables and Health's findings
+  `List`; checked by hand before the final review.
+- `HelperClient`'s error text and a `scripts/bundle-app.sh` comment still say "Permissions section"; renamed with the
+  next change that goes through the helper-security review.
+- Simulators maps five known platform identifiers to Apple's names (iOS, watchOS, tvOS, visionOS, macOS); an unknown
+  platform shows its short identifier.
+

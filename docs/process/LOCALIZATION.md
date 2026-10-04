@@ -5,8 +5,8 @@ XCodeVault ships in English (base), Brazilian Portuguese, Spanish, Japanese and 
 ## How it works
 
 - One catalog, in Core: `Sources/XCodeVaultCore/Localization/Localizable.xcstrings` (open in Xcode, or edit
-  the JSON), with keys namespaced by where they are shown — `savings.*` (shared), `cli.*`, `app.*` (spec
-  §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
+  the JSON), with keys namespaced by where they are shown — `savings.*` and `perm.*` (shared), `cli.*`, `app.*`
+  (spec §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
 - `scripts/l10n.sh gen` compiles it into `CoreStrings.generated.swift`, a static table built into the binary.
   There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language. The catalog is
   kept sorted (`add` writes it that way); an editor that reorders it produces a large, harmless diff.
@@ -82,8 +82,21 @@ text — and the `status` footer. Still English in every language: the per-comma
 `clean` and `externalize` plan and preflight messages, and error messages (all of it formats bytes with
 `ByteCount.english`, so an English sentence never carries another language's number format) — and the older
 output lines. `--json` and `report` are
-always English. The app (S4) moves its text into the catalog as it is rewritten; each remaining English
-string moves when its text is next edited.
+always English.
+
+The app (S4) takes its language once at launch — its resolved localization, then the user's preferences;
+`XCODEVAULT_LANG` is the CLI's — and every string it shows is a catalog key (`AppTextCoverageTests` refuses a
+string literal in a view). Localized in the app: the sidebar and every screen's own text — the Overview's bar, cards
+and notes, the bucket views (titles, promises, costs to undo, markers, the Delete table's columns and dialogs, Park's
+vault line, **Copy Command**), the Access checklist, and the Details screens' titles, columns and empty states — with
+bytes formatted in the chosen language. Still English in the app: category names and outcomes (the catalog's
+`StorageCategory` data, a decision of S4 Task 2 — localizing them needs display names in the catalog, a follow-up),
+Core prose shown as given (doctor findings, scan and volume warnings, vault details, skipped-row reasons), and records
+(journal kind, state and summary; `simctl`'s platform, state and device names; commands and paths). The permission
+texts (`perm.*`) are shared: the app's Access screen and the `permissions` text output show them in the chosen
+language, while `PermissionsReport`, the journal and the clean plan keep the English (`why(in:)`/`title(in:)` take a
+locale; the plain properties are the record's English). Every app string other than English is a draft marked
+`needs_review`.
 
 `scripts/l10n.sh check` prints `l10n: unused key <key>` for a catalog key no source references — a warning,
 not a failure, since a key can be built at run time.

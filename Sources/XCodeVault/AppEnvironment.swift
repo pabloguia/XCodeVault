@@ -13,10 +13,16 @@ struct AppEnvironment: Sendable {
     var runner: @Sendable (any PrivilegedHelper) -> PrivilegedActionRunner
     var clean: @Sendable (CleanPlan, Bool) throws -> CleanResult
     var open: @MainActor @Sendable (URL) -> Void
+    /// **Copy command** in the Park, Run externally and Delete views: the string goes to the pasteboard as is.
+    var copy: @MainActor @Sendable (String) -> Void
 
     static let live = AppEnvironment(
         survey: nil, fullDiskAccess: { FullDiskAccessProbe().state() }, helper: LiveHelper(),
         approvalFlow: { HelperApprovalFlow(helper: $0) }, runner: { PrivilegedActionRunner(helper: $0) },
         clean: { plan, useTrash in try CleanExecutor(useTrash: useTrash).execute(plan) },
-        open: { url in _ = NSWorkspace.shared.open(url) })
+        open: { url in _ = NSWorkspace.shared.open(url) },
+        copy: { text in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        })
 }

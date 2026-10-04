@@ -46,7 +46,7 @@ if [ -n "$SIGN" ] && [ -z "$TEAM" ]; then TEAM=$(echo "$SIGN" | sed -E 's/.*\(([
 cd "$ROOT"
 HELPER_SRC=Sources/XCodeVaultHelper/main.swift
 # The client needs the same substitution as the daemon (issue #30). The CLI and the app link it since
-# the 2026-09-27 permissions work: `xcodevaultctl permissions` and the app's Permissions section report
+# the 2026-09-27 permissions work: `xcodevaultctl permissions` and the app's Access screen (formerly Permissions) report
 # the helper as "not available in this build" while the team ID is still the placeholder, so in a
 # signed build this substitution is what lets that report say anything else. The app's connection
 # (deliverable 4) also needs the running code signed by that team, which is `--sign`'s job, not this

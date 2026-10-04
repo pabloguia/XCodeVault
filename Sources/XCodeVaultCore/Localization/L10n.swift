@@ -26,8 +26,8 @@ public enum L10n {
     /// The locale every `tr`/`plural` without an explicit locale uses.
     public static var locale: String { state.value }
 
-    /// Called once by the CLI before parsing (with `--lang`) and available to tests. The app does not call
-    /// it: the initial value already follows the user's language preferences.
+    /// Called once by the CLI before parsing (with `--lang`), once by the app at launch (with an empty environment:
+    /// the app ignores `XCODEVAULT_LANG`), and by tests.
     /// Order: `--lang` override, then `XCODEVAULT_LANG`, then the system preferences, then English.
     public static func configure(
         override: String?,
@@ -91,6 +91,12 @@ public enum L10n {
 
     public static func plural(_ key: String, count: Int, _ arguments: CVarArg...) -> String {
         plural(key, count: count, in: .core, locale: locale, arguments: arguments)
+    }
+
+    /// The Core table in a given locale: `"en"` for the texts a record keeps (the journal, `--json`) whatever the
+    /// process locale. Keys must be string literals, as for `tr(_:_:)`.
+    public static func tr(_ key: String, locale: String, _ arguments: CVarArg...) -> String {
+        string(key, in: .core, locale: locale, arguments: arguments)
     }
 
     /// CLDR cardinal categories for integers in the shipped languages. A new language adds its rule here

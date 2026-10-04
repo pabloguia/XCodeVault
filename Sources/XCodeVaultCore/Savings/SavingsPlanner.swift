@@ -133,15 +133,11 @@ public enum SavingsPlanner {
         var o = "\(bucket.localizedTitle)\n\(bucket.localizedPromise)\n\(bucket.localizedUndoCost)\n\n"
         guard !rows.isEmpty else { return o + L10n.tr("cli.plan.empty") + "\n" }
         for r in rows {
-            var markers: [String] = []
-            if r.option.isExperimental { markers.append(L10n.tr("cli.plan.marker.experimental")) }
-            if r.option.losesUserData { markers.append(L10n.tr("cli.plan.marker.losesUserData")) }
-            if r.actsImmediately { markers.append(L10n.tr("cli.plan.marker.actsImmediately")) }
-            if !r.option.appliesToExistingData { markers.append(L10n.tr("cli.plan.marker.newDataOnly")) }
-            if r.isPerItem && r.itemCount > 0 { markers.append(L10n.plural("cli.plan.marker.perItem", count: r.itemCount)) }
+            // The same markers and notes the app shows (`SavingsMarker.markers(for:)`, `localizedNotes`).
+            let markers = SavingsMarker.markers(for: r).map(\.localizedText)
             let size = r.option.appliesToExistingData ? "  " + ByteCount.format(r.bytes) : ""
             o += "  \(r.categoryName)\(size)" + (markers.isEmpty ? "" : "  (" + markers.joined(separator: ", ") + ")") + "\n      \(r.command)\n"
-            for note in r.noteIDs.compactMap(noteText) { o += "      \(note)\n" }
+            for note in r.localizedNotes { o += "      \(note)\n" }
         }
         return o
     }
