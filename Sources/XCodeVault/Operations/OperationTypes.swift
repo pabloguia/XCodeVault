@@ -70,6 +70,15 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
     var asksTestsAcknowledgement: Bool { self == .setDerivedData }
     /// Deletes data on this Mac when it runs: the confirm button is destructive and not the default (HIG).
     var deletesData: Bool { [.offloadRuntime, .deleteRuntime, .eraseVolume, .eraseDisk].contains(self) }
+    /// The symbol the destructive confirm button leads with (A+B review M3): an eraser for an erase, a bin for a deletion;
+    /// nil for a kind that deletes nothing.
+    var destructiveSymbol: String? {
+        switch self {
+        case .eraseVolume, .eraseDisk: DestructiveSymbol.erase
+        case .offloadRuntime, .deleteRuntime: DestructiveSymbol.delete
+        default: nil
+        }
+    }
     /// Whether **Stop and Quit** may terminate this operation's command: the one rule behind `AppModel.quitChoice` and
     /// `LiveOperations.stoppableChildren`. A copy (`ditto`) and an export (`xcodebuild`) are never stopped, and neither is
     /// an offload: its `simctl` only asks CoreSimulatorService to delete, so a stopped client can leave the runtime gone while

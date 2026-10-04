@@ -179,7 +179,7 @@ struct ExternalDriveRowView: View {
                 Label {
                     InlineCodeText(reason.volumeName + ": " + reason.reason).font(.caption).fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "xmark.octagon").foregroundStyle(.secondary).accessibilityHidden(true)
+                    StatusIcon(.neutral, symbol: StatusKind.notQualifyingSymbol)
                 }
             }
             // Least destructive first (minor 1): ownership runs nothing, so it comes before every button that does.
@@ -197,13 +197,13 @@ struct ExternalDriveRowView: View {
             // prominent per drive row (ruling B-1); the Experimental tag is on its own line above the options, never in the
             // buttons' row, and what each option costs is a footnote under them.
             if a.verdict == .canBeUsed {
-                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }.actionButton(prominent: a.useDriveIsPrimary)
+                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }.actionButton(prominent: a.primaryAction == .useDrive)
             }
             if !a.commandOptions.isEmpty {
                 Tag.marker(.experimental)
                 HStack(spacing: Spacing.s) {
                     ForEach(a.commandOptions, id: \.self) { o in
-                        Button(DriveText.optionButton(o)) { actions.prepare(a, o) }.actionButton(prominent: a.isRecommended(o))
+                        Button(DriveText.optionButton(o)) { actions.prepare(a, o) }.actionButton(prominent: a.primaryAction == .option(o))
                     }
                 }
                 if let note = DriveText.optionsFootnote(a) {

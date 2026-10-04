@@ -122,17 +122,17 @@ final class R7ACoreTests: XCTestCase {
         DriveEvaluation.assess(try XCTUnwrap(snap.disks.first { $0.id == id }), in: snap, vaults: [R6DriveTests.vaultCheck()])
     }
 
-    func testUseThisDriveIsPrimaryOnlyWhenNoFixIsRecommended() throws {
+    func testTheRowsPrimaryIsTheRecommendedFixElseUseThisDrive() throws {
         let snap = try R6DriveTests.snapshot()
         let media = try assess("disk2", snap)
         XCTAssertEqual(media.verdict, .canBeUsed)
         XCTAssertNotNil(media.recommendedOption, "case-sensitive: the new volume comes first")
-        XCTAssertFalse(media.useDriveIsPrimary)
+        XCTAssertEqual(media.primaryAction, .option(.addVolume(container: "disk3")))
         var plain = snap
         plain.volumes = plain.volumes.map {
             var v = $0; if v.volumeName == "Media" { v.filesystemPersonality = "APFS" }; return v
         }
-        XCTAssertTrue(try assess("disk2", plain).useDriveIsPrimary)
-        XCTAssertFalse(try assess("disk10", snap).useDriveIsPrimary, "a ready vault is not offered")
+        XCTAssertEqual(try assess("disk2", plain).primaryAction, .useDrive)
+        XCTAssertNil(try assess("disk10", snap).primaryAction, "a ready vault is not offered")
     }
 }

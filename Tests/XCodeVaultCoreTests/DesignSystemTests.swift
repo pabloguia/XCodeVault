@@ -191,8 +191,11 @@ final class DesignSystemTests: XCTestCase {
         for mediaOwners in [true, false] {
             let snap = try R6DriveTests.snapshot(mediaOwners: mediaOwners)
             for a in DriveEvaluation.assessAll(snap, vaults: [R6DriveTests.vaultCheck()]) {
-                let prominent = a.commandOptions.filter(a.isRecommended).count + (a.verdict == .canBeUsed && a.useDriveIsPrimary ? 1 : 0)
-                XCTAssertLessThanOrEqual(prominent, 1, a.disk.id)
+                // The row's buttons, as the view draws them: each is prominent exactly when it is the one `primaryAction`.
+                var buttons = a.commandOptions.map { DriveAssessment.PrimaryAction.option($0) }
+                if a.verdict == .canBeUsed { buttons.append(.useDrive) }
+                XCTAssertLessThanOrEqual(buttons.filter { $0 == a.primaryAction }.count, 1, a.disk.id)
+                if let primary = a.primaryAction { XCTAssertTrue(buttons.contains(primary), "the primary is one of the row's buttons: \(a.disk.id)") }
             }
         }
     }
@@ -205,6 +208,61 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertTrue(note.contains(L10n.tr("app.drives.options.eraseDeletes")), note)
         let vault = DriveEvaluation.assess(try XCTUnwrap(snap.disks.first { $0.id == "disk10" }), in: snap, vaults: [R6DriveTests.vaultCheck()])
         XCTAssertNil(DriveText.optionsFootnote(vault), "no options, no footnote")
+    }
+
+    // MARK: A+B fix round
+
+    /// M3: every destructive kind leads with a symbol that exists; the others have none.
+    func testEveryDestructiveKindHasItsSymbol() {
+        for kind in OperationKind.allCases {
+            if kind.deletesData {
+                let symbol = try? XCTUnwrap(kind.destructiveSymbol, "\(kind)")
+                XCTAssertNotNil(NSImage(systemSymbolName: symbol ?? "", accessibilityDescription: nil), "\(kind)")
+            } else {
+                XCTAssertNil(kind.destructiveSymbol, "\(kind)")
+            }
+        }
+        for symbol in [DestructiveSymbol.delete, DestructiveSymbol.erase, DestructiveSymbol.uninstall] {
+            XCTAssertNotNil(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), symbol)
+        }
+    }
+
+    /// M6: a stderr line is never told by its red alone: it starts with "! ".
+    func testAStderrLineHasAPrefixAsWellAsItsColor() {
+        XCTAssertEqual(LogLine(.stderr, "failed").rendered, "! failed")
+        XCTAssertFalse(LogLine(.stdout, "ok").rendered.hasPrefix("!"))
+    }
+
+    /// M4, M11: the statuses views used to choose inline.
+    func testTheInlineStatusChoicesAreMappings() {
+        XCTAssertEqual(StatusKind.operationDone(foldersError: nil), .success)
+        XCTAssertEqual(StatusKind.operationDone(foldersError: "Cannot create"), .warning)
+        XCTAssertNil(StatusKind.historyOutcomeSymbol(.failed), "a failure takes the blocker's own symbol")
+        XCTAssertNil(StatusKind.historyOutcomeSymbol(.interrupted))
+        XCTAssertEqual(StatusKind.historyOutcomeSymbol(.completed), JournalTimeline.Outcome.completed.symbolName)
+        XCTAssertNotNil(NSImage(systemSymbolName: StatusKind.notQualifyingSymbol, accessibilityDescription: nil))
+    }
+
+    /// M2: while the review is being checked, the footer says so; the delete footer says why it is disabled.
+    func testEveryDisabledControlSaysWhy() async throws {
+        let ops = ScriptedOperations()
+        ops.preview = { _, _ in OperationPreview() }
+        let m = makeR3Model(ops, survey: sampleSurvey(checks: [r3VaultCheck()]))
+        await m.refresh()
+        m.openRun(r3Row())
+        m.operationSheet?.isPreviewing = true
+        XCTAssertEqual(m.operationFooterReason, OperationText.stage(.planning))
+        m.operationSheet?.isPreviewing = false
+        m.operationSheet?.preview = OperationPreview()
+        XCTAssertEqual(m.operationFooterReason, L10n.tr("app.run.reason.notReady"), "nothing prepared, nothing blocking: still a reason")
+        XCTAssertNil(m.operationChoicesLockedReason)
+        m.operationSheet?.offloadToReturnTo = OperationInputs()
+        XCTAssertEqual(m.operationChoicesLockedReason, L10n.tr("app.run.lockedForOffload"))
+        XCTAssertEqual(m.deleteDisabledReason(selectedDeletable: 0), L10n.tr("app.clean.selectToDelete"))
+        XCTAssertNil(m.deleteDisabledReason(selectedDeletable: 2))
+        // While a cleanup runs (`isCleaning`, set only by `applyClean`) the reason is `app.clean.inProgress`, checked by its
+        // key's presence here; running a real cleanup is out of a design test's reach.
+        XCTAssertFalse(L10n.tr("app.clean.inProgress").hasPrefix("app."))
     }
 
     // MARK: The chart's label column (R7-B)
@@ -222,8 +280,10 @@ final class DesignSystemTests: XCTestCase {
 
 /// The design system's gallery (docs/design/DESIGN_SYSTEM.md §5.3): every component and state — buttons enabled and
 /// disabled, tags, filter chips on and off, every status label, a notice with actions, a sheet footer with a disabled
-/// reason — in light, dark and Increase Contrast, en and ja. `XCV_SNAPSHOTS=1` only; reviewers compare this, not twenty
-/// screens. Off-screen: no window.
+/// reason — in light and dark, en and ja. `XCV_SNAPSHOTS=1` only; reviewers compare this, not twenty screens. Off-screen:
+/// no window. Not Increase Contrast: off-screen, the high-contrast appearance names do not change SwiftUI's rendering
+/// (its renders were byte-identical to these, A+B review I1) and `colorSchemeContrast` cannot be set, so increased
+/// contrast is a real-window check.
 @MainActor
 final class DesignSystemSnapshotTests: XCTestCase {
     nonisolated override func tearDown() {
@@ -234,9 +294,7 @@ final class DesignSystemSnapshotTests: XCTestCase {
     func testWriteTheGallery() throws {
         guard SnapshotWriter.isEnabled else { return }
         var written: [String] = []
-        let appearances: [(NSAppearance.Name, String)] = [
-            (.aqua, "light"), (.darkAqua, "dark"), (.accessibilityHighContrastAqua, "light-contrast"), (.accessibilityHighContrastDarkAqua, "dark-contrast"),
-        ]
+        let appearances: [(NSAppearance.Name, String)] = [(.aqua, "light"), (.darkAqua, "dark")]
         for locale in ["en", "ja"] {
             L10n.configure(override: locale, environment: [:], preferred: [])
             for (appearance, tag) in appearances {

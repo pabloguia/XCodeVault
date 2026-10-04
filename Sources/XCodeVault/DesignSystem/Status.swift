@@ -130,6 +130,16 @@ extension StatusKind {
         }
     }
 
+    /// A History row's symbol: a failure and an interruption take their status kind's own (filled) symbol, every other
+    /// state its own neutral symbol from Core.
+    static func historyOutcomeSymbol(_ o: JournalTimeline.Outcome) -> String? { historyOutcome(o) == .neutral ? o.symbolName : nil }
+
+    /// A finished operation: done, or done with a part left over — registered but the standard folders not created.
+    static func operationDone(foldersError: String?) -> StatusKind { foldersError == nil ? .success : .warning }
+
+    /// The neutral mark beside a reason a volume does not qualify: not an error, the drive just cannot be a vault as it is.
+    static let notQualifyingSymbol = "xmark.octagon"
+
     /// An action's result banner.
     static func feedback(_ k: AppFeedback.Kind) -> StatusKind { k == .success ? .success : .info }
 }

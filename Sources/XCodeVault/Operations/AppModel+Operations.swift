@@ -160,10 +160,27 @@ extension AppModel {
     }
 
     /// The footer's leading text (R7-B, §3.7, ruling B-3): while the review cannot be confirmed, why — the first blocker in
-    /// words, visible, never only a tooltip. Nil otherwise.
+    /// words; while it is still being checked, that it is; and a review with nothing prepared and nothing blocking (A+B
+    /// review M2) says so too. Visible, never only a tooltip. Nil when the primary is enabled.
     var operationFooterReason: String? {
-        guard let s = operationSheet, s.phase == .review, !canConfirmOperation, let first = operationBlockers.first else { return nil }
-        return Self.blockerText(first)
+        guard let s = operationSheet, s.phase == .review, !canConfirmOperation else { return nil }
+        if let first = operationBlockers.first { return Self.blockerText(first) }
+        if s.isPreviewing || s.preview == nil { return OperationText.stage(.planning) }
+        return L10n.tr("app.run.reason.notReady")
+    }
+
+    /// Why the review's choices — destination, folder, the drives' fixes — are disabled (A+B review M2): they belong to
+    /// the offload this export was started for, and the sheet goes back to them when it is done. Nil when they are not.
+    var operationChoicesLockedReason: String? {
+        guard let s = operationSheet, s.phase == .review, s.offloadToReturnTo != nil else { return nil }
+        return L10n.tr("app.run.lockedForOffload")
+    }
+
+    /// Why **Delete Selected…** is disabled, in visible text (R7-B audit row 30, A+B review M2): a cleanup is running, or
+    /// nothing deletable is selected. Nil when it is enabled.
+    func deleteDisabledReason(selectedDeletable count: Int) -> String? {
+        if isCleaning { return L10n.tr("app.clean.inProgress") }
+        return count == 0 ? L10n.tr("app.clean.selectToDelete") : nil
     }
 
     /// **Check Again** in the footer, beside that reason: only while the review is blocked by something the world can

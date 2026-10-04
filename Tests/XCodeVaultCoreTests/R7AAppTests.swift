@@ -213,22 +213,32 @@ final class R7ASnapshotTests: XCTestCase {
         for locale in ["en", "ja"] {
             L10n.configure(override: locale, environment: [:], preferred: [])
             let ops = ScriptedOperations()
-            ops.preview = { _, _ in
+            // As the real review does (A+B review M5): until "I understand…" is checked, the acknowledgement blocks it.
+            ops.preview = { _, inputs in
                 OperationPreview(
                     destination: "/Volumes/Media/XCodeVault/DerivedData",
                     warnings: [
-                        "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (E2, reproduced).",
-                        "If this volume is disconnected, Xcode's behaviour is not yet verified (E6 pending): run `xcodevaultctl doctor` after reconnecting.",
-                    ], prepared: .migration(R3RunInAppTests.plan()), willCreateFolder: "/Volumes/Media/XCodeVault/DerivedData")
+                        "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (reproduced here).",
+                        "If this volume is disconnected, Xcode's behaviour has not been tested yet: run `xcodevaultctl doctor` after reconnecting.",
+                    ], blockers: inputs.acknowledgeTests ? [] : [.acknowledgeTests],
+                    prepared: inputs.acknowledgeTests ? .migration(R3RunInAppTests.plan()) : nil, willCreateFolder: "/Volumes/Media/XCodeVault/DerivedData")
             }
-            let pablo = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(301), mount: "/Volumes/Media")
+            // The vault is the drive's own volume, named as the drive shows it.
+            let pablo = VaultVolumeCheck(
+                volume: VaultVolume(
+                    volumeUUID: R6DriveTests.u(301), volumeName: "Media", lastMountPoint: "/Volumes/Media", registeredAt: Date(), sentinelID: "s"),
+                state: .verified, currentMountPoint: "/Volumes/Media", shadowBytes: nil, detail: "")
             let drives = ScriptedDrives(try R6DriveTests.snapshot())
             var env = makeR3Model(ops, survey: sampleSurvey(checks: [pablo])).environment
             env.drives = drives.services
             let m = AppModel(environment: env)
             await m.refresh()
             m.openRun(r3Row(categoryID: "derivedData", bucket: .runFromExternal))
-            await eventually("the review") { m.operationSheet?.preview != nil }
+            await eventually("the review") { m.operationSheet?.preview != nil && m.operationSheet?.isPreviewing == false }
+            XCTAssertFalse(m.canConfirmOperation, "blocked until the box is checked")
+            written.append(try SnapshotWriter.write(OperationSheetView(model: m), name: "r7a-derived-data-review-blocked-\(locale)", size: size))
+            m.updateOperationInputs { $0.acknowledgeTests = true }
+            await eventually("the acknowledged review") { m.canConfirmOperation }
             written.append(try SnapshotWriter.write(OperationSheetView(model: m), name: "r7a-derived-data-review-\(locale)", size: size))
 
             let rec = PreparedRecorder()

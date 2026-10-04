@@ -26,6 +26,39 @@ extension View {
     }
 }
 
+/// A destructive action in content or a footer (§3.6, A+B review M3): bordered, `role: .destructive`, never the default,
+/// its title naming the destruction, and a leading symbol tinted `status.danger`, so the danger is a shape as well as the
+/// words. Never red text (principle 3). A `confirmationDialog`'s own buttons stay plain: the system draws those.
+struct DestructiveButton: View {
+    let title: String
+    let symbol: String
+    let action: @MainActor () -> Void
+
+    init(_ title: String, symbol: String, action: @escaping @MainActor () -> Void) {
+        self.title = title
+        self.symbol = symbol
+        self.action = action
+    }
+
+    var body: some View {
+        Button(role: .destructive, action: action) {
+            Label {
+                Text(verbatim: title)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(StatusKind.danger.tint)
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
+/// The symbols a destructive button leads with.
+enum DestructiveSymbol {
+    static let delete = "trash"
+    static let erase = "eraser"
+    static let uninstall = "xmark.bin"
+}
+
 /// **Copy Command** everywhere (§3.1, audit row 22): bordered, small, `doc.on.doc`, and a moment of "Copied" after the
 /// click, said to VoiceOver too. `a11yName` says whose command it copies when a screen has several.
 struct CopyCommandButton: View {

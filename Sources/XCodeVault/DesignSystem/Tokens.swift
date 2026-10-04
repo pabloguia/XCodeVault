@@ -43,7 +43,8 @@ enum Tokens {
     static let chipSelectedStroke = Color.accentColor
     /// The hover wash on an unselected chip.
     static let chipHoverFill = Color.primary.opacity(0.06)
-    /// A log line the command wrote to standard error. The log's own convention; the stream is also in the line's text.
+    /// A log line the command wrote to standard error. Never color alone (A+B review M6): the line also starts with "! "
+    /// (`LogLine.rendered`), asserted by `DesignSystemTests`.
     static let logStderr = Color.red
     /// The neutral "other data" segment of a disk bar.
     static let otherDataFill = Color(nsColor: .systemGray).opacity(0.55)

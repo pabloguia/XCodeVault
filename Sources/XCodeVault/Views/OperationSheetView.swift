@@ -184,6 +184,10 @@ struct OperationSheetView: View {
             }
         }
         if s.kind.usesDestination { otherDrives(s) }
+        if let locked = model.operationChoicesLockedReason {
+            // Why the choices above are disabled (A+B review M2).
+            Text(verbatim: locked).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
         if s.kind.asksTestsAcknowledgement {
             Toggle(L10n.tr("app.run.acknowledgeTests"), isOn: ackBinding).toggleStyle(.checkbox)
         }
@@ -225,7 +229,7 @@ struct OperationSheetView: View {
                 Label {
                     Text(verbatim: a.displayName + " — " + DriveText.verdict(a.verdict)).font(.callout).fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: DriveText.symbol(a.verdict)).foregroundStyle(.secondary).accessibilityHidden(true)
+                    StatusIcon(.driveVerdict(a.verdict), symbol: DriveText.symbol(a.verdict))
                 }
                 Spacer()
                 if let title = DriveText.prepareTitle(a.prepareAction) {
@@ -390,7 +394,7 @@ struct OperationSheetView: View {
             }
         default:
             if let r = s.result {
-                StatusLabel(model.registrationFoldersError == nil ? .success : .warning, OperationText.done(r))
+                StatusLabel(.operationDone(foldersError: model.registrationFoldersError), OperationText.done(r))
             }
             if let why = model.registrationFoldersError {
                 InlineCodeText(why).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
@@ -434,8 +438,8 @@ struct OperationSheetView: View {
                         Text(verbatim: OperationText.stage(.removing)).font(.callout)
                         ProgressView().progressViewStyle(.linear)
                     }
-                    Button(L10n.tr("app.run.removeOriginal"), role: .destructive) { confirmsRemoval = true }
-                        .actionButton().disabled(!model.canRemoveOriginal)
+                    DestructiveButton(L10n.tr("app.run.removeOriginal"), symbol: DestructiveSymbol.delete) { confirmsRemoval = true }
+                        .disabled(!model.canRemoveOriginal)
                     // Why it is disabled, in visible text (ruling B-3).
                     if let why = model.removeOriginalDisabledReason {
                         Text(verbatim: why).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -521,8 +525,10 @@ struct OperationSheetView: View {
                     // Deletes data here (ruling B-2, ADR-0012): Cancel stays the default, so Return cancels; Escape closes
                     // the sheet too (`onExitCommand`). The destructive verb is bordered and never the default.
                     Button(L10n.tr("app.action.cancel")) { model.closeOperationSheet() }.keyboardShortcut(.defaultAction)
-                    Button(model.operationConfirmTitle, role: .destructive) { Task { await model.runOperation() } }
-                        .actionButton().disabled(!model.canConfirmOperation)
+                    DestructiveButton(model.operationConfirmTitle, symbol: s.kind.destructiveSymbol ?? DestructiveSymbol.delete) {
+                        Task { await model.runOperation() }
+                    }
+                    .disabled(!model.canConfirmOperation)
                 } else {
                     Button(L10n.tr("app.action.cancel"), role: .cancel) { model.closeOperationSheet() }.keyboardShortcut(.cancelAction)
                     Button(model.operationConfirmTitle) { Task { await model.runOperation() } }

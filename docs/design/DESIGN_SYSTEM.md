@@ -164,7 +164,7 @@ Each component has one SwiftUI type in `Sources/XCodeVault/DesignSystem/`. Views
 | --- | --- | --- |
 | **Primary** | `Button(t) {…}.keyboardShortcut(.defaultAction)` in a sheet/dialog (macOS draws the default button in the accent color); elsewhere `.buttonStyle(.borderedProminent)` | One per surface (§1.2) |
 | **Secondary** | `.buttonStyle(.bordered)` (explicit) | Every other action in content, rows, cards |
-| **Destructive** | `Button(t, role: .destructive) {…}.buttonStyle(.bordered)`; never `.defaultAction`; title names the destruction ("Delete 12 Items…", "Erase PABLO…") | Footer or row; always opens a confirmation (§3.6) |
+| **Destructive** | `DestructiveButton(t, symbol:)`: bordered, `role: .destructive`, a leading symbol (`trash`, `eraser`, `xmark.bin`) tinted `status.danger`, **never red text** (A+B review M3); never `.defaultAction`; title names the destruction ("Delete 12 Items…", "Erase PABLO…"). A `confirmationDialog`'s or a context menu's own destructive buttons stay plain | Footer or row; always opens a confirmation (§3.6) |
 | **Tertiary / link** | `.buttonStyle(.link)` for navigation inside text ("Show in Health"); `.borderless` + icon-only + `.help` for small inline affordances (dismiss ×) | Inline |
 | **Cancel** | `Button(L10n.tr("app.action.cancel"), role: .cancel) {…}.keyboardShortcut(.cancelAction)` | Sheets, always Escape |
 
@@ -462,7 +462,14 @@ Scope: `Sources/XCodeVault/**/*.swift` excluding `Sources/XCodeVault/DesignSyste
 | U7 One prominent per file body (heuristic) | more than one `.borderedProminent` per `struct … View` | §1.2; exceptions listed in the script with a reason |
 | U8 No custom disabled look | `\.opacity\(.*(isEnabled|disabled)` | Use `.disabled(_:)` (§3.1) |
 | U9 Sheet Cancel binds Escape | a `Button(…"app.action.cancel"…)` line in `OperationSheetView.swift`/`XCodeVaultApp.swift` without `.cancelAction` — or with `.defaultAction` (ruling B-2) in a file with no `.onExitCommand {` | §3.6–3.7 |
+| U11 Destructive bordered buttons go through `DestructiveButton` | `role: .destructive` and `.actionButton(`/`.buttonStyle(` on one line (A+B review M3) | §3.1 |
 | U10 Buttons in List/Form rows are styled | `Button(` in `DrivesViews.swift`, `AccessView.swift` row views without `.buttonStyle(` within the same view chain (checked per call site, allow-list for toolbar/menu/dialog contexts) | Root cause of 17 |
+
+A+B review M8 widened the patterns: U1 also `.clipShape(Capsule())` and `background(Capsule()…)`; U3 also `.tint(…)` and
+`.foregroundColor(…)`; U10 also the trailing-closure `Button {`; U7 starts a count at nested view types too. Known limits:
+U7 counts a body written in an `extension` with the struct before it, and U10 checks only Drives and Permissions rows.
+One recorded exception to "never color alone": a log line written to standard error is red **and** starts with `! `
+(`LogLine.rendered`, asserted in `DesignSystemTests`).
 
 Each rule prints `file:line` and the rule ID; a mutation self-test (inject one violation in a temp copy, expect failure)
 keeps the lint honest, as `helper-invariants.sh` does.
@@ -489,7 +496,9 @@ keeps the lint honest, as `helper-invariants.sh` does.
 
 `DesignSystemSnapshotTests` renders one view with every component — primary/secondary/destructive/link buttons enabled and
 disabled, Tag variants, FilterChip off/on/disabled (hover cannot be rendered off-screen), each StatusLabel, a NoticeRow with actions, a sheet footer with a
-disabled reason — in light, dark and Increase Contrast, en and ja. Reviewers compare it, not 20 screens. Like the existing
+disabled reason — in light and dark, en and ja. **Not Increase Contrast** (A+B review I1): off-screen, the
+high-contrast appearance names render byte-identically to light and dark, and `colorSchemeContrast` cannot be set, so
+increased contrast is checked in a real window, not in this gallery. Reviewers compare it, not 20 screens. Like the existing
 snapshot tests, it renders off-screen (no window, no scan).
 
 ---

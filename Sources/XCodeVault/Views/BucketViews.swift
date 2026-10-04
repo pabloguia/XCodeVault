@@ -427,9 +427,9 @@ struct DeleteView: View {
     private func footer(_ list: DeleteList) -> some View {
         HStack {
             let chosen = list.deletable(selected: selection)
-            if chosen.isEmpty {
-                // Why Delete Selected… is disabled, in visible text (R7-B, audit row 30).
-                Text.l10n(L10n.tr("app.clean.selectToDelete")).font(.footnote).foregroundStyle(.secondary)
+            if let why = model.deleteDisabledReason(selectedDeletable: chosen.count) {
+                // Why Delete Selected… is disabled, in visible text (R7-B audit row 30, A+B review M2).
+                Text.l10n(why).font(.footnote).foregroundStyle(.secondary)
             } else {
                 Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
             }
@@ -438,8 +438,7 @@ struct DeleteView: View {
             Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash).help(L10n.tr("app.clean.useTrash.help"))
             Spacer()
             // A destructive verb with ⌘⌫ (HIG review D1); it only opens the confirmation.
-            Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) { confirm = true }
-                .actionButton()
+            DestructiveButton(L10n.tr("app.clean.deleteSelected"), symbol: DestructiveSymbol.delete) { confirm = true }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(chosen.isEmpty || model.isCleaning)
         }

@@ -101,7 +101,8 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   label as measured (`ChartLabelMetrics`, `BarChartLayout.labelColumnWidth`). `scripts/ui-invariants.sh` (U1–U10, with a
   mutation self-test) is a CI gate: preflight is 14 gates. Gallery: `DesignSystemSnapshotTests`. Report:
   `.superpowers/sdd/r7/b-report.md`. **Manual check, open:** the gallery and every screen in a real window, light, dark
-  and Increase Contrast; whether a bordered destructive button needs a red tint on this macOS.
+  and Increase Contrast (the gallery cannot render increased contrast off-screen); a disabled prominent button in dark
+  mode.
 
 ## Blocked / pending — manual (ask the user)
 

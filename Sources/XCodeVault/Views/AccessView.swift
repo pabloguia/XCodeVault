@@ -103,7 +103,7 @@ struct AccessView: View {
                     }
                     if model.offersUninstall(row) {
                         // Opens the confirmation; destructive in role, never the default (R7-B, §3.6).
-                        Button(L10n.tr("app.permissions.uninstallEllipsis"), role: .destructive) { confirmUninstall = true }.actionButton()
+                        DestructiveButton(L10n.tr("app.permissions.uninstallEllipsis"), symbol: DestructiveSymbol.uninstall) { confirmUninstall = true }
                     }
                 }
             }

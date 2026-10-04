@@ -153,6 +153,46 @@ final class ScreenFitTests: XCTestCase {
         }
     }
 
+    /// A+B review M12: Storage and Simulators with nothing to chart fit, at their minimum and in the window, in en and ja.
+    func testTheChartsFitWithNothingToChart() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let t = TempDir()
+            let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: sampleSurvey())
+            await model.refresh()
+            let report = try XCTUnwrap(model.report)
+            XCTAssertTrue(model.storageBars(report).isEmpty && SimulatorsChart.bars(report: report).isEmpty, "the fixture charts nothing")
+            for section in [SidebarSection.storage, .simulators] {
+                model.section = section
+                XCTAssertLessThanOrEqual(minimumHeight(MainView(model: model).detail(report)), Self.ceiling, "empty, \(language), \(section.rawValue)")
+                XCTAssertLessThanOrEqual(windowHeightAsked(MainView(model: model)), Self.ceiling, "empty, \(language), \(section.rawValue): asked")
+            }
+        }
+    }
+
+    /// A+B review M12: the box both charts sit in keeps its height with long labels — a Storage-sized box with long option
+    /// names, a Simulators-sized box with long device names — and their rows scroll inside it rather than growing it.
+    func testTheChartBoxKeepsItsHeightWithLongLabels() {
+        let long = [
+            "Dauerhaft auf einem externen Laufwerk ausführen, vollständig ausgeschrieben",
+            "外部ドライブから実行（ローカライズされた非常に長いラベル、省略なし）",
+            "Apple Watch Ultra 3 (49 mm) – Speicherplatz für Simulatordaten, vollständig ausgeschrieben",
+            "iPhone 17 Pro Max（シミュレータのデータとデバイスサポートファイルをすべて含む長い名前）",
+        ]
+        let bars = long.enumerated().map { i, label in
+            ChartBar(id: "\(i)", label: label, bytes: UInt64(i + 1) * 1_000_000_000, color: .teal, accessibilityLabel: label)
+        }
+        for (maximum, name) in [(StorageView.chartHeight, "Storage"), (SimulatorsView.chartBoxHeight, "Simulators")] {
+            let box = ChartBox(barCount: bars.count, maximum: maximum, title: name) {
+                BarList(bars: bars, isFilteredOut: { _ in false }, icon: { _ in Image(systemName: "iphone") }, click: { _, _ in })
+            }
+            .frame(width: 700)
+            let expected = BarChartLayout.boxHeight(barCount: bars.count, maximum: maximum)
+            XCTAssertEqual(minimumHeight(box), expected, accuracy: 1, "\(name): the box, not the wrapped rows, sets the height")
+            XCTAssertEqual(windowHeightAsked(box), expected, accuracy: 1, "\(name): asked")
+        }
+    }
+
     /// Delete with the helper's access row showing above the table (spec §6.3: never folded away) still fits, in en and ja.
     func testDeleteFitsWithTheAccessRowShowing() async throws {
         for language in ["en", "ja"] {

@@ -231,7 +231,7 @@ struct HistoryOutcomeLabel: View {
         Label {
             Text(verbatim: AppText.historyOutcome(outcome)).lineLimit(1)
         } icon: {
-            StatusIcon(kind, symbol: kind == .neutral ? outcome.symbolName : nil)
+            StatusIcon(kind, symbol: StatusKind.historyOutcomeSymbol(outcome))
         }
     }
 }

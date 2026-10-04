@@ -56,7 +56,7 @@ daemon's logic, in a library so it is testable) + `Sources/XCodeVaultHelper` (ro
 bootstrap, allowlisted verbs; every change needs the helper-security review) · `Sources/XCodeVault` (SwiftUI app) ·
 `Resources/` (Info.plist, launchd plist) · `scripts/bundle-app.sh` / `scripts/release.sh` ·
 `scripts/helper-invariants.sh` / `scripts/check-doc-mirror.sh` (the two controls that run in CI) ·
-`scripts/ui-invariants.sh` (the design system's UI lint, U1–U10; a CI gate) ·
+`scripts/ui-invariants.sh` (the design system's UI lint, U1–U11; a CI gate) ·
 `scripts/preflight.sh` (runs every CI gate locally, in CI's order — run it before pushing; three of
 the four gates passing is not "the gates passed") ·
 `scripts/l10n.sh` (String Catalogs → compiled tables; `check` is a CI gate; see `docs/process/LOCALIZATION.md`) ·

@@ -195,9 +195,18 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
         return .nothing
     }
 
-    /// Whether **Use This Drive** is the drive's primary button (R7-A): it can be used as it is and no fix is recommended
-    /// instead — a case-sensitive volume gets the recommended new volume first (`prepareAction`).
-    public var useDriveIsPrimary: Bool { verdict == .canBeUsed && recommendedOption == nil }
+    /// The one action a drive's row makes prominent (R7-A/R7-B, ruling B-1): the recommended option when there is one —
+    /// a case-sensitive volume gets the new volume first (`prepareAction`) — else **Use This Drive** when the drive can be
+    /// used as it is, else none. The Drives row and its test read this one value, so a row can never get two.
+    public enum PrimaryAction: Equatable, Sendable {
+        case useDrive
+        case option(PreparationOption)
+    }
+
+    public var primaryAction: PrimaryAction? {
+        if let recommended = recommendedOption { return .option(recommended) }
+        return verdict == .canBeUsed ? .useDrive : nil
+    }
 
     /// The options that run a command, least destructive first: the Drives screen's buttons.
     public var commandOptions: [PreparationOption] { options.filter(\.runsCommand) }

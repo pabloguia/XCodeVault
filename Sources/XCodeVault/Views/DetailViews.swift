@@ -33,14 +33,10 @@ struct StorageView: View {
                 // No row in any option: a sentence, not an empty plot (R2 review M4).
                 Text.l10n(L10n.tr("app.storage.chart.none")).foregroundStyle(.secondary).padding(.horizontal)
             } else {
-                ScrollView(.vertical) {
+                ChartBox(barCount: bars.count, maximum: Self.chartHeight, title: L10n.tr("app.storage.chart.title")) {
                     StorageBucketChart(bars: bars, selected: model.storageBucketFilter) { model.clickStorageBar($0, extending: $1) }
-                        .padding(.vertical, 2)
                 }
-                .frame(height: BarChartLayout.boxHeight(barCount: bars.count, maximum: Self.chartHeight))
                 .padding(.horizontal)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.chart.title")))
                 legend(bars)
                 // A persistent hint (the user's feedback): the chart filters.
                 Text.l10n(L10n.tr("app.storage.chart.caption")).font(.caption).foregroundStyle(.secondary)
@@ -206,13 +202,9 @@ struct SimulatorsView: View {
         if bars.isEmpty {
             Text.l10n(L10n.tr("app.simulators.chart.none")).foregroundStyle(.secondary)
         } else {
-            ScrollView(.vertical) {
+            ChartBox(barCount: bars.count, maximum: Self.chartBoxHeight, title: L10n.tr("app.simulators.chart.title")) {
                 SimulatorsChartView(bars: bars, selection: model.simulatorSelection) { id, _ in model.clickSimulatorBar(id) }
-                    .padding(.vertical, 2)
             }
-            .frame(height: BarChartLayout.boxHeight(barCount: bars.count, maximum: Self.chartBoxHeight))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(Text(verbatim: L10n.tr("app.simulators.chart.title")))
             Text.l10n(L10n.tr("app.simulators.chart.caption")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         let unmeasured = SimulatorsChart.unmeasuredCount(report: report)

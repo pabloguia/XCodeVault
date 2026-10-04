@@ -319,6 +319,13 @@ extension L10nCatalog {
                 "ja": "選択項目を削除…",
                 "zh-Hans": "删除所选项目…",
             ],
+            "app.clean.inProgress": [
+                "en": "Deleting… one cleanup runs at a time.",
+                "pt-BR": "Apagando… uma limpeza de cada vez.",
+                "es": "Eliminando… una limpieza a la vez.",
+                "ja": "削除しています… クリーンアップは一度に 1 つです。",
+                "zh-Hans": "正在删除… 一次只运行一项清理。",
+            ],
             "app.clean.privileged.empty": [
                 "en": "Empty %@",
                 "pt-BR": "Esvaziar %@",
@@ -2076,6 +2083,13 @@ extension L10nCatalog {
                 "ja": "取り消すには",
                 "zh-Hans": "撤销方式",
             ],
+            "app.run.lockedForOffload": [
+                "en": "These choices belong to the offload this export is for; the sheet goes back to them when the export is done.",
+                "pt-BR": "Estas escolhas pertencem ao descarregamento para o qual esta exportação serve; a janela volta a elas quando a exportação terminar.",
+                "es": "Estas opciones pertenecen a la descarga para la que es esta exportación; la hoja vuelve a ellas cuando termina la exportación.",
+                "ja": "これらの選択は、この書き出しの対象である退避のものです。書き出しが終わるとシートはそこに戻ります。",
+                "zh-Hans": "这些选项属于此次导出所服务的移出操作；导出完成后表单会回到它们。",
+            ],
             "app.run.logFile": [
                 "en": "Full log: %@",
                 "pt-BR": "Registro completo: %@",
@@ -2089,6 +2103,13 @@ extension L10nCatalog {
                 "es": "%1$@ de %2$@",
                 "ja": "%2$@ 中 %1$@",
                 "zh-Hans": "%1$@ / %2$@",
+            ],
+            "app.run.reason.notReady": [
+                "en": "Nothing to run yet: check the choices above.",
+                "pt-BR": "Ainda não há nada para executar: confira as escolhas acima.",
+                "es": "Aún no hay nada que ejecutar: revisa las opciones de arriba.",
+                "ja": "まだ実行するものがありません。上の選択を確認してください。",
+                "zh-Hans": "还没有可运行的内容：请检查上方的选项。",
             ],
             "app.run.removeOriginal": [
                 "en": "Remove Original…",
@@ -2651,11 +2672,11 @@ extension L10nCatalog {
                 "zh-Hans": "运行时：%@",
             ],
             "app.storage.chart.caption": [
-                "en": "Click a bar to filter; ⌘-click or use the buttons below to choose several. Items on every drive, each counted once.",
-                "pt-BR": "Clique em uma barra para filtrar; use ⌘-clique ou os botões abaixo para escolher várias. Itens de todas as unidades, contados uma vez.",
-                "es": "Haz clic en una barra para filtrar; usa ⌘-clic o los botones de abajo para elegir varias. Elementos de todas las unidades, contados una vez.",
-                "ja": "バーをクリックすると絞り込みます。複数選ぶには ⌘-クリックするか下のボタンを使います。すべてのドライブの項目を 1 回ずつ数えています。",
-                "zh-Hans": "点按条形以筛选；按住 ⌘ 点按或使用下方按钮可选择多个。包含所有驱动器上的项目，每项只计一次。",
+                "en": "Click a bar to filter; ⌘-click bars, or turn on the filters above, to choose several. Items on every drive, each counted once.",
+                "pt-BR": "Clique em uma barra para filtrar; use ⌘-clique nas barras, ou ative os filtros acima, para escolher várias. Itens de todas as unidades, contados uma vez.",
+                "es": "Haz clic en una barra para filtrar; usa ⌘-clic en las barras o activa los filtros de arriba para elegir varias. Elementos de todas las unidades, contados una vez.",
+                "ja": "バーをクリックすると絞り込みます。複数選ぶには、バーを ⌘-クリックするか上のフィルタをオンにします。すべてのドライブの項目を 1 回ずつ数えています。",
+                "zh-Hans": "点按条形以筛选；按住 ⌘ 点按条形或打开上方的筛选器可选择多个。包含所有驱动器上的项目，每项只计一次。",
             ],
             "app.storage.chart.none": [
                 "en": "Nothing to chart.",

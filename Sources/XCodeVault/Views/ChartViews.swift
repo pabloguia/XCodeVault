@@ -12,6 +12,24 @@ import XCodeVaultCore
 // sized to the longest label, wrapping when it is longer than the column; the bar is to its right and its size after it, on
 // every row.
 
+/// The bounded box both charts sit in (R1's fit rule): one row's height per bar up to `maximum`
+/// (`BarChartLayout.boxHeight`); more rows, or rows a wrapped label made taller, scroll inside it — never taller.
+struct ChartBox<Content: View>: View {
+    let barCount: Int
+    let maximum: CGFloat
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ScrollView(.vertical) {
+            content().padding(.vertical, 2)
+        }
+        .frame(height: BarChartLayout.boxHeight(barCount: barCount, maximum: maximum))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(verbatim: title))
+    }
+}
+
 /// One bar of a `BarList`: what Core decided, in the words the screen shows.
 struct ChartBar: Identifiable, Equatable {
     let id: String
