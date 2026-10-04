@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-03. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-04. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -51,6 +51,15 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   headers (OVERVIEW, USAGE, OPTIONS, SUBCOMMANDS, and "<GROUP> SUBCOMMANDS") stay English — the library
   prints them and offers no hook — and Japanese help wraps only at spaces, so a long Japanese abstract runs
   past the column width instead of breaking mid-phrase.
+
+- **R3 — run the savings commands in the app** (branch `feat/r3-run-in-app`, stacked on R4; ADR-0011, brief
+  `.superpowers/sdd/r3/brief.md`, approved 2026-10-04). **Run…** beside **Copy Command** on Park, Run externally and the
+  Delete view's runtime row; a Run sheet with review, exact-action confirmation, stage, progress bar and live log
+  (`StreamingCommandRunner`, no new parameter on any existing Core operation); Remove Original as a separate step;
+  Undo for Locations; the interrupted-migration banner; the quit guard. Written and tested with fakes only — **never
+  run against real data in a real window**. Waiting on the migration-safety review (dispatched by the controller), then
+  a manual run in the app: Archives to a vault and Remove Original, a DerivedData change and Undo, an offload with
+  Export Installer First. Translations are drafts (`needs_review`).
 
 ## Blocked / pending — manual (ask the user)
 

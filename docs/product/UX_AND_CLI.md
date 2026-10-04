@@ -98,10 +98,18 @@ The app is a projection of Core: every number and every decision a screen shows 
   (`verifiedSavingsBytes`, `estimatedInternalSavingsBytes`) are not shown anywhere in the app; a test greps for them.
 - **Delete.** The clean plan grouped by category (`DeleteList`), with a cost-to-undo column and markers; the same
   Trash toggle, exact-count confirmation and journaling as before. The rows another tool deletes (simulator devices,
-  runtimes) are listed with **Copy Command** and are never deleted from the app.
-- **Park, Run externally.** `SavingsPlanner.rows` with **Copy Command** per row and Park's vault state. The app runs
-  none of these commands: a GUI writer for `externalize`, `runtime offload` or `locations set-*` needs its own spec
-  and the migration-safety review.
+  runtimes) are listed with **Copy Command** and are never deleted by **Delete Selected…**; the runtime row has
+  **Run…** (R3), which runs `runtime delete` through the Run sheet.
+- **Park, Run externally.** `SavingsPlanner.rows` with **Copy Command** per row and Park's vault state, and **Run…**
+  (R3, ADR-0011) on the rows the app runs: `externalize` (Archives), `runtime offload`, `locations set-derived-data` /
+  `set-archives` and `runtime export`; on the Delete view, `runtime delete`. Simulator devices stay copy-only. The Run
+  sheet reviews (Core's preflight or plan; blockers disable the confirm button), confirms with the exact action, then
+  shows the stage, a progress bar and the live log (`StreamingCommandRunner`), and the result. The flags become
+  controls: the vault picker, a folder panel, the runtime and platform pickers, the tests checkbox for DerivedData;
+  `--yes` becomes the confirm button. Removing an original is a second step after a verified copy, behind the
+  non-regenerable checkbox; a Locations change offers **Undo** (Core's reset). No cancel while copying, verifying or
+  removing; one operation at a time; quitting while one runs asks first. An interrupted migration puts a banner with
+  `migration status` / `resume` / `abort` on Park, Run externally and History; resume and abort stay CLI-only.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
   Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
   an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows; the devices total is the sum of
