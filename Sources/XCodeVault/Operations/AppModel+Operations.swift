@@ -28,7 +28,11 @@ extension AppModel {
     func openRun(_ row: SavingsPlanRow) {
         guard let kind = OperationKind.forRow(row), !isOperationRunning else { return }
         var inputs = OperationInputs()
-        if kind.needsVault { inputs.vaultUUID = defaultVaultUUID }
+        // R6: the destination starts at the only usable vault, and a folder at that vault's standard folder (`VaultLayout`).
+        if kind.usesDestination, let uuid = defaultVaultUUID {
+            inputs.vaultUUID = uuid
+            if kind.needsFolder { inputs.folder = Self.defaultFolder(kind, usableVaults.first { $0.volume.volumeUUID == uuid }) }
+        }
         operationSheet = OperationSheetState(row: row, kind: kind, inputs: inputs)
         Task { await previewOperation() }
     }
@@ -46,6 +50,12 @@ extension AppModel {
     /// while it ran is dropped: the next one is coming.
     func previewOperation() async {
         guard let sheet = operationSheet, sheet.phase == .review else { return }
+        if sheet.kind.isDriveKind {
+            // R6: planned from the Drives snapshot, on this actor — pure Core; the run reads the disks again.
+            operationSheet?.preview = Self.drivePreview(sheet.kind, sheet.inputs, snapshot: driveSnapshot, vaults: vaultChecks)
+            operationSheet?.isPreviewing = false
+            return
+        }
         let missing = Self.inputBlockers(sheet.kind, sheet.inputs)
         guard missing.isEmpty else {
             operationSheet?.preview = OperationPreview(blockers: missing)
@@ -84,7 +94,12 @@ extension AppModel {
     func revalidateOperationAfterScan() {
         guard let s = operationSheet, s.phase == .review else { return }
         if let uuid = s.inputs.vaultUUID, !usableVaults.contains(where: { $0.volume.volumeUUID == uuid }) {
-            updateOperationInputs { $0.vaultUUID = nil }
+            let kind = s.kind
+            updateOperationInputs {
+                $0.vaultUUID = nil
+                // A standard folder of the vault that went away goes with it; a folder the user chose stays.
+                if kind.needsFolder && !$0.folderIsCustom { $0.folder = nil }
+            }
         } else {
             checkOperationAgain()
         }
@@ -93,16 +108,25 @@ extension AppModel {
     /// **Choose…**: the folder panel (behind `AppEnvironment`), then a new review.
     func chooseOperationFolder() async {
         guard let path = await environment.operations.chooseFolder(operationSheet?.inputs.folder ?? folderPanelStart) else { return }
-        updateOperationInputs { $0.folder = path }
+        updateOperationInputs {
+            $0.folder = path
+            // **Choose Another Folder…** overrides the vault's standard folder (R6): the picker says "Other folder".
+            $0.folderIsCustom = true
+            $0.vaultUUID = nil
+        }
     }
 
     /// What disables the confirm button: the preview's blockers once it has run.
-    var operationBlockers: [OperationBlocker] { operationSheet?.preview?.blockers ?? [] }
+    var operationBlockers: [OperationBlocker] {
+        let blockers = operationSheet?.preview?.blockers ?? []
+        guard blockers.isEmpty, let name = typedNameNeeded else { return blockers }
+        return [.typeName(name)]
+    }
 
     /// Whether the confirm button is enabled: a finished review with something prepared and nothing blocking it.
     var canConfirmOperation: Bool {
         guard let s = operationSheet, s.phase == .review, !s.isPreviewing, let p = s.preview else { return false }
-        return p.blockers.isEmpty && p.prepared != nil
+        return p.blockers.isEmpty && p.prepared != nil && typedNameNeeded == nil
     }
 
     /// A blocker as the sheet says it. Core's own sentences are English prose and are shown as given.
@@ -113,6 +137,8 @@ extension AppModel {
         case .chooseRuntime: L10n.tr("app.run.blocker.chooseRuntime")
         case .acknowledgeTests: L10n.tr("app.run.blocker.acknowledgeTests")
         case .simulatorWorkRunning: L10n.tr("app.run.blocker.simulatorWork")
+        case .driveGone: L10n.tr("app.run.blocker.driveGone")
+        case .typeName(let name): L10n.tr("app.run.blocker.typeName", name)
         case .core(let why): why
         }
     }
@@ -186,6 +212,9 @@ extension AppModel {
         /// A Delete view clean (`CleanExecutor`), which deletes or trashes item by item: stopping it part-way is untested
         /// (R5 safety review, pre-existing gap).
         case clean
+        /// R6: `diskutil` erasing or partitioning a drive, or registering one: stopping part-way leaves the disk in a state
+        /// nobody chose.
+        case diskPreparation
     }
 
     /// The decision per stage and kind. Copying, verifying and removing an original keep running; so do an export and an
@@ -197,11 +226,13 @@ extension AppModel {
             switch kind {
             case .exportRuntime: return .keepRunningOnly(.export)
             case .offloadRuntime: return .keepRunningOnly(.offload)
+            case .addVolume, .addPartition, .eraseVolume, .eraseDisk, .useDrive: return .keepRunningOnly(.diskPreparation)
             default: return .keepRunningOnly(.migration)
             }
         }
         switch stage {
-        case .copying, .verifying, .removing, .preparing: return .keepRunningOnly(.migration)
+        case .copying, .verifying, .removing: return .keepRunningOnly(.migration)
+        case .preparing: return .keepRunningOnly(.diskPreparation)
         case .exporting: return .keepRunningOnly(.export)
         case .planning, .deleting, .applying, .done, .failed: return .stopThenQuit
         }
@@ -243,7 +274,9 @@ extension AppModel {
     /// The confirm button: runs what the review prepared, streaming its log. No cancel (rule 4): Core's copy, verify and
     /// remove are not interruptible from here, and export's cancel was not made clean this round.
     func runOperation() async {
-        guard canConfirmOperation, var s = operationSheet, let prepared = s.preview?.prepared else { return }
+        guard canConfirmOperation, var s = operationSheet, var prepared = s.preview?.prepared else { return }
+        // R6: the name as typed goes to Core, which refuses an erase without the exact name whatever was decided here.
+        if case .diskPreparation(let plan, _) = prepared { prepared = .diskPreparation(plan, confirmedName: s.confirmationText) }
         s.phase = .running
         s.stage = s.kind.runningStage
         s.startedAt = Date()
@@ -256,9 +289,11 @@ extension AppModel {
         let run = environment.operations.run
         // Copy progress only: an export's folder may not grow until the end (review M4), so it shows elapsed time alone.
         let progress: String? = if case .migration(let plan) = prepared { plan.destination } else { nil }
-        let result = await execute(progress) { children, observer in try run(prepared, children, observer) }
+        let toRun = prepared
+        let result = await execute(progress) { children, observer in try run(toRun, children, observer) }
         finishOperation(result)
         await refresh()
+        if s.kind.isDriveKind { await refreshDrives() }
         if case .success(.exported) = result { returnToOffloadIfAsked() }
     }
 
@@ -347,7 +382,7 @@ extension AppModel {
         switch result {
         case .copied(let outcome): outcome.plan.direction == .externalize && !outcome.sourceRemoved ? .removeOriginal : .none
         case .locationApplied: .undo
-        case .offloaded, .exported, .runtimeDeleted: .none
+        case .offloaded, .exported, .runtimeDeleted, .drivePrepared, .driveRegistered: .none
         }
     }
 
@@ -498,6 +533,12 @@ extension AppModel {
     func closeOperationSheet() {
         guard !isOperationRunning else { return }
         operationSheet = nil
+        // R6: back to the Run sheet **Prepare…** came from, its destination reviewed against the drives as they are now.
+        if let back = suspendedOperationSheet {
+            suspendedOperationSheet = nil
+            operationSheet = back
+            revalidateOperationAfterScan()
+        }
     }
 
     /// **Copy Log**: the lines kept in memory, as text, naming the full log's file when lines were dropped.
@@ -510,6 +551,7 @@ extension AppModel {
     func showHistoryFromOperation() {
         guard !isOperationRunning else { return }
         operationSheet = nil
+        suspendedOperationSheet = nil
         section = .history
     }
 

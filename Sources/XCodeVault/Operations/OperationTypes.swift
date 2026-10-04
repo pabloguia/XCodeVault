@@ -5,6 +5,46 @@ import XCodeVaultCore
 /// the `clean` rows keep **Copy command** only.
 enum OperationKind: String, Sendable, Equatable, CaseIterable {
     case externalizeArchives, offloadRuntime, setDerivedData, setArchives, exportRuntime, deleteRuntime
+    /// R6 (ADR-0012): preparing an external drive — EXPERIMENTAL (rule 10) — and **Use This Drive**.
+    case addVolume, addPartition, eraseVolume, eraseDisk, useDrive
+
+    /// The drive kinds: planned by `AppModel.drivePreview` from the Drives snapshot, never by `OperationServices.preview`.
+    var isDriveKind: Bool { [.addVolume, .addPartition, .eraseVolume, .eraseDisk, .useDrive].contains(self) }
+    /// The Core action a preparation kind runs.
+    var preparationAction: DiskPreparationAction? {
+        switch self {
+        case .addVolume: .addVolume
+        case .addPartition: .addPartition
+        case .eraseVolume: .eraseVolume
+        case .eraseDisk: .eraseDisk
+        default: nil
+        }
+    }
+
+    /// The kind that runs `option`; nil for ownership, which the app runs nothing for.
+    static func forOption(_ option: PreparationOption) -> OperationKind? {
+        switch option {
+        case .addVolume: .addVolume
+        case .addPartition: .addPartition
+        case .eraseVolume: .eraseVolume
+        case .eraseDisk: .eraseDisk
+        case .enableOwnership: nil
+        }
+    }
+
+    /// Whether the sheet shows the **Destination** picker (R6): the kinds that write to a vault or a folder.
+    var usesDestination: Bool { needsVault || needsFolder }
+
+    /// The standard vault folder this kind's folder defaults to (`VaultLayout`). Externalize Archives keeps the migration
+    /// engine's own path under the vault directory.
+    var layoutPurpose: VaultLayout.Purpose? {
+        switch self {
+        case .setDerivedData: .derivedData
+        case .setArchives: .archives
+        case .offloadRuntime, .exportRuntime: .runtimes
+        default: nil
+        }
+    }
 
     /// The row's operation, decided by its bucket and category; nil keeps the row copy-only.
     static func forRow(_ row: SavingsPlanRow) -> OperationKind? {
@@ -26,11 +66,13 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
     /// DerivedData on an external volume breaks `xcodebuild test` (E2): the CLI's `--i-understand-tests-may-fail`.
     var asksTestsAcknowledgement: Bool { self == .setDerivedData }
     /// Deletes data on this Mac when it runs: the confirm button is destructive and not the default (HIG).
-    var deletesData: Bool { self == .offloadRuntime || self == .deleteRuntime }
+    var deletesData: Bool { [.offloadRuntime, .deleteRuntime, .eraseVolume, .eraseDisk].contains(self) }
     /// Whether **Stop and Quit** may terminate this operation's command: the one rule behind `AppModel.quitChoice` and
     /// `LiveOperations.stoppableChildren`. A copy (`ditto`) and an export (`xcodebuild`) are never stopped, and neither is
     /// an offload: its `simctl` only asks CoreSimulatorService to delete, so a stopped client can leave the runtime gone while
     /// the journal says `failed` — which Doctor reads as "the delete did not happen", losing the offload's way back.
+    /// A drive preparation (R6) is never stopped: `diskutil` part-way through an erase or a partition change leaves the
+    /// disk in a state nobody chose.
     var canBeStopped: Bool { [.deleteRuntime, .setDerivedData, .setArchives].contains(self) }
 
     /// The stage the sheet shows from the moment the operation starts.
@@ -40,6 +82,8 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
         case .offloadRuntime, .deleteRuntime: .deleting
         case .setDerivedData, .setArchives: .applying
         case .exportRuntime: .exporting
+        case .addVolume, .addPartition, .eraseVolume, .eraseDisk: .preparing
+        case .useDrive: .applying
         }
     }
 
@@ -80,6 +124,15 @@ struct OperationInputs: Sendable, Equatable {
     var buildVersion: String?
     /// `--i-understand-tests-may-fail`.
     var acknowledgeTests = false
+    /// True when the folder was chosen with **Choose Another Folder…** rather than from a vault's standard layout (R6).
+    var folderIsCustom = false
+    /// R6: the whole disk a preparation targets, and which option.
+    var diskID: String?
+    var driveOption: PreparationOption?
+    /// R6: the new volume's settings (name, case sensitivity, size limit).
+    var volume = VolumeConfiguration()
+    /// R6, **Use This Drive**: the volume to register, by UUID.
+    var driveVolumeUUID: String?
 }
 
 /// Why **Run** is disabled. The app's own reasons are localized; Core's are its English prose, shown as given.
@@ -87,6 +140,10 @@ enum OperationBlocker: Sendable, Equatable {
     case chooseVault, chooseFolder, chooseRuntime, acknowledgeTests
     /// Simulator work (a simulator, `simctl`, a test run) is running: offload and delete wait for it (review L3).
     case simulatorWorkRunning
+    /// R6: the drive is no longer connected, or the disks could not be read.
+    case driveGone
+    /// R6: an erase waits for the exact name to be typed.
+    case typeName(String)
     case core(String)
 }
 
@@ -97,6 +154,11 @@ enum PreparedOperation: Sendable {
     case location(XcodeLocations.Change, acknowledgeTests: Bool)
     case export(RuntimeOperations.ExportRequest, XcodeInstallation, HostEnvironment)
     case deleteRuntime(identifier: String, XcodeInstallation, HostEnvironment)
+    /// R6: one `diskutil` preparation; `confirmedName` is what the user typed (Core refuses an erase without the exact
+    /// name, whatever this layer decided).
+    case diskPreparation(DiskPreparationPlan, confirmedName: String)
+    /// R6: **Use This Drive** on a mounted volume.
+    case useDrive(Volume)
 
     /// The kind this prepared operation runs as.
     var kind: OperationKind {
@@ -106,6 +168,14 @@ enum PreparedOperation: Sendable {
         case .location(let change, _): change.key == .archives ? .setArchives : .setDerivedData
         case .export: .exportRuntime
         case .deleteRuntime: .deleteRuntime
+        case .diskPreparation(let plan, _):
+            switch plan.action {
+            case .addVolume: .addVolume
+            case .addPartition: .addPartition
+            case .eraseVolume: .eraseVolume
+            case .eraseDisk: .eraseDisk
+            }
+        case .useDrive: .useDrive
         }
     }
 
@@ -139,6 +209,10 @@ enum OperationResult: Sendable {
     case offloaded
     case exported
     case runtimeDeleted
+    /// R6: the drive was prepared; the new or erased volume is named in the plan.
+    case drivePrepared(DiskPreparationPlan)
+    /// R6: **Use This Drive** registered the vault and made its standard folders.
+    case driveRegistered(DriveRegistration.Outcome)
 }
 
 /// The Run sheet's whole state (R3). Presented while `AppModel.operationSheet` is non-nil.
@@ -162,7 +236,12 @@ struct OperationSheetState: Sendable {
     }
 
     let id = UUID()
-    let row: SavingsPlanRow
+    /// The plan row **Run…** came from; nil for a drive operation (R6).
+    let row: SavingsPlanRow?
+    /// R6: the drive a preparation or **Use This Drive** is for, as assessed when the sheet opened.
+    var drive: DriveAssessment?
+    /// R6: what the user typed to confirm an erase. Not an input: typing does not plan again.
+    var confirmationText = ""
     var kind: OperationKind
     var inputs: OperationInputs
     var preview: OperationPreview?
@@ -198,8 +277,9 @@ struct OperationSheetState: Sendable {
     /// The journal id of the running operation, when known (`PreparedOperation.journalID`).
     var runningJournalID: String?
 
-    init(row: SavingsPlanRow, kind: OperationKind, inputs: OperationInputs) {
+    init(row: SavingsPlanRow?, kind: OperationKind, inputs: OperationInputs, drive: DriveAssessment? = nil) {
         self.row = row
+        self.drive = drive
         self.kind = kind
         self.inputs = inputs
     }

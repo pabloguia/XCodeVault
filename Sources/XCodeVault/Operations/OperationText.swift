@@ -13,6 +13,11 @@ enum OperationText {
         case .setArchives: L10n.tr("app.run.title.setArchives")
         case .exportRuntime: L10n.tr("app.run.title.exportRuntime")
         case .deleteRuntime: L10n.tr("app.run.title.deleteRuntime")
+        case .addVolume: L10n.tr("app.run.title.addVolume")
+        case .addPartition: L10n.tr("app.run.title.addPartition")
+        case .eraseVolume: L10n.tr("app.run.title.eraseVolume")
+        case .eraseDisk: L10n.tr("app.run.title.eraseDisk")
+        case .useDrive: L10n.tr("app.run.title.useDrive")
         }
     }
 
@@ -25,6 +30,10 @@ enum OperationText {
         case .setDerivedData, .setArchives: current.map { L10n.tr("app.run.undo.locationRestore", $0) } ?? L10n.tr("app.run.undo.location")
         case .exportRuntime: L10n.tr("app.run.undo.exportRuntime")
         case .deleteRuntime: L10n.tr("app.run.undo.deleteRuntime")
+        case .addVolume: L10n.tr("app.run.undo.addVolume")
+        case .addPartition: L10n.tr("app.run.undo.addPartition")
+        case .eraseVolume, .eraseDisk: L10n.tr("app.run.undo.erase")
+        case .useDrive: L10n.tr("app.run.undo.useDrive")
         }
     }
 
@@ -52,6 +61,11 @@ enum OperationText {
         case .setArchives: L10n.tr("app.run.failed.title.setArchives")
         case .exportRuntime: L10n.tr("app.run.failed.title.exportRuntime")
         case .deleteRuntime: L10n.tr("app.run.failed.title.deleteRuntime")
+        case .addVolume: L10n.tr("app.run.failed.title.addVolume")
+        case .addPartition: L10n.tr("app.run.failed.title.addPartition")
+        case .eraseVolume: L10n.tr("app.run.failed.title.eraseVolume")
+        case .eraseDisk: L10n.tr("app.run.failed.title.eraseDisk")
+        case .useDrive: L10n.tr("app.run.failed.title.useDrive")
         }
     }
 
@@ -74,6 +88,9 @@ enum OperationText {
         case .offloaded: L10n.tr("app.run.done.offloaded")
         case .exported: L10n.tr("app.run.done.exported")
         case .runtimeDeleted: L10n.tr("app.run.done.deleted")
+        case .drivePrepared(let plan) where plan.action.erases: L10n.tr("app.run.done.erased", plan.configuration.name)
+        case .drivePrepared(let plan): L10n.tr("app.run.done.volumeAdded", plan.configuration.name)
+        case .driveRegistered: L10n.tr("app.run.done.registered")
         }
     }
 
@@ -103,6 +120,11 @@ extension AppModel {
         case .setArchives: return L10n.tr("app.run.confirm.setArchives", folder)
         case .exportRuntime: return L10n.tr("app.run.confirm.exportRuntime", s.inputs.platform, folder)
         case .deleteRuntime: return L10n.tr("app.run.confirm.deleteRuntime", runtime, size)
+        case .addVolume: return L10n.tr("app.run.confirm.addVolume", s.inputs.volume.name)
+        case .addPartition: return L10n.tr("app.run.confirm.addPartition", s.inputs.volume.name)
+        case .eraseVolume: return L10n.tr("app.run.confirm.eraseVolume", pendingDiskPlan?.confirmationName ?? "")
+        case .eraseDisk: return L10n.tr("app.run.confirm.eraseDisk", pendingDiskPlan?.confirmationName ?? "")
+        case .useDrive: return L10n.tr("app.run.confirm.useDrive", s.drive?.registrable?.volumeName ?? "")
         }
     }
 
@@ -111,5 +133,60 @@ extension AppModel {
     var operationProgressText: String? {
         guard let s = operationSheet, s.stage == .copying, case .migration(let plan)? = s.preview?.prepared, let done = s.progressBytes else { return nil }
         return L10n.tr("app.run.progress.copied", ByteCount.format(min(done, plan.sourceBytes)), ByteCount.format(plan.sourceBytes))
+    }
+}
+
+/// The Drives screen's and the preparation sheet's words (R6). Literal keys; commands, names and paths never translated.
+enum DriveText {
+    static func verdict(_ v: DriveVerdict) -> String {
+        switch v {
+        case .ready: L10n.tr("app.drives.verdict.ready")
+        case .canBeUsed: L10n.tr("app.drives.verdict.canBeUsed")
+        case .needsPreparation: L10n.tr("app.drives.verdict.needsPreparation")
+        case .cannotBeUsed: L10n.tr("app.drives.verdict.cannotBeUsed")
+        }
+    }
+
+    /// The verdict's symbol, always beside its words (never color alone).
+    static func symbol(_ v: DriveVerdict) -> String {
+        switch v {
+        case .ready: "checkmark.circle.fill"
+        case .canBeUsed: "checkmark.circle"
+        case .needsPreparation: "wrench.and.screwdriver"
+        case .cannotBeUsed: "minus.circle"
+        }
+    }
+
+    static func refusal(_ r: DiskRefusal) -> String {
+        switch r {
+        case .internalDisk: L10n.tr("app.drives.refusal.internalDisk")
+        case .bootDisk: L10n.tr("app.drives.refusal.bootDisk")
+        case .diskImage: L10n.tr("app.drives.refusal.diskImage")
+        case .holdsVault: L10n.tr("app.drives.refusal.holdsVault")
+        case .timeMachine: L10n.tr("app.drives.refusal.timeMachine")
+        case .readOnlyMedia: L10n.tr("app.drives.refusal.readOnlyMedia")
+        }
+    }
+
+    /// An option as its button and the sheet's picker name it.
+    static func option(_ o: PreparationOption) -> String {
+        switch o {
+        case .addVolume: L10n.tr("app.prep.option.addVolume")
+        case .addPartition(_, let free): L10n.tr("app.prep.option.addPartition", ByteCount.format(free))
+        case .eraseVolume(let id, let name): L10n.tr("app.prep.option.eraseVolume", name.isEmpty ? id : name)
+        case .eraseDisk: L10n.tr("app.prep.option.eraseDisk")
+        case .enableOwnership: L10n.tr("app.prep.option.enableOwnership")
+        }
+    }
+
+    /// A volume an erase destroys, with what it holds when known.
+    static func destroyed(_ v: DestroyedVolume) -> String {
+        let name = v.name.isEmpty ? v.id : v.name
+        return v.usedBytes.map { L10n.tr("app.prep.destroys.row", name, ByteCount.format($0)) } ?? name
+    }
+
+    /// The drive's facts in one line: media, bus, size.
+    static func facts(_ a: DriveAssessment) -> String {
+        [a.disk.mediaName, a.disk.busProtocol, ByteCount.format(a.disk.sizeBytes)].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }

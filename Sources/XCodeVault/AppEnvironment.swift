@@ -21,6 +21,8 @@ struct AppEnvironment: Sendable {
     /// **Run…** in Park, Run externally and Delete (R3): previews, runs, the second steps and the folder panel. `.inert`
     /// unless set, so a test that does not supply fakes cannot reach Core's operations.
     var operations: OperationServices = .inert
+    /// R6: reading the disks and hearing mounts (`DriveServices`). `.inert` unless set: a test never runs `diskutil`.
+    var drives: DriveServices = .inert
     /// **Show in Finder** on the Delete and Storage tables (R5): selects the paths in a Finder window. A no-op unless set.
     var reveal: @MainActor @Sendable ([String]) -> Void = { _ in }
     /// Quitting this instance, through `applicationShouldTerminate` (the quit guard). A no-op unless set.
@@ -42,7 +44,7 @@ struct AppEnvironment: Sendable {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         },
-        registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() }, operations: .live,
+        registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() }, operations: .live, drives: .live,
         reveal: { paths in NSWorkspace.shared.activateFileViewerSelecting(paths.map { URL(fileURLWithPath: $0) }) },
         terminate: { NSApplication.shared.terminate(nil) },
         launchNewInstance: {

@@ -180,7 +180,9 @@ struct MainView: View {
                 copyCommand: { model.environment.copy($0) })
         case .storage: StorageView(model: model, report: r)
         case .simulators: SimulatorsView(model: model, report: r)
-        case .drives: DrivesView(list: model.drivesList(r)) { model.driveBar($0, report: r) }
+        case .drives:
+            DrivesView(
+                list: model.drivesList(r), bar: { model.driveBar($0, report: r) }, external: model.driveAssessments, actions: model.externalDriveActions)
         case .health: HealthView(model: model)
         case .history: HistoryView(model: model)
         case .access: AccessView(model: model)

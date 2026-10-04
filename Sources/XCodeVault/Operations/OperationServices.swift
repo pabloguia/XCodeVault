@@ -98,6 +98,10 @@ final class OperationLogFile: @unchecked Sendable {
 /// tested.
 enum LiveOperations {
     static func preview(_ kind: OperationKind, _ inputs: OperationInputs) -> OperationPreview {
+        // R6: a folder chosen by hand on a network share is refused before anything else is asked.
+        if kind.needsFolder, let folder = inputs.folder, let why = DestinationFolder.networkRefusal(MountStatus.filesystem(containing: folder)) {
+            return OperationPreview(destination: folder, blockers: [.core(why)])
+        }
         do {
             switch kind {
             case .externalizeArchives: return try externalizePreview(inputs)
@@ -105,6 +109,8 @@ enum LiveOperations {
             case .setDerivedData, .setArchives: return locationPreview(kind, inputs)
             case .exportRuntime: return try exportPreview(inputs)
             case .deleteRuntime: return try deletePreview(inputs)
+            // Planned by `AppModel.drivePreview` from the Drives snapshot; never asked here.
+            case .addVolume, .addPartition, .eraseVolume, .eraseDisk, .useDrive: return OperationPreview(blockers: [.driveGone])
             }
         } catch {
             return OperationPreview(blockers: [.core("\(error)")])
@@ -231,6 +237,19 @@ enum LiveOperations {
             try refuseIfSimulatorWork(CleanExecutor.simulatorWorkIsRunning())
             try RuntimeOperations(runner: runner, xcode: x, host: h).delete(identifier: id)
             return .runtimeDeleted
+        case .diskPreparation(let plan, let typed):
+            // EXPERIMENTAL (rule 10, H17). Core reads the disks again, re-checks the disk's identity and `DiskSafety`, runs
+            // ONE diskutil command with no sudo, and journals it. The registry is read here, at the moment of use: a vault
+            // registered since the preview forbids an erase. An unreadable registry refuses (fails closed).
+            let outcome = try DiskPreparation.execute(
+                plan, confirmedName: typed, runner: runner, journal: Journal(),
+                registeredVaultUUIDs: { Set(try VaultRegistry().volumes().map(\.volumeUUID)) }, snapshot: { try DriveSnapshot.read() })
+            return .drivePrepared(outcome.plan)
+        case .useDrive(let volume):
+            observer(LogLine(.command, "register \(volume.mountPoint ?? volume.deviceNode) as a vault"))
+            let outcome = try DriveRegistration.useDrive(volume)
+            for folder in outcome.folders { observer(LogLine(.stdout, folder)) }
+            return .driveRegistered(outcome)
         }
     }
 

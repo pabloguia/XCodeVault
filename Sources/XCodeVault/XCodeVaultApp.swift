@@ -29,7 +29,10 @@ struct XCodeVaultApp: App {
         Window(AppText.productName, id: "main") {
             MainView(model: model)
                 .frame(minWidth: 960, minHeight: 620)
-                .task { await model.refresh() }
+                .task {
+                    model.startObservingDrives()
+                    await model.refresh()
+                }
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
@@ -78,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .export: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.export")
             case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
             case .clean: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.clean")
+            case .diskPreparation: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.diskPreparation")
             }
             alert.runModal()
             model.relaunchRequested = false
@@ -266,6 +270,7 @@ final class AppModel {
             updateAccessBanner()
             revalidateOperationAfterScan()
         } while scanGate.scanEnded()
+        await refreshDrives()
     }
 
     // MARK: - Run… (R3; the methods are in AppModel+Operations.swift)
@@ -281,6 +286,18 @@ final class AppModel {
     var operationLogFile: OperationLogFile?
     /// The running operation's child processes, which **Stop and Quit** stops (review M1).
     var activeChildren: ChildProcesses?
+
+    // MARK: - Drives (R6; the methods are in AppModel+Drives.swift)
+
+    /// The disks and mounted volumes as last read; nil before the first read or when they could not be read.
+    var driveSnapshot: DriveSnapshot?
+    /// The Run sheet put aside while **Prepare…** runs a drive preparation from its Destination picker; it comes back when
+    /// the preparation sheet closes.
+    var suspendedOperationSheet: OperationSheetState?
+    /// The pending debounced refresh after a mount or unmount.
+    var driveRefreshTask: Task<Void, Never>?
+    /// Keeps the mount observation alive.
+    var driveObservation: AnyObject?
 
     // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
 
