@@ -170,11 +170,12 @@ enum LiveOperations {
     static func createFolderStep(
         _ folder: String, vaultDirectory: String, vaultUUID: String, observer: LogObserver, world: FolderStepWorld = .live
     ) throws {
-        observer(LogLine(.command, "mkdir -p " + DiskPreparation.shellQuoted(folder)))
         guard let vault = try world.vault(vaultUUID) else {
             throw VaultError("The vault \(vaultUUID) is no longer registered. Nothing was created; check the drive and preview again.")
         }
         try VaultLayout.createStandardFolder(folder, vaultDirectory: vaultDirectory, vault: vault, check: world.check, volumeUUID: world.volumeUUID)
+        // Logged only once it ran: a refused step must not show a command that never happened.
+        observer(LogLine(.command, "mkdir -p " + DiskPreparation.shellQuoted(folder)))
         observer(LogLine(.stdout, "created " + folder))
     }
 

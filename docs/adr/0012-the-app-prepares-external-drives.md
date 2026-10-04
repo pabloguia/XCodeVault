@@ -64,6 +64,8 @@ automatic or presented as harmless.
    The standard-folder mkdir (§8) checks identity too (fix round 2, N1): before creating it, the run refuses unless the
    vault verifies — mounted, its volume UUID, its sentinel — at the mount point the folder is under, and the vault
    directory is a real directory (no symlink) on that same volume; otherwise nothing is created.
+   A window of milliseconds remains between those checks and the mkdir itself; it is accepted, as for the diskutil
+   calls, and cannot be closed from user space.
 7. **Journal and History.** Every run is journaled under the new kind `diskPreparation` (planned → started →
    completed/failed, with the command in its detail), including a refusal before running. History shows it.
 8. **The vault layout is defined once** (`VaultLayout`): `<volume>/XCodeVault/{DerivedData,Archives,Runtimes}`.
