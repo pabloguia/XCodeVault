@@ -121,7 +121,12 @@ The app is a projection of Core: every number and every decision a screen shows 
   internal, boot, disk-image, Time Machine and read-only disks, and every erase on a disk holding a registered vault.
   Preparation runs in the Run sheet: typed name for an erase, Core re-reads and re-checks identity before its one
   `diskutil` command, journal kind `diskPreparation`, Keep Running only on quit. Detection: `NSWorkspace` mount/unmount,
-  debounced. `vault init` also creates the `VaultLayout` folders.
+  debounced, older reads dropped; an open sheet keeps its previewed plan and blocks ("The disk changed") if the disk or
+  target differs. `vault init` also creates the `VaultLayout` folders and **exits 3** when the vault was registered but
+  they could not be created (0 done, 1 not registered). The Destination picker lists the usable vaults; drives that can
+  be used or need preparation (and a ready vault with a recommended fix) are listed under it with **Prepare…**, which
+  opens the recommended option, rather than inside the picker. A missing standard folder of a usable vault is created
+  by the run's first step ("Will create folder …"); a hand-chosen folder never is.
 - **Details.** Storage lists every item with a Bucket column (the primary bucket's symbol and title, `StorageTable`);
   Simulators lists the runtimes and the devices with their data size (`SimulatorsTable`; platforms by Apple's names,
   an unmeasured size as "not measured", the runtime total the same `ScanSummary.runtimeImageBytes` the Overview shows; the devices total is the sum of

@@ -89,7 +89,8 @@ it changes is journaled and shows in History.
    only ready one is chosen for you, and drives that can be used or need preparation are listed under it with
    **Prepare…**, which opens the preparation sheet and comes back here when it closes), a folder — filled in with the
    vault's standard folder (`XCodeVault/DerivedData`, `XCodeVault/Archives` or `XCodeVault/Runtimes`; Externalize
-   Archives keeps its own path) and changed with **Choose Another Folder…** (a network share is refused), the runtime, the platform, and for DerivedData the checkbox "I
+   Archives keeps its own path; created by the run if missing) and changed with **Choose Another Folder…** (a network
+   share is refused), the runtime, the platform, and for DerivedData the checkbox "I
    understand that unit tests may fail for projects built there" (`--i-understand-tests-may-fail`). The sheet shows
    where the data comes from and goes, its size, what undoing it costs, Core's warnings, and the experimental badge
    where the strategy is experimental. Anything that stops it — Xcode running, the vault offline, too little space, no
@@ -130,7 +131,7 @@ the banner gives the commands.
 | Simulators | A chart of every measured runtime and device, coloured and marked by kind (runtime or device) and labelled by name; one not measured has no bar, and a line under the chart says how many. Click a bar to select its row in the table below and scroll to it; **Clear Selection** clears it. One table, in two sections: the installed simulator runtimes with their total, then the simulator devices with the size of their data and their total — each device's data folder as `simctl` reports it, so it can differ from the Delete view's "Simulator devices" row, which measures the whole `Devices` folder. Columns: size ("Not measured" when the scan did not measure it), name, version or runtime, state ("Mounted" for a runtime whose image is), path; "—" where `simctl` gave nothing. It sorts by any column, and the search field finds rows by name, runtime or path | Nothing: runtimes and devices are deleted with `simctl`, whose commands the Delete view lists |
 | Drives | One row per drive — the running system's System and Data volumes as one "Internal disk (boot)" row, marked only "Boot volume" — with whether it can be a vault (what stops it shown, warnings folded behind their count) and, on a registered vault's own row, one verdict: Ready, Ready with warnings, Needs attention (the drive no longer qualifies) or Can't be used, with why under it. Each drive whose size was measured has a bar of its space: other data, the developer data the scan found on it by way of reclaiming, and free space, with a legend that names each part and its size. On a vault the bar shows what the scan found there; XCodeVault's records keep no sizes of what was placed on it. Registered vaults that are not connected have a section of their own | See **External drives** below |
 | Health | A line of counts by severity ("1 warning · 3 info"), then one card per doctor finding, most severe first, then largest: the severity as a symbol and a word, the title, one short sentence, the size when the finding has one, and the fix — or, where the privileged helper can fix it (the vault folder a drive refused), its control. **Details** unfolds the full explanation, the per-device sizes, why `clean` does not offer it, the whole fix, the path and the evidence. The findings' own text stays English | Nothing by itself: the doctor proposes, it never applies a fix. The control, where it is a button, creates the vault folder through the helper; remove the folder if you no longer want it |
-| History | A table, one row per operation — not one per journal record — in sections by the day it started (Today, Yesterday, then the date), newest first, the newest 100: the time, a badge for its kind (a symbol, a color and a short name: Cleanup, Runtime deleted, Runtime parked, Runtime export, Runtime import, Migration, Xcode location, Privileged helper, Other), its state as a symbol and a word (Completed, Failed, Interrupted, Rolled back, Skipped, Planned — recorded but never started), the summary — whole in its tooltip, with how it ended — and the size when one was recorded. **Interrupted** means the journal records a start and no end, as `xcodevaultctl doctor` counts it; an operation another `xcodevaultctl` is running at that moment shows so too until it ends. A failed or interrupted row shows how it ended under its summary; every step of an operation, such as which path a
+| History | A table, one row per operation — not one per journal record — in sections by the day it started (Today, Yesterday, then the date), newest first, the newest 100: the time, a badge for its kind (a symbol, a color and a short name: Cleanup, Runtime deleted, Runtime parked, Runtime export, Runtime import, Migration, Xcode location, Drive preparation, Privileged helper, Other), its state as a symbol and a word (Completed, Failed, Interrupted, Rolled back, Skipped, Planned — recorded but never started), the summary — whole in its tooltip, with how it ended — and the size when one was recorded. **Interrupted** means the journal records a start and no end, as `xcodevaultctl doctor` counts it; an operation another `xcodevaultctl` is running at that moment shows so too until it ends. A failed or interrupted row shows how it ended under its summary; every step of an operation, such as which path a
 cleanup could not delete, is in `xcodevaultctl journal`. The kinds menu ("All Kinds", or "3 of 5 Kinds") hides kinds; **Show All**, inside it,
 brings them back. Right-click ▸ **Copy Summary** copies the selected rows' summaries. The summaries are the journal's own English | Nothing |
 | Permissions | One row per permission — Full Disk Access and the privileged helper — each with its state as a symbol and a word ("Off" with a neutral symbol when nothing needs it), one sentence of why, and one button | See below |
@@ -162,17 +163,34 @@ words beside a symbol:
 The sheet asks for the volume name (default `XCodeVault`) and whether it is case-sensitive (off, and recommended off),
 and shows the exact `diskutil` command with **Copy Command**. An erase lists every volume it destroys with how much each
 holds, and its button stays disabled until you type the disk's name (or the volume's) exactly; Return cancels. Erasing
-is never offered on a disk that holds a registered vault or a Time Machine backup, nor on an internal or boot disk.
+is never offered on a disk that holds a registered vault or a Time Machine backup, nor on an internal or boot disk, nor
+while an HFS+ partition on it is unmounted (it might be a Time Machine backup: mount it so XCodeVault can check); a new
+partition is never added to a disk that holds a vault, because rewriting the partition map remounts the disk. On a USB
+stick with no recognised file system the confirmation also says the disk can't be told apart from another of the same
+model. If the disk is swapped or changes while the sheet is open, the sheet says "The disk changed. Close this and
+preview again." and will not run; anything you had typed is cleared.
 Right before running, XCodeVault reads the disks again and refuses if the disk is no longer the one you reviewed ("the
 disk changed"). Nothing runs after an erase without its own confirmation; the app never asks for your password and
 never retries with privileges — if `diskutil` refuses, the log has the command to run yourself. It cannot be stopped
 once it starts, so quitting waits for it. Every run is in History as *Drive preparation*.
+
+**A vault that is case-sensitive** (or ignores ownership) — for example a drive formatted Case-sensitive APFS and
+registered with `vault init` — stays *Ready*, and its row also offers **Add an APFS volume (erases nothing) —
+recommended**: a new case-insensitive `XCodeVault` volume in the same container. Erasing it is never offered ("Erasing
+or repartitioning is blocked: this disk holds a vault"). **Prepare…** in the Run sheet opens that recommended option
+too, rather than registering a case-sensitive volume.
 
 **Use This Drive…** registers the volume as a vault (the checks of `vault init`) and creates the standard layout:
 
     <volume>/XCodeVault/DerivedData
     <volume>/XCodeVault/Archives
     <volume>/XCodeVault/Runtimes
+
+If the vault is registered but a folder cannot be created (usually ownership), the sheet says "Registered; the standard
+folders could not be created" with what to run; `vault init` prints the same and exits 3. A vault registered before
+these folders existed needs nothing: when the Run sheet's destination is its standard folder and the folder is missing,
+the review says "Will create folder …", and the run creates that one folder first and logs it. A folder you choose with
+**Choose Another Folder…** is never created; it has to exist.
 
 Whether these commands run without your password was measured on disk images only (H17); on a physical disk it is
 expected but unmeasured.

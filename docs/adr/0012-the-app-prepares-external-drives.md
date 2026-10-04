@@ -25,11 +25,16 @@ automatic or presented as harmless.
    physical disk one verdict — Ready, Can be used, Needs preparation, Can't be used — and its options, least destructive
    first: add an APFS volume to an existing container, add an APFS partition in free space, erase one volume, erase the
    whole disk, and (no command) turn ownership on. The app draws what Core returns.
-2. **One guard, `DiskSafety`, asked twice.** No change of any kind on an internal disk, the boot disk, a disk image, a
-   disk with a Time Machine volume (APFS role `Backup`, or a `Backups.backupdb` / `.timemachine` marker), or read-only
-   media. No erase on a disk holding a registered vault (any registered vault, usable or not). The options are computed
-   only through it, `DiskPreparation.plan` asks it again, and `DiskPreparation.execute` reads the disks afresh and asks it
-   a third time immediately before the command.
+2. **One guard, `DiskSafety`, asked three times** (`DiskSafety.refusals(for:target:on:)`). No change of any kind on an
+   internal disk, the boot disk, a disk image, a disk with a Time Machine volume (APFS role `Backup`, or a
+   `Backups.backupdb` / `.timemachine` marker), or read-only media. No erase **and no new partition** on a disk holding a
+   registered vault (any registered vault, usable or not, mounted or not): rewriting the partition map remounts the
+   disk, and that remount is a rule 6 window in which the vault is not where it was (fix round 1, M3). Adding an APFS
+   volume stays allowed on such a disk — it does not touch the map — and is how a case-sensitive vault (the user's own
+   drive) gets the recommended case-insensitive `XCodeVault` volume. An unmounted HFS+ partition might be a Time
+   Machine backup that cannot be checked: erasing it, or the whole disk, is refused until it is mounted. The options
+   are computed through this function, `DiskPreparation.plan` asks it again, and `DiskPreparation.execute` reads the
+   disks afresh and asks it a third time immediately before the command.
 3. **Only commands E-diskprep proved run without `sudo`** are wired into Core (H17): `diskutil apfs addVolume` (with
    `-quota` as an option), `diskutil addPartition <after> APFS|"Case-sensitive APFS" <name> 0`, `diskutil eraseVolume`,
    `diskutil eraseDisk … GPT`. The argv is built from these four shapes only; the one user string in it is a validated
@@ -43,14 +48,27 @@ automatic or presented as harmless.
    disk's media name (whole disk) or the volume's name typed exactly, uses a destructive-styled button with Cancel as
    the default, and runs one command — nothing is chained after it. Core re-checks the typed name itself.
 6. **Disconnect and identity (rule 6).** Before running, Core re-reads the disks and refuses unless the device id still
-   names the same disk: media name, size and the sorted partition UUIDs as previewed ("the disk changed"). Mount and
-   unmount events (`NSWorkspace`) re-read the drives, debounced, and re-plan an open preparation sheet; a drive that went
-   away blocks it.
+   names the same disk: media name, size, the sorted partition UUIDs and the sorted file-system UUIDs (partition volume
+   UUIDs, APFS container and volume UUIDs) as previewed ("the disk changed"). The plan also records its target's own
+   UUID and name; `revalidate` re-derives them, and the name the user typed, from the fresh disks and refuses if any
+   changed — a volume deleted and re-added under the same device id is not the one confirmed (fix round 1, M2).
+   **Residual case, stated honestly:** an MBR disk with no recognised file system (or a blank disk) has no partition or
+   file-system UUID and is told apart by media name and size only; its erase stays offered, and the confirmation says
+   "This disk can't be told apart from another of the same model."
+   In the app, the sheet keeps the plan the user previewed (fix round 1, H1): mount and unmount events re-read the
+   drives (debounced; an older read finishing late is dropped) and re-plan an open sheet, every re-plan clears the typed
+   name, and if the new plan's disk identity or target differs from the previewed one the new plan is **not** swapped
+   in — the sheet is blocked for good ("The disk changed. Close this and preview again.") and the run only ever uses the
+   previewed plan. A drive that went away blocks it too.
 7. **Journal and History.** Every run is journaled under the new kind `diskPreparation` (planned → started →
    completed/failed, with the command in its detail), including a refusal before running. History shows it.
 8. **The vault layout is defined once** (`VaultLayout`): `<volume>/XCodeVault/{DerivedData,Archives,Runtimes}`.
    **Use This Drive** registers the volume with `VaultRegistry.register` (the same validations as `vault init`) and
-   creates the folders; `vault init` now creates them too. The Run sheet's **Destination** lists ready vaults first and
+   creates the folders; `vault init` now creates them too. A registration whose folders could not be made is a distinct,
+   partial outcome ("Registered; the standard folders could not be created", with `OwnershipAdvice`); `vault init` exits
+   3 for it. When the destination is a usable vault whose standard folder is missing (every vault registered before
+   R6), the review says "Will create folder …" and the run's first step creates exactly that folder inside the vault
+   directory, logged; a folder chosen with **Choose Another Folder…** is never created. The Run sheet's **Destination** lists ready vaults first and
    pre-fills the folder from the layout (Externalize Archives keeps the migration engine's own path); **Choose Another
    Folder…** stays as the override, and a folder on a network file system is refused. Network volumes are a blocker in
    `VolumeQualification`.

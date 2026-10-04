@@ -72,7 +72,12 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   and creates the `VaultLayout` folders, the Run sheet's Destination pre-fills them. Tested with fakes only — **never
   run against a real disk in a real window**. Waiting on the migration-safety review (dispatched by the controller).
   **Manual check, open:** H17 on a physical disk (spare drive), mount detection on a real plug/unplug, the preparation
-  sheet's form in a real window, and Finder's Get Info route for ownership.
+  sheet's form in a real window, and Finder's Get Info route for ownership. **Fix round 1 (2026-10-04)** applied the
+  safety review (H1 previewed plan kept and a changed disk blocks; M1 file-system UUIDs in the identity; M2 the
+  target's UUID and name re-checked; M3 no new partition on a vault disk; lows) and the quality review (C1 the
+  case-sensitive vault gets its recommended new volume; I1 a missing standard folder is created by the run; I2 partial
+  registration, `vault init` exit 3; I3 fit; I4 decisions out of the views; 11 minors). Report:
+  `.superpowers/sdd/r6/fix-round-1-report.md`. Waiting on the scoped safety re-review.
 
 ## Blocked / pending — manual (ask the user)
 
