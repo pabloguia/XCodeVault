@@ -83,6 +83,13 @@ public enum SimulatorsTable {
     public static func runtimesBytes(report: ScanReport) -> UInt64 {
         report.summary.runtimeImageBytes
     }
+
+    /// The height a table on the Simulators screen is given (R1): its header plus every row, so it never scrolls inside
+    /// the screen's one scroll view and never asks for more than its rows. Points; at least one row's worth, so an empty
+    /// table still shows its header. `rowHeight` and `headerHeight` are macOS's default `Table` metrics with a little room.
+    public static func fittedTableHeight(rowCount: Int, rowHeight: Double = 24, headerHeight: Double = 28) -> Double {
+        headerHeight + Double(max(rowCount, 1)) * rowHeight + 2
+    }
 }
 
 extension SimulatorRuntime {

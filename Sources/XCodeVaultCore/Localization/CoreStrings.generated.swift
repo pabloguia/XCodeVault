@@ -137,6 +137,13 @@ extension L10nCatalog {
                 "ja": "このビルドには含まれていません",
                 "zh-Hans": "此版本中不包含",
             ],
+            "app.action.back": [
+                "en": "Back",
+                "pt-BR": "Voltar",
+                "es": "Atrás",
+                "ja": "戻る",
+                "zh-Hans": "返回",
+            ],
             "app.action.cancel": [
                 "en": "Cancel",
                 "pt-BR": "Cancelar",
@@ -367,6 +374,13 @@ extension L10nCatalog {
                 "es": "%@ — %@",
                 "ja": "%@ — %@",
                 "zh-Hans": "%@ — %@",
+            ],
+            "app.delete.notes.warningsAndMore": [
+                "en": "%@, %@",
+                "pt-BR": "%@, %@",
+                "es": "%@, %@",
+                "ja": "%@、%@",
+                "zh-Hans": "%@，%@",
             ],
             "app.delete.otherTools.detail": [
                 "en": "These are never deleted from this list. Copy a command and run it in Terminal; simulator devices lose their apps and the apps\' data.",
@@ -949,6 +963,13 @@ extension L10nCatalog {
                 "ja": "確認済み",
                 "zh-Hans": "已验证",
             ],
+            "app.volumes.bootGroup": [
+                "en": "Internal disk (boot)",
+                "pt-BR": "Disco interno (inicialização)",
+                "es": "Disco interno (arranque)",
+                "ja": "内蔵ディスク（起動）",
+                "zh-Hans": "内置磁盘（启动）",
+            ],
             "app.volumes.bootVolume": [
                 "en": "boot volume",
                 "pt-BR": "volume de inicialização",
@@ -984,6 +1005,13 @@ extension L10nCatalog {
                 "ja": "マウント中のボリューム",
                 "zh-Hans": "已挂载的卷",
             ],
+            "app.volumes.vaultBadge": [
+                "en": "Vault: %@",
+                "pt-BR": "Cofre: %@",
+                "es": "Bóveda: %@",
+                "ja": "退避先: %@",
+                "zh-Hans": "保险库：%@",
+            ],
             "app.volumes.vaults": [
                 "en": "Vault volumes (identified by UUID + sentinel)",
                 "pt-BR": "Discos-cofre (identificados por UUID + sentinela)",
@@ -997,6 +1025,13 @@ extension L10nCatalog {
                 "es": "Ninguno registrado. Para registrar uno, ejecuta: xcodevaultctl vault init /Volumes/<nombre>",
                 "ja": "登録されていません。登録するには次を実行します: xcodevaultctl vault init /Volumes/<名前>",
                 "zh-Hans": "尚未注册。要注册，请运行：xcodevaultctl vault init /Volumes/<名称>",
+            ],
+            "app.volumes.vaults.offline": [
+                "en": "Registered vaults not mounted",
+                "pt-BR": "Cofres registrados não montados",
+                "es": "Bóvedas registradas no montadas",
+                "ja": "マウントされていない登録済みの退避先",
+                "zh-Hans": "未挂载的已注册保险库",
             ],
             "app.volumes.verdict.suitable": [
                 "en": "suitable",
@@ -1906,6 +1941,66 @@ extension L10nCatalog {
                     "other": "已选 %lld 项 · %@",
                 ],
             ],
+            "app.delete.notes.more": [
+                "en": [
+                    "one": "%lld more note",
+                    "other": "%lld more notes",
+                ],
+                "pt-BR": [
+                    "one": "mais %lld observação",
+                    "other": "mais %lld observações",
+                ],
+                "es": [
+                    "one": "%lld nota más",
+                    "other": "%lld notas más",
+                ],
+                "ja": [
+                    "other": "ほかの注記 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "另有 %lld 条说明",
+                ],
+            ],
+            "app.delete.notes.title": [
+                "en": [
+                    "one": "%lld note about this list",
+                    "other": "%lld notes about this list",
+                ],
+                "pt-BR": [
+                    "one": "%lld observação sobre esta lista",
+                    "other": "%lld observações sobre esta lista",
+                ],
+                "es": [
+                    "one": "%lld nota sobre esta lista",
+                    "other": "%lld notas sobre esta lista",
+                ],
+                "ja": [
+                    "other": "このリストについての注記 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "关于此列表的 %lld 条说明",
+                ],
+            ],
+            "app.delete.notes.warnings": [
+                "en": [
+                    "one": "%lld warning",
+                    "other": "%lld warnings",
+                ],
+                "pt-BR": [
+                    "one": "%lld aviso",
+                    "other": "%lld avisos",
+                ],
+                "es": [
+                    "one": "%lld advertencia",
+                    "other": "%lld advertencias",
+                ],
+                "ja": [
+                    "other": "警告 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 条警告",
+                ],
+            ],
             "app.delete.skipped.title": [
                 "en": [
                     "one": "%lld item not offered or skipped",
@@ -1944,6 +2039,26 @@ extension L10nCatalog {
                 ],
                 "zh-Hans": [
                     "other": "诊断：%lld 个问题需要处理",
+                ],
+            ],
+            "app.volumes.warnings.count": [
+                "en": [
+                    "one": "%lld warning",
+                    "other": "%lld warnings",
+                ],
+                "pt-BR": [
+                    "one": "%lld aviso",
+                    "other": "%lld avisos",
+                ],
+                "es": [
+                    "one": "%lld advertencia",
+                    "other": "%lld advertencias",
+                ],
+                "ja": [
+                    "other": "警告 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 条警告",
                 ],
             ],
             "cli.plan.marker.perItem": [

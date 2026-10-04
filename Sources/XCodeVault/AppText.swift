@@ -50,6 +50,16 @@ enum AppText {
         }
     }
 
+    /// The Delete notes panel's label (`DeleteNotes.title`).
+    static func deleteNotesTitle(_ title: DeleteNotes.Title) -> String {
+        switch title {
+        case .notes(let n): L10n.plural("app.delete.notes.title", count: n)
+        case .warnings(let n): L10n.plural("app.delete.notes.warnings", count: n)
+        case .warningsAndMore(let w, let more):
+            L10n.tr("app.delete.notes.warningsAndMore", L10n.plural("app.delete.notes.warnings", count: w), L10n.plural("app.delete.notes.more", count: more))
+        }
+    }
+
     /// The Delete view's cost-to-undo column, from the category's regenerability (`DeleteList.Group.undo`).
     static func undoCost(_ regenerability: Regenerability) -> String {
         switch regenerability {

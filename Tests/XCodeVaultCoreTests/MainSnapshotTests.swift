@@ -54,7 +54,8 @@ final class MainSnapshotTests: XCTestCase {
             for section in SidebarSection.allCases {
                 model.section = section
                 written.append(try SnapshotWriter.write(MainView(model: model), name: "main-\(locale)-\(section.rawValue)"))
-                // The screen on its own as well: off screen, the split view leaves some screens (Delete) undrawn.
+                // The screen on its own as well. Delete once came out undrawn inside the split view; that was not an
+                // off-screen artifact but the screen asking for more height than the window has (R1, `ScreenFitTests`).
                 let report = try XCTUnwrap(model.report)
                 written.append(try SnapshotWriter.write(MainView(model: model).detail(report), name: "screen-\(locale)-\(section.rawValue)"))
             }
