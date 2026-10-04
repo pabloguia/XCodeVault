@@ -57,6 +57,40 @@ public struct VolumeConfiguration: Sendable, Equatable, Codable {
     }
 }
 
+/// Where a new volume will be mounted (R7-A, the add-volume sheet). `diskutil` takes the volume's name, never a path; macOS
+/// mounts it at `/Volumes/<name>`, or at `/Volumes/<name> 1` when a volume of that name is already mounted there.
+public struct MountPreview: Sendable, Equatable {
+    /// `/Volumes/<name>`.
+    public var mountPoint: String
+    /// Whether a mounted volume already has that mount point (compared as the case-insensitive boot volume does).
+    public var isTaken: Bool
+    /// Where macOS will actually mount it: `mountPoint`, or the first free `/Volumes/<name> N` when it is taken.
+    public var actualMountPoint: String
+    /// When it is taken, a name whose mount point is free (`<name>2`, `<name>3`, …); nil otherwise.
+    public var suggestedName: String?
+}
+
+extension VolumeConfiguration {
+    /// Where every volume is mounted.
+    public static let mountRoot = "/Volumes/"
+
+    /// Where this configuration's volume will appear, against the mount points in use now; nil while the name is not
+    /// one `diskutil` would take (`problems`), so the sheet never shows a path for a name it refuses.
+    public func mountPreview(mountedAt mountPoints: [String]) -> MountPreview? {
+        guard VolumeConfiguration(name: name).problems(for: .addVolume).isEmpty else { return nil }
+        let used = Set(mountPoints.map(Self.mountKey))
+        func free(_ candidate: String) -> Bool { !used.contains(Self.mountKey(candidate)) }
+        let wanted = Self.mountRoot + name
+        guard !free(wanted) else { return MountPreview(mountPoint: wanted, isTaken: false, actualMountPoint: wanted, suggestedName: nil) }
+        let actual = (1...).lazy.map { wanted + " \($0)" }.first(where: free) ?? wanted
+        let suggestion = (2...).lazy.map { name + "\($0)" }.first { free(Self.mountRoot + $0) }
+        return MountPreview(mountPoint: wanted, isTaken: true, actualMountPoint: actual, suggestedName: suggestion)
+    }
+
+    /// A mount point as the boot volume compares names: case-insensitive, canonically composed.
+    private static func mountKey(_ path: String) -> String { path.precomposedStringWithCanonicalMapping.lowercased() }
+}
+
 public enum DiskPreparationAction: String, Sendable, Codable, CaseIterable {
     case addVolume, addPartition, eraseVolume, eraseDisk
 
@@ -93,6 +127,24 @@ public struct DiskPreparationPlan: Sendable, Equatable, Codable {
 
     /// The command, quoted for Terminal: what **Copy Command** copies and what the sheet shows.
     public var command: String { (["diskutil"] + arguments).map(DiskPreparation.shellQuoted).joined(separator: " ") }
+}
+
+extension DiskPreparationPlan {
+    /// The volume this plan made, once it ran and the disks were read again (R7-A): on the plan's disk, mounted, named as
+    /// configured, with a UUID the disk did not have when it was previewed (`identity.volumeUUIDs`), not a registered vault,
+    /// and not unsuitable as a vault. Nil unless exactly one volume is such — the result sheet then offers **Use This
+    /// Drive** for it, a separate review: nothing is chained (ADR-0012).
+    public func madeVolume(in snapshot: DriveSnapshot, registeredVaultUUIDs: Set<String>) -> Volume? {
+        guard let disk = snapshot.disks.first(where: { $0.id == identity.wholeDisk }) else { return nil }
+        let before = Set(identity.volumeUUIDs.map { $0.uppercased() })
+        let registered = Set(registeredVaultUUIDs.map { $0.uppercased() })
+        let made = snapshot.volumes(on: disk).filter { v in
+            guard let uuid = v.volumeUUID?.uppercased(), !uuid.isEmpty else { return false }
+            return v.mountPoint != nil && v.volumeName == configuration.name && !before.contains(uuid) && !registered.contains(uuid)
+                && VolumeQualification.evaluate(v).verdict != .unsuitable
+        }
+        return made.count == 1 ? made.first : nil
+    }
 }
 
 public struct DiskPreparationError: DescribedError, Sendable {

@@ -195,6 +195,10 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
         return .nothing
     }
 
+    /// Whether **Use This Drive** is the drive's primary button (R7-A): it can be used as it is and no fix is recommended
+    /// instead — a case-sensitive volume gets the recommended new volume first (`prepareAction`).
+    public var useDriveIsPrimary: Bool { verdict == .canBeUsed && recommendedOption == nil }
+
     /// The options that run a command, least destructive first: the Drives screen's buttons.
     public var commandOptions: [PreparationOption] { options.filter(\.runsCommand) }
 

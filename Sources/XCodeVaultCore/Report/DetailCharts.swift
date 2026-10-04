@@ -142,6 +142,34 @@ public enum ChartEmphasis {
     public static func axisLabel(_ bytes: Double) -> String { bytes <= 0 ? "0" : ByteCount.format(UInt64(bytes)) }
 }
 
+// MARK: - Bar lists
+
+/// How the Details screens' charts lay out (R7-A, the user's check of R6: "Pa…", "Ke…", "iOS 26…"): one row per bar, its
+/// label spelled out in full at body size in a leading column sized to the longest label, the bar to its right scaled to
+/// the largest, and the bar's size after it — every bar's, never clipped by the box. A label longer than the column wraps
+/// (Japanese, German); it is never truncated.
+public enum BarChartLayout {
+    /// One row's height with a one-line label, the gap below it included. A label that wraps makes its row taller.
+    public static let rowHeight: Double = 28
+    /// The label column's widest; a longer label wraps inside it.
+    public static let labelColumnMaxWidth: Double = 260
+    /// The room kept after the longest bar for its size, so the size is never pushed out of the row.
+    public static let sizeLabelWidth: Double = 84
+
+    /// A bar's length as a fraction of the longest bar's: 0 for nothing measured, otherwise at least `minimum` so a bar
+    /// of a few kilobytes beside one of tens of gigabytes is still seen. Never more than 1.
+    public static func fraction(_ bytes: UInt64, largest: UInt64, minimum: Double = 0.01) -> Double {
+        guard bytes > 0, largest > 0 else { return 0 }
+        return max(minimum, min(1, Double(bytes) / Double(largest)))
+    }
+
+    /// The box that shows `barCount` rows: one row's height each, at most `maximum`; more rows scroll inside the box, so
+    /// the screen keeps fitting the window (R1, `ScreenFitTests`).
+    public static func boxHeight(barCount: Int, maximum: Double) -> Double {
+        min(maximum, Double(max(barCount, 1)) * rowHeight)
+    }
+}
+
 // MARK: - Chart clicks
 
 /// Where a click lands on a chart (R2 review M1), decided here so the view only reads the chart's value at it.
