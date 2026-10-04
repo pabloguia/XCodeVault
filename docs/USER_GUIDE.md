@@ -74,6 +74,12 @@ What each way costs to undo:
 Everything that stays on this Mac — Archives among it, which nothing here ever offers to delete — is counted in the
 bar, never in a card.
 
+In **Park** and **Run Externally**, a command that takes a folder (`<dir>`) shows a second line under it: the same
+command with your vault's standard folder filled in, for example
+`xcodevaultctl locations set-derived-data /Volumes/PABLO/XCodeVault/DerivedData`. **Copy Command** then copies that
+filled-in command. With no usable vault, the second line says so and **Show Drives** opens Drives, where a drive can be
+prepared or used.
+
 | View | What it shows | What it changes | How to undo |
 |---|---|---|---|
 | Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its notes (*Experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…** (or ⌘⌫, or right-click ▸ **Delete Selected…**; right-click also has **Show in Finder** and **Copy Path**); the confirmation shows the exact count and what undoing costs for exactly those rows. **Move to Trash** is on by default. Above the table, the helper's row when a row needs root. Below it, in one panel folded by default (open when the table is empty): the planner's warnings, the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command** — and, for runtimes, **Run…** — and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted by **Delete Selected…**: **Copy Command** puts the command on the clipboard, and you run it — or, for a runtime, **Run…** runs `runtime delete` in the Run sheet | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
@@ -85,15 +91,19 @@ bar, never in a card.
 **Run…** opens a sheet in three steps. Every step goes through the same Core code as the command line, and everything
 it changes is journaled and shows in History.
 
-1. **Review.** The choices the command line took as flags are controls: the **Destination** (ready vaults first; the
-   only ready one is chosen for you, and drives that can be used or need preparation are listed under it with
-   **Prepare…**, which opens the preparation sheet and comes back here when it closes), a folder — filled in with the
-   vault's standard folder (`XCodeVault/DerivedData`, `XCodeVault/Archives` or `XCodeVault/Runtimes`; Externalize
+1. **Review.** The choices the command line took as flags are controls: the **Destination** (the ready vaults, each
+   with its verdict, said once there; the only ready one is chosen for you). When the chosen vault's drive has a
+   recommended fix — a case-sensitive vault such as PABLO — a button beside the picker says what it does, such as
+   **Add a Case-insensitive Volume…**. Drives that can be used or need preparation are listed under the picker, each
+   with a button that says what it does (**Use This Drive…**, **Add a Case-insensitive Volume…**, **Erase the
+   Volume…**); each opens its own sheet and comes back here when it closes. Then a folder — shown once, in full,
+   filled in with the vault's standard folder (`XCodeVault/DerivedData`, `XCodeVault/Archives` or `XCodeVault/Runtimes`; Externalize
    Archives keeps its own path; created by the run if missing) and changed with **Choose Another Folder…** (a network
    share is refused), the runtime, the platform, and for DerivedData the checkbox "I
    understand that unit tests may fail for projects built there" (`--i-understand-tests-may-fail`). The sheet shows
    where the data comes from and goes, its size, what undoing it costs, Core's warnings, and the experimental badge
-   where the strategy is experimental. Anything that stops it — Xcode running, the vault offline, too little space, no
+   where the strategy is experimental. A review longer than the sheet scrolls; the buttons stay at the bottom. Anything
+   that stops it — Xcode running, the vault offline, too little space, no
    installer in the library yet, and for an offload or a runtime deletion a simulator, `simctl` or a test run still
    running — disables the button and says why; **Check Again** reviews it again once that has changed. For an offload
    whose library has no installer,
@@ -127,8 +137,8 @@ the banner gives the commands.
 
 | Screen | What it shows | What it changes |
 |---|---|---|
-| Storage | A chart of the size in each option, for items on all drives (its symbol, name and size; each item counted once, so a per-device breakdown and a symlink are listed but not added). Click a bar to show only that option's rows; ⌘-click a bar, or click the buttons under the chart, to show several. While anything narrows the table, "Filtering: Delete and Park ×" and **Show All** say so and clear it. The search field in the toolbar finds rows by name or path, together with the options. The Overview's bar counts only the internal disk, so its amounts can be smaller. Below it, every storage item the scan found, largest first, sortable by any column: size, option, category, outcome, strategy (by name, with its *Experimental* badge) and path; symlinks and mount points are marked with a symbol and a word. Right-click a row for **Show in Finder** and **Copy Path** | Nothing |
-| Simulators | A chart of every measured runtime and device, coloured and marked by kind (runtime or device) and labelled by name; one not measured has no bar, and a line under the chart says how many. Click a bar to select its row in the table below and scroll to it; **Clear Selection** clears it. One table, in two sections: the installed simulator runtimes with their total, then the simulator devices with the size of their data and their total — each device's data folder as `simctl` reports it, so it can differ from the Delete view's "Simulator devices" row, which measures the whole `Devices` folder. Columns: size ("Not measured" when the scan did not measure it), name, version or runtime, state ("Mounted" for a runtime whose image is), path; "—" where `simctl` gave nothing. It sorts by any column, and the search field finds rows by name, runtime or path | Nothing: runtimes and devices are deleted with `simctl`, whose commands the Delete view lists |
+| Storage | A chart of the size in each option — each bar's name spelled out in full, wrapping rather than cut when a translation is long, with its size after the bar — for items on all drives (its symbol, name and size; each item counted once, so a per-device breakdown and a symlink are listed but not added). Click a bar to show only that option's rows; ⌘-click a bar, or click the buttons under the chart, to show several. While anything narrows the table, "Filtering: Delete and Park ×" and **Show All** say so and clear it. The search field in the toolbar finds rows by name or path, together with the options. The Overview's bar counts only the internal disk, so its amounts can be smaller. Below it, every storage item the scan found, largest first, sortable by any column: size, option, category, outcome, strategy (by name, with its *Experimental* badge) and path; symlinks and mount points are marked with a symbol and a word. Right-click a row for **Show in Finder** and **Copy Path** | Nothing |
+| Simulators | A chart of every measured runtime and device, coloured and marked by kind (runtime or device), labelled by its full name and with its size after every bar; one not measured has no bar, and a line under the chart says how many. Click a bar to select its row in the table below and scroll to it; **Clear Selection** clears it. One table, in two sections: the installed simulator runtimes with their total, then the simulator devices with the size of their data and their total — each device's data folder as `simctl` reports it, so it can differ from the Delete view's "Simulator devices" row, which measures the whole `Devices` folder. Columns: size ("Not measured" when the scan did not measure it), name, version or runtime, state ("Mounted" for a runtime whose image is), path; "—" where `simctl` gave nothing. It sorts by any column, and the search field finds rows by name, runtime or path | Nothing: runtimes and devices are deleted with `simctl`, whose commands the Delete view lists |
 | Drives | One row per drive — the running system's System and Data volumes as one "Internal disk (boot)" row, marked only "Boot volume" — with whether it can be a vault (what stops it shown, warnings folded behind their count) and, on a registered vault's own row, one verdict: Ready, Ready with warnings, Needs attention (the drive no longer qualifies) or Can't be used, with why under it. Each drive whose size was measured has a bar of its space: other data, the developer data the scan found on it by way of reclaiming, and free space, with a legend that names each part and its size. On a vault the bar shows what the scan found there; XCodeVault's records keep no sizes of what was placed on it. Registered vaults that are not connected have a section of their own | See **External drives** below |
 | Health | A line of counts by severity ("1 warning · 3 info"), then one card per doctor finding, most severe first, then largest: the severity as a symbol and a word, the title, one short sentence, the size when the finding has one, and the fix — or, where the privileged helper can fix it (the vault folder a drive refused), its control. **Details** unfolds the full explanation, the per-device sizes, why `clean` does not offer it, the whole fix, the path and the evidence. The findings' own text stays English | Nothing by itself: the doctor proposes, it never applies a fix. The control, where it is a button, creates the vault folder through the helper; remove the folder if you no longer want it |
 | History | A table, one row per operation — not one per journal record — in sections by the day it started (Today, Yesterday, then the date), newest first, the newest 100: the time, a badge for its kind (a symbol, a color and a short name: Cleanup, Runtime deleted, Runtime parked, Runtime export, Runtime import, Migration, Xcode location, Drive preparation, Privileged helper, Other), its state as a symbol and a word (Completed, Failed, Interrupted, Rolled back, Skipped, Planned — recorded but never started), the summary — whole in its tooltip, with how it ended — and the size when one was recorded. **Interrupted** means the journal records a start and no end, as `xcodevaultctl doctor` counts it; an operation another `xcodevaultctl` is running at that moment shows so too until it ends. A failed or interrupted row shows how it ended under its summary; every step of an operation, such as which path a
@@ -161,7 +171,9 @@ words beside a symbol:
    on this volume" (Finder asks for your password), or **Copy Command** for `sudo diskutil enableOwnership` in Terminal.
 
 The sheet asks for the volume name (default `XCodeVault`) and whether it is case-sensitive (off, and recommended off),
-and shows the exact `diskutil` command with **Copy Command**. An erase lists every volume it destroys with how much each
+and shows the exact `diskutil` command with **Copy Command**. The name is only a name, not a path: when you add a volume
+or a partition, the sheet says where it will appear ("Will appear as /Volumes/XCodeVault") and, if a volume of that name
+is already mounted, warns that macOS would mount the new one as "XCodeVault 1" and suggests another name. An erase lists every volume it destroys with how much each
 holds, and its button stays disabled until you type the disk's name (or the volume's) exactly; Return cancels. Erasing
 is never offered on a disk that holds a registered vault or a Time Machine backup, nor on an internal or boot disk, nor
 while an HFS+ partition on it is unmounted (it might be a Time Machine backup: mount it so XCodeVault can check); a new
@@ -179,6 +191,12 @@ registered with `vault init` — stays *Ready*, and its row also offers **Add an
 recommended**: a new case-insensitive `XCodeVault` volume in the same container. Erasing it is never offered ("Erasing
 or repartitioning is blocked: this disk holds a vault"). **Prepare…** in the Run sheet opens that recommended option
 too, rather than registering a case-sensitive volume.
+
+The buttons are bordered buttons, the recommended one filled in. The *Experimental* marker beside them, and in every
+sheet's title, is a label — a symbol and the word in grey — not something to click.
+
+When adding a volume or a partition succeeds, the result offers **Use This Drive…** for the new volume. It opens its own
+review and registers nothing until you confirm there; nothing is chained after a preparation.
 
 **Use This Drive…** registers the volume as a vault (the checks of `vault init`) and creates the standard layout:
 

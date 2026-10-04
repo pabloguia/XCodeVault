@@ -79,6 +79,19 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   registration, `vault init` exit 3; I3 fit; I4 decisions out of the views; 11 minors). Report:
   `.superpowers/sdd/r6/fix-round-1-report.md`. Waiting on the scoped safety re-review.
 
+- **R7-A — fixes from the user's real-window check of R6** (branch `feat/r7-polish-plan`, stacked on R6; brief
+  `.superpowers/sdd/r7/brief-a.md`, approved 2026-10-04). The Storage and Simulators charts are laid out by hand: every
+  label in full at body size in a leading column (wrapping, never "…"), every bar's size shown (`BarChartLayout`).
+  Park and Run Externally show each `<dir>` command filled with the vault's standard folder, and **Copy Command** copies
+  it (`SavingsPlanRow.command(filling:)`, `AppModel.commandSuggestion`). The Run sheet says the verdict once (in the
+  picker), puts the chosen drive's fix beside it with a title that says what it does (`destinationFix`,
+  `DriveText.prepareTitle`), shows the folder once, and scrolls with its scroller visible. Drives' options are bordered
+  buttons (the recommended one prominent); every marker is a plain label. The add-volume sheet says where the volume will
+  appear and warns of a taken name (`VolumeConfiguration.mountPreview`); a successful preparation offers **Use This
+  Drive** for the volume it made, as its own review (`DiskPreparationPlan.madeVolume`). Tested with fakes only.
+  Report: `.superpowers/sdd/r7/a-report.md`. **Manual check, open:** the charts, the sheet and the Drives buttons in a
+  real window, light and dark. Next: R7-B (design system).
+
 ## Blocked / pending — manual (ask the user)
 
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
