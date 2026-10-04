@@ -165,44 +165,6 @@ extension AppModel {
 
     // MARK: - The Run sheet's Destination
 
-    /// One line of the Destination picker.
-    struct DestinationChoice: Identifiable, Equatable {
-        enum Target: Equatable {
-            /// A registered vault that is usable now: choosable.
-            case vault(VaultVolumeCheck)
-            /// A drive that can be used or needs preparation: not choosable until it is a vault; **Prepare…** beside it.
-            case drive(DriveAssessment)
-        }
-
-        let target: Target
-        var id: String {
-            switch target {
-            case .vault(let c): "vault:" + c.volume.volumeUUID
-            case .drive(let a): "drive:" + a.disk.id
-            }
-        }
-        var name: String {
-            switch target {
-            case .vault(let c): c.volume.volumeName
-            case .drive(let a): a.displayName
-            }
-        }
-        var verdict: DriveVerdict {
-            switch target {
-            case .vault: .ready
-            case .drive(let a): a.verdict
-            }
-        }
-    }
-
-    /// Ready vaults first, then the drives that can be used or need preparation (brief §6). A drive whose vault is
-    /// already listed is not listed again; drives that cannot be used are not offered.
-    var destinationChoices: [DestinationChoice] {
-        let vaults = usableVaults.map { DestinationChoice(target: .vault($0)) }
-        let drives = driveAssessments.filter { $0.verdict == .canBeUsed || $0.verdict == .needsPreparation }.map { DestinationChoice(target: .drive($0)) }
-        return vaults + drives
-    }
-
     /// The standard folder of `vault` for `kind` (`VaultLayout`); nil for a kind without one or a vault not mounted.
     static func defaultFolder(_ kind: OperationKind, _ vault: VaultVolumeCheck?) -> String? {
         guard let purpose = kind.layoutPurpose, let vault else { return nil }
@@ -281,7 +243,9 @@ extension AppModel {
             } else {
                 s.previewedPlan = plan
             }
-        } else if s.diskChanged {
+        } else if s.diskChanged || (s.previewedPlan != nil && preview.blockers.contains(.driveGone)) {
+            // N4: the previewed drive went away. Whatever appears under its id later is not what was previewed: sticky.
+            s.diskChanged = true
             preview = OperationPreview(source: preview.source, blockers: [.diskChanged])
         }
         s.preview = preview

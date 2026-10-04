@@ -59,7 +59,11 @@ automatic or presented as harmless.
    drives (debounced; an older read finishing late is dropped) and re-plan an open sheet, every re-plan clears the typed
    name, and if the new plan's disk identity or target differs from the previewed one the new plan is **not** swapped
    in — the sheet is blocked for good ("The disk changed. Close this and preview again.") and the run only ever uses the
-   previewed plan. A drive that went away blocks it too.
+   previewed plan. A drive that went away blocks it too, for good: whatever appears later under its id is not what was
+   previewed (fix round 2, N4).
+   The standard-folder mkdir (§8) checks identity too (fix round 2, N1): before creating it, the run refuses unless the
+   vault verifies — mounted, its volume UUID, its sentinel — at the mount point the folder is under, and the vault
+   directory is a real directory (no symlink) on that same volume; otherwise nothing is created.
 7. **Journal and History.** Every run is journaled under the new kind `diskPreparation` (planned → started →
    completed/failed, with the command in its detail), including a refusal before running. History shows it.
 8. **The vault layout is defined once** (`VaultLayout`): `<volume>/XCodeVault/{DerivedData,Archives,Runtimes}`.

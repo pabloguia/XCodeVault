@@ -60,15 +60,35 @@ public enum VaultLayout {
 
 extension VaultLayout {
     /// I1: creates ONE standard folder of a registered vault — `folder` must be exactly `path(purpose, vaultDirectory:)`
-    /// for one purpose, the vault directory must exist, and the folder must resolve inside it. Nothing else is ever
-    /// created; a folder chosen by hand is never passed here. Ownership failures carry `OwnershipAdvice`.
-    public static func createStandardFolder(_ folder: String, vaultDirectory: String, fileManager: FileManager = .default) throws {
+    /// for one purpose. Nothing else is ever created; a folder chosen by hand is never passed here.
+    ///
+    /// N1 (fix round 2): before the mkdir, the vault must be the drive mounted here. `check` (default `VaultVerifier`)
+    /// must report it verified or moved, at a mount point whose vault directory is `vaultDirectory` — mounted, the right
+    /// volume UUID, the sentinel matching. The vault directory must be a real directory, not a symlink, resolve inside
+    /// that mount point, and sit on a volume whose UUID (`volumeUUID`, read without following symlinks) is the vault's.
+    /// Any refusal creates nothing. Ownership failures carry `OwnershipAdvice`.
+    public static func createStandardFolder(
+        _ folder: String, vaultDirectory: String, vault: VaultVolume, check: (VaultVolume) -> VaultVolumeCheck = { VaultVerifier().check($0) },
+        volumeUUID: (String) -> String? = { MountStatus.volumeUUID(at: $0) }, fileManager: FileManager = .default
+    ) throws {
+        let refusal = "Nothing was created. The vault \(vault.volumeName) is not the drive mounted here; check the drive and preview again."
         guard Purpose.allCases.contains(where: { path($0, vaultDirectory: vaultDirectory) == folder }) else {
             throw VaultError("\(folder) is not a standard folder of the vault \(vaultDirectory). Nothing was created.")
         }
-        var isDir: ObjCBool = false
-        guard fileManager.fileExists(atPath: vaultDirectory, isDirectory: &isDir), isDir.boolValue else {
-            throw VaultError("The vault directory \(vaultDirectory) does not exist. Nothing was created.")
+        let verified = check(vault)
+        guard verified.isUsable, let mp = verified.currentMountPoint, vault.vaultDirectory(atMountPoint: mp) == vaultDirectory else {
+            throw VaultError("\(vaultDirectory): \(refusal) (\(verified.state.rawValue): \(verified.detail))")
+        }
+        let type = (try? fileManager.attributesOfItem(atPath: vaultDirectory))?[.type] as? FileAttributeType
+        guard type == .typeDirectory else {
+            throw VaultError("\(vaultDirectory) is \(type == .typeSymbolicLink ? "a symbolic link" : "not a directory"). \(refusal)")
+        }
+        let onVolume: Bool
+        do { onVolume = try PathSafety.isContainedAllowingMissingParents(vaultDirectory, in: mp) } catch {
+            throw VaultError("Cannot tell where \(vaultDirectory) resolves: \(error). \(refusal)")
+        }
+        guard onVolume, let found = volumeUUID(vaultDirectory), found.caseInsensitiveCompare(vault.volumeUUID) == .orderedSame else {
+            throw VaultError("\(vaultDirectory) is not on the vault's volume \(vault.volumeUUID). \(refusal)")
         }
         let inside: Bool
         do { inside = try PathSafety.isContainedAllowingMissingParents(folder, in: vaultDirectory) } catch {

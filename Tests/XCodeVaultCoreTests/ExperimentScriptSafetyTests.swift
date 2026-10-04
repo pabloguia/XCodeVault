@@ -400,6 +400,10 @@ final class ExperimentScriptSafetyTests: XCTestCase {
         }
         XCTAssertEqual(Self.literalDeviceLines(in: body), [], "a literal disk<N> outside a comment could reach a real disk")
         XCTAssertTrue(body.contains("dp_backing_image"), "the guard no longer checks the image file behind the device")
+        // N3: cleanup force-detaches only what the guard would accept, never any disk image.
+        let cleanup = body.range(of: "cleanup() {").map { String(body[$0.upperBound...]).components(separatedBy: "\n}").first ?? "" } ?? ""
+        XCTAssertTrue(cleanup.contains("dp_is_our_image \"$d\" && hdiutil detach"), "cleanup detaches without the guard's check")
+        XCTAssertEqual(cleanup.components(separatedBy: "hdiutil detach").count, 2, "exactly one detach, the guarded one")
         XCTAssertTrue(body.contains("*..*"), "image paths with '..' are no longer refused")
         XCTAssertFalse(
             body.split(separator: "\n").contains { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") && $0.contains("sudo diskutil") },

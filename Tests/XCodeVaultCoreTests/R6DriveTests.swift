@@ -574,7 +574,7 @@ final class R6DriveTests: XCTestCase {
     }
 
     func testInvisibleAndControlCharactersAreRefusedInAName() {
-        for bad in ["a\u{7F}b", "a\u{85}b", "a\u{202E}b", "a\u{200B}b", "a\u{0007}b", "a\nb"] {
+        for bad in ["a\u{7F}b", "a\u{85}b", "a\u{202E}b", "a\u{200B}b", "a\u{0007}b", "a\nb", "a\u{2028}b", "a\u{2029}b"] {
             XCTAssertFalse(VolumeConfiguration(name: bad).problems(for: .addVolume).isEmpty, bad.unicodeScalars.map { String($0.value, radix: 16) }.joined())
         }
         XCTAssertEqual(VolumeConfiguration(name: "Café Vault").problems(for: .addVolume), [])
@@ -601,18 +601,72 @@ final class R6DriveTests: XCTestCase {
         XCTAssertTrue(DriveRegistration.outcome(vault: vault) { ["/a"] }.isComplete)
     }
 
-    /// I1: only a vault's standard folder is created, inside an existing vault directory.
+    /// A scratch vault: `<tmp>/XCodeVault`, mounted (as far as the injected check says) at `<tmp>`.
+    static func scratchVault(_ tmp: TempDir, uuid: String = "AAAAAAAA-0000-4000-8000-000000000001") -> (VaultVolume, String) {
+        let vault = VaultVolume(volumeUUID: uuid, volumeName: "Scratch", lastMountPoint: tmp.path, registeredAt: Date(), sentinelID: "s")
+        return (vault, tmp.path + "/XCodeVault")
+    }
+
+    static func verified(_ v: VaultVolume, at mp: String?, _ state: VaultVolumeState = .verified) -> VaultVolumeCheck {
+        VaultVolumeCheck(volume: v, state: state, currentMountPoint: mp, shadowBytes: nil, detail: "d")
+    }
+
+    /// I1 and N1: only a vault's standard folder is created, and only on the vault verified at that mount point.
     func testCreateStandardFolderCreatesOnlyThatFolder() throws {
         let tmp = TempDir()
-        let vault = tmp.path + "/XCodeVault"
-        try FileManager.default.createDirectory(atPath: vault, withIntermediateDirectories: true)
-        try VaultLayout.createStandardFolder(vault + "/DerivedData", vaultDirectory: vault)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: vault + "/DerivedData"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: vault + "/Archives"))
-        XCTAssertThrowsError(try VaultLayout.createStandardFolder(vault + "/Elsewhere", vaultDirectory: vault))
-        XCTAssertThrowsError(try VaultLayout.createStandardFolder(tmp.path + "/DerivedData", vaultDirectory: vault))
-        XCTAssertThrowsError(try VaultLayout.createStandardFolder(tmp.path + "/Gone/Archives", vaultDirectory: tmp.path + "/Gone"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.path + "/Gone"), "a missing vault directory is never created")
+        let (vault, dir) = Self.scratchVault(tmp)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        func create(_ folder: String, in d: String = dir, check: VaultVolumeCheck? = nil, uuid: String? = nil) throws {
+            try VaultLayout.createStandardFolder(
+                folder, vaultDirectory: d, vault: vault, check: { _ in check ?? Self.verified(vault, at: tmp.path) },
+                volumeUUID: { _ in uuid ?? vault.volumeUUID })
+        }
+        try create(dir + "/DerivedData")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir + "/DerivedData"), "the normal case creates the folder")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/Archives"))
+        XCTAssertThrowsError(try create(dir + "/Elsewhere"))
+        XCTAssertThrowsError(try create(tmp.path + "/DerivedData", in: dir))
+    }
+
+    /// N1: the directory exists, but the volume behind it is another one — refused, nothing created.
+    func testTheStandardFolderIsRefusedOnAnotherVolume() throws {
+        let tmp = TempDir()
+        let (vault, dir) = Self.scratchVault(tmp)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        XCTAssertThrowsError(
+            try VaultLayout.createStandardFolder(
+                dir + "/Archives", vaultDirectory: dir, vault: vault, check: { _ in Self.verified(vault, at: tmp.path) },
+                volumeUUID: { _ in "BBBBBBBB-0000-4000-8000-000000000002" })
+        ) { XCTAssertTrue("\($0)".contains("not the drive mounted here")) }
+        XCTAssertThrowsError(
+            try VaultLayout.createStandardFolder(
+                dir + "/Archives", vaultDirectory: dir, vault: vault, check: { _ in Self.verified(vault, at: tmp.path) }, volumeUUID: { _ in nil }),
+            "an unreadable volume UUID refuses")
+        for state in [VaultVolumeState.foreign, .absent, .ambiguous, .sentinelMissing] {
+            XCTAssertThrowsError(
+                try VaultLayout.createStandardFolder(
+                    dir + "/Archives", vaultDirectory: dir, vault: vault, check: { _ in Self.verified(vault, at: tmp.path, state) },
+                    volumeUUID: { _ in vault.volumeUUID }), "\(state)")
+        }
+        XCTAssertThrowsError(
+            try VaultLayout.createStandardFolder(
+                dir + "/Archives", vaultDirectory: dir, vault: vault, check: { _ in Self.verified(vault, at: "/Volumes/Elsewhere", .movedMountPoint) },
+                volumeUUID: { _ in vault.volumeUUID }), "verified at another mount point")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/Archives"), "nothing was created")
+    }
+
+    /// N1: the vault directory is a symbolic link (here to a folder outside the mount point): refused.
+    func testTheStandardFolderIsRefusedThroughASymlinkedVaultDirectory() throws {
+        let tmp = TempDir()
+        let outside = TempDir()
+        let (vault, dir) = Self.scratchVault(tmp)
+        try FileManager.default.createSymbolicLink(atPath: dir, withDestinationPath: outside.path)
+        XCTAssertThrowsError(
+            try VaultLayout.createStandardFolder(
+                dir + "/Runtimes", vaultDirectory: dir, vault: vault, check: { _ in Self.verified(vault, at: tmp.path) },
+                volumeUUID: { _ in vault.volumeUUID })
+        ) { XCTAssertTrue("\($0)".contains("symbolic link")) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outside.path + "/Runtimes"))
     }
 }
 

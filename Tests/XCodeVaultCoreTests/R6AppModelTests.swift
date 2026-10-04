@@ -200,7 +200,7 @@ final class R6AppModelTests: XCTestCase {
         await eventually("the review") { m.operationSheet?.preview?.prepared != nil }
         drives.snapshot?.disks.removeAll { $0.id == "disk6" }
         await m.refreshDrives()
-        await eventually("blocked") { m.operationBlockers == [.driveGone] }
+        await eventually("blocked") { m.operationBlockers == [.diskChanged] }
         XCTAssertFalse(m.canConfirmOperation)
     }
 
@@ -272,13 +272,6 @@ final class R6AppModelTests: XCTestCase {
         XCTAssertEqual(m.operationSheet?.inputs.folder, "/Volumes/Vault/XCodeVault/DerivedData")
         m.chooseDestination(vaultUUID: nil)
         XCTAssertNil(m.operationSheet?.inputs.folder)
-    }
-
-    func testDestinationListsReadyVaultsFirstThenDrivesToPrepare() async throws {
-        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()))
-        await m.refresh()
-        XCTAssertEqual(m.destinationChoices.map(\.verdict), [.ready, .canBeUsed, .needsPreparation, .needsPreparation])
-        XCTAssertEqual(m.destinationChoices.map(\.name), ["Vault", "Media", "STICK", "Transfer"])
     }
 
     func testPrepareFromTheRunSheetComesBackToIt() async throws {
@@ -405,10 +398,10 @@ final class R6AppModelTests: XCTestCase {
         XCTAssertEqual(m.operationSheet?.inputs.folder, "/Users/t/Mine", "a folder chosen by hand stays")
     }
 
-    /// I1: the review of a missing standard folder checks the vault directory and says the folder will be created; the
-    /// run creates only that folder, logged. A folder chosen by hand is never substituted or created.
+    /// I1: the review of a missing standard folder checks the vault directory and says the folder will be created. A
+    /// folder chosen by hand is never substituted or created.
     func testAMissingStandardFolderIsReviewedAndCreatedByTheRun() throws {
-        var inputs = OperationInputs(folder: "/Volumes/Vault/XCodeVault/DerivedData", standardFolderOf: "/Volumes/Vault/XCodeVault")
+        var inputs = OperationInputs(vaultUUID: "U", folder: "/Volumes/Vault/XCodeVault/DerivedData", standardFolderOf: "/Volumes/Vault/XCodeVault")
         let plan = LiveOperations.standardFolderPlan(inputs, exists: { $0 == "/Volumes/Vault/XCodeVault" })
         XCTAssertEqual(plan.inputs.folder, "/Volumes/Vault/XCodeVault")
         XCTAssertEqual(plan.willCreate, "/Volumes/Vault/XCodeVault/DerivedData")
@@ -421,23 +414,130 @@ final class R6AppModelTests: XCTestCase {
         let reviewed = OperationPreview(
             destination: "/Volumes/Vault/XCodeVault",
             prepared: .location(XcodeLocations.Change(key: .derivedData, newValue: "/Volumes/Vault/XCodeVault"), acknowledgeTests: true))
-        let p = LiveOperations.withNewFolder(reviewed, folder: "/Volumes/Vault/XCodeVault/DerivedData", vaultDirectory: "/Volumes/Vault/XCodeVault")
+        let p = LiveOperations.withNewFolder(
+            reviewed, folder: "/Volumes/Vault/XCodeVault/DerivedData", vaultDirectory: "/Volumes/Vault/XCodeVault", vaultUUID: "U")
         XCTAssertEqual(p.willCreateFolder, "/Volumes/Vault/XCodeVault/DerivedData")
         XCTAssertEqual(p.destination, "/Volumes/Vault/XCodeVault/DerivedData")
-        guard case .creatingFolder(let folder, let dir, .location(let change, _))? = p.prepared else { return XCTFail("\(String(describing: p.prepared))") }
+        guard case .creatingFolder(let folder, let dir, let uuid, .location(let change, _))? = p.prepared else {
+            return XCTFail("\(String(describing: p.prepared))")
+        }
         XCTAssertEqual(folder, "/Volumes/Vault/XCodeVault/DerivedData")
         XCTAssertEqual(dir, "/Volumes/Vault/XCodeVault")
+        XCTAssertEqual(uuid, "U", "the run verifies this vault before the mkdir (N1)")
         XCTAssertEqual(change.newValue, folder, "Xcode is pointed at the folder, not the vault directory")
         XCTAssertEqual(p.prepared?.kind, .setDerivedData)
+    }
 
+    /// A scratch vault the folder step verifies: registered, verified at `tmp`, on volume `uuid`. Never a real vault.
+    private func world(_ tmp: TempDir, vault: VaultVolume, volume: String? = nil, registered: Bool = true) -> LiveOperations.FolderStepWorld {
+        let mountPoint = tmp.path
+        return LiveOperations.FolderStepWorld(
+            vault: { _ in registered ? vault : nil }, check: { R6DriveTests.verified($0, at: mountPoint) }, volumeUUID: { _ in volume ?? vault.volumeUUID })
+    }
+
+    /// Fix round 2, A: the composed review — a missing standard folder is reviewed (against the vault directory, by a
+    /// fake Core) and says "Will create folder…", not blocked.
+    func testTheComposedPreviewOfAMissingStandardFolderIsNotBlocked() throws {
         let tmp = TempDir()
-        let vaultDir = tmp.path + "/XCodeVault"
-        try FileManager.default.createDirectory(atPath: vaultDir, withIntermediateDirectories: true)
+        let (_, dir) = R6DriveTests.scratchVault(tmp)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let inputs = OperationInputs(vaultUUID: "U", folder: dir + "/DerivedData", standardFolderOf: dir)
+        var asked: [String?] = []
+        let p = LiveOperations.preview(
+            .setDerivedData, inputs, filesystem: { _ in nil },
+            core: { kind, i in
+                asked.append(i.folder)
+                return OperationPreview(
+                    destination: i.folder, prepared: .location(XcodeLocations.Change(key: .derivedData, newValue: i.folder), acknowledgeTests: true))
+            })
+        XCTAssertEqual(asked, [dir], "Core reviewed the vault directory, which exists")
+        XCTAssertEqual(p.willCreateFolder, dir + "/DerivedData")
+        XCTAssertEqual(p.blockers, [])
+        XCTAssertNotNil(p.prepared)
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        XCTAssertEqual(L10n.tr("app.run.willCreateFolder", dir + "/DerivedData"), "Will create folder " + dir + "/DerivedData")
+        // A folder chosen by hand that is missing goes to Core as is (and Core blocks it).
+        var custom = inputs
+        custom.folderIsCustom = true
+        _ = LiveOperations.preview(
+            .setDerivedData, custom, filesystem: { _ in nil },
+            core: { _, i in
+                asked.append(i.folder)
+                return OperationPreview()
+            })
+        XCTAssertEqual(asked.last, dir + "/DerivedData")
+    }
+
+    /// Fix round 2, A and N1: the run creates the folder on the verified vault, then reaches its `then` step; on another
+    /// volume it refuses, creates nothing and never reaches `then`.
+    func testRunCreatingFolderCreatesThenRunsTheStep() throws {
+        let tmp = TempDir()
+        let (vault, dir) = R6DriveTests.scratchVault(tmp)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let log = LineBuffer()
-        try LiveOperations.createFolderStep(vaultDir + "/Runtimes", vaultDirectory: vaultDir) { log.add($0) }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: vaultDir + "/Runtimes"))
-        XCTAssertEqual(log.drain().first?.text, "mkdir -p " + vaultDir + "/Runtimes")
-        XCTAssertThrowsError(try LiveOperations.createFolderStep(tmp.path + "/Mine", vaultDirectory: vaultDir) { _ in })
+        var reached = 0
+        let result = try LiveOperations.runCreatingFolder(
+            dir + "/Runtimes", vaultDirectory: dir, vaultUUID: vault.volumeUUID, observer: { log.add($0) }, world: world(tmp, vault: vault)
+        ) {
+            reached += 1
+            XCTAssertTrue(FileManager.default.fileExists(atPath: dir + "/Runtimes"), "the folder exists before the step")
+            return .exported
+        }
+        guard case .exported = result else { return XCTFail("\(result)") }
+        XCTAssertEqual(reached, 1)
+        XCTAssertEqual(log.drain().first?.text, "mkdir -p " + dir + "/Runtimes")
+        for w in [world(tmp, vault: vault, volume: "BBBBBBBB-0000-4000-8000-000000000002"), world(tmp, vault: vault, registered: false)] {
+            XCTAssertThrowsError(
+                try LiveOperations.runCreatingFolder(dir + "/Archives", vaultDirectory: dir, vaultUUID: vault.volumeUUID, observer: { _ in }, world: w) {
+                    reached += 1
+                    return .exported
+                })
+        }
+        XCTAssertEqual(reached, 1, "a refused folder step never reaches the operation")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir + "/Archives"))
+        XCTAssertThrowsError(
+            try LiveOperations.createFolderStep(
+                tmp.path + "/Mine", vaultDirectory: dir, vaultUUID: vault.volumeUUID, observer: { _ in }, world: world(tmp, vault: vault)))
+    }
+
+    /// N4: the previewed drive goes away, and a different disk appears under the same id: blocked, and it stays blocked.
+    func testADriveThatGoesAwayAndComesBackDifferentStaysBlocked() async throws {
+        let rec = PreparedRecorder()
+        let drives = ScriptedDrives(try R6DriveTests.snapshot())
+        let m = model(drives: drives, ops: rec.services)
+        await m.refresh()
+        m.openPreparation(try assessment(m, "disk6"), option: .eraseDisk(disk: "disk6"))
+        await eventually("the review") { m.pendingDiskPlan != nil }
+        drives.snapshot?.disks.removeAll { $0.id == "disk6" }
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationBlockers, [.diskChanged])
+        XCTAssertEqual(m.operationSheet?.diskChanged, true)
+        var other = try R6DriveTests.snapshot()
+        other.disks = other.disks.map { d in
+            var d = d
+            if d.id == "disk6" { d.partitions[0].volumeUUID = R6DriveTests.u(697) }
+            return d
+        }
+        drives.snapshot = other
+        await m.refreshDrives()
+        XCTAssertEqual(m.operationBlockers, [.diskChanged])
+        m.updateConfirmationText("USB Flash Disk")
+        await m.runOperation()
+        XCTAssertTrue(rec.runs.isEmpty)
+    }
+
+    /// Fix round 2, C: PABLO's shape — a ready, case-sensitive vault — is listed under the Destination with Prepare…,
+    /// which opens the recommended new volume.
+    func testACaseSensitiveVaultIsListedUnderTheDestination() async throws {
+        let pablo = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(301), mount: "/Volumes/Media")
+        let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()), checks: [vault(), pablo])
+        await m.refresh()
+        let listed = try XCTUnwrap(m.destinationDrives.first { $0.disk.id == "disk2" })
+        XCTAssertEqual(listed.verdict, .ready)
+        XCTAssertEqual(listed.recommendedOption, .addVolume(container: "disk3"))
+        XCTAssertFalse(m.destinationDrives.contains { $0.disk.id == "disk10" }, "a ready vault with nothing to fix is only in the picker")
+        m.prepareFromDestination(listed)
+        XCTAssertEqual(m.operationSheet?.kind, .addVolume)
     }
 
     /// I1: the default folder carries its vault directory; Choose Another Folder… drops it.

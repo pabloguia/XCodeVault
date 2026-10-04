@@ -123,8 +123,9 @@ dp_attach() {
 cleanup() {
   local d
   for d in "$DISK_A" "$DISK_B"; do
-    # Detach only what we attached, and only while it is still an image.
-    [ -n "$d" ] && [ "$(dp_key "$d" BusProtocol)" = "Disk Image" ] && hdiutil detach "/dev/$d" -force -quiet 2>/dev/null
+    # Detach only what we attached, and only while it is still OUR image (the same check as the guard: the image file
+    # recorded at attach still backs it, and diskutil calls it a disk image). Fix round 2, N3.
+    [ -n "$d" ] && dp_is_our_image "$d" && hdiutil detach "/dev/$d" -force -quiet 2>/dev/null
   done
   rm -f "$IMG_A".sparseimage "$IMG_B".sparseimage
 }

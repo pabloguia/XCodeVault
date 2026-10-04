@@ -168,7 +168,8 @@ enum PreparedOperation: Sendable {
     /// R6: **Use This Drive** on a mounted volume.
     case useDrive(Volume)
     /// R6 (I1): first create the vault's missing standard `folder` (only that, inside `vaultDirectory`), then run `then`.
-    indirect case creatingFolder(folder: String, vaultDirectory: String, then: PreparedOperation)
+    /// N1: `vaultUUID` is the vault whose identity the run verifies at the mount point before the mkdir.
+    indirect case creatingFolder(folder: String, vaultDirectory: String, vaultUUID: String, then: PreparedOperation)
 
     /// The kind this prepared operation runs as.
     var kind: OperationKind {
@@ -186,7 +187,7 @@ enum PreparedOperation: Sendable {
             case .eraseDisk: .eraseDisk
             }
         case .useDrive: .useDrive
-        case .creatingFolder(_, _, let then): then.kind
+        case .creatingFolder(_, _, _, let then): then.kind
         }
     }
 
@@ -195,7 +196,7 @@ enum PreparedOperation: Sendable {
     var journalID: String? {
         switch self {
         case .migration(let plan): return plan.operationID
-        case .creatingFolder(_, _, let then): return then.journalID
+        case .creatingFolder(_, _, _, let then): return then.journalID
         default: return nil
         }
     }

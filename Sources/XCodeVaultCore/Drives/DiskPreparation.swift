@@ -39,9 +39,12 @@ public struct VolumeConfiguration: Sendable, Equatable, Codable {
         if trimmed.isEmpty { out.append("Give the volume a name.") }
         if trimmed != name { out.append("The name cannot start or end with a space.") }
         if name.hasPrefix("-") || name.hasPrefix(".") { out.append("The name cannot start with “-” or “.”.") }
-        // Every Unicode control (Cc: C0, DEL, C1) and format character (Cf: bidi overrides, zero-width spaces): a name the
+        // Every Unicode control (Cc: C0, DEL, C1), format (Cf: bidi overrides, zero-width spaces) and line or paragraph
+        // separator (Zl, Zp), and any newline: a name the
         // confirmation shows must be the name diskutil writes, with nothing invisible or reordering in it.
-        let invisible = name.unicodeScalars.contains { [.control, .format].contains($0.properties.generalCategory) }
+        let invisible =
+            name.unicodeScalars.contains { [.control, .format, .lineSeparator, .paragraphSeparator].contains($0.properties.generalCategory) }
+            || name.contains(where: \.isNewline)
         if name.contains(where: { $0 == ":" || $0 == "/" }) || invisible {
             out.append("The name cannot contain “:”, “/”, control or invisible formatting characters.")
         }
