@@ -3173,3 +3173,12 @@ window. **Back** (⌘[): `NavigationHistory` in Core, recorded by every section 
 `DrivesList` groups the boot System and Data volumes on one APFS container into one row, shows a mounted vault as a
 badge on its own row, and keeps a section only for vaults that are not connected; warnings are folded. Six new keys,
 drafts `needs_review`. The snapshot test's comment that blamed off-screen drawing for the undrawn Delete is corrected.
+
+**R1 review round 1 (same day).** Simulators tables may scroll inside again (`scrollDisabled` removed: a wrong row
+metric now degrades to a small internal scroll, never hidden rows). A mounted vault that is not usable shows its
+check's sentence as text (`DriveRow.showsVaultDetail`), not only as a tooltip. The boot row now holds only the running
+system's pair, the volumes at `/` and `/System/Volumes/Data` on one container; another install's System/Data in the same
+container keeps its own rows. **Known limitation:** `Volume` does not carry the APFS volume-group UUID, so System and
+its Data sibling are tied by those mount points, not by the group itself. Also: the Delete notes label names its
+warnings, the table gets layout priority over the notes, duplicate registry entries are shown rather than dropped, and
+the not-mounted vaults' symbol follows their state.

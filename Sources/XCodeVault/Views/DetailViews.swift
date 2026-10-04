@@ -68,7 +68,6 @@ struct SimulatorsView: View {
                     TableColumn(L10n.tr("app.column.image")) { Text(verbatim: $0.path ?? "").font(.system(.caption, design: .monospaced)) }
                 }
                 .frame(height: SimulatorsTable.fittedTableHeight(rowCount: runtimes.count))
-                .scrollDisabled(true)
             }
             Text.l10n(L10n.tr("app.simulators.devices.title", ByteCount.format(SimulatorsTable.devicesBytes(report: report)))).font(.headline)
             // simctl's per-device data size, not the catalog's `du` of the Devices folder that Delete shows (final review M2).
@@ -87,7 +86,6 @@ struct SimulatorsView: View {
                     TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.device.dataPath ?? "").font(.system(.caption, design: .monospaced)) }
                 }
                 .frame(height: SimulatorsTable.fittedTableHeight(rowCount: devices.count))
-                .scrollDisabled(true)
             }
             Text.l10n(L10n.tr("app.simulators.footer")).font(.footnote).foregroundStyle(.secondary)
         }
@@ -112,11 +110,12 @@ struct DrivesView: View {
                 }
             } else if !list.offlineVaults.isEmpty {
                 Section(L10n.tr("app.volumes.vaults.offline")) {
-                    ForEach(list.offlineVaults, id: \.volume.volumeUUID) { c in
+                    // By position: a damaged registry can hold one UUID twice, and both entries are shown.
+                    ForEach(Array(list.offlineVaults.enumerated()), id: \.offset) { _, c in
                         VStack(alignment: .leading) {
                             HStack {
-                                // The state's words and its symbol first; the color only repeats them.
-                                Label(AppText.vaultState(c.state), systemImage: "externaldrive.badge.xmark").bold()
+                                // The state's words and its symbol first (`DrivesList.offlineSymbol`); the color only repeats them.
+                                Label(AppText.vaultState(c.state), systemImage: DrivesList.offlineSymbol(for: c)).bold()
                                     .foregroundStyle(c.isUsable ? .green : .red)
                                 Text(verbatim: c.volume.volumeName)
                             }
@@ -158,6 +157,16 @@ struct DriveRowView: View {
                 .foregroundStyle(.secondary)
             // A mark and a sentence before the color: never color alone.
             ForEach(q.blockers, id: \.self) { Text(verbatim: "✗ " + $0).font(.caption).foregroundStyle(.red) }
+            // A mounted vault that is not usable says why in visible text, not only in the badge's tooltip
+            // (`DriveRow.showsVaultDetail`).
+            if let vault = row.vault, row.showsVaultDetail {
+                Text(verbatim: vault.detail).font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            // Further registry entries for this volume (`DriveRow.duplicateVaults`): shown, never dropped.
+            ForEach(Array(row.duplicateVaults.enumerated()), id: \.offset) { _, extra in
+                Label(L10n.tr("app.volumes.vaultBadge", AppText.vaultState(extra.state)) + " — " + extra.detail, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+            }
             if !q.warnings.isEmpty {
                 DisclosureGroup(isExpanded: Binding(get: { showsWarnings ?? !row.warningsStartCollapsed }, set: { showsWarnings = $0 })) {
                     VStack(alignment: .leading, spacing: 2) {

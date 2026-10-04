@@ -112,14 +112,57 @@ final class DrivesListTests: XCTestCase {
         XCTAssertFalse(list.rows[1].isBootGroup)
     }
 
+    /// Review M7: another macOS install's System and Data volumes, in the same container and with the boot role, are
+    /// mounted elsewhere and keep their own rows; only the running system's pair at `/` and `/System/Volumes/Data` is one.
+    func testAnotherInstallInTheSameContainerIsNotFoldedIntoTheBootRow() {
+        let system = volume("/dev/disk3s1s1", "Alpha", uuid: "S", mount: "/", boot: true, writable: false)
+        let data = volume("/dev/disk3s5", "Alpha - Data", uuid: "D", mount: "/System/Volumes/Data", boot: true)
+        let otherSystem = volume("/dev/disk3s7", "Beta", uuid: "OS", mount: "/Volumes/Beta", boot: true, writable: false)
+        let otherData = volume("/dev/disk3s8", "Beta - Data", uuid: "OD", mount: "/Volumes/Beta - Data", boot: true)
+        let list = DrivesList.make(volumes: [system, otherSystem, data, otherData], checks: [])
+        XCTAssertEqual(list.rows.map(\.volume), [data, otherSystem, otherData])
+        XCTAssertEqual(list.rows.map(\.isBootGroup), [true, false, false])
+        XCTAssertEqual(list.rows[0].members, [system, data])
+    }
+
+    /// Review M9: `disk1` and `disk10` are different containers, and an external or off-path boot-role volume is never in
+    /// the running system's row.
     func testBootVolumesOnDifferentContainersOrExternalStayApart() {
-        let a = volume("/dev/disk3s5", "A", uuid: "A", mount: "/System/Volumes/Data", boot: true)
-        let b = volume("/dev/disk7s1", "B", uuid: "B", mount: "/Volumes/B", boot: true)
-        let external = volume("/dev/disk3s9", "E", uuid: "E", mount: "/Volumes/E", boot: true, inside: false)
-        let list = DrivesList.make(volumes: [a, b, external], checks: [])
-        XCTAssertEqual(list.rows.map(\.volume), [a, b, external])
-        XCTAssertEqual(list.rows.map(\.isBootGroup), [true, true, false])
-        XCTAssertEqual(list.rows[0].members, [a])
+        let root = volume("/dev/disk1s1s1", "A", uuid: "A", mount: "/", boot: true)
+        let data10 = volume("/dev/disk10s5", "B", uuid: "B", mount: "/System/Volumes/Data", boot: true)
+        let external = volume("/dev/disk1s9", "E", uuid: "E", mount: "/Volumes/E", boot: true, inside: false)
+        let list = DrivesList.make(volumes: [root, data10, external], checks: [])
+        XCTAssertEqual(list.rows.map(\.volume), [root, data10, external])
+        XCTAssertEqual(list.rows.map(\.isBootGroup), [true, false, false], "disk10's Data is not disk1's sibling")
+        XCTAssertEqual(list.rows[0].members, [root])
+        let dataOnly = DrivesList.make(volumes: [data10], checks: [])
+        XCTAssertEqual(dataOnly.rows.map(\.isBootGroup), [true], "the Data volume alone is the group")
+    }
+
+    /// Review M9: a registry holding one UUID twice (`vault init` refuses it; a hand edit does not) loses no entry — the
+    /// first is the badge, the rest are listed on the same row, and none moves to the not-mounted section.
+    func testADuplicateRegistryEntryIsShownOnTheRowNotDropped() {
+        let drive = volume("/dev/disk5s1", "Drive", uuid: "U", mount: "/Volumes/Drive", inside: false, bus: "USB")
+        let first = check("U", .verified), second = check("U", .sentinelMissing)
+        let list = DrivesList.make(volumes: [drive], checks: [first, second, check("X", .absent), check("X", .absent)])
+        XCTAssertEqual(list.rows[0].vault, first)
+        XCTAssertEqual(list.rows[0].duplicateVaults, [second])
+        XCTAssertEqual(list.offlineVaults.map(\.volume.volumeUUID), ["X", "X"], "both offline entries are listed")
+    }
+
+    /// Review I2 and M8: a mounted vault that is not usable shows its sentence; the not-mounted section's symbol follows the
+    /// state.
+    func testAnUnusableMountedVaultShowsItsDetailAndOfflineSymbolsFollowTheState() {
+        let drive = volume("/dev/disk5s1", "Drive", uuid: "U", mount: "/Volumes/Drive", inside: false)
+        let odd = volume("/dev/disk6s1", "Odd", uuid: "O", mount: "/Volumes/Odd", inside: false)
+        let rows = DrivesList.make(volumes: [drive, odd], checks: [check("U", .verified), check("O", .sentinelMissing)]).rows
+        XCTAssertFalse(rows[0].showsVaultDetail, "a usable vault keeps its sentence in the tooltip")
+        XCTAssertTrue(rows[1].showsVaultDetail)
+        XCTAssertFalse(DrivesList.make(volumes: [drive], checks: []).rows[0].showsVaultDetail, "no vault, nothing to show")
+        XCTAssertEqual(DrivesList.offlineSymbol(for: check("X", .absent)), "externaldrive.badge.xmark")
+        for state in [VaultVolumeState.foreign, .ambiguous, .sentinelMissing] {
+            XCTAssertEqual(DrivesList.offlineSymbol(for: check("X", state)), "externaldrive.badge.exclamationmark", "\(state)")
+        }
     }
 
     func testAMountedVaultIsABadgeOnItsOwnRowAndOnlyUnconnectedVaultsHaveASection() {
@@ -157,6 +200,7 @@ final class DrivesListTests: XCTestCase {
         XCTAssertEqual(DrivesList.containerKey("/dev/disk3s5"), "disk3")
         XCTAssertEqual(DrivesList.containerKey("/dev/disk3s1s1"), "disk3", "the sealed system snapshot")
         XCTAssertEqual(DrivesList.containerKey("/dev/disk12s2"), "disk12")
+        XCTAssertNotEqual(DrivesList.containerKey("/dev/disk1s5"), DrivesList.containerKey("/dev/disk10s5"))
         XCTAssertEqual(DrivesList.containerKey("disk4"), "disk4")
         XCTAssertEqual(DrivesList.containerKey(""), "")
         XCTAssertEqual(DrivesList.containerKey("/dev/other"), "other")
@@ -191,6 +235,8 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         let notes = DeleteNotes.make(plan: plan, list: list)
         XCTAssertEqual(notes.count, 2 + root + list.otherTools.count + 3, "the access row is not a note: it stays above the table")
         XCTAssertFalse(notes.startsExpanded)
+        XCTAssertEqual(notes.warningCount, 2)
+        XCTAssertEqual(notes.title, .warningsAndMore(warnings: 2, more: notes.count - 2), "the label names the warnings")
     }
 
     func testTheNotesStartOpenWhenTheTableIsEmptyAndAreAbsentWhenThereAreNone() {
@@ -204,6 +250,8 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         let open = DeleteNotes.make(plan: warned, list: DeleteList.make(plan: warned, report: survey.0))
         XCTAssertEqual(open.count, 1)
         XCTAssertTrue(open.startsExpanded)
+        XCTAssertEqual(open.title, .warnings(1), "only warnings: no \"more notes\"")
+        XCTAssertEqual(none.title, .notes(0))
     }
 
     func testASimulatorsTableIsAsTallAsItsHeaderAndRows() {

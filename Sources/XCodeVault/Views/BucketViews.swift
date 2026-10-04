@@ -177,6 +177,13 @@ struct DeleteView: View {
     /// The notes panel's state once the user opened or closed it; until then `DeleteNotes.startsExpanded` decides.
     @State private var notesExpanded: Bool?
 
+    /// `notesInitiallyExpanded` is for `ScreenFitTests`, which measures the panel opened while the table has rows; the app
+    /// passes nil and `DeleteNotes.startsExpanded` decides.
+    init(model: AppModel, notesInitiallyExpanded: Bool? = nil) {
+        _model = Bindable(model)
+        _notesExpanded = State(initialValue: notesInitiallyExpanded)
+    }
+
     var body: some View {
         if let plan = model.cleanPlan, let list = model.deleteList {
             VStack(alignment: .leading, spacing: 10) {
@@ -187,8 +194,9 @@ struct DeleteView: View {
                     GroupBox { AccessRowView(row: access) { model.handle($0) } }.padding(.horizontal)
                 }
                 // No floor for the table (R1): a rigid minimum made the screen taller than the window, which pushed the split
-                // view's sidebar off the top and left the table undrawn. The table takes whatever the notes and footer leave.
-                table(list)
+                // view's sidebar off the top and left the table undrawn. The table takes whatever the notes and footer leave,
+                // and gets the space first: the notes' bounded scroll gives way before it does.
+                table(list).layoutPriority(1)
                 if let notes = model.deleteNotes, !notes.isEmpty { notesPanel(plan, list, notes) }
                 footer(list)
             }
@@ -247,7 +255,8 @@ struct DeleteView: View {
     }
 
     /// Everything below the table, in one panel folded by default (R1): the planner's warnings, the root rows, the rows
-    /// another tool deletes and the skipped lines. The access row is not here: it stays above the table. Open, it scrolls inside a bounded height, so it can never push the footer out of the window.
+    /// another tool deletes and the skipped lines. The access row is not here: it stays above the table. Open, it scrolls
+    /// inside a bounded height, so it can never push the footer out of the window.
     private func notesPanel(_ plan: CleanPlan, _ list: DeleteList, _ notes: DeleteNotes) -> some View {
         let expanded = notesExpanded ?? notes.startsExpanded
         return VStack(alignment: .leading, spacing: 6) {
@@ -256,7 +265,8 @@ struct DeleteView: View {
             DisclosureGroup(isExpanded: Binding(get: { expanded }, set: { notesExpanded = $0 })) {
                 EmptyView()
             } label: {
-                Text.l10n(L10n.plural("app.delete.notes.title", count: notes.count)).font(.callout)
+                // Names the warnings when there are any (`DeleteNotes.title`): folded, the panel never hides that they exist.
+                Text.l10n(AppText.deleteNotesTitle(notes.title)).font(.callout)
             }
             if expanded { notesContent(plan, list) }
         }

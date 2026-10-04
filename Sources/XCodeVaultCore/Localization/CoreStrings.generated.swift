@@ -375,6 +375,13 @@ extension L10nCatalog {
                 "ja": "%@ — %@",
                 "zh-Hans": "%@ — %@",
             ],
+            "app.delete.notes.warningsAndMore": [
+                "en": "%@, %@",
+                "pt-BR": "%@, %@",
+                "es": "%@, %@",
+                "ja": "%@、%@",
+                "zh-Hans": "%@，%@",
+            ],
             "app.delete.otherTools.detail": [
                 "en": "These are never deleted from this list. Copy a command and run it in Terminal; simulator devices lose their apps and the apps\' data.",
                 "pt-BR": "Estes nunca são apagados por esta lista. Copie um comando e execute-o no Terminal; os dispositivos do simulador perdem os apps e os dados dos apps.",
@@ -1020,11 +1027,11 @@ extension L10nCatalog {
                 "zh-Hans": "尚未注册。要注册，请运行：xcodevaultctl vault init /Volumes/<名称>",
             ],
             "app.volumes.vaults.offline": [
-                "en": "Vaults not connected",
-                "pt-BR": "Cofres não conectados",
-                "es": "Bóvedas no conectadas",
-                "ja": "接続されていない退避先",
-                "zh-Hans": "未连接的保险库",
+                "en": "Registered vaults not mounted",
+                "pt-BR": "Cofres registrados não montados",
+                "es": "Bóvedas registradas no montadas",
+                "ja": "マウントされていない登録済みの退避先",
+                "zh-Hans": "未挂载的已注册保险库",
             ],
             "app.volumes.verdict.suitable": [
                 "en": "suitable",
@@ -1934,6 +1941,26 @@ extension L10nCatalog {
                     "other": "已选 %lld 项 · %@",
                 ],
             ],
+            "app.delete.notes.more": [
+                "en": [
+                    "one": "%lld more note",
+                    "other": "%lld more notes",
+                ],
+                "pt-BR": [
+                    "one": "mais %lld observação",
+                    "other": "mais %lld observações",
+                ],
+                "es": [
+                    "one": "%lld nota más",
+                    "other": "%lld notas más",
+                ],
+                "ja": [
+                    "other": "ほかの注記 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "另有 %lld 条说明",
+                ],
+            ],
             "app.delete.notes.title": [
                 "en": [
                     "one": "%lld note about this list",
@@ -1952,6 +1979,26 @@ extension L10nCatalog {
                 ],
                 "zh-Hans": [
                     "other": "关于此列表的 %lld 条说明",
+                ],
+            ],
+            "app.delete.notes.warnings": [
+                "en": [
+                    "one": "%lld warning",
+                    "other": "%lld warnings",
+                ],
+                "pt-BR": [
+                    "one": "%lld aviso",
+                    "other": "%lld avisos",
+                ],
+                "es": [
+                    "one": "%lld advertencia",
+                    "other": "%lld advertencias",
+                ],
+                "ja": [
+                    "other": "警告 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 条警告",
                 ],
             ],
             "app.delete.skipped.title": [

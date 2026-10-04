@@ -94,9 +94,36 @@ final class ScreenFitTests: XCTestCase {
             XCTAssertNotNil(model.deleteAccessRow, "the stress fixture shows the access row")
             model.section = .delete
             let height = minimumHeight(MainView(model: model).detail(try XCTUnwrap(model.report)))
-            print("SCREENFIT delete-with-access-row \(language): \(height)")
             XCTAssertLessThanOrEqual(height, Self.ceiling, "\(language): Delete with the access row, minimum height \(height)")
         }
+    }
+
+    /// Review M5: the notes panel opened by the user while the table has rows, with the access row above the table — the
+    /// tallest Delete there is — still fits, in en and ja.
+    func testDeleteFitsWithTheNotesOpenOverATableWithRows() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let t = TempDir()
+            let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, fullDiskAccess: .notGranted, survey: screenFitStressSurvey())
+            await model.refresh()
+            XCTAssertEqual(model.deleteList?.groups.isEmpty, false, "the table has rows")
+            XCTAssertNotNil(model.deleteAccessRow)
+            let height = minimumHeight(DeleteView(model: model, notesInitiallyExpanded: true))
+            XCTAssertLessThanOrEqual(height, Self.ceiling, "\(language): Delete with rows and the notes open, minimum height \(height)")
+        }
+    }
+
+    /// Review M3: the measure catches the construct that regressed — a `Table` with a fixed floor inside a stack.
+    func testTheMeasureCatchesATableWithAFloor() {
+        struct Row: Identifiable {
+            let id: Int
+        }
+        let rows = (0..<3).map(Row.init)
+        let floored = VStack {
+            Table(rows) { TableColumn("n") { Text(verbatim: String($0.id)) } }.frame(minHeight: 451)
+        }
+        XCTAssertGreaterThan(minimumHeight(floored), Self.ceiling)
+        XCTAssertLessThanOrEqual(minimumHeight(VStack { Table(rows) { TableColumn("n") { Text(verbatim: String($0.id)) } } }), Self.ceiling)
     }
 
     /// Control: the measurement does catch a screen with a rigid floor, as Delete's `Table.frame(minHeight: 200)` was.
