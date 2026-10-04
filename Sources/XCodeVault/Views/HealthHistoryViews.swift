@@ -232,8 +232,15 @@ struct HistoryRowView: View {
                 Image(systemName: row.outcome.symbolName).accessibilityHidden(true)
             }
             .frame(width: HistoryView.Width.state, alignment: .leading)
-            Text(verbatim: row.summary).lineLimit(1).truncationMode(.middle).frame(maxWidth: .infinity, alignment: .leading)
-                .help(fullSummary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: row.summary).lineLimit(1).truncationMode(.middle)
+                // How it ended, under it, when it did not end well (R4 review M5); every step is in `xcodevaultctl journal`.
+                if row.showsEndSummary, let end = row.endSummary {
+                    Text(verbatim: end).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(fullSummary)
             Text(verbatim: row.bytes.map { ByteCount.format($0) } ?? "").monospacedDigit().lineLimit(1)
                 .frame(width: HistoryView.Width.size, alignment: .trailing)
         }

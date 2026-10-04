@@ -119,21 +119,24 @@ enum AppText {
         case .skipped: L10n.tr("app.history.outcome.skipped")
         case .interrupted: L10n.tr("app.history.outcome.interrupted")
         case .inProgress: L10n.tr("app.history.outcome.inProgress")
+        case .planned: L10n.tr("app.history.outcome.planned")
         }
     }
 
-    /// A History section's header: Today, Yesterday, then the date, in the app's language.
-    static func historyDay(_ day: JournalTimeline.Day) -> String {
+    /// A History section's header: Today, Yesterday, then the date, in the app's language and in `calendar`'s time zone —
+    /// the calendar that grouped the rows (`AppModel.historySections`), so the header names the day that was grouped.
+    static func historyDay(_ day: JournalTimeline.Day, calendar: Calendar = .current) -> String {
         switch day {
         case .today: L10n.tr("app.history.day.today")
         case .yesterday: L10n.tr("app.history.day.yesterday")
-        case .date(let date): date.formatted(Date.FormatStyle(date: .complete, time: .omitted).locale(Locale(identifier: L10n.locale)))
+        case .date(let date):
+            date.formatted(Date.FormatStyle(date: .complete, time: .omitted, timeZone: calendar.timeZone).locale(Locale(identifier: L10n.locale)))
         }
     }
 
-    /// A History row's time; the section header gives the day.
-    static func time(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(Locale(identifier: L10n.locale)))
+    /// A History row's time, in `calendar`'s time zone; the section header gives the day.
+    static func time(_ date: Date, calendar: Calendar = .current) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: calendar.timeZone).locale(Locale(identifier: L10n.locale)))
     }
 
     /// An `AccessChecklist` row's text, from its key and the facts the sentence takes (`blocksBytes`,

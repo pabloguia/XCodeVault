@@ -57,6 +57,9 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 - Read-only (all `--json`): `scan [--details]`, `plan`, `status`, `report`, `doctor`, `xcode list`,
   `runtime list`, `runtime library --dir`, `volumes`, `compatibility`, `locations show`,
   `journal`, `vault status`, `migration status`, `permissions`, `bench <dir>`.
+  `doctor --json` findings may carry two optional fields, absent when unset: `bytes` (the finding's size)
+  and `parts` (`explanation`, per-item `lines` of `label`/`bytes`, `notOfferedByClean`), set today only on
+  `perDeviceRegenerable.*` (R4, 2026-10-04). `detail` still holds the whole text.
 - Changing (each journaled except `vault forget`, which only edits the registry; dry-run/plan by
   default where meaningful):
   `clean [--category …] [--apply] [--trash] [--force]`,

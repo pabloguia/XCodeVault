@@ -16,10 +16,14 @@ public enum JournalTimeline {
     /// How an operation ended, as its last record says.
     public enum Outcome: String, Sendable, CaseIterable, Hashable {
         case completed, failed, rolledBack, skipped
-        /// The last record opened or continued it and no record closed it: a crash, a kill, or a power cut — the same
-        /// rule as `Journal.interrupted()`. An operation the caller knows is running right now is `inProgress` instead.
+        /// The last record started or continued it and no record closed it: a crash, a kill, or a power cut — exactly
+        /// `Journal.interrupted()`'s rule (a last state of `started`). An operation the caller knows is running right now
+        /// is `inProgress` instead.
         case interrupted
         case inProgress
+        /// The last record is a plan: recorded, never started. Not a crash — `Journal.interrupted()` does not count it,
+        /// and the journal also writes standalone `planned` notes (the vault registry's durability warning).
+        case planned
     }
 
     public struct Row: Sendable, Equatable, Identifiable {
@@ -33,8 +37,12 @@ public enum JournalTimeline {
         public let summary: String
         /// The last record's summary when it says something else: how it ended (a count, an error).
         public let endSummary: String?
-        /// The last size any record gave; nil when none did.
+        /// The operation's size: the closing record's when it gives one, else the opening record's (the planned total).
+        /// A step's size in between is never the operation's.
         public let bytes: UInt64?
+        /// Whether the row shows `endSummary` under its summary, not only in its tooltip: when the operation did not end
+        /// well, how it ended is the part the user came for (R4 review M5).
+        public var showsEndSummary: Bool { endSummary != nil && (outcome == .failed || outcome == .interrupted) }
         /// How many records the operation has.
         public let recordCount: Int
         /// The first record's sequence number, which orders rows that started at the same time.
@@ -54,11 +62,17 @@ public enum JournalTimeline {
             return Row(
                 id: id, kind: kind(of: records), outcome: outcome(of: last, running: running.contains(id)), started: first.timestamp,
                 summary: first.summary, endSummary: last.summary == first.summary ? nil : last.summary,
-                bytes: records.last { $0.bytes != nil }?.bytes, recordCount: records.count, sequence: first.sequence)
+                bytes: size(first: first, last: last), recordCount: records.count, sequence: first.sequence)
         }
         // Newest start first, so the day sections run newest first; the sequence breaks ties and orders a journal whose
         // clock went backwards the way it was written.
         .sorted { ($0.started, $0.sequence) > ($1.started, $1.sequence) }
+    }
+
+    static func size(first: JournalEntry, last: JournalEntry) -> UInt64? {
+        let closed: Set<JournalEntry.State> = [.completed, .failed, .rolledBack, .skipped]
+        if closed.contains(last.state), let bytes = last.bytes { return bytes }
+        return first.bytes
     }
 
     /// The badge for an operation's records. The helper's actions say so in their summary (`PrivilegedActionRunner`
@@ -84,7 +98,8 @@ public enum JournalTimeline {
         case .failed: .failed
         case .rolledBack: .rolledBack
         case .skipped: .skipped
-        case .planned, .started: running ? .inProgress : .interrupted
+        case .started: running ? .inProgress : .interrupted
+        case .planned: running ? .inProgress : .planned
         }
     }
 
@@ -192,6 +207,7 @@ extension JournalTimeline.Outcome {
         case .skipped: "forward.end.circle"
         case .interrupted: "exclamationmark.triangle"
         case .inProgress: "clock"
+        case .planned: "calendar"
         }
     }
 }

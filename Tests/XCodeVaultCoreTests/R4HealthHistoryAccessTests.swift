@@ -129,7 +129,7 @@ final class JournalTimelineTests: XCTestCase {
         XCTAssertEqual(rows["failed"]?.outcome, .failed)
         XCTAssertEqual(rows["failed"]?.endSummary, "failed: nope")
         XCTAssertEqual(rows["orphan"]?.outcome, .interrupted, "a start with no end")
-        XCTAssertEqual(rows["planned-only"]?.outcome, .interrupted)
+        XCTAssertEqual(rows["planned-only"]?.outcome, .planned, "recorded, never started: not a crash")
         XCTAssertEqual(rows["running"]?.outcome, .inProgress, "the caller knows it is running")
         XCTAssertEqual(JournalTimeline.rows([entry("x", 1, .clean, .rolledBack)]).first?.outcome, .rolledBack)
         XCTAssertEqual(JournalTimeline.rows([entry("x", 1, .clean, .skipped)]).first?.outcome, .skipped)
@@ -142,8 +142,41 @@ final class JournalTimelineTests: XCTestCase {
         try journal.record(id: "done", kind: .migration, state: .started, summary: "COPY")
         try journal.record(id: "done", kind: .migration, state: .completed, summary: "DONE")
         try journal.record(id: "cut", kind: .migration, state: .started, summary: "COPY")
-        let interrupted = Set(JournalTimeline.rows(try journal.entries()).filter { $0.outcome == .interrupted }.map(\.id))
+        // A standalone plan, as the vault registry writes its durability warning: neither rule calls it interrupted.
+        try journal.record(id: "note", kind: .migration, state: .planned, summary: "warning: vault directory is not durable")
+        let rows = JournalTimeline.rows(try journal.entries())
+        let interrupted = Set(rows.filter { $0.outcome == .interrupted }.map(\.id))
         XCTAssertEqual(interrupted, Set(try journal.interrupted().map(\.id)))
+        XCTAssertEqual(interrupted, ["cut"])
+        XCTAssertEqual(rows.first { $0.id == "note" }?.outcome, .planned)
+    }
+
+    /// The row's size is the operation's: the closing record's, else the opening record's — never one step's (review M4).
+    func testTheSizeIsTheOperationsNotAStepsOne() {
+        let cut = JournalTimeline.rows([entry("c", 1, .clean, .planned, bytes: 10), entry("c", 2, .clean, .started, bytes: 4)])
+        XCTAssertEqual(cut.first?.bytes, 10, "interrupted mid-way: the planned total")
+        let done = JournalTimeline.rows([
+            entry("d", 1, .clean, .planned, bytes: 10), entry("d", 2, .clean, .started, bytes: 4), entry("d", 3, .clean, .completed, bytes: 6),
+        ])
+        XCTAssertEqual(done.first?.bytes, 6, "closed: what the end recorded")
+        let failedNoSize = JournalTimeline.rows([entry("f", 1, .clean, .planned, bytes: 10), entry("f", 2, .clean, .failed)])
+        XCTAssertEqual(failedNoSize.first?.bytes, 10)
+        XCTAssertNil(JournalTimeline.rows([entry("n", 1, .runtimeDelete, .started), entry("n", 2, .runtimeDelete, .completed)]).first?.bytes)
+    }
+
+    /// How it ended shows under the summary only when it did not end well (review M5).
+    func testTheEndSummaryShowsOnFailedAndInterruptedRows() {
+        let rows = Dictionary(
+            uniqueKeysWithValues: JournalTimeline.rows([
+                entry("ok", 1, .clean, .started, summary: "a"), entry("ok", 2, .clean, .completed, summary: "b"),
+                entry("bad", 3, .clean, .started, summary: "a"), entry("bad", 4, .clean, .failed, summary: "delete x: denied"),
+                entry("cut", 5, .clean, .planned, summary: "a"), entry("cut", 6, .clean, .started, summary: "delete y"),
+                entry("one", 7, .clean, .failed, summary: "same"),
+            ]).map { ($0.id, $0) })
+        XCTAssertEqual(rows["ok"]?.showsEndSummary, false)
+        XCTAssertEqual(rows["bad"]?.showsEndSummary, true)
+        XCTAssertEqual(rows["cut"]?.showsEndSummary, true)
+        XCTAssertEqual(rows["one"]?.showsEndSummary, false, "nothing more to say")
     }
 
     func testRowsAreNewestFirstAndInterleavedRecordsStayTogether() {
@@ -196,6 +229,7 @@ final class JournalTimelineTests: XCTestCase {
         XCTAssertEqual(sections.map(\.day), [.today, .yesterday, .date(calendar.startOfDay(for: lastWeek))])
         XCTAssertEqual(sections.map { $0.rows.map(\.id) }, [["t2", "t1"], ["y"], ["w"]])
     }
+
 }
 
 /// The kind badges' palette: one hue and one symbol per kind, each color clearing 3:1 on the system backgrounds in light
@@ -290,7 +324,9 @@ final class FullDiskAccessRegistrationTests: XCTestCase {
         }
         L10n.configure(override: "en", environment: [:], preferred: [])
         let hint = AppText.access(AccessChecklist.Key.fdaHintInList, bytes: nil, folders: nil)
-        XCTAssertEqual(hint, "XCodeVault is already in the list — turn its switch on.")
+        // Hedged until H16 is verified: "should", and what to do if it is not there.
+        XCTAssertEqual(hint, "XCodeVault should now be in the list — turn its switch on. If it isn't there, add it with +.")
+        XCTAssertFalse(hint.contains("already"), "never states the unverified registration as fact")
         XCTAssertFalse(hint.lowercased().contains("turned on") || hint.lowercased().contains("will turn"), "never claims the app turns it on")
     }
 
@@ -475,5 +511,51 @@ final class R4AppModelTests: XCTestCase {
         }
         XCTAssertEqual(written.count, 2 * 2 * 3)
         print("snapshots:\n" + written.joined(separator: "\n"))
+    }
+}
+
+/// R4 review, fix round 1: the minors that a test can hold.
+@MainActor
+final class R4ReviewFixTests: XCTestCase {
+    override func tearDown() { L10n.configure(override: "en", environment: [:], preferred: []) }
+
+    /// M1: `Finding`'s new fields are optional on the wire both ways, and a per-device finding round-trips.
+    func testFindingsNewFieldsAreAdditiveInJSON() throws {
+        let old = #"{"id":"low-free-space","severity":"warning","title":"t","detail":"d","path":"/p","remediation":"r","evidence":"e"}"#
+        let decoded = try JSONDecoder().decode(Finding.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.bytes)
+        XCTAssertNil(decoded.parts)
+        let encoded = try XCTUnwrap(String(data: try JSONEncoder().encode(decoded), encoding: .utf8))
+        XCTAssertFalse(encoded.contains("\"bytes\"") || encoded.contains("\"parts\""), encoded)
+        let perDevice = finding(
+            "perDeviceRegenerable.x", .info, bytes: 11,
+            parts: Finding.Parts(explanation: "E.", lines: [Finding.Line(label: "U", bytes: 11)], notOfferedByClean: "why"))
+        XCTAssertEqual(try JSONDecoder().decode(Finding.self, from: try JSONEncoder().encode(perDevice)), perDevice)
+    }
+
+    /// M7: the header names the day the rows were grouped in, in the grouping calendar's time zone.
+    func testTheDayHeaderUsesTheGroupingCalendarsTimeZone() throws {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        for zone in ["UTC", "Pacific/Kiritimati", "Pacific/Pago_Pago"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+            let expected = calendar.component(.day, from: day)
+            let header = AppText.historyDay(.date(day), calendar: calendar)
+            XCTAssertTrue(header.contains(" \(expected),"), "\(zone): \(header)")
+        }
+    }
+
+    /// M8: a kind hidden before a rescan that no longer has it is not left hidden.
+    func testAHiddenKindTheRowsNoLongerHaveIsCleared() async {
+        let t = TempDir()
+        var survey = sampleSurvey()
+        survey.4 = [entry("a", 1, .clean, .completed)]
+        let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: survey)
+        await model.refresh()
+        model.toggleHistoryKind(.clean)
+        model.toggleHistoryKind(.runtimeDelete)
+        await model.refresh()
+        XCTAssertEqual(model.historyHiddenKinds, [.clean], "the kind still listed stays hidden; the gone one is cleared")
     }
 }

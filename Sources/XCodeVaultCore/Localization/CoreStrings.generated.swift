@@ -19,11 +19,11 @@ extension L10nCatalog {
                 "zh-Hans": "重新检查",
             ],
             "app.access.fda.hint.inList": [
-                "en": "XCodeVault is already in the list — turn its switch on.",
-                "pt-BR": "O XCodeVault já está na lista — ative a chave dele.",
-                "es": "XCodeVault ya está en la lista: activa su interruptor.",
-                "ja": "XCodeVault はすでに一覧にあります。スイッチをオンにしてください。",
-                "zh-Hans": "XCodeVault 已在列表中——请打开它的开关。",
+                "en": "XCodeVault should now be in the list — turn its switch on. If it isn\'t there, add it with +.",
+                "pt-BR": "O XCodeVault deve estar na lista agora — ative a chave dele. Se não estiver, adicione-o com +.",
+                "es": "XCodeVault debería aparecer ya en la lista: activa su interruptor. Si no aparece, añádelo con +.",
+                "ja": "XCodeVault が一覧に表示されているはずです。スイッチをオンにしてください。表示されていない場合は + で追加してください。",
+                "zh-Hans": "XCodeVault 现在应已出现在列表中——请打开它的开关。如果没有出现，请用 + 添加。",
             ],
             "app.access.fda.why.granted": [
                 "en": "XCodeVault can measure the folders macOS protects.",
@@ -619,6 +619,13 @@ extension L10nCatalog {
                 "es": "Interrumpido",
                 "ja": "中断",
                 "zh-Hans": "已中断",
+            ],
+            "app.history.outcome.planned": [
+                "en": "Planned",
+                "pt-BR": "Planejado",
+                "es": "Planificado",
+                "ja": "計画のみ",
+                "zh-Hans": "仅计划",
             ],
             "app.history.outcome.rolledBack": [
                 "en": "Rolled back",

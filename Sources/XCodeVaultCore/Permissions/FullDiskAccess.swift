@@ -76,7 +76,8 @@ public struct FullDiskAccessProbe: Sendable {
 /// TCC records the app that asked. H15's indicator (`FullDiskAccessProbe.indicatorPath`, the system `TCC.db`) is not
 /// used for this: that folder is also protected by System Integrity Protection, which can refuse the open before TCC is
 /// asked — and the app opens it on every check, yet the user found it missing from the list (R4). **Unverified on a real window**: the
-/// listing is what macOS does, not something any API reports; STATUS.md R4 records the manual check.
+/// listing is what macOS does, not something any API reports. H16 in HYPOTHESES.md holds the claim and the manual check;
+/// until it is recorded, the app's text says the app *should* be in the list and how to add it if not.
 ///
 /// **It never reads anything.** `open(2)` of the directory, then `close(2)`: no listing, no file, nothing kept. The
 /// result is not used either: the probe above is what says whether access is granted.

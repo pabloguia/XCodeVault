@@ -46,9 +46,10 @@ public enum AccessChecklist {
         /// Folders the scan could not read because privacy protection refused them (`ScanSummary.privacyRefusalCount`).
         public let blocksFolders: Int?
 
-        /// What to do once the button has done its part, said next to it: the Full Disk Access button registers the app
-        /// and opens the pane (`FullDiskAccessRegistration`), so the app is already in the list and only its switch is
-        /// left. Nil for every other row. It never claims the app turns the switch on: only the user can.
+        /// What to do once the button has done its part, said next to it: the Full Disk Access button tries to register
+        /// the app and opens the pane (`FullDiskAccessRegistration`). The registration is unverified (H16), so the text
+        /// is hedged — the app *should* be in the list, and if not, **+** adds it. Nil for every other row. It never
+        /// claims the app turns the switch on: only the user can.
         public var hintKey: String? { action == .openFullDiskAccessSettings ? Key.fdaHintInList : nil }
 
         /// The need's name: the titles `xcodevaultctl permissions` prints.

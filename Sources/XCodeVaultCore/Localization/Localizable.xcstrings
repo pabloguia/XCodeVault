@@ -74,31 +74,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "XCodeVault is already in the list — turn its switch on."
+            "value" : "XCodeVault should now be in the list — turn its switch on. If it isn't there, add it with +."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault ya está en la lista: activa su interruptor."
+            "value" : "XCodeVault debería aparecer ya en la lista: activa su interruptor. Si no aparece, añádelo con +."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault はすでに一覧にあります。スイッチをオンにしてください。"
+            "value" : "XCodeVault が一覧に表示されているはずです。スイッチをオンにしてください。表示されていない場合は + で追加してください。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O XCodeVault já está na lista — ative a chave dele."
+            "value" : "O XCodeVault deve estar na lista agora — ative a chave dele. Se não estiver, adicione-o com +."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault 已在列表中——请打开它的开关。"
+            "value" : "XCodeVault 现在应已出现在列表中——请打开它的开关。如果没有出现，请用 + 添加。"
           }
         }
       }
@@ -3973,6 +3973,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "已中断"
+          }
+        }
+      }
+    },
+    "app.history.outcome.planned" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Planificado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "計画のみ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Planejado"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "仅计划"
           }
         }
       }

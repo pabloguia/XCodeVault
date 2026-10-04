@@ -56,7 +56,6 @@ final class AppModel {
     var findings: [Finding] = []
     var vaultChecks: [VaultVolumeCheck] = []
     var cleanPlan: CleanPlan?
-    var journal: [JournalEntry] = []
     /// Every scan starts through this: never two at once, and one more after the running one when a scan was
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
@@ -78,8 +77,8 @@ final class AppModel {
     }
 
     /// The most an app can do for Full Disk Access (ADR-0007): put itself in the pane's list, then open the exact pane.
-    /// The attempt comes first so the list already shows the app when the pane opens (R4, `FullDiskAccessRegistration`);
-    /// the user turns its switch on.
+    /// The attempt comes first so the list should already show the app when the pane opens (R4, `FullDiskAccessRegistration`,
+    /// unverified: H16); the user turns its switch on, or adds the app with + if it is not there.
     func openFullDiskAccessSettings() {
         guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
         returningFromSettings = true
@@ -98,7 +97,8 @@ final class AppModel {
         refreshPermissions()
         guard
             AccessChecklist.rescansOnActivation(
-                before: before, after: fullDiskAccess, hasScanned: report != nil, returningFromSettings: returning)
+                // A scan in flight counts as one: it ran without the grant, and `ScanGate` queues the follow-up (review M9).
+                before: before, after: fullDiskAccess, hasScanned: report != nil || isScanning, returningFromSettings: returning)
         else { return }
         await refresh()
     }
@@ -124,9 +124,11 @@ final class AppModel {
                 return (report, findings, checks, plan, journal)
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
-            self.journal = journal
-            // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start.
+            // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
+            // records themselves are not kept: nothing else reads them (R4 review M6).
             self.historyRows = Array(JournalTimeline.rows(journal).prefix(Self.historyLimit))
+            // A kind the new rows no longer have cannot stay hidden: the menu would not offer it (R4 review M8).
+            self.historyHiddenKinds.formIntersection(JournalTimeline.kinds(in: self.historyRows))
             // The bucket views first: the Delete view's access row reads their list.
             updateBucketViews()
             revalidateDetailState()
@@ -364,6 +366,7 @@ final class AppModel {
     func showAllHistoryKinds() { historyHiddenKinds = [] }
 
     /// History's sections: the shown operations by the day they started (`JournalTimeline.sections`), as of `now`.
+    /// The view formats the headers with the same `calendar` (`AppText.historyDay`), so the day grouped is the day shown.
     func historySections(now: Date = Date(), calendar: Calendar = .current) -> [JournalTimeline.DaySection] {
         JournalTimeline.sections(JournalTimeline.filter(historyRows, hiding: historyHiddenKinds), now: now, calendar: calendar)
     }
