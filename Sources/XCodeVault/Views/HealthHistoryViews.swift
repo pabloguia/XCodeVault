@@ -164,6 +164,7 @@ struct HistoryView: View {
                 L10n.tr("app.journal.empty.title"), systemImage: "list.bullet.rectangle", description: Text.l10n(L10n.tr("app.journal.empty.detail")))
         } else {
             VStack(alignment: .leading, spacing: 6) {
+                InterruptedMigrationsBanner(items: model.interruptedMigrations) { model.environment.copy($0) }.padding(.horizontal)
                 filterBar
                 header
                 let sections = model.historySections()

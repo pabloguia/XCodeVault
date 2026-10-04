@@ -7,7 +7,10 @@ import XCodeVaultCore
 /// Scanner / Doctor / CleanPlanner / VaultVerifier the CLI uses (ADR-0003).
 @main
 struct XCodeVaultApp: App {
-    @State private var model = AppModel()
+    /// Owns the model, so the quit guard can ask it whether an operation runs (R3), and so an operation outlives its
+    /// window being closed.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    private var model: AppModel { appDelegate.model }
 
     /// Before any tool runs: once the user grants Full Disk Access, every tool the app starts works inside
     /// that grant, so what `xcrun` resolves must not come from this process's inherited environment.
@@ -35,6 +38,25 @@ struct XCodeVaultApp: App {
                 Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
             }
         }
+    }
+}
+
+/// The quit guard (R3 §9): while an operation runs, quitting asks first. Closing the window does not interrupt it — the
+/// model lives here, not in the window — so only quitting is guarded.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard model.quitNeedsConfirmation else { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.tr("app.quit.title")
+        alert.informativeText = L10n.tr("app.quit.message")
+        // The safe choice is the default (HIG): Return keeps the operation running.
+        alert.addButton(withTitle: L10n.tr("app.quit.keepRunning"))
+        alert.addButton(withTitle: L10n.tr("app.quit.quitAnyway")).hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 }
 

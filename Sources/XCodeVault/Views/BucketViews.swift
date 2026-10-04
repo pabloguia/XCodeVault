@@ -73,6 +73,14 @@ struct InlineCodeText: View {
 struct PlanRowView: View {
     let row: SavingsPlanRow
     let copy: @MainActor () -> Void
+    /// **Run…** (R3): set only for a row the app can run (`AppModel.canRun`); nil keeps the row copy-only.
+    let run: (@MainActor () -> Void)?
+
+    init(row: SavingsPlanRow, copy: @escaping @MainActor () -> Void, run: (@MainActor () -> Void)? = nil) {
+        self.row = row
+        self.copy = copy
+        self.run = run
+    }
     /// A moment of "Copied" after the button, said to VoiceOver too: feedback only, it decides nothing.
     @State private var copied = false
     /// Counts the clicks: each one restarts the moment (`.task(id:)` cancels the previous wait), and nothing outlives the view.
@@ -109,6 +117,10 @@ struct PlanRowView: View {
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }  // cancelled: a newer click, or the view went away
                     copied = false
                 }
+                if let run {
+                    Button(action: run) { Label(L10n.tr("app.plan.run"), systemImage: "play") }
+                        .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.run.a11y", row.categoryName)))
+                }
             }
             ForEach(Array(row.localizedNotes.enumerated()), id: \.offset) { _, note in
                 InlineCodeText(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -121,19 +133,26 @@ struct PlanRowView: View {
     }
 }
 
-/// Park and Run externally (spec §6.4): the plan for the bucket with **Copy command** per row. The app runs none of
-/// these: GUI execution of `externalize`, `runtime offload` and `locations set-*` needs its own spec and review.
+/// Park and Run externally (spec §6.4): the plan for the bucket with **Copy command** per row, and **Run…** where the
+/// app runs it (R3, ADR-0011, which supersedes §6.4's "no GUI writer").
 struct PlanView: View {
     let bucket: SavingsBucket
     let rows: [SavingsPlanRow]
     /// Park's vault line; nil for Run externally, whose commands take a folder, not a vault.
     let vault: VaultStatus?
     let copy: @MainActor (SavingsPlanRow) -> Void
+    /// The rows **Run…** is offered for, and what it does (`AppModel.canRun`, `AppModel.openRun`).
+    var canRun: @MainActor (SavingsPlanRow) -> Bool = { _ in false }
+    var run: @MainActor (SavingsPlanRow) -> Void = { _ in }
+    /// The interrupted-migration banner (R3 §10).
+    var interrupted: [InterruptedMigration] = []
+    var copyCommand: @MainActor (String) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 BucketHeaderView(bucket: bucket)
+                InterruptedMigrationsBanner(items: interrupted, copy: copyCommand)
                 if let vault {
                     Label {
                         InlineCodeText(AppText.vaultStatus(vault)).font(.callout)
@@ -146,12 +165,19 @@ struct PlanView: View {
                     Text.l10n(L10n.tr("cli.plan.empty")).foregroundStyle(.secondary)
                 }
                 ForEach(rows, id: \.categoryID) { row in
-                    PlanRowView(row: row) { copy(row) }
+                    PlanRowView(row: row, copy: { copy(row) }, run: runAction(row))
                 }
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// **Run…** for a row the app runs; nil for a copy-only row.
+    private func runAction(_ row: SavingsPlanRow) -> (@MainActor () -> Void)? {
+        guard canRun(row) else { return nil }
+        let run = self.run
+        return { run(row) }
     }
 
     static func vaultSymbol(_ status: VaultStatus) -> String {
@@ -235,6 +261,13 @@ struct DeleteView: View {
         }
     }
 
+    /// **Run…** for the runtime row another tool deletes; nil for the devices row, which stays copy-only (R3).
+    private func runAction(_ row: SavingsPlanRow) -> (@MainActor () -> Void)? {
+        guard model.canRun(row) else { return nil }
+        let model = self.model
+        return { model.openRun(row) }
+    }
+
     private func table(_ list: DeleteList) -> some View {
         Table(of: CleanAction.self, selection: $selection) {
             TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
@@ -313,7 +346,8 @@ struct DeleteView: View {
         }
     }
 
-    /// Simulator devices and runtimes: deleted by `simctl` / `runtime delete`, never from this list.
+    /// Simulator devices and runtimes: deleted by `simctl` / `runtime delete`, never from this list. The runtime row also
+    /// has **Run…** (R3); the devices row stays copy-only.
     @ViewBuilder
     private func otherTools(_ list: DeleteList) -> some View {
         if !list.otherTools.isEmpty {
@@ -322,7 +356,7 @@ struct DeleteView: View {
                     Text.l10n(L10n.tr("app.delete.otherTools.detail")).font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(list.otherTools, id: \.categoryID) { row in
-                        PlanRowView(row: row) { model.copyCommand(row) }
+                        PlanRowView(row: row, copy: { model.copyCommand(row) }, run: runAction(row))
                     }
                 }
             } label: {

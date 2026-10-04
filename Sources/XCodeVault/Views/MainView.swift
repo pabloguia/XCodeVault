@@ -126,6 +126,9 @@ struct MainView: View {
             Task { await model.appDidBecomeActive() }
         }
         .sheet(isPresented: $model.showsHelperSheet) { HelperRequestSheet(model: model) }
+        .sheet(isPresented: Binding(get: { model.operationSheet != nil }, set: { if !$0 { model.closeOperationSheet() } })) {
+            OperationSheetView(model: model)
+        }
         .overlay(alignment: .top) {
             if let progress = model.helperProgress {
                 HStack {
@@ -163,8 +166,12 @@ struct MainView: View {
         case .overview:
             OverviewView(report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) })
         case .delete: DeleteView(model: model)
-        case .park: PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { model.copyCommand($0) }
-        case .runExternally: PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) }
+        case .park, .runExternally:
+            let bucket: SavingsBucket = model.section == .park ? .parkExternally : .runFromExternal
+            PlanView(
+                bucket: bucket, rows: model.rows(for: bucket), vault: model.section == .park ? model.vaultStatus : nil, copy: { model.copyCommand($0) },
+                canRun: { model.canRun($0) }, run: { model.openRun($0) }, interrupted: model.interruptedMigrations,
+                copyCommand: { model.environment.copy($0) })
         case .storage: StorageView(model: model, report: r)
         case .simulators: SimulatorsView(model: model, report: r)
         case .drives: DrivesView(list: model.drivesList(r)) { model.driveBar($0, report: r) }

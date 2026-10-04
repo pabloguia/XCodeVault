@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 
 @testable import XCodeVault
@@ -451,4 +452,73 @@ final class R3RunInAppTests: XCTestCase {
             macOSVersion: "26.6", macOSBuild: "x", architecture: "x86_64", homeDirectory: "/tmp", dataVolumeFreeBytes: 1 << 40,
             dataVolumeTotalBytes: 1 << 41, userName: "t", isRoot: false)
     }
+}
+
+/// The Run sheet fits (R1's lesson, R3): in every phase its minimum height stays small, so the sheet never asks the
+/// window for a huge height, and the main window's screens still fit while a sheet is up.
+@MainActor
+final class R3SheetFitTests: XCTestCase {
+    static let ceiling: CGFloat = 420
+
+    override func tearDown() { L10n.configure(override: "en", environment: [:], preferred: []) }
+
+    private func minimumHeight<V: View>(_ view: V) -> CGFloat {
+        NSHostingController(rootView: view).sizeThatFits(in: NSSize(width: 560, height: 1)).height
+    }
+
+    func testEveryPhaseOfTheSheetFits() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let ops = ScriptedOperations()
+            ops.preview = { _, _ in
+                OperationPreview(
+                    source: "/Users/t/Library/Developer/Xcode/Archives", destination: "/Volumes/PABLO/XCodeVault/archives/Archives", bytes: 18_000_000_000,
+                    warnings: (1...12).map { "Warning \($0): a sentence long enough to wrap at the sheet's width, as Core's do." },
+                    prepared: .migration(R3RunInAppTests.plan()))
+            }
+            ops.lines = (1...6_000).map { LogLine(.stdout, "line \($0)") }
+            ops.result = .success(.copied(R3RunInAppTests.outcome()))
+            ops.holds = true
+            ops.measured = 1
+            let m = makeR3Model(ops, survey: sampleSurvey(checks: [r3VaultCheck()]))
+            await m.refresh()
+            m.openRun(r3Row())
+            await eventually("the review") { m.canConfirmOperation }
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) review")
+            let running = Task { await m.runOperation() }
+            await eventually("running") { m.operationSheet?.log.droppedCount == 6_000 + 1 - OperationLog.defaultLimit }
+            XCTAssertEqual(m.operationSheet?.log.droppedCount, 6_000 + 1 - OperationLog.defaultLimit, "the log keeps the newest lines")
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) running")
+            m.section = .park
+            let report = try XCTUnwrap(m.report)
+            XCTAssertLessThanOrEqual(minimumHeight(MainView(model: m).detail(report)), ScreenFitTests.ceiling, "\(language) Park under the sheet")
+            ops.release()
+            await running.value
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) finished")
+        }
+    }
+}
+
+@MainActor
+func makeR3Model(_ ops: ScriptedOperations, survey: AppModel.Survey) -> AppModel {
+    let helper = SwitchableHelper(.unavailableInThisBuild)
+    let url = URL(fileURLWithPath: NSTemporaryDirectory() + "xcv-r3-\(UUID().uuidString).jsonl")
+    return AppModel(
+        environment: AppEnvironment(
+            survey: { survey }, fullDiskAccess: { .granted }, helper: helper, approvalFlow: { HelperApprovalFlow(helper: $0) },
+            runner: { PrivilegedActionRunner(helper: $0, journal: Journal(url: url), isXcodeRunning: { false }, isSimulatorWorkRunning: { false }) },
+            clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in }, operations: ops.services))
+}
+
+func r3Row() -> SavingsPlanRow {
+    SavingsPlanRow(
+        categoryID: "archives", categoryName: "Archives", bytes: 18_000_000_000,
+        option: SavingsOption(bucket: .parkExternally, isExperimental: true, appliesToExistingData: true, losesUserData: false),
+        command: "xcodevaultctl externalize --category archives --vault <vault>", itemCount: 1, actsImmediately: false, noteIDs: ["archivesPark"])
+}
+
+func r3VaultCheck() -> VaultVolumeCheck {
+    VaultVolumeCheck(
+        volume: VaultVolume(volumeUUID: "U-1", volumeName: "PABLO", lastMountPoint: "/Volumes/PABLO", registeredAt: Date(), sentinelID: "s"),
+        state: .verified, currentMountPoint: "/Volumes/PABLO", shadowBytes: nil, detail: "")
 }
