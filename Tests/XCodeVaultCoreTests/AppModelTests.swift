@@ -115,23 +115,37 @@ func sampleSavings(lowerBound: Bool = false) -> SavingsSummary {
     return s
 }
 
+/// A Full Disk Access state a test changes as it goes: what the probe answers next (R4).
+final class AccessBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _state: FullDiskAccessState
+    init(_ state: FullDiskAccessState) { _state = state }
+    var state: FullDiskAccessState {
+        get { lock.withLock { _state } }
+        set { lock.withLock { _state = newValue } }
+    }
+}
+
 /// `AppModel` over fakes. The runner journals into `journal` and sees nothing running; the approval flow polls
 /// every millisecond.
 @MainActor
 func makeModel(
     _ helper: any PrivilegedHelper, journal: TempDir, fullDiskAccess: FullDiskAccessState = .granted,
     survey: AppModel.Survey = sampleSurvey(), maxPolls: Int = 10_000, opened: OpenedURLs = OpenedURLs(), copied: CopiedStrings = CopiedStrings(),
+    fullDiskAccessBox: AccessBox? = nil, registered: (@Sendable () -> Void)? = nil,
     clean: @escaping @Sendable (CleanPlan, Bool) throws -> CleanResult = { _, _ in CleanResult(deleted: [], failedPairs: []) }
 ) -> AppModel {
     let journalURL = URL(fileURLWithPath: journal.path + "/j.jsonl")
+    let access = fullDiskAccessBox ?? AccessBox(fullDiskAccess)
     return AppModel(
         environment: AppEnvironment(
-            survey: { survey }, fullDiskAccess: { fullDiskAccess }, helper: helper,
+            survey: { survey }, fullDiskAccess: { access.state }, helper: helper,
             approvalFlow: { HelperApprovalFlow(helper: $0, pollInterval: .milliseconds(1), maxPolls: maxPolls) },
             runner: {
                 PrivilegedActionRunner(helper: $0, journal: Journal(url: journalURL), isXcodeRunning: { false }, isSimulatorWorkRunning: { false })
             },
-            clean: clean, open: { url in opened.urls.append(url) }, copy: { copied.strings.append($0) }))
+            clean: clean, open: { url in opened.urls.append(url) }, copy: { copied.strings.append($0) },
+            registerForFullDiskAccess: registered ?? {}))
 }
 
 /// Waits for `condition`, failing after `timeout`. The model starts unstructured tasks; this is how a test sees
@@ -230,16 +244,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(model.isScanning)
     }
 
-    func testReturningFromSettingsRescansOnceAndOnlyThen() async {
+    /// R4: coming back from the pane with Full Disk Access granted rescans, once; coming back without it scans nothing.
+    func testReturningFromSettingsRescansOnceAndOnlyWhenAccessWasGranted() async {
         let t = TempDir()
         let opened = OpenedURLs()
-        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, opened: opened)
+        let access = AccessBox(.notGranted)
+        let model = makeModel(SwitchableHelper(.notInstalled), journal: t, opened: opened, fullDiskAccessBox: access)
         await model.appDidBecomeActive()
         XCTAssertNil(model.report, "an ordinary activation does not scan")
         model.openFullDiskAccessSettings()
         XCTAssertEqual(opened.urls, [URL(string: FullDiskAccessProbe.settingsURL)!])
         await model.appDidBecomeActive()
-        XCTAssertNotNil(model.report, "coming back from Settings rescans")
+        XCTAssertNil(model.report, "back without granting it: nothing to rescan")
+        model.openFullDiskAccessSettings()
+        access.state = .granted
+        await model.appDidBecomeActive()
+        XCTAssertNotNil(model.report, "back with it granted: rescans")
         model.report = nil
         await model.appDidBecomeActive()
         XCTAssertNil(model.report, "once, not on every activation")

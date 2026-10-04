@@ -65,3 +65,40 @@ public struct FullDiskAccessProbe: Sendable {
         return 0
     }
 }
+
+/// What the app does just before it opens the Full Disk Access pane (R4): one attempt to open a folder that Full Disk
+/// Access guards, so that macOS lists the app in the pane and the user only turns its switch on, instead of adding it
+/// with **+**.
+///
+/// **Which folder, and why.** `~/Library/Safari`: a folder in the user's own Library that macOS guards with Full Disk
+/// Access itself (`SystemPolicyAllFiles`) on every macOS this app supports (14+), present on every Mac since Safari
+/// ships with macOS, and the usual target for this registration. A refused attempt is how a client comes to be listed:
+/// TCC records the app that asked. H15's indicator (`FullDiskAccessProbe.indicatorPath`, the system `TCC.db`) is not
+/// used for this: that folder is also protected by System Integrity Protection, which can refuse the open before TCC is
+/// asked — and the app opens it on every check, yet the user found it missing from the list (R4). **Unverified on a real window**: the
+/// listing is what macOS does, not something any API reports; STATUS.md R4 records the manual check.
+///
+/// **It never reads anything.** `open(2)` of the directory, then `close(2)`: no listing, no file, nothing kept. The
+/// result is not used either: the probe above is what says whether access is granted.
+public struct FullDiskAccessRegistration: Sendable {
+    /// The folder, under `home`.
+    public static func path(home: String) -> String { home + "/Library/Safari" }
+
+    let path: String
+    let openReadOnly: @Sendable (String) -> Int32
+
+    /// The live attempt, on the user's home folder.
+    public init() {
+        self.init(path: FullDiskAccessRegistration.path(home: NSHomeDirectory()))
+    }
+
+    /// Internal: tests give a folder of their own, or an opener that records the path.
+    init(path: String, openReadOnly: @escaping @Sendable (String) -> Int32 = FullDiskAccessProbe.openAndClose) {
+        self.path = path
+        self.openReadOnly = openReadOnly
+    }
+
+    /// Opens the folder read-only and closes it at once. Returns the open's `errno`, `0` on success; callers ignore it.
+    @discardableResult
+    public func attempt() -> Int32 { openReadOnly(path) }
+}

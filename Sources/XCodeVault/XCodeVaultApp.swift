@@ -65,8 +65,8 @@ final class AppModel {
     var lastCleanResult: CleanResult?
     var fullDiskAccess: FullDiskAccessState = .unknown
     var helperState: HelperState = .unavailableInThisBuild
-    /// Set when the app sends the user to System Settings, so coming back re-checks and rescans once, not on
-    /// every activation — a scan measures sizes, it is not free.
+    /// Set when the app sends the user to System Settings, so coming back can rescan once if Full Disk Access was
+    /// granted there, not on every activation — a scan measures sizes, it is not free.
     var returningFromSettings = false
 
     /// Both checks are cheap and read-only: one `open(2)` of H15's indicator, and `SMAppService`'s status.
@@ -77,16 +77,29 @@ final class AppModel {
         updateAccessBanner()
     }
 
-    /// The most an app can do for Full Disk Access (ADR-0007): open the exact pane.
+    /// The most an app can do for Full Disk Access (ADR-0007): put itself in the pane's list, then open the exact pane.
+    /// The attempt comes first so the list already shows the app when the pane opens (R4, `FullDiskAccessRegistration`);
+    /// the user turns its switch on.
     func openFullDiskAccessSettings() {
         guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
         returningFromSettings = true
+        environment.registerForFullDiskAccess()
         environment.open(url)
     }
 
+    /// Every activation re-checks the permissions, so the Access row, the banner and the Overview follow what the user did
+    /// in System Settings. A rescan follows only when Full Disk Access became granted, and only after a scan or a trip to
+    /// the pane (`AccessChecklist.rescansOnActivation`): the launch's own scan is not doubled, and coming back without
+    /// granting it scans nothing.
     func appDidBecomeActive() async {
-        guard returningFromSettings else { return }
+        let before = fullDiskAccess
+        let returning = returningFromSettings
         returningFromSettings = false
+        refreshPermissions()
+        guard
+            AccessChecklist.rescansOnActivation(
+                before: before, after: fullDiskAccess, hasScanned: report != nil, returningFromSettings: returning)
+        else { return }
         await refresh()
     }
 
@@ -111,7 +124,9 @@ final class AppModel {
                 return (report, findings, checks, plan, journal)
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
-            self.journal = journal.suffix(100).reversed()
+            self.journal = journal
+            // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start.
+            self.historyRows = Array(JournalTimeline.rows(journal).prefix(Self.historyLimit))
             // The bucket views first: the Delete view's access row reads their list.
             updateBucketViews()
             revalidateDetailState()
@@ -314,6 +329,43 @@ final class AppModel {
             return SimulatorsChart.rowAnchor(index: rows.firstIndex { $0.id == id }, rowCount: rows.count).map { (.device, $0) }
         }
         return nil
+    }
+
+    /// Whether the Bucket menu next to **All** is enabled: only when the chart has bars to choose from (R2 review N1).
+    func storageFilterMenuEnabled(_ report: ScanReport) -> Bool { !storageBars(report).isEmpty }
+
+    // MARK: - Health and History (R4)
+
+    /// Health's cards (`HealthCard.cards`): most severe first, then largest.
+    var healthCards: [HealthCard] { HealthCard.cards(findings) }
+
+    /// Health's summary line: a count per severity present, most severe first.
+    var healthCounts: [(severity: Finding.Severity, count: Int)] { HealthCard.counts(findings) }
+
+    /// How many operations History lists.
+    static let historyLimit = 100
+    /// The journal as operations, newest first (`JournalTimeline.rows`), planned once per scan.
+    private(set) var historyRows: [JournalTimeline.Row] = []
+    /// The kinds History's filter hides; empty shows every kind.
+    private(set) var historyHiddenKinds: Set<JournalTimeline.Kind> = []
+
+    /// The kinds the filter offers: those the listed operations have.
+    var historyKinds: [JournalTimeline.Kind] { JournalTimeline.kinds(in: historyRows) }
+
+    /// Whether `kind` is shown.
+    func historyShows(_ kind: JournalTimeline.Kind) -> Bool { !historyHiddenKinds.contains(kind) }
+
+    /// A kind's toggle in the filter: hidden becomes shown and shown becomes hidden.
+    func toggleHistoryKind(_ kind: JournalTimeline.Kind) {
+        if historyHiddenKinds.contains(kind) { historyHiddenKinds.remove(kind) } else { historyHiddenKinds.insert(kind) }
+    }
+
+    /// **Show all** in the filter.
+    func showAllHistoryKinds() { historyHiddenKinds = [] }
+
+    /// History's sections: the shown operations by the day they started (`JournalTimeline.sections`), as of `now`.
+    func historySections(now: Date = Date(), calendar: Calendar = .current) -> [JournalTimeline.DaySection] {
+        JournalTimeline.sections(JournalTimeline.filter(historyRows, hiding: historyHiddenKinds), now: now, calendar: calendar)
     }
 
     /// A drive row's bar (`DiskBar.drive`); nil when the volume's size was not measured.

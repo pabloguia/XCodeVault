@@ -88,7 +88,7 @@ final class AppTextCoverageTests: XCTestCase {
     // MARK: - The Access checklist's keys (Task 1)
 
     func testEveryAccessChecklistKeyIsInTheCatalogInEveryLanguage() {
-        XCTAssertEqual(AccessChecklist.allKeys.count, 22)
+        XCTAssertEqual(AccessChecklist.allKeys.count, 23)
         for key in AccessChecklist.allKeys {
             let byLocale = L10nCatalog.core.strings[key] ?? L10nCatalog.core.plurals[key]?.mapValues { $0["other"] ?? "" }
             for locale in L10n.supportedLocales {

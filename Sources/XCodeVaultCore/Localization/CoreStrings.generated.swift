@@ -18,6 +18,13 @@ extension L10nCatalog {
                 "ja": "もう一度確認",
                 "zh-Hans": "重新检查",
             ],
+            "app.access.fda.hint.inList": [
+                "en": "XCodeVault is already in the list — turn its switch on.",
+                "pt-BR": "O XCodeVault já está na lista — ative a chave dele.",
+                "es": "XCodeVault ya está en la lista: activa su interruptor.",
+                "ja": "XCodeVault はすでに一覧にあります。スイッチをオンにしてください。",
+                "zh-Hans": "XCodeVault 已在列表中——请打开它的开关。",
+            ],
             "app.access.fda.why.granted": [
                 "en": "XCodeVault can measure the folders macOS protects.",
                 "pt-BR": "O XCodeVault consegue medir as pastas que o macOS protege.",
@@ -305,13 +312,6 @@ extension L10nCatalog {
                 "ja": "ランタイム",
                 "zh-Hans": "运行时",
             ],
-            "app.column.sequence": [
-                "en": "#",
-                "pt-BR": "#",
-                "es": "#",
-                "ja": "#",
-                "zh-Hans": "#",
-            ],
             "app.column.size": [
                 "en": "Size",
                 "pt-BR": "Tamanho",
@@ -438,6 +438,27 @@ extension L10nCatalog {
                 "ja": "根拠: %@",
                 "zh-Hans": "依据：%@",
             ],
+            "app.health.details": [
+                "en": "Details",
+                "pt-BR": "Detalhes",
+                "es": "Detalles",
+                "ja": "詳細",
+                "zh-Hans": "详细信息",
+            ],
+            "app.health.fix": [
+                "en": "How to fix it",
+                "pt-BR": "Como resolver",
+                "es": "Cómo resolverlo",
+                "ja": "対処方法",
+                "zh-Hans": "如何修复",
+            ],
+            "app.health.notOffered": [
+                "en": "Not offered by `clean`:",
+                "pt-BR": "Não oferecido pelo `clean`:",
+                "es": "`clean` no lo ofrece:",
+                "ja": "`clean` では提示されません:",
+                "zh-Hans": "`clean` 不提供：",
+            ],
             "app.helper.error.timedOut": [
                 "en": "macOS has not approved the helper yet. Approve it in System Settings ▸ General ▸ Login Items & Extensions, then try again.",
                 "pt-BR": "O macOS ainda não aprovou o auxiliar. Aprove-o em Ajustes do Sistema ▸ Geral ▸ Itens de Início e Extensões e tente de novo.",
@@ -472,6 +493,146 @@ extension L10nCatalog {
                 "es": "Dejar de esperar",
                 "ja": "待機をやめる",
                 "zh-Hans": "停止等待",
+            ],
+            "app.history.day.today": [
+                "en": "Today",
+                "pt-BR": "Hoje",
+                "es": "Hoy",
+                "ja": "今日",
+                "zh-Hans": "今天",
+            ],
+            "app.history.day.yesterday": [
+                "en": "Yesterday",
+                "pt-BR": "Ontem",
+                "es": "Ayer",
+                "ja": "昨日",
+                "zh-Hans": "昨天",
+            ],
+            "app.history.filter.all": [
+                "en": "Show all",
+                "pt-BR": "Mostrar tudo",
+                "es": "Mostrar todo",
+                "ja": "すべて表示",
+                "zh-Hans": "全部显示",
+            ],
+            "app.history.filter.menu": [
+                "en": "Kinds",
+                "pt-BR": "Tipos",
+                "es": "Tipos",
+                "ja": "種類",
+                "zh-Hans": "类型",
+            ],
+            "app.history.filter.none": [
+                "en": "No operation of the kinds shown.",
+                "pt-BR": "Nenhuma operação dos tipos exibidos.",
+                "es": "Ninguna operación de los tipos mostrados.",
+                "ja": "表示中の種類の操作はありません。",
+                "zh-Hans": "没有所显示类型的操作。",
+            ],
+            "app.history.kind.clean": [
+                "en": "Cleanup",
+                "pt-BR": "Limpeza",
+                "es": "Limpieza",
+                "ja": "クリーンアップ",
+                "zh-Hans": "清理",
+            ],
+            "app.history.kind.migration": [
+                "en": "Migration",
+                "pt-BR": "Migração",
+                "es": "Migración",
+                "ja": "移行",
+                "zh-Hans": "迁移",
+            ],
+            "app.history.kind.other": [
+                "en": "Other",
+                "pt-BR": "Outro",
+                "es": "Otro",
+                "ja": "その他",
+                "zh-Hans": "其他",
+            ],
+            "app.history.kind.privileged": [
+                "en": "Privileged helper",
+                "pt-BR": "Auxiliar privilegiado",
+                "es": "Asistente con privilegios",
+                "ja": "特権ヘルパー",
+                "zh-Hans": "特权助手",
+            ],
+            "app.history.kind.runtimeDelete": [
+                "en": "Runtime deleted",
+                "pt-BR": "Runtime excluído",
+                "es": "Runtime eliminado",
+                "ja": "ランタイム削除",
+                "zh-Hans": "删除运行时",
+            ],
+            "app.history.kind.runtimeExport": [
+                "en": "Runtime export",
+                "pt-BR": "Exportar runtime",
+                "es": "Exportar runtime",
+                "ja": "ランタイム書き出し",
+                "zh-Hans": "导出运行时",
+            ],
+            "app.history.kind.runtimeImport": [
+                "en": "Runtime import",
+                "pt-BR": "Importar runtime",
+                "es": "Importar runtime",
+                "ja": "ランタイム読み込み",
+                "zh-Hans": "导入运行时",
+            ],
+            "app.history.kind.runtimeOffload": [
+                "en": "Runtime parked",
+                "pt-BR": "Runtime guardado",
+                "es": "Runtime guardado",
+                "ja": "ランタイム退避",
+                "zh-Hans": "移出运行时",
+            ],
+            "app.history.kind.xcodeLocationChange": [
+                "en": "Xcode location",
+                "pt-BR": "Local do Xcode",
+                "es": "Ubicación de Xcode",
+                "ja": "Xcode の場所",
+                "zh-Hans": "Xcode 位置",
+            ],
+            "app.history.outcome.completed": [
+                "en": "Completed",
+                "pt-BR": "Concluído",
+                "es": "Completado",
+                "ja": "完了",
+                "zh-Hans": "已完成",
+            ],
+            "app.history.outcome.failed": [
+                "en": "Failed",
+                "pt-BR": "Falhou",
+                "es": "Falló",
+                "ja": "失敗",
+                "zh-Hans": "失败",
+            ],
+            "app.history.outcome.inProgress": [
+                "en": "In progress",
+                "pt-BR": "Em andamento",
+                "es": "En curso",
+                "ja": "実行中",
+                "zh-Hans": "进行中",
+            ],
+            "app.history.outcome.interrupted": [
+                "en": "Interrupted",
+                "pt-BR": "Interrompido",
+                "es": "Interrumpido",
+                "ja": "中断",
+                "zh-Hans": "已中断",
+            ],
+            "app.history.outcome.rolledBack": [
+                "en": "Rolled back",
+                "pt-BR": "Revertido",
+                "es": "Revertido",
+                "ja": "取り消し済み",
+                "zh-Hans": "已回滚",
+            ],
+            "app.history.outcome.skipped": [
+                "en": "Skipped",
+                "pt-BR": "Ignorado",
+                "es": "Omitido",
+                "ja": "スキップ",
+                "zh-Hans": "已跳过",
             ],
             "app.journal.empty.detail": [
                 "en": "Every change XCodeVault makes is recorded here.",
@@ -2124,6 +2285,86 @@ extension L10nCatalog {
                 ],
                 "zh-Hans": [
                     "other": "%lld 项未提供或已跳过",
+                ],
+            ],
+            "app.health.count.critical": [
+                "en": [
+                    "one": "%lld critical",
+                    "other": "%lld critical",
+                ],
+                "pt-BR": [
+                    "one": "%lld crítico",
+                    "other": "%lld críticos",
+                ],
+                "es": [
+                    "one": "%lld crítico",
+                    "other": "%lld críticos",
+                ],
+                "ja": [
+                    "other": "重大 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 个严重问题",
+                ],
+            ],
+            "app.health.count.error": [
+                "en": [
+                    "one": "%lld error",
+                    "other": "%lld errors",
+                ],
+                "pt-BR": [
+                    "one": "%lld erro",
+                    "other": "%lld erros",
+                ],
+                "es": [
+                    "one": "%lld error",
+                    "other": "%lld errores",
+                ],
+                "ja": [
+                    "other": "エラー %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 个错误",
+                ],
+            ],
+            "app.health.count.info": [
+                "en": [
+                    "one": "%lld info",
+                    "other": "%lld info",
+                ],
+                "pt-BR": [
+                    "one": "%lld informativo",
+                    "other": "%lld informativos",
+                ],
+                "es": [
+                    "one": "%lld informativo",
+                    "other": "%lld informativos",
+                ],
+                "ja": [
+                    "other": "情報 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 条信息",
+                ],
+            ],
+            "app.health.count.warning": [
+                "en": [
+                    "one": "%lld warning",
+                    "other": "%lld warnings",
+                ],
+                "pt-BR": [
+                    "one": "%lld aviso",
+                    "other": "%lld avisos",
+                ],
+                "es": [
+                    "one": "%lld advertencia",
+                    "other": "%lld advertencias",
+                ],
+                "ja": [
+                    "other": "警告 %lld 件",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 条警告",
                 ],
             ],
             "app.overview.doctor.issues": [

@@ -364,6 +364,14 @@ final class PerDeviceRegenerablesTests: XCTestCase {
         XCTAssertTrue(dead.detail.contains(deviceA), "the per-device breakdown is the actionable part")
         XCTAssertTrue(dead.detail.contains(deviceB))
         XCTAssertTrue(dead.detail.contains("Not offered by `clean`"), dead.detail)
+        // R4: the same facts as structure, for Health's card and its folded details. `detail` stays the CLI's text.
+        let parts = try XCTUnwrap(dead.parts)
+        XCTAssertEqual(Set(parts.lines.map(\.label)), [deviceA, deviceB])
+        XCTAssertEqual(parts.lines.map(\.bytes), parts.lines.map(\.bytes).sorted(by: >), "largest first")
+        XCTAssertEqual(dead.bytes, parts.lines.reduce(0) { $0 + $1.bytes }, "the size is the lines' total")
+        XCTAssertNotNil(parts.notOfferedByClean)
+        XCTAssertFalse(parts.explanation.contains(deviceA), "the explanation alone, without the lines")
+        XCTAssertTrue(dead.detail.hasPrefix(parts.explanation))
 
         XCTAssertNotNil(findings.first { $0.id == "perDeviceRegenerable.simulatorMobileAssets" })
         // The log store occupies two subpaths under one device; it must still read as one finding.

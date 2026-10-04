@@ -29,7 +29,14 @@ struct AccessRowView: View {
                     InlineCodeText(text(key)).font(.caption).foregroundStyle(.secondary).frame(maxWidth: 300, alignment: .trailing)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Button(text(key)) { act(action) }
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Button(text(key)) { act(action) }
+                        // What is left after the button (R4): the app is in the pane's list; the user turns its switch on.
+                        if let hint = row.hintKey {
+                            Text(verbatim: text(hint)).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 260, alignment: .trailing).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }

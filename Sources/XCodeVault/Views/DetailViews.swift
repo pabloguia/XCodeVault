@@ -1,9 +1,10 @@
 import SwiftUI
 import XCodeVaultCore
 
-// The Details screens (spec 2026-10-03 §6.1): Storage, Simulators, Drives, Health, History. Each shows what the scan,
-// the doctor, the vault checks or the journal recorded; none changes anything except Health's root-action buttons, which
-// go through `AppModel.request(_:)`. The rows and their order are Core's (`StorageTable`, `SimulatorsTable`).
+// The Details screens (spec 2026-10-03 §6.1): Storage, Simulators and Drives here; Health and History in
+// HealthHistoryViews.swift. Each shows what the scan, the doctor, the vault checks or the journal recorded; none changes
+// anything except Health's root-action buttons, which go through `AppModel.request(_:)`. The rows and their order are
+// Core's (`StorageTable`, `SimulatorsTable`).
 
 /// Storage (R2): a chart of the scan's items by savings bucket over the table of them. A click on a bar filters the table to
 /// that bucket (a chip says so, with an × to clear it, as does **All**); every column sorts. The rows, the bars, the filter
@@ -66,6 +67,8 @@ struct StorageView: View {
                 }
             }
             .fixedSize()
+            // Nothing to choose from without bars (R2 review N1), as **All** is disabled without a filter.
+            .disabled(!model.storageFilterMenuEnabled(report))
             Button(L10n.tr("app.storage.filter.all")) { model.clearStorageFilter() }
                 .disabled(model.storageBucketFilter == nil)
         }
@@ -309,56 +312,6 @@ struct DriveRowView: View {
                 } label: {
                     Text.l10n(L10n.plural("app.volumes.warnings.count", count: q.warnings.count)).font(.caption)
                 }
-            }
-        }
-    }
-}
-
-/// Health: the doctor's findings, with the proposed fix and, where the helper can apply it, the action's control.
-struct HealthView: View {
-    @Bindable var model: AppModel
-    var body: some View {
-        if model.findings.isEmpty {
-            ContentUnavailableView(L10n.tr("app.doctor.empty"), systemImage: "checkmark.seal")
-        } else {
-            List(model.findings) { f in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        // The severity word is there; the color only repeats it.
-                        Text(verbatim: AppText.severity(f.severity)).font(.caption).bold()
-                            .foregroundStyle(f.severity >= .error ? .red : (f.severity == .warning ? .orange : .secondary))
-                        Text(verbatim: f.title).bold()
-                    }
-                    Text(verbatim: f.detail).font(.callout)
-                    if let p = f.path { Text(verbatim: p).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary) }
-                    if let r = f.remediation { Text(verbatim: "→ " + r).font(.callout) }
-                    // The finding carries the action; the button never re-derives it (carried note 2).
-                    if let action = f.action {
-                        PrivilegedActionControlView(action: action, state: model.helperState) { model.request(action) }
-                    }
-                    if let e = f.evidence { Text.l10n(L10n.tr("app.doctor.evidence", e)).font(.caption2).foregroundStyle(.secondary) }
-                }
-                .padding(.vertical, 4)
-            }
-        }
-    }
-}
-
-/// History: the last 100 journal entries, newest first.
-struct HistoryView: View {
-    let entries: [JournalEntry]
-    var body: some View {
-        if entries.isEmpty {
-            ContentUnavailableView(
-                L10n.tr("app.journal.empty.title"), systemImage: "list.bullet.rectangle", description: Text.l10n(L10n.tr("app.journal.empty.detail")))
-        } else {
-            Table(entries) {
-                // Kind, state and summary are the journal's own record: never translated (docs/process/LOCALIZATION.md).
-                TableColumn(L10n.tr("app.column.sequence")) { Text(verbatim: String($0.sequence)) }.width(40)
-                TableColumn(L10n.tr("app.column.when")) { Text(verbatim: AppText.date($0.timestamp)) }
-                TableColumn(L10n.tr("app.column.kind")) { Text(verbatim: $0.kind.rawValue) }
-                TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.state.rawValue) }
-                TableColumn(L10n.tr("app.column.summary")) { Text(verbatim: $0.summary) }
             }
         }
     }

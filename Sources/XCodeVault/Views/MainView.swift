@@ -169,7 +169,7 @@ struct MainView: View {
         case .simulators: SimulatorsView(model: model, report: r)
         case .drives: DrivesView(list: model.drivesList(r)) { model.driveBar($0, report: r) }
         case .health: HealthView(model: model)
-        case .history: HistoryView(entries: model.journal)
+        case .history: HistoryView(model: model)
         case .access: AccessView(model: model)
         }
     }

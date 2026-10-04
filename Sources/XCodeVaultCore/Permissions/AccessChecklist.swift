@@ -46,6 +46,11 @@ public enum AccessChecklist {
         /// Folders the scan could not read because privacy protection refused them (`ScanSummary.privacyRefusalCount`).
         public let blocksFolders: Int?
 
+        /// What to do once the button has done its part, said next to it: the Full Disk Access button registers the app
+        /// and opens the pane (`FullDiskAccessRegistration`), so the app is already in the list and only its switch is
+        /// left. Nil for every other row. It never claims the app turns the switch on: only the user can.
+        public var hintKey: String? { action == .openFullDiskAccessSettings ? Key.fdaHintInList : nil }
+
         /// The need's name: the titles `xcodevaultctl permissions` prints.
         public var titleKey: String { need == .fullDiskAccess ? Key.fdaTitle : Key.helperTitle }
 
@@ -83,6 +88,7 @@ public enum AccessChecklist {
         public static let fdaWhyUnknown = "app.access.fda.why.unknown"
         public static let fdaActionOpenSettings = "app.access.fda.action.openSettings"
         public static let fdaActionRecheck = "app.access.fda.action.recheck"
+        public static let fdaHintInList = "app.access.fda.hint.inList"
         public static let helperWhyEnabled = "app.access.helper.why.enabled"
         /// Takes `blocksBytes`.
         public static let helperWhyRootOnlyBytes = "app.access.helper.why.rootOnlyBytes"
@@ -100,7 +106,7 @@ public enum AccessChecklist {
         Key.fdaActionOpenSettings, Key.fdaActionRecheck, Key.helperWhyEnabled, Key.helperWhyRootOnlyBytes, Key.helperWhyRootActions,
         Key.helperActionInstall, Key.helperActionApprove, Key.helperActionSignedReleaseOrCLI, Key.fdaTitle, Key.helperTitle, Key.fdaStatusGranted,
         Key.fdaStatusMissing, Key.fdaStatusUnknown, Key.helperStatusEnabled, Key.helperStatusMissing, Key.helperStatusAwaitingApproval,
-        Key.helperStatusUnavailable,
+        Key.helperStatusUnavailable, Key.fdaHintInList,
     ]
 
     /// - Parameters:
@@ -163,6 +169,15 @@ public enum AccessChecklist {
     public static func controlShowsGuidance(helper: HelperState, besides shownRow: Row?) -> Bool {
         guard helper.actionControl == .notAvailableInThisBuild else { return true }
         return shownRow?.actionKey != Key.helperActionSignedReleaseOrCLI
+    }
+
+    /// Whether the app rescans when it becomes active again (R4). Only when Full Disk Access became granted — a scan with
+    /// it measures folders the last one could not — and only once there is a scan to redo or the user is back from the
+    /// pane the app opened: the launch's own scan is never doubled, and an activation that changed nothing scans nothing.
+    public static func rescansOnActivation(
+        before: FullDiskAccessState, after: FullDiskAccessState, hasScanned: Bool, returningFromSettings: Bool
+    ) -> Bool {
+        before != .granted && after == .granted && (hasScanned || returningFromSettings)
     }
 
     /// Whether the Access view offers **Uninstall…** under `row`: the helper's row, once it is enabled

@@ -166,7 +166,7 @@ final class AppViewRenderTests: XCTestCase {
                 render(SimulatorsView(model: model, report: survey.0))
                 model.clearStorageFilter()
                 render(HealthView(model: model))
-                render(HistoryView(entries: model.journal))
+                render(HistoryView(model: model))
                 for section in SidebarSection.details {
                     model.section = section
                     render(MainView(model: model))
@@ -239,11 +239,13 @@ final class AppViewRenderTests: XCTestCase {
             render(DeleteView(model: model))
             render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: [])) { model.driveBar($0, report: survey.0) })
             render(SimulatorsView(model: model, report: survey.0))
-            render(HistoryView(entries: []))
+            render(HistoryView(model: model))  // no journal: the empty view
             let entry = JournalEntry(
                 id: "op", sequence: 1, timestamp: Date(timeIntervalSince1970: 1_800_000_000), kind: .clean, state: .completed, summary: "s", paths: [],
                 bytes: nil, detail: [:], toolVersion: "t")
-            render(HistoryView(entries: [entry]))
+            var withEntry = survey
+            withEntry.4 = [entry]
+            render(HistoryView(model: await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: withEntry, journal: t)))
             render(AccessView(model: model))
             for row in model.accessRows { render(AccessRowView(row: row) { _ in }) }
             for state in HelperState.allCases { render(PrivilegedActionControlView(action: .emptyCoreSimulatorDyldCache, state: state) {}) }

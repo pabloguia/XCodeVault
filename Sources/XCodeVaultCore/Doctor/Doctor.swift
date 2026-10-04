@@ -25,6 +25,38 @@ public struct Finding: Sendable, Codable, Equatable, Identifiable {
     /// the text fallback and is always set when this is. Doctor never executes it. `nil` on every finding but
     /// `vault-dir:<uuid>`.
     public var action: PrivilegedAction? = nil
+    /// The finding's size, when it is about bytes on disk (R4: the Health card shows it). `detail` still says it in
+    /// words for the CLI; this is the number. Nil on every finding that is not a measured total.
+    public var bytes: UInt64? = nil
+    /// The finding's long text in parts, for a client that folds it (R4, Health's "Details"): `detail` is unchanged
+    /// and remains the whole text the CLI prints. Nil where `detail` is one piece.
+    public var parts: Parts? = nil
+
+    /// `detail` split into what it is made of. English, like `detail` (S2: Core prose is never translated).
+    public struct Parts: Sendable, Codable, Equatable {
+        /// The explanation alone, without the lines or the note.
+        public var explanation: String
+        /// One line per item the finding totals (a device, by its UDID), largest first.
+        public var lines: [Line]
+        /// Why `clean` does not offer it, when it does not.
+        public var notOfferedByClean: String?
+
+        public init(explanation: String, lines: [Line], notOfferedByClean: String?) {
+            self.explanation = explanation
+            self.lines = lines
+            self.notOfferedByClean = notOfferedByClean
+        }
+    }
+
+    public struct Line: Sendable, Codable, Equatable {
+        public var label: String
+        public var bytes: UInt64
+
+        public init(label: String, bytes: UInt64) {
+            self.label = label
+            self.bytes = bytes
+        }
+    }
 }
 
 /// Read-only diagnostics per docs/product/UX_AND_CLI.md §Doctor. Proposes; never executes.
@@ -536,21 +568,24 @@ public struct Doctor: Sendable {
             guard total > 0 else { return nil }
             // Largest first: which device holds the bytes is the actionable part, since a device the
             // user no longer wants can be deleted outright with the official command.
-            let breakdown =
+            // Ties by UDID, so the order does not depend on the dictionary's.
+            let lines =
                 perDeviceTotals
                 .filter { $0.value > 0 }
-                .sorted { $0.value > $1.value }
-                .map { "  \($0.key): \(ByteCount.english($0.value))" }
-                .joined(separator: "\n")
+                .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+                .map { Finding.Line(label: $0.key, bytes: $0.value) }
+            let breakdown = lines.map { "  \($0.label): \(ByteCount.english($0.bytes))" }.joined(separator: "\n")
+            let notOffered = category.notes.first ?? "reported for accounting only."
             return Finding(
                 id: "perDeviceRegenerable.\(category.id)",
                 severity: .info,
                 title: "\(ByteCount.english(total)) in \(category.name.lowercased()) across \(perDeviceTotals.filter { $0.value > 0 }.count) device(s)",
                 detail: category.description + "\n" + breakdown
-                    + "\n\nNot offered by `clean`: " + (category.notes.first ?? "reported for accounting only."),
+                    + "\n\nNot offered by `clean`: " + notOffered,
                 path: nil,
                 remediation: category.remediationHint,
-                evidence: category.evidence)
+                evidence: category.evidence, bytes: total,
+                parts: Finding.Parts(explanation: category.description, lines: lines, notOfferedByClean: notOffered))
         }
     }
 

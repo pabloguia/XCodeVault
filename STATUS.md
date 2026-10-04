@@ -3217,3 +3217,26 @@ with the default order, one tie-breaker each (fixture with ties); Storage says s
 empty plot; a **Bucket** menu next to **All** sets the filter without a pointer; a rescan clears a filter whose bucket has no
 bar and a selection whose row is gone. Two more keys (`app.storage.chart.none`, `app.storage.filter.menu`), 16 for R2 in all.
 **Still needs a real window:** the menu, the chart clicks, and the scroll on a chart click.
+
+## 2026-10-04 — R4: Health as cards, History as operations, Access registers the app
+
+Brief `.superpowers/sdd/r4/brief.md`, branch `feat/r4-health-history-access` (stacked on R2). **Health**: a summary line of
+counts by severity (symbol and word), then one card per finding (`HealthCard.cards`: severity, then size, then the doctor's
+order) with the severity, the title, one sentence (`HealthCard.firstSentence`, tested on abbreviations, dotted names and
+backticks), the size and the action or the fix's first sentence; **Details** folds the rest. `Finding` gained `bytes` and
+`parts` (explanation, per-device lines, the not-offered note), set by the per-device rule; `detail` is unchanged, so the CLI
+prints what it did. **History**: `JournalTimeline.rows` merges records by operation id into one row with its final state
+(an orphan start or plan is `interrupted`, the rule of `Journal.interrupted()`; `inProgress` only for ids the caller names,
+and the app names none), kinds from the records (`helper: ` summaries are the privileged helper; a migration needs its
+`direction`; the vault registry is `other`), sections by day, a kinds filter in the model; the newest 100 operations are
+cut after the merge. Badge palette: light/dark hex per kind, 3:1 on the window and control backgrounds and the older
+macOS values (`HistoryKindPaletteTests`). **Access**: **Open Full Disk Access Settings** calls
+`AppEnvironment.registerForFullDiskAccess` (`FullDiskAccessRegistration`: `open(2)`+`close(2)` of `~/Library/Safari`) then
+opens the pane; the row says "XCodeVault is already in the list — turn its switch on." Every activation re-checks the
+permissions; a rescan follows only a new grant (`AccessChecklist.rescansOnActivation`), so coming back without granting no
+longer rescans. R2 N1: the Bucket menu is disabled without bars. 28 new keys, one removed (`app.column.sequence`), drafts
+`needs_review`.
+**Needs a real window:** that the attempt on `~/Library/Safari` does list the app in the Full Disk Access pane on macOS 14,
+15 and 26 (no API reports it; tests replace the closure), and how a dev build is listed; the History list's column header
+alignment with the rows and the Kinds menu's toggles; Health's **Details** disclosure — off-screen drawing leaves `List` rows
+blank and draws disclosures closed.

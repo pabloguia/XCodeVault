@@ -85,6 +85,57 @@ enum AppText {
         date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: L10n.locale)))
     }
 
+    /// Health's summary line: "2 warnings", one per severity (R4).
+    static func healthCount(_ severity: Finding.Severity, _ count: Int) -> String {
+        switch severity {
+        case .critical: L10n.plural("app.health.count.critical", count: count)
+        case .error: L10n.plural("app.health.count.error", count: count)
+        case .warning: L10n.plural("app.health.count.warning", count: count)
+        case .info: L10n.plural("app.health.count.info", count: count)
+        }
+    }
+
+    /// A History badge's short name.
+    static func historyKind(_ kind: JournalTimeline.Kind) -> String {
+        switch kind {
+        case .clean: L10n.tr("app.history.kind.clean")
+        case .runtimeDelete: L10n.tr("app.history.kind.runtimeDelete")
+        case .runtimeOffload: L10n.tr("app.history.kind.runtimeOffload")
+        case .runtimeExport: L10n.tr("app.history.kind.runtimeExport")
+        case .runtimeImport: L10n.tr("app.history.kind.runtimeImport")
+        case .migration: L10n.tr("app.history.kind.migration")
+        case .xcodeLocationChange: L10n.tr("app.history.kind.xcodeLocationChange")
+        case .privileged: L10n.tr("app.history.kind.privileged")
+        case .other: L10n.tr("app.history.kind.other")
+        }
+    }
+
+    /// A History row's state word.
+    static func historyOutcome(_ outcome: JournalTimeline.Outcome) -> String {
+        switch outcome {
+        case .completed: L10n.tr("app.history.outcome.completed")
+        case .failed: L10n.tr("app.history.outcome.failed")
+        case .rolledBack: L10n.tr("app.history.outcome.rolledBack")
+        case .skipped: L10n.tr("app.history.outcome.skipped")
+        case .interrupted: L10n.tr("app.history.outcome.interrupted")
+        case .inProgress: L10n.tr("app.history.outcome.inProgress")
+        }
+    }
+
+    /// A History section's header: Today, Yesterday, then the date, in the app's language.
+    static func historyDay(_ day: JournalTimeline.Day) -> String {
+        switch day {
+        case .today: L10n.tr("app.history.day.today")
+        case .yesterday: L10n.tr("app.history.day.yesterday")
+        case .date(let date): date.formatted(Date.FormatStyle(date: .complete, time: .omitted).locale(Locale(identifier: L10n.locale)))
+        }
+    }
+
+    /// A History row's time; the section header gives the day.
+    static func time(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(Locale(identifier: L10n.locale)))
+    }
+
     /// An `AccessChecklist` row's text, from its key and the facts the sentence takes (`blocksBytes`,
     /// `blocksFolders`). Each key has its own literal call; an unknown key shows itself, which is a bug report.
     static func access(_ key: String, bytes: UInt64?, folders: Int?) -> String {
@@ -112,6 +163,7 @@ enum AppText {
         case K.helperStatusMissing: return L10n.tr("app.access.status.helper.missing")
         case K.helperStatusAwaitingApproval: return L10n.tr("app.access.status.helper.awaitingApproval")
         case K.helperStatusUnavailable: return L10n.tr("app.access.status.helper.unavailable")
+        case K.fdaHintInList: return L10n.tr("app.access.fda.hint.inList")
         default: return key
         }
     }
