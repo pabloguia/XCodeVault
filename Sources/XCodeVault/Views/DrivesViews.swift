@@ -236,19 +236,30 @@ struct ExternalDriveRowView: View {
                     .controlSize(.small)
                 }
             }
+            // R7-A (the user: "destacar como botão"): each action is a real bordered button, the recommended one prominent;
+            // the experimental marker beside them is a plain label (`MarkerBadges`), never shaped like a button.
             if a.verdict == .canBeUsed {
-                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }
+                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }.modifier(DriveButtonStyle(prominent: a.useDriveIsPrimary))
             }
             if !a.commandOptions.isEmpty {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     MarkerBadges(markers: [.experimental])
                     ForEach(a.commandOptions, id: \.self) { o in
                         Button(DriveText.optionButton(o, recommended: a.isRecommended(o))) { actions.prepare(a, o) }
+                            .modifier(DriveButtonStyle(prominent: a.isRecommended(o)))
                     }
                 }
-                .controlSize(.small)
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// A drive action's button (R7-A): bordered, or bordered and prominent for the one the drive's assessment recommends.
+struct DriveButtonStyle: ViewModifier {
+    let prominent: Bool
+
+    func body(content: Content) -> some View {
+        if prominent { content.buttonStyle(.borderedProminent) } else { content.buttonStyle(.bordered) }
     }
 }

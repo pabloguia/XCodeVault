@@ -122,6 +122,37 @@ final class ScreenFitTests: XCTestCase {
         try await assertEveryScreenFits(survey, "notes only")
     }
 
+    /// R7-A: the charts spell every label out in full, wrapping a long one. Storage and Simulators with long device names
+    /// (German and Japanese, as a localized device set names them) still fit at their minimum and in the window, in en
+    /// and ja.
+    func testTheChartsFitWithLongLabels() async throws {
+        var survey = screenFitStressSurvey()
+        let names = [
+            "Apple Watch Ultra 3 (49 mm) – Speicherplatz für Simulatordaten, vollständig ausgeschrieben",
+            "iPhone 17 Pro Max（シミュレータのデータとデバイスサポートファイルをすべて含む長い名前）",
+        ]
+        survey.0.devices += names.enumerated().map { i, name in
+            SimulatorDevice(
+                udid: "LONG\(i)", name: name, runtimeIdentifier: iOSRuntimeID, state: "Shutdown", isAvailable: true,
+                dataPath: "/Users/tester/Library/Developer/CoreSimulator/Devices/LONG\(i)/data", dataPathSize: 90_000_000_000)
+        }
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let t = TempDir()
+            let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: survey)
+            await model.refresh()
+            let report = try XCTUnwrap(model.report)
+            XCTAssertTrue(SimulatorsChart.bars(report: report).contains { $0.name == names[0] }, "the long names are charted, largest first")
+            for section in [SidebarSection.storage, .simulators] {
+                model.section = section
+                let height = minimumHeight(MainView(model: model).detail(report))
+                XCTAssertLessThanOrEqual(height, Self.ceiling, "long labels, \(language), \(section.rawValue): minimum height \(height)")
+                let asked = windowHeightAsked(MainView(model: model))
+                XCTAssertLessThanOrEqual(asked, Self.ceiling, "long labels, \(language), \(section.rawValue): the window asks for \(asked) pt")
+            }
+        }
+    }
+
     /// Delete with the helper's access row showing above the table (spec §6.3: never folded away) still fits, in en and ja.
     func testDeleteFitsWithTheAccessRowShowing() async throws {
         for language in ["en", "ja"] {

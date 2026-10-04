@@ -267,6 +267,13 @@ struct OperationSheetState: Sendable {
 
     /// The experimental badge in the title (rule 10): the plan row's strategy, or any drive preparation.
     var showsExperimentalBadge: Bool { row?.option.isExperimental == true || kind.isExperimental }
+
+    /// Whether the review's facts repeat the destination as "To" (R7-A): not when it is the folder the Folder row already
+    /// shows, so a path is shown once.
+    func showsDestinationFact(_ preview: OperationPreview) -> Bool {
+        guard let destination = preview.destination else { return false }
+        return !(kind.needsFolder && destination == inputs.folder)
+    }
     var kind: OperationKind
     var inputs: OperationInputs
     var preview: OperationPreview?

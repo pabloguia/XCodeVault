@@ -128,7 +128,7 @@ extension StorageTable {
 
 // MARK: - Chart emphasis
 
-/// How a chart draws its bars and axis (R5 review m4), decided here so the views only apply it.
+/// How a chart draws its bars (R5 review m4), decided here so the views only apply it.
 public enum ChartEmphasis {
     /// A bar's opacity: the bar under the pointer solid; the others a little lighter while one is hovered; those outside
     /// the filter or the selection faded.
@@ -137,9 +137,6 @@ public enum ChartEmphasis {
         if isFilteredOut { return 0.35 }
         return isAnyHovered ? 0.7 : 1
     }
-
-    /// A size axis label: "0" at the origin rather than "0 bytes" (HIG review C2), else the size.
-    public static func axisLabel(_ bytes: Double) -> String { bytes <= 0 ? "0" : ByteCount.format(UInt64(bytes)) }
 }
 
 // MARK: - Bar lists
@@ -167,18 +164,6 @@ public enum BarChartLayout {
     /// the screen keeps fitting the window (R1, `ScreenFitTests`).
     public static func boxHeight(barCount: Int, maximum: Double) -> Double {
         min(maximum, Double(max(barCount, 1)) * rowHeight)
-    }
-}
-
-// MARK: - Chart clicks
-
-/// Where a click lands on a chart (R2 review M1), decided here so the view only reads the chart's value at it.
-public enum ChartHit {
-    /// The click's y inside the plot, measured from the plot's top — what `ChartProxy.value(atY:)` takes — or nil when
-    /// the click is above or below the plot. Its edges count as inside.
-    public static func plotY(clickY: Double, plotMinY: Double, plotMaxY: Double) -> Double? {
-        guard plotMinY <= plotMaxY, clickY >= plotMinY, clickY <= plotMaxY else { return nil }
-        return clickY - plotMinY
     }
 }
 
@@ -235,12 +220,6 @@ public enum SimulatorsChart {
     /// The runtimes and devices with no size: listed in the tables as "not measured", left out of the chart.
     public static func unmeasuredCount(report: ScanReport) -> Int {
         report.runtimes.filter { $0.sizeBytes == nil }.count + report.devices.filter { $0.dataPathSize == nil }.count
-    }
-
-    /// The chart's height in points: one bar's band per bar plus the axis, at least `minimum`. The screen scrolls as a
-    /// whole, so a long chart lengthens the page and never asks the window for more height.
-    public static func height(barCount: Int, band: Double = 34, axis: Double = 34, minimum: Double = 120) -> Double {
-        max(minimum, Double(barCount) * band + axis)
     }
 
     /// The selection after a click on the chart (R5): the clicked bar's row — a bar's id is its row's id in the one table

@@ -3241,6 +3241,142 @@
         }
       }
     },
+    "app.drives.fix.addPartition" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a Case-insensitive Partition…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Añadir una partición sin distinción de mayúsculas…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "大文字と小文字を区別しないパーティションを追加…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Adicionar uma Partição Sem Distinção de Maiúsculas…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "添加不区分大小写的分区…"
+          }
+        }
+      }
+    },
+    "app.drives.fix.addVolume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a Case-insensitive Volume…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Añadir un volumen sin distinción de mayúsculas…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "大文字と小文字を区別しないボリュームを追加…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Adicionar um Volume Sem Distinção de Maiúsculas…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "添加不区分大小写的宗卷…"
+          }
+        }
+      }
+    },
+    "app.drives.fix.eraseDisk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erase the Disk…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Borrar el disco…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ディスクを消去…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Apagar o Disco…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "抹掉磁盘…"
+          }
+        }
+      }
+    },
+    "app.drives.fix.eraseVolume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erase the Volume…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Borrar el volumen…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ボリュームを消去…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Apagar o Volume…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "抹掉宗卷…"
+          }
+        }
+      }
+    },
     "app.drives.none" : {
       "localizations" : {
         "en" : {
@@ -3339,40 +3475,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "在访达中显示"
-          }
-        }
-      }
-    },
-    "app.drives.prepare" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prepare…"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Preparar…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "準備…"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Preparar…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "准备…"
           }
         }
       }
@@ -7195,6 +7297,142 @@
         }
       }
     },
+    "app.plan.suggest.a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggested command: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Comando sugerido: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "おすすめのコマンド: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Comando sugerido: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "建议的命令：%@"
+          }
+        }
+      }
+    },
+    "app.plan.suggest.help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The command with your vault’s folder %@ filled in. Copy Command copies this one."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El comando con la carpeta %@ de tu bóveda ya escrita. Copiar comando copia este."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先のフォルダ %@ を入れたコマンドです。「コマンドをコピー」はこちらをコピーします。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O comando com a pasta %@ do seu cofre preenchida. Copiar Comando copia este."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已填入保险库文件夹 %@ 的命令。“拷贝命令”会拷贝这一条。"
+          }
+        }
+      }
+    },
+    "app.plan.suggest.noVault" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No vault yet: prepare a drive to get a suggested folder."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Aún no hay bóveda: prepara un disco para tener una carpeta sugerida."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "退避先がまだありません。ドライブを準備すると、おすすめのフォルダが表示されます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ainda não há cofre: prepare um disco para ter uma pasta sugerida."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "还没有保险库：准备一个驱动器即可获得建议的文件夹。"
+          }
+        }
+      }
+    },
+    "app.plan.suggest.showDrives" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Drives"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mostrar discos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ドライブを表示"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Mostrar Discos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "显示驱动器"
+          }
+        }
+      }
+    },
     "app.plan.vault.attention" : {
       "localizations" : {
         "en" : {
@@ -7565,6 +7803,74 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "操作"
+          }
+        }
+      }
+    },
+    "app.prep.mountsAs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Will appear as %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Aparecerá como %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ として表示されます"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Vai aparecer como %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "将显示为 %@"
+          }
+        }
+      }
+    },
+    "app.prep.mountsAs.taken" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A volume is already mounted at %1$@: macOS would mount the new one at %2$@. Choose another name, such as “%3$@”."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ya hay un volumen montado en %1$@: macOS montaría el nuevo en %2$@. Elige otro nombre, como “%3$@”."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@ にはすでにボリュームがマウントされています。macOS は新しいボリュームを %2$@ にマウントします。「%3$@」など別の名前にしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Já há um volume montado em %1$@: o macOS montaria o novo em %2$@. Escolha outro nome, como “%3$@”."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@ 处已装载了一个宗卷：macOS 会将新宗卷装载到 %2$@。请换一个名称，例如“%3$@”。"
           }
         }
       }
@@ -9843,6 +10149,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "重新验证后已删除原件。经过验证的拷贝在保险库中。"
+          }
+        }
+      }
+    },
+    "app.run.done.useMadeVolume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is not a vault yet. Use This Drive registers it after its own review."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ aún no es una bóveda. Usar este disco la registra tras su propia revisión."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ はまだ退避先ではありません。「このドライブを使用」で、確認のあとに登録します。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ ainda não é um cofre. Usar Este Disco o registra depois da própria revisão."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%@ 还不是保险库。“使用此驱动器”会在其单独确认后登记它。"
           }
         }
       }
@@ -13277,40 +13617,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "点按条形以选择其所在行。"
-          }
-        }
-      }
-    },
-    "app.simulators.chart.kind" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kind"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Tipo"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "種類"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Tipo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "类型"
           }
         }
       }

@@ -12,6 +12,9 @@ struct OperationSheetView: View {
     /// Whether the log follows its newest line (review M2): off, the user can read and select earlier lines.
     @State private var followsOutput = true
 
+    /// The height the sheet opens at; a longer review scrolls inside it (`R3SheetFitTests`).
+    static let idealHeight: CGFloat = 460
+
     /// `showsLog` is for `R3SheetFitTests`, which measures the log expanded; the app starts it folded.
     init(model: AppModel, showsLog: Bool = false) {
         _model = Bindable(model)
@@ -32,11 +35,14 @@ struct OperationSheetView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                // R7-A: the review can be longer than the sheet (the user's 19: a warning cut off at the bottom). It scrolls,
+                // with its scroller shown, and the buttons below stay visible.
+                .scrollIndicators(.visible)
                 if s.phase != .review || !s.log.lines.isEmpty { log(s) }
                 buttons(s)
             }
             .padding(20)
-            .frame(minWidth: 520, idealWidth: 560, minHeight: 260, idealHeight: 420)
+            .frame(minWidth: 520, idealWidth: 560, minHeight: 260, idealHeight: Self.idealHeight)
             .interactiveDismissDisabled(model.isOperationRunning)
             .onChange(of: s.stage) { _, stage in
                 // Phase changes and the end, never every line or percent (HIG review §4).
@@ -121,14 +127,23 @@ struct OperationSheetView: View {
             if s.kind.usesDestination {
                 GridRow {
                     Text.l10n(L10n.tr("app.run.label.destinationPicker")).foregroundStyle(.secondary)
-                    Picker(L10n.tr("app.run.label.destinationPicker"), selection: destinationBinding) {
-                        Text.l10n(s.inputs.folderIsCustom ? L10n.tr("app.run.destination.otherFolder") : L10n.tr("app.run.choose.none")).tag(String?.none)
-                        ForEach(model.usableVaults, id: \.volume.volumeUUID) { c in
-                            Text(verbatim: c.volume.volumeName + " — " + DriveText.verdict(.ready)).tag(String?.some(c.volume.volumeUUID))
+                    HStack(spacing: 8) {
+                        Picker(L10n.tr("app.run.label.destinationPicker"), selection: destinationBinding) {
+                            Text.l10n(s.inputs.folderIsCustom ? L10n.tr("app.run.destination.otherFolder") : L10n.tr("app.run.choose.none"))
+                                .tag(String?.none)
+                            ForEach(model.usableVaults, id: \.volume.volumeUUID) { c in
+                                Text(verbatim: c.volume.volumeName + " — " + DriveText.verdict(.ready)).tag(String?.some(c.volume.volumeUUID))
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .disabled(s.offloadToReturnTo != nil)
+                        // R7-A: the verdict is said once, in the picker. Beside it, only when the chosen drive has a fix to
+                        // make, a button that says what the fix is (`AppModel.destinationFix`).
+                        if let fix = model.destinationFix, let title = DriveText.prepareTitle(fix.prepareAction) {
+                            Button(title) { model.prepareFromDestination(fix) }.disabled(s.offloadToReturnTo != nil)
                         }
                     }
-                    .labelsHidden()
-                    .disabled(s.offloadToReturnTo != nil)
                 }
             }
             if s.kind.needsRuntime {
@@ -156,10 +171,13 @@ struct OperationSheetView: View {
             if s.kind.needsFolder {
                 GridRow {
                     Text.l10n(L10n.tr("app.run.label.folder")).foregroundStyle(.secondary)
-                    HStack {
+                    HStack(alignment: .firstTextBaseline) {
+                        // R7-A: the folder in full, wrapping, shown once — the facts below do not repeat it as "To".
                         Text(verbatim: s.inputs.folder ?? L10n.tr("app.run.choose.none"))
-                            .font(.system(.body, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                            .font(.system(.body, design: .monospaced)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                             .foregroundStyle(s.inputs.folder == nil ? .secondary : .primary)
+                            .help(s.inputs.folder ?? "")
+                        Spacer(minLength: 0)
                         Button(L10n.tr("app.run.destination.chooseFolder")) { Task { await model.chooseOperationFolder() } }
                             .disabled(s.offloadToReturnTo != nil)
                     }
@@ -177,7 +195,7 @@ struct OperationSheetView: View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
             // A drive operation names its drive above and what an erase destroys below, with sizes: no From or Size here.
             if let source = p.source, !s.kind.isDriveKind { fact(L10n.tr("app.run.label.source"), source, mono: true) }
-            if let destination = p.destination { fact(L10n.tr("app.run.label.destination"), destination, mono: true) }
+            if let destination = p.destination, s.showsDestinationFact(p) { fact(L10n.tr("app.run.label.destination"), destination, mono: true) }
             if let bytes = p.bytes, !s.kind.isDriveKind { fact(L10n.tr("app.run.label.size"), ByteCount.format(bytes), mono: false) }
             GridRow {
                 Text.l10n(L10n.tr("app.run.label.undo")).foregroundStyle(.secondary)
@@ -197,20 +215,23 @@ struct OperationSheetView: View {
 
     // MARK: - Destination and drives (R6)
 
-    /// The drives that can be used or need preparation, under the Destination picker: each with its verdict in words and
-    /// **Prepare…** (`AppModel.prepareFromDestination`), which comes back to this sheet when it closes.
+    /// The drives that can be used or need preparation, under the Destination picker — never a ready vault, which is in
+    /// the picker (R7-A) — each with its verdict in words and a button saying what it does (`DriveText.prepareTitle`,
+    /// `AppModel.prepareFromDestination`); the sheet it opens comes back to this one when it closes.
     @ViewBuilder
     private func otherDrives(_ s: OperationSheetState) -> some View {
         let drives = model.destinationDrives
         ForEach(drives) { a in
             HStack(spacing: 8) {
                 Label {
-                    Text(verbatim: a.displayName + " — " + DriveText.verdict(a.verdict)).font(.callout)
+                    Text(verbatim: a.displayName + " — " + DriveText.verdict(a.verdict)).font(.callout).fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: DriveText.symbol(a.verdict)).foregroundStyle(.secondary).accessibilityHidden(true)
                 }
                 Spacer()
-                Button(L10n.tr("app.drives.prepare")) { model.prepareFromDestination(a) }.disabled(s.offloadToReturnTo != nil)
+                if let title = DriveText.prepareTitle(a.prepareAction) {
+                    Button(title) { model.prepareFromDestination(a) }.disabled(s.offloadToReturnTo != nil)
+                }
             }
         }
     }
@@ -235,9 +256,12 @@ struct OperationSheetView: View {
                         }
                         .labelsHidden()
                     }
-                    GridRow {
+                    GridRow(alignment: .firstTextBaseline) {
                         Text.l10n(L10n.tr("app.prep.label.name")).foregroundStyle(.secondary)
-                        TextField(L10n.tr("app.prep.label.name"), text: volumeNameBinding).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                        VStack(alignment: .leading, spacing: 4) {
+                            TextField(L10n.tr("app.prep.label.name"), text: volumeNameBinding).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                            mountPreview
+                        }
                     }
                 }
             }
@@ -253,6 +277,24 @@ struct OperationSheetView: View {
                 }
             } else {
                 Text.l10n(L10n.tr("app.prep.useDrive.detail")).font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// R7-A (the user asked whether the name should be a path): diskutil takes only the name; this says where it will
+    /// appear, and warns when that name is mounted already (`AppModel.newVolumeMountPreview`).
+    @ViewBuilder
+    private var mountPreview: some View {
+        if let m = model.newVolumeMountPreview {
+            Text(verbatim: L10n.tr("app.prep.mountsAs", m.mountPoint)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if m.isTaken {
+                Label {
+                    Text(verbatim: L10n.tr("app.prep.mountsAs.taken", m.mountPoint, m.actualMountPoint, m.suggestedName ?? ""))
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).accessibilityHidden(true)
+                }
             }
         }
     }
@@ -370,6 +412,14 @@ struct OperationSheetView: View {
             }
             if let why = model.registrationFoldersError {
                 InlineCodeText(why).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+            // R7-A: the volume a preparation made is not a vault yet. **Use This Drive** opens its own review; nothing is
+            // registered from here, and nothing is chained after the preparation (rule 6, ADR-0012).
+            if let made = model.madeVolume {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(verbatim: L10n.tr("app.run.done.useMadeVolume", made.volume.volumeName)).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Button(L10n.tr("app.drives.useDrive")) { model.useMadeVolume() }.buttonStyle(.bordered).disabled(model.isOperationRunning)
+                }
             }
         }
         secondStep(s)

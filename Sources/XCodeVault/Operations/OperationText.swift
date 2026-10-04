@@ -125,7 +125,10 @@ extension AppModel {
         case .addPartition: return L10n.tr("app.run.confirm.addPartition", s.inputs.volume.name)
         case .eraseVolume: return L10n.tr("app.run.confirm.eraseVolume", pendingDiskPlan?.confirmationName ?? "")
         case .eraseDisk: return L10n.tr("app.run.confirm.eraseDisk", pendingDiskPlan?.confirmationName ?? "")
-        case .useDrive: return L10n.tr("app.run.confirm.useDrive", s.drive?.registrable?.volumeName ?? "")
+        case .useDrive:
+            // The volume the review registers: the drive's qualifying one, or the one a preparation just made (R7-A).
+            let volume = driveSnapshot?.volumes.first { $0.volumeUUID != nil && $0.volumeUUID == s.inputs.driveVolumeUUID }
+            return L10n.tr("app.run.confirm.useDrive", volume?.volumeName ?? s.drive?.registrable?.volumeName ?? "")
         }
     }
 
@@ -184,6 +187,19 @@ enum DriveText {
     /// A Drives button: the option, "recommended" when it is, and the ellipsis of an action that opens a sheet.
     static func optionButton(_ o: PreparationOption, recommended: Bool) -> String {
         option(o) + (recommended ? " — " + L10n.tr("app.prep.recommended") : "") + "…"
+    }
+
+    /// What a drive's button beside or under the Destination picker does, as its title (R7-A): **Use This Drive…**, or the
+    /// preparation it opens — "Add a Case-insensitive Volume…" — never a bare "Prepare…". Nil when there is nothing to do.
+    static func prepareTitle(_ action: DriveAssessment.PrepareAction) -> String? {
+        switch action {
+        case .useDrive: L10n.tr("app.drives.useDrive")
+        case .prepare(.addVolume): L10n.tr("app.drives.fix.addVolume")
+        case .prepare(.addPartition): L10n.tr("app.drives.fix.addPartition")
+        case .prepare(.eraseVolume): L10n.tr("app.drives.fix.eraseVolume")
+        case .prepare(.eraseDisk): L10n.tr("app.drives.fix.eraseDisk")
+        case .prepare(.enableOwnership), .nothing: nil
+        }
     }
 
     /// A volume an erase destroys, with what it holds when known.

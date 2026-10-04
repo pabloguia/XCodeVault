@@ -17,6 +17,28 @@ extension AppModel {
     /// Where the folder panel opens: the usable vault's mount point when there is one.
     var folderPanelStart: String? { usableVaults.first?.currentMountPoint }
 
+    /// What a plan row suggests for its `<dir>` (R7-A, the user's "faltou colocar a sugestão"): the command filled with
+    /// the usable vault's standard folder (`VaultLayout`), or that there is no usable vault yet, so the row points to
+    /// Drives. With several usable vaults, the first one's (the Run sheet's picker chooses among them).
+    enum CommandSuggestion: Equatable {
+        /// The row's command takes no `<dir>`.
+        case none
+        case filled(command: String, folder: String)
+        case noVault
+    }
+
+    func commandSuggestion(_ row: SavingsPlanRow) -> CommandSuggestion {
+        guard let purpose = row.folderPurpose else { return .none }
+        guard let folder = usableVaults.lazy.compactMap({ VaultLayout.path(purpose, in: $0) }).first, let command = row.command(filling: folder)
+        else { return .noVault }
+        return .filled(command: command, folder: folder)
+    }
+
+    /// **Copy Command** on a plan row: the command filled with the vault's folder when there is one, else as listed.
+    func copyCommand(_ row: SavingsPlanRow) {
+        if case .filled(let command, _) = commandSuggestion(row) { environment.copy(command) } else { environment.copy(row.command) }
+    }
+
     /// The runtimes the picker offers, largest first. No default: a runtime to delete is always chosen.
     var runtimesForPicker: [SimulatorRuntime] {
         (report?.runtimes ?? []).sorted { ($0.sizeBytes ?? 0, $1.identifier) > ($1.sizeBytes ?? 0, $0.identifier) }

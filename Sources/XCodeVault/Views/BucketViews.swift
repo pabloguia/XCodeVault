@@ -23,12 +23,14 @@ struct BucketHeaderView: View {
     }
 }
 
-/// A row's markers as small badges, in Core's order and words (`SavingsMarker`). The experimental badge is how rule 10
-/// reaches every experimental row.
+/// A row's markers, in Core's order and words (`SavingsMarker`). The experimental marker is how rule 10 reaches every
+/// experimental row and sheet. R7-A (the user's check of R6: the marker "has the same layout" as a button): a marker is a
+/// plain label — its symbol and word in secondary color, with no capsule, no hover and no pointer — so it never looks like
+/// something to click. Every marker the same way: a badge never looks like a button.
 struct MarkerBadges: View {
     let markers: [SavingsMarker]
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
                 Label {
                     Text(verbatim: AppText.marker(marker))
@@ -37,11 +39,12 @@ struct MarkerBadges: View {
                 }
                 .labelStyle(.titleAndIcon)
                 .font(.caption)
-                .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
-                .help(AppText.marker(marker))
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isStaticText)
             }
         }
+        .allowsHitTesting(false)
     }
 
     static func symbol(_ marker: SavingsMarker) -> String {
@@ -75,11 +78,21 @@ struct PlanRowView: View {
     let copy: @MainActor () -> Void
     /// **Run…** (R3): set only for a row the app can run (`AppModel.canRun`); nil keeps the row copy-only.
     let run: (@MainActor () -> Void)?
+    /// R7-A: the row's `<dir>` filled with the vault's folder, or the hint that there is no vault yet
+    /// (`AppModel.commandSuggestion`); `.none` for a command without `<dir>`.
+    let suggestion: AppModel.CommandSuggestion
+    /// The hint's **Show Drives**.
+    let showDrives: @MainActor () -> Void
 
-    init(row: SavingsPlanRow, copy: @escaping @MainActor () -> Void, run: (@MainActor () -> Void)? = nil) {
+    init(
+        row: SavingsPlanRow, copy: @escaping @MainActor () -> Void, run: (@MainActor () -> Void)? = nil, suggestion: AppModel.CommandSuggestion = .none,
+        showDrives: @escaping @MainActor () -> Void = {}
+    ) {
         self.row = row
         self.copy = copy
         self.run = run
+        self.suggestion = suggestion
+        self.showDrives = showDrives
     }
     /// A moment of "Copied" after the button, said to VoiceOver too: feedback only, it decides nothing.
     @State private var copied = false
@@ -97,8 +110,11 @@ struct PlanRowView: View {
                 Spacer(minLength: 0)
             }
             HStack(alignment: .firstTextBaseline) {
-                // A command is never translated (docs/process/LOCALIZATION.md).
-                Text(verbatim: row.command).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 4) {
+                    // A command is never translated (docs/process/LOCALIZATION.md).
+                    Text(verbatim: row.command).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                    suggestionLine
+                }
                 Spacer()
                 Button {
                     copy()
@@ -131,6 +147,30 @@ struct PlanRowView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
     }
+
+    /// The second line under the command (R7-A): the command with the vault's folder in it — what **Copy Command** copies —
+    /// or, with no usable vault, a short hint to Drives.
+    @ViewBuilder
+    private var suggestionLine: some View {
+        switch suggestion {
+        case .filled(let command, let folder):
+            Label {
+                Text(verbatim: command).font(.system(.callout, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "externaldrive.badge.checkmark").accessibilityHidden(true)
+            }
+            .foregroundStyle(.secondary)
+            .help(L10n.tr("app.plan.suggest.help", folder))
+            .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.suggest.a11y", command)))
+        case .noVault:
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text.l10n(L10n.tr("app.plan.suggest.noVault")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(L10n.tr("app.plan.suggest.showDrives"), action: showDrives).buttonStyle(.link).font(.callout)
+            }
+        case .none:
+            EmptyView()
+        }
+    }
 }
 
 /// Park and Run externally (spec §6.4): the plan for the bucket with **Copy command** per row, and **Run…** where the
@@ -147,6 +187,9 @@ struct PlanView: View {
     /// The interrupted-migration banner (R3 §10).
     var interrupted: [InterruptedMigration] = []
     var copyCommand: @MainActor (String) -> Void = { _ in }
+    /// R7-A: each row's suggested folder (`AppModel.commandSuggestion`), and the hint's **Show Drives**.
+    var suggestion: @MainActor (SavingsPlanRow) -> AppModel.CommandSuggestion = { _ in .none }
+    var showDrives: @MainActor () -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -159,7 +202,7 @@ struct PlanView: View {
                     Text.l10n(L10n.tr("cli.plan.empty")).foregroundStyle(.secondary)
                 }
                 ForEach(rows, id: \.categoryID) { row in
-                    PlanRowView(row: row, copy: { copy(row) }, run: runAction(row))
+                    PlanRowView(row: row, copy: { copy(row) }, run: runAction(row), suggestion: suggestion(row), showDrives: showDrives)
                 }
             }
             .padding()

@@ -16,7 +16,8 @@ struct StorageView: View {
     @Bindable var model: AppModel
     let report: ScanReport
 
-    /// The chart's height: modest and fixed, so the screen keeps fitting the window (R1, `ScreenFitTests`).
+    /// The chart box's greatest height: modest and bounded, so the screen keeps fitting the window (R1, `ScreenFitTests`); the
+    /// rows scroll inside it when wrapped labels make them taller (R7-A).
     static let chartHeight: CGFloat = 130
 
     var body: some View {
@@ -32,10 +33,14 @@ struct StorageView: View {
                 // No row in any option: a sentence, not an empty plot (R2 review M4).
                 Text.l10n(L10n.tr("app.storage.chart.none")).foregroundStyle(.secondary).padding(.horizontal)
             } else {
-                StorageBucketChart(bars: bars, selected: model.storageBucketFilter) { model.clickStorageBar($0, extending: $1) }
-                    .frame(height: Self.chartHeight)
-                    .padding(.horizontal)
-                    .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.chart.title")))
+                ScrollView(.vertical) {
+                    StorageBucketChart(bars: bars, selected: model.storageBucketFilter) { model.clickStorageBar($0, extending: $1) }
+                        .padding(.vertical, 2)
+                }
+                .frame(height: BarChartLayout.boxHeight(barCount: bars.count, maximum: Self.chartHeight))
+                .padding(.horizontal)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text(verbatim: L10n.tr("app.storage.chart.title")))
                 legend(bars)
                 // A persistent hint (the user's feedback): the chart filters.
                 Text.l10n(L10n.tr("app.storage.chart.caption")).font(.caption).foregroundStyle(.secondary)
@@ -198,6 +203,7 @@ struct SimulatorsView: View {
         let bars = SimulatorsChart.bars(report: report)
         HStack(alignment: .firstTextBaseline) {
             Text.l10n(L10n.tr("app.simulators.chart.title")).font(.headline)
+            if !bars.isEmpty { SimulatorsChartView.legend.padding(.leading, 8) }
             Spacer(minLength: 0)
             if !model.simulatorSelection.isEmpty {
                 Button(L10n.tr("app.simulators.clearSelection")) { model.clearSimulatorSelection() }
@@ -206,13 +212,13 @@ struct SimulatorsView: View {
         if bars.isEmpty {
             Text.l10n(L10n.tr("app.simulators.chart.none")).foregroundStyle(.secondary)
         } else {
-            let height = SimulatorsChart.height(barCount: bars.count)
             ScrollView(.vertical) {
                 SimulatorsChartView(bars: bars, selection: model.simulatorSelection) { id, _ in model.clickSimulatorBar(id) }
-                    .frame(height: height)
-                    .accessibilityLabel(Text(verbatim: L10n.tr("app.simulators.chart.title")))
+                    .padding(.vertical, 2)
             }
-            .frame(height: min(height, Self.chartBoxHeight))
+            .frame(height: BarChartLayout.boxHeight(barCount: bars.count, maximum: Self.chartBoxHeight))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text(verbatim: L10n.tr("app.simulators.chart.title")))
             Text.l10n(L10n.tr("app.simulators.chart.caption")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         let unmeasured = SimulatorsChart.unmeasuredCount(report: report)

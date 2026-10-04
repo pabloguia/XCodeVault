@@ -177,7 +177,7 @@ struct MainView: View {
             PlanView(
                 bucket: bucket, rows: model.rows(for: bucket), vault: model.section == .park ? model.vaultStatus : nil, copy: { model.copyCommand($0) },
                 canRun: { model.canRun($0) }, run: { model.openRun($0) }, interrupted: model.interruptedMigrations,
-                copyCommand: { model.environment.copy($0) })
+                copyCommand: { model.environment.copy($0) }, suggestion: { model.commandSuggestion($0) }, showDrives: { model.section = .drives })
         case .storage: StorageView(model: model, report: r)
         case .simulators: SimulatorsView(model: model, report: r)
         case .drives:

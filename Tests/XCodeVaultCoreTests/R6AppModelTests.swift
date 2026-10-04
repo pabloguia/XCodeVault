@@ -526,17 +526,18 @@ final class R6AppModelTests: XCTestCase {
         XCTAssertTrue(rec.runs.isEmpty)
     }
 
-    /// Fix round 2, C: PABLO's shape — a ready, case-sensitive vault — is listed under the Destination with Prepare…,
-    /// which opens the recommended new volume.
+    /// Fix round 2, C: PABLO's shape — a ready, case-sensitive vault — offers the recommended new volume. Since R7-A it
+    /// is not listed under the Destination (its verdict is in the picker); its fix sits beside the picker once it is the
+    /// chosen destination (`R7AAppTests`).
     func testACaseSensitiveVaultIsListedUnderTheDestination() async throws {
         let pablo = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(301), mount: "/Volumes/Media")
         let m = model(drives: ScriptedDrives(try R6DriveTests.snapshot()), checks: [vault(), pablo])
         await m.refresh()
-        let listed = try XCTUnwrap(m.destinationDrives.first { $0.disk.id == "disk2" })
-        XCTAssertEqual(listed.verdict, .ready)
-        XCTAssertEqual(listed.recommendedOption, .addVolume(container: "disk3"))
-        XCTAssertFalse(m.destinationDrives.contains { $0.disk.id == "disk10" }, "a ready vault with nothing to fix is only in the picker")
-        m.prepareFromDestination(listed)
+        let media = try assessment(m, "disk2")
+        XCTAssertEqual(media.verdict, .ready)
+        XCTAssertEqual(media.recommendedOption, .addVolume(container: "disk3"))
+        XCTAssertFalse(m.destinationDrives.contains { $0.verdict == .ready }, "a ready vault is only in the picker")
+        m.prepareFromDestination(media)
         XCTAssertEqual(m.operationSheet?.kind, .addVolume)
     }
 

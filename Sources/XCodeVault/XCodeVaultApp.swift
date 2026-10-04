@@ -684,10 +684,6 @@ final class AppModel {
         deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
     }
 
-    /// **Copy command**: exactly the row's command, never a variant of it. **Run…** (R3) runs the operation through Core
-    /// instead, never this string.
-    func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
-
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         // One clean at a time: a second one finishing first would clear `isCleaning` while this one still deletes, and the
         // quit guard and Relaunch would open in the middle of a clean (R5 re-review NEW-1).

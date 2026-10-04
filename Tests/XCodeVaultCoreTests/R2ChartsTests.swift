@@ -185,14 +185,11 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(Strategy.coldStorage.localizedName, "退避先に保管")
     }
 
-    func testTheChartsEmphasisAndAxis() {
+    func testTheChartsEmphasis() {
         XCTAssertEqual(ChartEmphasis.opacity(isHovered: true, isAnyHovered: true, isFilteredOut: true), 1, "the hovered bar is solid")
         XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: false, isFilteredOut: true), 0.35)
         XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: true, isFilteredOut: false), 0.7)
         XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: false, isFilteredOut: false), 1)
-        XCTAssertEqual(ChartEmphasis.axisLabel(0), "0")
-        XCTAssertEqual(ChartEmphasis.axisLabel(-1), "0")
-        XCTAssertEqual(ChartEmphasis.axisLabel(2_000_000_000), ByteCount.format(UInt64(2_000_000_000)))
         XCTAssertFalse(SimulatorsTable.isSearching(query: "  "), "spaces are no search")
         XCTAssertTrue(SimulatorsTable.isSearching(query: " a "))
     }
@@ -210,15 +207,6 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(runtimes.suffix(2).map(\.id), ["R3", "R0"], "two unmeasured: by platform (appletv before iphone)")
         let devices = SimulatorsTable.devices(report: s)
         XCTAssertEqual(SimulatorsTable.sorted(devices.reversed(), using: SimulatorsTable.defaultDeviceSortOrder), devices)
-    }
-
-    func testAClickCountsInsideThePlotOnly() {
-        XCTAssertEqual(ChartHit.plotY(clickY: 10, plotMinY: 10, plotMaxY: 160), 0, "the top edge is inside")
-        XCTAssertEqual(ChartHit.plotY(clickY: 160, plotMinY: 10, plotMaxY: 160), 150, "the bottom edge is inside")
-        XCTAssertEqual(ChartHit.plotY(clickY: 50, plotMinY: 10, plotMaxY: 160), 40)
-        XCTAssertNil(ChartHit.plotY(clickY: 9.5, plotMinY: 10, plotMaxY: 160))
-        XCTAssertNil(ChartHit.plotY(clickY: 160.5, plotMinY: 10, plotMaxY: 160))
-        XCTAssertNil(ChartHit.plotY(clickY: 10, plotMinY: 20, plotMaxY: 10), "an inverted plot frame hits nothing")
     }
 
     func testAValidFilterSurvivesAndAStaleOneDoesNot() {
@@ -261,8 +249,6 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertEqual(Set(bars.map(\.id)).count, bars.count, "two devices with one name keep two bars")
         XCTAssertEqual(SimulatorsChart.unmeasuredCount(report: r), 2, "R3 and D3: in the tables, not in the chart")
         XCTAssertEqual(bars.map(\.symbolName), ["shippingbox", "shippingbox", "iphone", "iphone"])
-        XCTAssertEqual(SimulatorsChart.height(barCount: 0), 120)
-        XCTAssertEqual(SimulatorsChart.height(barCount: 80), 80 * 34 + 34)
     }
 
     /// R5 (HIG review SI1): one table, two sections; a bar's id is its row's id, so a click selects that row.
