@@ -547,19 +547,62 @@ final class R3RunInAppTests: XCTestCase {
 
     /// Safety M1: what Quit may do, per stage.
     func testTheQuitChoiceDependsOnTheStage() {
-        XCTAssertEqual(AppModel.quitChoice(running: false, stage: .copying), .quitNow)
+        XCTAssertEqual(AppModel.quitChoice(running: false, stage: .copying, kind: .externalizeArchives), .quitNow)
         for stage in [OperationStage.copying, .verifying, .removing] {
-            XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage), .keepRunningOnly(.migration), "\(stage)")
+            XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage, kind: .externalizeArchives), .keepRunningOnly(.migration), "\(stage)")
         }
-        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .exporting), .keepRunningOnly(.export))
-        for stage in [OperationStage.deleting, .applying] {
-            XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage), .stopThenQuit, "\(stage)")
-        }
+        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .exporting, kind: .exportRuntime), .keepRunningOnly(.export))
+        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .deleting, kind: .deleteRuntime), .stopThenQuit)
+        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .applying, kind: .setDerivedData), .stopThenQuit)
+        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .applying, kind: .setArchives), .stopThenQuit)
         // R3 safety check: an offload is never stopped, whatever its stage; a plain runtime delete still can be.
         for stage in [OperationStage.planning, .deleting, .done] {
             XCTAssertEqual(AppModel.quitChoice(running: true, stage: stage, kind: .offloadRuntime), .keepRunningOnly(.offload), "\(stage)")
         }
-        XCTAssertEqual(AppModel.quitChoice(running: true, stage: .deleting, kind: .deleteRuntime), .stopThenQuit)
+    }
+
+    /// R3 safety confirmation F1/F2: a real offload plan (only Core's preflight can make one) runs as an offload, gets no
+    /// runner Stop and Quit can reach, and a running offload in the app offers only Keep Running and is never stopped.
+    func testARealOffloadIsNeverStoppable() async throws {
+        let installer = RuntimeInstaller(
+            path: "/Volumes/PABLO/lib/iphonesimulator_26.5_23F77.dmg", fileName: "iphonesimulator_26.5_23F77.dmg", sizeBytes: 900_000_000,
+            modifiedAt: Date(), platform: "iOS", version: "26.5", build: "23F77")
+        let runtime = SimulatorRuntime(
+            identifier: "R", runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-5", platformIdentifier: "com.apple.platform.iphonesimulator",
+            version: "26.5", build: "23F77", sizeBytes: 1_000)
+        let t = TempDir()
+        let ops = RuntimeOperations(
+            runner: FakeRunner(responses: [:]), journal: Journal(url: URL(fileURLWithPath: t.path + "/journal.jsonl")), xcode: Self.xcode(), host: Self.host())
+        let (plan, _) = try ops.preflightOffload(
+            identifier: "R", library: "/Volumes/PABLO/lib", installedRuntimes: [runtime], isMountPoint: { _ in true }, listLibrary: { _ in [installer] },
+            imageIsReadable: { _ in true }, volumeUUIDAt: { _ in "VAULT-UUID" })
+        let prepared = PreparedOperation.offload(plan, Self.xcode(), Self.host())
+        XCTAssertEqual(prepared.kind, .offloadRuntime)
+        XCTAssertNil(LiveOperations.stoppableChildren(for: prepared, ChildProcesses()))
+
+        let scripted = ScriptedOperations()
+        scripted.preview = { _, _ in OperationPreview(prepared: prepared) }
+        scripted.result = .success(.offloaded)
+        scripted.holds = true
+        var survey = sampleSurvey()
+        survey.0.runtimes = [runtime]
+        let m = model(scripted, survey: survey)
+        await m.refresh()
+        m.openRun(row("simulatorRuntimeAssets", .parkExternally, name: "Simulator runtimes"))
+        m.updateOperationInputs {
+            $0.runtimeID = "R"
+            $0.folder = "/Volumes/PABLO/lib"
+        }
+        await eventually("the offload preview") { m.canConfirmOperation }
+        let offloading = Task { await m.runOperation() }
+        await eventually("offloading") { m.operationSheet?.phase == .running }
+        XCTAssertEqual(m.operationSheet?.stage, .deleting, "the stage alone would have allowed Stop and Quit")
+        XCTAssertEqual(m.quitChoice, .keepRunningOnly(.offload))
+        let stopped = await m.stopOperationForQuit(timeout: .milliseconds(50))
+        XCTAssertFalse(stopped, "the quit is cancelled")
+        XCTAssertTrue(m.isOperationRunning, "the offload was not stopped")
+        scripted.release()
+        await offloading.value
     }
 
     func testACopyCannotBeStoppedForQuitAndARuntimeDeletionIsStoppedAndRecorded() async {

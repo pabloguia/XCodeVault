@@ -47,8 +47,9 @@ struct XCodeVaultApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
 
-    /// The decision is `AppModel.quitChoice`, per stage (review M1): copy, verify, remove and export only keep running;
-    /// a runtime deletion or a folder change can be stopped — its command terminated and waited for — before quitting.
+    /// The decision is `AppModel.quitChoice` (review M1, `OperationKind.canBeStopped`): copy, verify, remove, export and
+    /// offload only keep running; a runtime deletion from Delete or a folder change can be stopped — its command terminated
+    /// and waited for — before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let alert = NSAlert()
         alert.alertStyle = .warning

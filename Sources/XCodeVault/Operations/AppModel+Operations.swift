@@ -188,9 +188,9 @@ extension AppModel {
     /// The decision per stage and kind. Copying, verifying and removing an original keep running; so do an export and an
     /// offload. Deleting a runtime and applying a folder can be stopped: their commands are short, and a stopped one is
     /// recorded as failed.
-    static func quitChoice(running: Bool, stage: OperationStage, kind: OperationKind? = nil) -> QuitChoice {
+    static func quitChoice(running: Bool, stage: OperationStage, kind: OperationKind) -> QuitChoice {
         guard running else { return .quitNow }
-        if let kind, !kind.canBeStopped {
+        if !kind.canBeStopped {
             switch kind {
             case .exportRuntime: return .keepRunningOnly(.export)
             case .offloadRuntime: return .keepRunningOnly(.offload)
@@ -205,7 +205,9 @@ extension AppModel {
     }
 
     var quitChoice: QuitChoice {
-        Self.quitChoice(running: isOperationRunning, stage: operationSheet?.stage ?? .done, kind: operationSheet?.kind)
+        // Running implies a sheet (`isOperationRunning`), so a kind always reaches the rule; without one, nothing runs.
+        guard let sheet = operationSheet else { return .quitNow }
+        return Self.quitChoice(running: isOperationRunning, stage: sheet.stage, kind: sheet.kind)
     }
 
     /// Kept for the guard's callers: whether quitting asks first.
