@@ -86,6 +86,10 @@ struct MainView: View {
                         description: Text.l10n(L10n.tr("app.scanning.detail")))
                 }
             }
+            // The detail takes the column it is given and proposes no height of its own to the window. Without this a screen
+            // whose wrapped text is measured at the split view's near-zero ideal width (Delete's header, access row and footer)
+            // asked the window for ~4000 pt; the window, centred on that, showed neither the sidebar nor the table (R1, measured).
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, idealHeight: 0, maxHeight: .infinity, alignment: .top)
             .toolbar {
                 // Back (R1): only when there is somewhere to go back to (`AppModel.canGoBack`); ⌘[ as in Safari and Finder.
                 if model.canGoBack {

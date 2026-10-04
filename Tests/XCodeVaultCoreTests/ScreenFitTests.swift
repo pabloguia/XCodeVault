@@ -52,6 +52,15 @@ final class ScreenFitTests: XCTestCase {
         NSHostingController(rootView: view).sizeThatFits(in: NSSize(width: 1000, height: 1)).height
     }
 
+    /// The height the whole window's content asks for once laid out at a typical size: AppKit sizes and centres the
+    /// window's split view on this, so a large value pushes the sidebar and the screen's top out of sight.
+    private func windowHeightAsked<V: View>(_ view: V) -> CGFloat {
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: 1000, height: 560)
+        host.layoutSubtreeIfNeeded()
+        return host.intrinsicContentSize.height
+    }
+
     private func assertEveryScreenFits(_ survey: AppModel.Survey, _ fixture: String) async throws {
         for language in ["en", "ja"] {
             L10n.configure(override: language, environment: [:], preferred: [])
@@ -63,6 +72,11 @@ final class ScreenFitTests: XCTestCase {
                 model.section = section
                 let height = minimumHeight(MainView(model: model).detail(report))
                 XCTAssertLessThanOrEqual(height, Self.ceiling, "\(fixture), \(language), \(section.rawValue): minimum height \(height)")
+                // The whole window as well: the screen alone can fit while, inside the split view, its wrapped text is
+                // measured at a near-zero width and the window asks for thousands of points. That is what the user saw on
+                // Delete after the first R1 fix (4006 pt on this Mac's real scan; 16 pt on every other screen).
+                let asked = windowHeightAsked(MainView(model: model))
+                XCTAssertLessThanOrEqual(asked, Self.ceiling, "\(fixture), \(language), \(section.rawValue): the window asks for \(asked) pt")
             }
         }
     }
