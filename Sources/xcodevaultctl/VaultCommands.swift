@@ -16,6 +16,9 @@ struct Vault: ParsableCommand {
                     Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
                     to use a folder you can write, or create the default one with the command this prints when it fails.
 
+                    It then creates the standard folders inside the vault directory: DerivedData, Archives and Runtimes \
+                    (the destinations the app pre-fills).
+
                     Note --directory is a client-side choice: the privileged helper can only ever create the default \
                     \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
 
@@ -41,6 +44,13 @@ struct Vault: ParsableCommand {
             if directory.hasPrefix(".TemporaryItems") { print("! .TemporaryItems is purged by macOS — fine for experiments, not for durable storage.") }
             let vv = try VaultRegistry().register(v, relativeDirectory: directory)
             print("Registered \(vv.volumeName) (\(vv.volumeUUID)) at \(vv.lastVaultDirectory).")
+            // The standard layout (R6, `VaultLayout`): the folders the app pre-fills as destinations. The vault is
+            // registered either way; a folder that cannot be made is reported with what to do.
+            do {
+                for folder in try VaultLayout.createFolders(vaultDirectory: vv.vaultDirectory(atMountPoint: mountPoint)) { print("  \(folder)") }
+            } catch {
+                print("! \(error)")
+            }
         }
     }
     struct Status: ParsableCommand {

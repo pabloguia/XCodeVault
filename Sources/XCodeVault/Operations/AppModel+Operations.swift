@@ -86,6 +86,11 @@ extension AppModel {
     func checkOperationAgain() {
         guard operationSheet?.phase == .review else { return }
         operationSheet?.preview = nil
+        // R6: a drive sheet reads the disks again first — the drive may have been reconnected.
+        if operationSheet?.kind.isDriveKind == true {
+            Task { await refreshDrives() }
+            return
+        }
         Task { await previewOperation() }
     }
 

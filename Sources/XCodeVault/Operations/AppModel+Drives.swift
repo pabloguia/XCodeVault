@@ -30,7 +30,10 @@ extension AppModel {
         let read = environment.drives.snapshot
         let snapshot = await Self.offThePool { read() }
         driveSnapshot = snapshot
-        if let s = operationSheet, s.kind.isDriveKind, s.phase == .review { checkOperationAgain() }
+        if let s = operationSheet, s.kind.isDriveKind, s.phase == .review {
+            operationSheet?.preview = nil
+            await previewOperation()
+        }
     }
 
     /// The external drives, judged, ready vaults first (`DriveEvaluation.assessAll`). Empty before the first read.
