@@ -90,6 +90,20 @@ final class R2ChartsAppTests: XCTestCase {
         XCTAssertNil(model.simulatorScrollTarget(report))
     }
 
+    /// R2 review M8, kept in R5's one table (R5 review m3): a selection made in the table never scrolls it.
+    func testATableClickNeverScrolls() async throws {
+        let (model, _) = await model()
+        let report = try XCTUnwrap(model.report)
+        let row = try XCTUnwrap(model.simulatorRows(report, kind: .device).first)
+        model.simulatorSelection = [row.id]
+        XCTAssertEqual(model.simulatorScrollRequests, 0, "the table's own selection asks for no scroll")
+        let bar = try XCTUnwrap(SimulatorsChart.bars(report: report).first)
+        model.clickSimulatorBar(bar.id)
+        XCTAssertEqual(model.simulatorScrollRequests, 1, "a chart click does")
+        model.simulatorSelection = []
+        XCTAssertEqual(model.simulatorScrollRequests, 1)
+    }
+
     /// Review M6: after a rescan, buckets with no bar and rows no longer listed leave the filter and the selections.
     func testARescanClearsAStaleFilterAndSelection() async throws {
         let (model, _) = await model()

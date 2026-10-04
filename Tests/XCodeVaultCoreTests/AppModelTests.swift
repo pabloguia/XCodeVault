@@ -313,7 +313,7 @@ final class AppModelTests: XCTestCase {
         let unavailable = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t)
         unavailable.installHelper(then: vault)
         await eventually("the unavailable build is reported") { unavailable.lastError != nil }
-        XCTAssertEqual(unavailable.lastError?.message, HelperState.unavailableInThisBuild.why)
+        XCTAssertEqual(unavailable.lastError?.message, L10n.tr("app.error.helper.unavailable"), "the app's words; the shared text keeps its references")
 
         let slow = SwitchableHelper(.awaitingApproval)
         let timedOut = makeModel(slow, journal: t, maxPolls: 3)

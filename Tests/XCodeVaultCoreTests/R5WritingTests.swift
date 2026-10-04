@@ -17,7 +17,11 @@ final class R5WritingTests: XCTestCase {
     /// texts say. Hypothesis and issue ids stay in the docs and `--json`.
     func testTheAppSpeaksTheUsersWords() {
         let keys = (Array(L10nCatalog.core.strings.keys) + Array(L10nCatalog.core.plurals.keys))
-            .filter { $0.hasPrefix("app.") || $0.hasPrefix("perm.") || $0.hasPrefix("savings.") }
+            // The `perm.*` texts the CLI and `--json` share keep their evidence references (R5 review m2); the app shows its own
+            // words for those, and the `perm.*` it does show are the titles and the actions'.
+            .filter {
+                $0.hasPrefix("app.") || $0.hasPrefix("savings.") || $0.hasPrefix("perm.action.") || $0 == "perm.fda.title" || $0 == "perm.helper.title"
+            }
         XCTAssertGreaterThan(keys.count, 300, "the catalog was read")
         let jargon = try! NSRegularExpression(pattern: #"\bH\d{1,2}\b|#\d+|Definition of Done|journaled|sentinel|\bbuckets?\b"#)
         let caps = try! NSRegularExpression(pattern: #"\b[A-Z]{3,}\b"#)
@@ -85,9 +89,10 @@ final class R5WritingTests: XCTestCase {
         for fda in FullDiskAccessState.allCases {
             for helper in HelperState.allCases {
                 for row in AccessChecklist.rows(fullDiskAccess: fda, helper: helper, savings: SavingsSummary(), plan: [], privacyRefusalCount: 1) {
-                    XCTAssertFalse(AccessChecklist.offersRelaunch(row, openedSettings: false), "never before the pane was opened")
+                    XCTAssertFalse(AccessChecklist.offersRelaunch(row, openedSettings: false, busy: false), "never before the pane was opened")
+                    XCTAssertFalse(AccessChecklist.offersRelaunch(row, openedSettings: true, busy: true), "never while something runs")
                     XCTAssertEqual(
-                        AccessChecklist.offersRelaunch(row, openedSettings: true), row.need == .fullDiskAccess && fda == .notGranted,
+                        AccessChecklist.offersRelaunch(row, openedSettings: true, busy: false), row.need == .fullDiskAccess && fda == .notGranted,
                         "\(fda) \(helper) \(row.need)")
                     XCTAssertEqual(row.helpKey != nil, row.action == .guidanceOnly, "the manual route is the guidance's tooltip only")
                 }
@@ -96,29 +101,117 @@ final class R5WritingTests: XCTestCase {
     }
 }
 
+/// What the live environment's closures did, in order.
+@MainActor final class EnvironmentLog {
+    var events: [String] = []
+}
+
+/// A model whose terminate, new instance, guide panel and clean are recorded.
+@MainActor
+func r5Model(
+    _ log: EnvironmentLog, access: AccessBox, journal: TempDir, survey: AppModel.Survey = sampleSurvey(),
+    clean: @escaping @Sendable (CleanPlan, Bool) throws -> CleanResult = { _, _ in CleanResult(deleted: [], failedPairs: []) }
+) -> AppModel {
+    let journalURL = URL(fileURLWithPath: journal.path + "/j.jsonl")
+    return AppModel(
+        environment: AppEnvironment(
+            survey: { survey }, fullDiskAccess: { access.state }, helper: SwitchableHelper(.notInstalled),
+            approvalFlow: { HelperApprovalFlow(helper: $0) }, runner: { PrivilegedActionRunner(helper: $0, journal: Journal(url: journalURL)) },
+            clean: clean, open: { _ in }, copy: { _ in }, terminate: { log.events.append("terminate") },
+            launchNewInstance: { log.events.append("launch") }, showAccessGuide: { _ in log.events.append("show guide") },
+            closeAccessGuide: { log.events.append("close guide") }))
+}
+
 @MainActor
 final class R5RelaunchAppTests: XCTestCase {
-    func testRelaunchGoesThroughTheEnvironmentAndOnlyWhenOffered() async throws {
+    func testRelaunchQuitsOnlyWhenOfferedAndLaunchesNothingItself() async throws {
         let t = TempDir()
-        let relaunched = CopiedStrings()
+        let log = EnvironmentLog()
         let access = AccessBox(.notGranted)
-        let journalURL = URL(fileURLWithPath: t.path + "/j.jsonl")
-        let model = AppModel(
-            environment: AppEnvironment(
-                survey: { sampleSurvey() }, fullDiskAccess: { access.state }, helper: SwitchableHelper(.notInstalled),
-                approvalFlow: { HelperApprovalFlow(helper: $0) }, runner: { PrivilegedActionRunner(helper: $0, journal: Journal(url: journalURL)) },
-                clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in },
-                relaunch: { relaunched.strings.append("relaunch") }))
+        let model = r5Model(log, access: access, journal: t)
         model.refreshPermissions()
-        let row = try XCTUnwrap(model.accessRows.first)
-        XCTAssertFalse(model.offersRelaunch(row), "not before the user went to the pane")
+        XCTAssertFalse(model.offersRelaunch(try XCTUnwrap(model.accessRows.first)), "not before the user went to the pane")
         model.openFullDiskAccessSettings()
         await model.appDidBecomeActive()
         XCTAssertTrue(model.offersRelaunch(try XCTUnwrap(model.accessRows.first)), "back, and this process still lacks it")
         model.relaunch()
-        XCTAssertEqual(relaunched.strings, ["relaunch"])
+        XCTAssertTrue(model.relaunchRequested)
+        XCTAssertEqual(log.events.filter { $0 != "show guide" }, ["terminate"], "it asks to quit; the new instance starts once the quit is approved")
         access.state = .granted
         await model.appDidBecomeActive()
         XCTAssertFalse(model.offersRelaunch(try XCTUnwrap(model.accessRows.first)), "granted and seen: nothing to relaunch for")
+    }
+
+    /// R5 review I1, safety LOW-2, and the pre-existing gap: while a clean runs, quitting only keeps running, Relaunch is
+    /// not offered, and pressing it anyway quits and launches nothing.
+    func testNothingRelaunchesOrQuitsWhileACleanRuns() async throws {
+        let t = TempDir()
+        let log = EnvironmentLog()
+        let gate = DispatchSemaphore(value: 0)
+        let action = CleanAction(
+            categoryID: "derivedData", categoryName: "DerivedData", path: "/tmp/dd", bytes: 1, isExperimental: false, risk: .low, requiresRoot: false,
+            notes: [])
+        let model = r5Model(
+            log, access: AccessBox(.notGranted), journal: t, survey: sampleSurvey(actions: [action]),
+            clean: { plan, _ in
+                gate.wait()
+                return CleanResult(deleted: plan.actions, failedPairs: [])
+            })
+        await model.refresh()
+        model.openFullDiskAccessSettings()
+        XCTAssertEqual(model.quitChoice, .quitNow)
+        let cleaning = Task { await model.applyClean(actions: [action], useTrash: true) }
+        await eventually("cleaning") { model.isCleaning }
+        XCTAssertEqual(model.quitChoice, .keepRunningOnly(.clean), "a clean is never cut short by quitting")
+        XCTAssertFalse(model.offersRelaunch(try XCTUnwrap(model.accessRows.first)))
+        model.relaunch()
+        XCTAssertFalse(model.relaunchRequested)
+        XCTAssertFalse(log.events.contains("terminate") || log.events.contains("launch"), "\(log.events)")
+        XCTAssertEqual(model.lastError?.title, L10n.tr("app.error.relaunch.title"), "it says why")
+        gate.signal()
+        await cleaning.value
+        XCTAssertFalse(model.isCleaning)
+        XCTAssertEqual(model.quitChoice, .quitNow)
+    }
+
+    func testACleanKeepsRunningWhateverTheOperationAllows() {
+        typealias M = AppModel
+        XCTAssertEqual(M.quitChoice(operation: .quitNow, cleaning: false), .quitNow)
+        XCTAssertEqual(M.quitChoice(operation: .quitNow, cleaning: true), .keepRunningOnly(.clean))
+        XCTAssertEqual(M.quitChoice(operation: .stopThenQuit, cleaning: true), .keepRunningOnly(.clean), "Stop and Quit would leave the clean half done")
+        XCTAssertEqual(M.quitChoice(operation: .stopThenQuit, cleaning: false), .stopThenQuit)
+        XCTAssertEqual(M.quitChoice(operation: .keepRunningOnly(.migration), cleaning: true), .keepRunningOnly(.migration))
+    }
+
+    /// The user's real-window feedback: the guide opens with the pane, once, and closes on Done or once the grant is seen.
+    func testTheGuideOpensWithThePaneAndClosesOnDoneOrTheGrant() async {
+        let t = TempDir()
+        let log = EnvironmentLog()
+        let access = AccessBox(.notGranted)
+        let model = r5Model(log, access: access, journal: t)
+        model.openFullDiskAccessSettings()
+        XCTAssertTrue(model.showsAccessGuide)
+        model.openFullDiskAccessSettings()
+        XCTAssertEqual(log.events, ["show guide"], "one panel, not one per click")
+        await model.appDidBecomeActive()
+        XCTAssertTrue(model.showsAccessGuide, "back without the grant: it stays")
+        access.state = .granted
+        await model.appDidBecomeActive()
+        XCTAssertFalse(model.showsAccessGuide)
+        XCTAssertEqual(log.events, ["show guide", "close guide"])
+        model.closeAccessGuide()
+        XCTAssertEqual(log.events.count, 2, "closing twice does nothing")
+        // Done: the closure the environment received.
+        var done: (@MainActor () -> Void)?
+        let other = AppModel(
+            environment: AppEnvironment(
+                survey: { sampleSurvey() }, fullDiskAccess: { .notGranted }, helper: SwitchableHelper(.notInstalled),
+                approvalFlow: { HelperApprovalFlow(helper: $0) }, runner: { PrivilegedActionRunner(helper: $0) },
+                clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in },
+                showAccessGuide: { done = $0 }, closeAccessGuide: { log.events.append("closed by done") }))
+        other.openFullDiskAccessSettings()
+        done?()
+        XCTAssertFalse(other.showsAccessGuide)
+        XCTAssertEqual(log.events.last, "closed by done")
     }
 }

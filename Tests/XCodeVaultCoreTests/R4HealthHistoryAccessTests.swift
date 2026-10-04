@@ -325,7 +325,11 @@ final class FullDiskAccessRegistrationTests: XCTestCase {
         L10n.configure(override: "en", environment: [:], preferred: [])
         let hint = AppText.access(AccessChecklist.Key.fdaHintInList, bytes: nil, folders: nil)
         // H16 verified on macOS 26.7.1 (the user's check, 2026-10-04): no hedge; the + fallback stays for other versions.
-        XCTAssertEqual(hint, "XCodeVault is now in the list — turn its switch on. If it isn’t there, click + and choose XCodeVault.")
+        // R5 review round, the user's real-window feedback: where to look in the alphabetical list.
+        XCTAssertEqual(
+            hint,
+            "Scroll to the end of the list — XCodeVault is listed alphabetically, near the bottom — and turn its switch on. "
+                + "If it isn’t there, click + and choose XCodeVault.")
         XCTAssertFalse(hint.contains("already"), "never states the unverified registration as fact")
         XCTAssertFalse(hint.lowercased().contains("turned on") || hint.lowercased().contains("will turn"), "never claims the app turns it on")
     }

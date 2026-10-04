@@ -202,6 +202,24 @@ final class R5FeedbackAppTests: XCTestCase {
         XCTAssertFalse(model.showsAccessHint(model.accessRows[1]))
     }
 
+    /// Safety LOW-3: the context menu and ⌘⌫ confirm exactly the rows given, and only when Delete Selected… would delete one.
+    func testTheContextMenuConfirmsOnlyDeletableRows() async {
+        let t = TempDir()
+        func action(_ path: String, root: Bool) -> CleanAction {
+            CleanAction(
+                categoryID: "derivedData", categoryName: "DerivedData", path: path, bytes: 1, isExperimental: false, risk: .low, requiresRoot: root,
+                notes: [])
+        }
+        let actions = [action("/dd/a", root: false), action("/dd/r", root: true)]
+        let model = makeModel(SwitchableHelper(.enabled), journal: t, survey: sampleSurvey(actions: actions))
+        XCTAssertNil(model.deletionToConfirm(["/dd/a"]), "no list before the scan")
+        await model.refresh()
+        XCTAssertEqual(model.deletionToConfirm(["/dd/a", "/dd/r"]), ["/dd/a", "/dd/r"], "the rows given; the count is still the deletable ones")
+        XCTAssertNil(model.deletionToConfirm(["/dd/r"]), "a root row alone opens no confirmation")
+        XCTAssertNil(model.deletionToConfirm([]))
+        XCTAssertNil(model.deletionToConfirm(["/not/listed"]))
+    }
+
     func testShowInFinderAndCopyPathTakeTheSelection() {
         let t = TempDir()
         let revealed = CopiedStrings()
@@ -234,6 +252,10 @@ final class R5FeedbackAppTests: XCTestCase {
         XCTAssertFalse(lossy.contains(L10n.tr("app.clean.confirm.regenerable")))
         XCTAssertTrue(lossy.contains(L10n.tr("app.clean.confirm.userRecreatable")))
         XCTAssertTrue(lossy.contains(L10n.tr("app.clean.trashNote")))
+        // Safety LOW-1: non-regenerable data gets its own line, never "you recreate them yourself".
+        let lost = AppText.deleteConfirmation(costs: [.nonRegenerable], useTrash: false)
+        XCTAssertTrue(lost.contains(L10n.tr("app.clean.confirm.nonRegenerable")))
+        XCTAssertFalse(lost.contains(L10n.tr("app.clean.confirm.userRecreatable")))
         for locale in L10n.supportedLocales {
             L10n.configure(override: locale, environment: [:], preferred: [])
             for action in [PrivilegedAction.createVaultDirectory(volumeUUID: "U"), .emptyCoreSimulatorDyldCache] {

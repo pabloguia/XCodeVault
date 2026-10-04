@@ -1992,9 +1992,13 @@ Privacy & Security ▸ Full Disk Access with its switch **off**; the user switch
 recommended relaunching the app. The signing of that build was not recorded. No API reports the list; tests
 still replace the attempt with a closure and never touch TCC. Every other macOS version is **unmeasured**.
 
-What changed in the app (R5): the hint is no longer hedged — "XCodeVault is now in the list — turn its switch
-on. If it isn't there, click + and choose XCodeVault." — and keeps the **+** fallback for the versions not
-measured. Because macOS asked for a relaunch, the Access screen offers **Relaunch XCodeVault** once the user
+What changed in the app (R5): the hint is no longer hedged, and since the R5 review round it also says where to
+look — "Scroll to the end of the list — XCodeVault is listed alphabetically, near the bottom — and turn its switch
+on. If it isn't there, click + and choose XCodeVault." The copy is **deliberately the same on every macOS
+version**: the claim is verified on one combination only, and the **+** clause is the hedge for the others (a
+version gate in Core was considered and not taken: it would hide the useful part of the hint on every unmeasured
+version to protect a sentence whose fallback already covers them). A floating guide panel opens beside the pane
+with the same hint and the app's icon to drag into the list; whether that drag is accepted is unmeasured. Because macOS asked for a relaunch, the Access screen offers **Relaunch XCodeVault** once the user
 has opened the pane from the app and the running process still cannot open the indicator
 (`AccessChecklist.offersRelaunch`): a grant this process does not see yet looks exactly like no grant, so the
 button comes with "If you turned it on, relaunch XCodeVault so the change takes effect." Whether a relaunch is

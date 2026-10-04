@@ -345,13 +345,15 @@ struct DeleteView: View {
             Button(L10n.tr("app.action.copyPath")) { model.copyPaths(paths) }
             Divider()
             Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) {
-                selection = paths
-                confirm = true
+                if let confirmed = model.deletionToConfirm(paths) {
+                    selection = confirmed
+                    confirm = true
+                }
             }
-            .disabled(list.deletable(selected: paths).isEmpty)
+            .disabled(model.deletionToConfirm(paths) == nil)
         }
         .onDeleteCommand {
-            if !list.deletable(selected: selection).isEmpty { confirm = true }
+            if model.deletionToConfirm(selection) != nil { confirm = true }
         }
         .focused($tableFocused)
     }

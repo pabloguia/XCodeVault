@@ -135,9 +135,10 @@ public enum AccessChecklist {
     /// Whether the Full Disk Access row offers **Relaunch XCodeVault** (R5, the user's check of H16 on 2026-10-04: after
     /// the switch was turned on, macOS recommended relaunching). Once the user has opened the pane from the app and this
     /// process still cannot open the indicator: a grant the running process does not see yet looks exactly like no
-    /// grant, so the button comes with "if you turned it on". Never for a granted or undetermined state.
-    public static func offersRelaunch(_ row: Row, openedSettings: Bool) -> Bool {
-        row.need == .fullDiskAccess && row.state == .missing && openedSettings
+    /// grant, so the button comes with "if you turned it on". Never for a granted or undetermined state, and never while
+    /// something runs that the quit guard would keep (`busy`, R5 review I1): a relaunch then would leave two instances.
+    public static func offersRelaunch(_ row: Row, openedSettings: Bool, busy: Bool) -> Bool {
+        row.need == .fullDiskAccess && row.state == .missing && openedSettings && !busy
     }
 
     /// - Parameters:

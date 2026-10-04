@@ -23,9 +23,15 @@ struct AppEnvironment: Sendable {
     var operations: OperationServices = .inert
     /// **Show in Finder** on the Delete and Storage tables (R5): selects the paths in a Finder window. A no-op unless set.
     var reveal: @MainActor @Sendable ([String]) -> Void = { _ in }
-    /// **Relaunch XCodeVault** (R5): opens a new instance of the app's bundle, then asks this one to quit (the quit guard
-    /// still applies). A no-op unless set: a test never launches or quits anything.
-    var relaunch: @MainActor @Sendable () -> Void = {}
+    /// Quitting this instance, through `applicationShouldTerminate` (the quit guard). A no-op unless set.
+    var terminate: @MainActor @Sendable () -> Void = {}
+    /// **Relaunch XCodeVault** (R5): a new instance of the app's bundle, started from `applicationWillTerminate` once the
+    /// quit was approved. A no-op unless set: a test never launches anything.
+    var launchNewInstance: @MainActor @Sendable () -> Void = {}
+    /// The Full Disk Access guide panel (R5): shown when the pane opens, with the closure its Done calls; closed by the
+    /// model. No-ops unless set: a test never opens a window.
+    var showAccessGuide: @MainActor @Sendable (@escaping @MainActor () -> Void) -> Void = { _ in }
+    var closeAccessGuide: @MainActor @Sendable () -> Void = {}
 
     static let live = AppEnvironment(
         survey: nil, fullDiskAccess: { FullDiskAccessProbe().state() }, helper: LiveHelper(),
@@ -38,13 +44,15 @@ struct AppEnvironment: Sendable {
         },
         registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() }, operations: .live,
         reveal: { paths in NSWorkspace.shared.activateFileViewerSelecting(paths.map { URL(fileURLWithPath: $0) }) },
-        relaunch: {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.createsNewApplicationInstance = true
-            NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
-                // Quit only once the new instance is on its way; if it could not open, this one stays.
-                guard error == nil else { return }
-                Task { @MainActor in NSApplication.shared.terminate(nil) }
-            }
-        })
+        terminate: { NSApplication.shared.terminate(nil) },
+        launchNewInstance: {
+            // `open -n` asks Launch Services for a new instance and returns: it outlives this process, which is quitting.
+            let open = Process()
+            open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            open.arguments = ["-n", Bundle.main.bundleURL.path]
+            try? open.run()
+            open.waitUntilExit()
+        },
+        showAccessGuide: { done in AccessGuidePanel.shared.show(done: done) },
+        closeAccessGuide: { AccessGuidePanel.shared.close() })
 }

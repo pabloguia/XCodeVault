@@ -22,23 +22,22 @@ enum AppText {
     /// words, which the app starts with a capital as a label does.
     static func marker(_ marker: SavingsMarker) -> String {
         if case .experimental = marker { return experimental }
+        // The CLI's label says its Full Disk Access is unmeasured (R5 review m2); the badge is short.
+        if case .needsRoot(.helperWithFullDiskAccess) = marker { return L10n.tr("app.marker.needsRootWithFullDiskAccess") }
         let text = marker.localizedText
         return text.prefix(1).uppercased() + text.dropFirst()
     }
 
-    /// A strategy's name in words (R5, HIG review ST4, X1): never its identifier.
-    static func strategy(_ strategy: Strategy) -> String {
-        switch strategy {
-        case .nativeConfiguration: L10n.tr("app.strategy.nativeConfiguration")
-        case .safeCleanup: L10n.tr("app.strategy.safeCleanup")
-        case .coldStorage: L10n.tr("app.strategy.coldStorage")
-        case .userDirectoryRelocation: L10n.tr("app.strategy.userDirectoryRelocation")
-        case .symlinkRelocation: L10n.tr("app.strategy.symlinkRelocation")
-        case .canonicalMount: L10n.tr("app.strategy.canonicalMount")
-        case .downloadRepository: L10n.tr("app.strategy.downloadRepository")
-        case .restoreOnDemand: L10n.tr("app.strategy.restoreOnDemand")
-        case .appleManaged: L10n.tr("app.strategy.appleManaged")
-        case .neverMove: L10n.tr("app.strategy.neverMove")
+    /// A strategy's name in words (R5, HIG review ST4, X1): never its identifier. Core's, so the Storage column sorts by
+    /// what it shows (`StorageRow.strategySortKey`).
+    static func strategy(_ strategy: Strategy) -> String { strategy.localizedName }
+
+    /// Why a root action needs the helper, in the helper sheet: the app's words for the requirement whose shared text
+    /// keeps the CLI's evidence references (R5 review m2).
+    static func requirementWhy(_ requirement: PrivilegeRequirement) -> String {
+        switch requirement {
+        case .helperWithFullDiskAccess: L10n.tr("app.requirement.helperWithFullDiskAccess.why")
+        default: requirement.why(in: L10n.locale)
         }
     }
 
@@ -187,7 +186,9 @@ enum AppText {
         var lines: [String] = []
         if costs.contains(.regenerable) { lines.append(L10n.tr("app.clean.confirm.regenerable")) }
         if costs.contains(.redownloadable) { lines.append(L10n.tr("app.clean.confirm.redownloadable")) }
-        if costs.contains(.userRecreatable) || costs.contains(.nonRegenerable) { lines.append(L10n.tr("app.clean.confirm.userRecreatable")) }
+        if costs.contains(.userRecreatable) { lines.append(L10n.tr("app.clean.confirm.userRecreatable")) }
+        // Never listed by `DeleteList` today; said plainly if it ever is (R5 safety LOW-1).
+        if costs.contains(.nonRegenerable) { lines.append(L10n.tr("app.clean.confirm.nonRegenerable")) }
         lines.append(L10n.tr("app.clean.confirm.history"))
         if useTrash { lines.append(L10n.tr("app.clean.trashNote")) }
         return lines.joined(separator: " ")

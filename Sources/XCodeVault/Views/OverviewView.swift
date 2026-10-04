@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import XCodeVaultCore
 
-/// The Overview (spec 2026-10-03 §6.2): the disk bar, three cards — Temporary (delete), Temporary (park), Permanent
-/// (run externally) — the note that they are alternatives with the union total, at most one access banner and the
+/// The Overview (spec 2026-10-03 §6.2): the disk bar, three cards — Delete and Park (the space comes back), Run
+/// Externally (the space stays free) — the note that they are alternatives with the union total, at most one access banner and the
 /// critical findings. Every number comes from Core (`OverviewCards`, `DiskBar`, `AccessChecklist.banner`); this only
 /// draws them.
 struct OverviewView: View {

@@ -265,7 +265,7 @@ struct SimulatorsView: View {
         }
         .overlay {
             if runtimes.isEmpty, devices.isEmpty {
-                if model.simulatorQuery.isEmpty {
+                if !SimulatorsTable.isSearching(query: model.simulatorQuery) {
                     ContentUnavailableView(L10n.tr("app.simulators.none"), systemImage: "iphone.slash")
                 } else {
                     ContentUnavailableView(L10n.tr("app.search.none"), systemImage: "magnifyingglass")

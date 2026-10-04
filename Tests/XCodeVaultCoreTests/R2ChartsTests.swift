@@ -165,12 +165,36 @@ final class R2ChartsTests: XCTestCase {
         XCTAssertFalse(SavingsCalculator.countsOnce(missing, category: StorageCatalog.category("derivedData")))
     }
 
-    func testTheStrategyColumnSortsAsItShows() {
-        let rows = StorageTable.rows(report: storageReport())
-        for row in rows where row.strategy != nil {
-            XCTAssertTrue(row.strategySortKey.hasPrefix(row.strategy!.rawValue))
-            XCTAssertEqual(row.strategySortKey.count > row.strategy!.rawValue.count, row.isExperimental, "experimental after the plain one")
+    /// R5 review I3: the column sorts by the name it shows, in the app's language, never by the identifier.
+    func testTheStrategyColumnSortsByTheNameItShows() {
+        defer { L10n.configure(override: "en", environment: [:], preferred: []) }
+        for locale in ["en", "ja"] {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let rows = StorageTable.rows(report: storageReport())
+            for row in rows where row.strategy != nil {
+                XCTAssertTrue(row.strategySortKey.hasPrefix(row.strategy!.localizedName), "\(locale): sorted by what the cell shows")
+                XCTAssertEqual(row.strategySortKey.count > row.strategy!.localizedName.count, row.isExperimental, "experimental after the plain one")
+            }
+            let shown = StorageTable.sorted(rows, using: [StorageTable.Column.strategy.comparator()]).compactMap { $0.strategy?.localizedName }
+            XCTAssertGreaterThan(Set(shown).count, 1, "\(locale): the fixture has several strategies")
+            for (x, y) in zip(shown, shown.dropFirst()) {
+                XCTAssertNotEqual(x.localizedStandardCompare(y), .orderedDescending, "\(locale): \(x) then \(y)")
+            }
         }
+        L10n.configure(override: "ja", environment: [:], preferred: [])
+        XCTAssertEqual(Strategy.coldStorage.localizedName, "退避先に保管")
+    }
+
+    func testTheChartsEmphasisAndAxis() {
+        XCTAssertEqual(ChartEmphasis.opacity(isHovered: true, isAnyHovered: true, isFilteredOut: true), 1, "the hovered bar is solid")
+        XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: false, isFilteredOut: true), 0.35)
+        XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: true, isFilteredOut: false), 0.7)
+        XCTAssertEqual(ChartEmphasis.opacity(isHovered: false, isAnyHovered: false, isFilteredOut: false), 1)
+        XCTAssertEqual(ChartEmphasis.axisLabel(0), "0")
+        XCTAssertEqual(ChartEmphasis.axisLabel(-1), "0")
+        XCTAssertEqual(ChartEmphasis.axisLabel(2_000_000_000), ByteCount.format(UInt64(2_000_000_000)))
+        XCTAssertFalse(SimulatorsTable.isSearching(query: "  "), "spaces are no search")
+        XCTAssertTrue(SimulatorsTable.isSearching(query: " a "))
     }
 
     /// Review M3: the default order and Core's own order are one order, ties included.

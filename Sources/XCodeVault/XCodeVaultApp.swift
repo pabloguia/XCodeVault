@@ -77,17 +77,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .migration: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.migration")
             case .export: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.export")
             case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
+            case .clean: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.clean")
             }
             alert.runModal()
+            model.relaunchRequested = false
             return .terminateCancel
         case .stopThenQuit:
             alert.informativeText = L10n.tr("app.quit.message")
             alert.addButton(withTitle: L10n.tr("app.quit.stopAndQuit")).hasDestructiveAction = true
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            guard alert.runModal() == .alertSecondButtonReturn else {
+                model.relaunchRequested = false
+                return .terminateCancel
+            }
             Task { @MainActor in
                 let stopped = await model.stopOperationForQuit()
                 sender.reply(toApplicationShouldTerminate: stopped)
                 guard !stopped else { return }
+                model.relaunchRequested = false
                 // Never quit with a command still alive: say so, and stay.
                 let failed = NSAlert()
                 failed.alertStyle = .critical
@@ -97,6 +103,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return .terminateLater
         }
+    }
+
+    /// **Relaunch XCodeVault** (R5 review I1): the new instance starts only here, once quitting was approved, so two
+    /// instances never run side by side.
+    func applicationWillTerminate(_ notification: Notification) {
+        if model.relaunchRequested { model.environment.launchNewInstance() }
     }
 }
 
@@ -151,18 +163,49 @@ final class AppModel {
         openedFullDiskAccessSettings = true
         environment.registerForFullDiskAccess()
         environment.open(url)
+        // The guide beside the pane (R5, the user's real-window feedback): where XCodeVault is in the list, and its icon
+        // to drag in if it is not.
+        if !showsAccessGuide {
+            showsAccessGuide = true
+            environment.showAccessGuide { [weak self] in self?.closeAccessGuide() }
+        }
+    }
+
+    /// Whether the Full Disk Access guide panel is up: shown when the pane opens, closed by its Done or once the grant is seen.
+    private(set) var showsAccessGuide = false
+
+    /// The guide's **Done**, and the grant seen on coming back.
+    func closeAccessGuide() {
+        guard showsAccessGuide else { return }
+        showsAccessGuide = false
+        environment.closeAccessGuide()
     }
 
     /// Set once the user opened the Full Disk Access pane from the app; it stays set, unlike `returningFromSettings`,
     /// which one activation consumes. The hint next to the button shows only after it (R5, HIG review A2).
     private(set) var openedFullDiskAccessSettings = false
 
-    /// Whether `row` offers **Relaunch XCodeVault** (`AccessChecklist.offersRelaunch`).
-    func offersRelaunch(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.offersRelaunch(row, openedSettings: openedFullDiskAccessSettings) }
+    /// Whether `row` offers **Relaunch XCodeVault** (`AccessChecklist.offersRelaunch`): never while something runs that
+    /// the quit guard would keep (R5 review I1).
+    func offersRelaunch(_ row: AccessChecklist.Row) -> Bool {
+        AccessChecklist.offersRelaunch(row, openedSettings: openedFullDiskAccessSettings, busy: quitNeedsConfirmation)
+    }
 
-    /// **Relaunch XCodeVault**: a new instance of this app, then this one quits — through the quit guard, so a running
-    /// operation is never cut short by it (`AppEnvironment.relaunch`).
-    func relaunch() { environment.relaunch() }
+    /// Set by **Relaunch XCodeVault** once quitting needs no confirmation; the app delegate starts the new instance in
+    /// `applicationWillTerminate`, after the quit was approved, and a cancelled quit clears it.
+    var relaunchRequested = false
+
+    /// **Relaunch XCodeVault** (R5 review I1, safety LOW-2): quits only when the quit guard would not ask — nothing runs —
+    /// and the new instance starts after the quit was approved. While something runs it opens and quits nothing, and says
+    /// why.
+    func relaunch() {
+        guard !quitNeedsConfirmation else {
+            lastError = AppError(title: L10n.tr("app.error.relaunch.title"), message: L10n.tr("app.error.relaunch.message"))
+            return
+        }
+        relaunchRequested = true
+        environment.terminate()
+    }
 
     /// Whether `row` shows its hint (`AccessChecklist.showsHint`).
     func showsAccessHint(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.showsHint(row, openedSettings: openedFullDiskAccessSettings) }
@@ -176,6 +219,7 @@ final class AppModel {
         let returning = returningFromSettings
         returningFromSettings = false
         refreshPermissions()
+        if fullDiskAccess == .granted { closeAccessGuide() }
         guard
             AccessChecklist.rescansOnActivation(
                 // A scan in flight counts as one: it ran without the grant, and `ScanGate` queues the follow-up (review M9).
@@ -285,7 +329,7 @@ final class AppModel {
             case .enabled:
                 if let action { await perform(action) }
             case .notAvailableInThisBuild:
-                lastError = AppError(title: title, message: HelperState.unavailableInThisBuild.why(in: L10n.locale))
+                lastError = AppError(title: title, message: L10n.tr("app.error.helper.unavailable"))
             case .timedOut:
                 lastError = AppError(title: title, message: L10n.tr("app.helper.error.timedOut"))
             case .cancelled:
@@ -629,6 +673,9 @@ final class AppModel {
         feedback = nil
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
         let clean = environment.clean
+        // The quit guard keeps the app open while it runs (`quitChoice`), and Relaunch is not offered.
+        isCleaning = true
+        defer { isCleaning = false }
         do {
             let result = try await Task.detached { try clean(selected, useTrash) }.value
             lastCleanResult = result
@@ -638,6 +685,17 @@ final class AppModel {
         } catch {
             lastError = AppError(title: useTrash ? L10n.tr("app.error.clean.trash.title") : L10n.tr("app.error.clean.delete.title"), error: error)
         }
+    }
+
+    /// Whether a Delete view clean runs: the quit guard offers only Keep Running (R5, safety review's pre-existing gap).
+    private(set) var isCleaning = false
+
+    /// What the Delete view's context menu and ⌘⌫ confirm (R5 safety LOW-3): the rows they act on when **Delete
+    /// Selected…** would delete any of them (`DeleteList.deletable`), nil when it would delete none and no confirmation
+    /// opens. The confirmation's count is still `deletable(selected:)` of the selection this returns.
+    func deletionToConfirm(_ paths: Set<String>) -> Set<String>? {
+        guard let list = deleteList, !list.deletable(selected: paths).isEmpty else { return nil }
+        return paths
     }
 
     /// The inline result's ×.
@@ -737,7 +795,7 @@ struct HelperRequestSheet: View {
         if let action = model.pendingPrivilegedAction {
             Text(verbatim: action.title(in: L10n.locale)).font(.callout).foregroundStyle(.secondary)
         }
-        Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
+        Text(verbatim: AppText.requirementWhy(model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper))
             .font(.callout).fixedSize(horizontal: false, vertical: true)
         HStack {
             Spacer()

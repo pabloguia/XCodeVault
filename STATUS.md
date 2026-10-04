@@ -3361,3 +3361,29 @@ clearable selection.
 **Still needs a real window:** hover/pointer and ⌘-click on the charts; the Simulators table scrolling to a clicked row
 (`ScrollViewReader` on a `Table`); History rows of two lines in a `Table`; the search fields' placement; Relaunch
 XCodeVault (a new instance, then quit); Increase Contrast; Full Keyboard Access.
+
+### R5 review fix round (2026-10-04)
+
+Two reviews of R5: quality (`.superpowers/sdd/hig/r5-review.md`, Changes requested) and migration safety
+(`r5-safety.md`, SAFE). All findings fixed, plus the user's real-window feedback on Full Disk Access:
+- **I1 / LOW-2.** Relaunch never starts a second instance while anything runs: `offersRelaunch` takes `busy`
+  (`quitNeedsConfirmation`); `relaunch()` asks to quit only when the guard would not ask, else opens and quits nothing
+  and says why; the new instance starts from `applicationWillTerminate`, after the quit was approved (`open -n`).
+- **Pre-existing gap.** A running Delete clean is under the quit guard: only **Keep Running**
+  (`QuitReason.clean`, `AppModel.quitChoice(operation:cleaning:)`). R3's per-stage rule is unchanged.
+- **I2, m7.** The inline result sits inside the zero-ideal-height frame; `R5FitTests` sets a long result on every
+  screen (en, ja) and measures the window's asked height — a mutant moving the inset back out fails it (20 failures) —
+  and measures the helper sheet's two states.
+- **I3.** The Strategy column sorts by the name it shows (`Strategy.localizedName`, Core), tested in en and ja.
+- **LOW-1.** Non-regenerable data has its own confirmation line; the Overview footer says again that XCodeVault never
+  deletes non-regenerable data automatically. **LOW-3.** `AppModel.deletionToConfirm`, tested.
+- **m1** H16's copy is deliberately global, recorded in HYPOTHESES. **m2** the shared `perm.*` texts are back to their
+  R4 wording, evidence references included (CLI and `--json`); the app shows its own keys for the badge, the helper
+  sheet's why and the unavailable-build error. **m3** a table selection never scrolls, tested again. **m4**
+  `ChartEmphasis`, `SimulatorsTable.isSearching`, in Core with tests. **m5** the scanning spinner has a name. **m6** doc
+  comment.
+- **Full Disk Access guidance.** The hint says XCodeVault is near the end of the alphabetical list. A floating,
+  non-activating **Allow Full Disk Access** panel (`AccessGuidePanel`, behind `AppEnvironment.showAccessGuide` /
+  `closeAccessGuide`) opens with the pane: the hint, the app's icon as a drag source (its bundle as a file URL), and
+  **Done**; it closes on Done or once the grant is seen (`AppModel.closeAccessGuide`, tested). No Accessibility API or
+  UI scripting. **Needs a real window:** whether System Settings accepts the dragged icon, and the panel's placement.

@@ -8,10 +8,28 @@ import Foundation
 extension StorageRow {
     /// The bucket column's order: `SavingsBucket`'s, most durable saving first; a row with no bucket last.
     public var bucketSortKey: Int { bucket.flatMap { SavingsBucket.allCases.firstIndex(of: $0) } ?? SavingsBucket.allCases.count }
-    /// The strategy column's order: by the strategy's identifier, a fixed order whatever the language (the cell shows the
-    /// strategy's name in words since R5); the experimental one of two equal identifiers sorts after the plain one, as its
-    /// badge follows its name. A row with no strategy first.
-    public var strategySortKey: String { (strategy?.rawValue ?? "") + (isExperimental ? " ~" : "") }
+    /// The strategy column's order (R5 review I3): by the name the cell shows (`Strategy.localizedName`), compared as
+    /// Finder does; the experimental one of two equal names sorts after the plain one, as its badge follows its name. A
+    /// row with no strategy first.
+    public var strategySortKey: String { (strategy?.localizedName ?? "") + (isExperimental ? " ~" : "") }
+}
+
+extension Strategy {
+    /// The strategy's name in words, in the chosen language (R5, HIG review ST4): what the Storage table shows and sorts by.
+    public var localizedName: String {
+        switch self {
+        case .nativeConfiguration: L10n.tr("app.strategy.nativeConfiguration")
+        case .safeCleanup: L10n.tr("app.strategy.safeCleanup")
+        case .coldStorage: L10n.tr("app.strategy.coldStorage")
+        case .userDirectoryRelocation: L10n.tr("app.strategy.userDirectoryRelocation")
+        case .symlinkRelocation: L10n.tr("app.strategy.symlinkRelocation")
+        case .canonicalMount: L10n.tr("app.strategy.canonicalMount")
+        case .downloadRepository: L10n.tr("app.strategy.downloadRepository")
+        case .restoreOnDemand: L10n.tr("app.strategy.restoreOnDemand")
+        case .appleManaged: L10n.tr("app.strategy.appleManaged")
+        case .neverMove: L10n.tr("app.strategy.neverMove")
+        }
+    }
 }
 
 extension StorageTable {
@@ -106,6 +124,22 @@ extension StorageTable {
     public static func sorted(_ rows: [StorageRow], using order: [KeyPathComparator<StorageRow>]) -> [StorageRow] {
         rows.sorted(using: order + [KeyPathComparator(\StorageRow.item.path), KeyPathComparator(\StorageRow.id)])
     }
+}
+
+// MARK: - Chart emphasis
+
+/// How a chart draws its bars and axis (R5 review m4), decided here so the views only apply it.
+public enum ChartEmphasis {
+    /// A bar's opacity: the bar under the pointer solid; the others a little lighter while one is hovered; those outside
+    /// the filter or the selection faded.
+    public static func opacity(isHovered: Bool, isAnyHovered: Bool, isFilteredOut: Bool) -> Double {
+        if isHovered { return 1 }
+        if isFilteredOut { return 0.35 }
+        return isAnyHovered ? 0.7 : 1
+    }
+
+    /// A size axis label: "0" at the origin rather than "0 bytes" (HIG review C2), else the size.
+    public static func axisLabel(_ bytes: Double) -> String { bytes <= 0 ? "0" : ByteCount.format(UInt64(bytes)) }
 }
 
 // MARK: - Chart clicks
@@ -277,6 +311,10 @@ extension SimulatorsTable {
     }
 
     public static var defaultListSortOrder: [KeyPathComparator<SimulatorListRow>] { [ListColumn.size.comparator(.reverse)] }
+
+    /// Whether a search narrows the table: text other than spaces (R5 review m4). The empty table then says "No Results",
+    /// not "no simulators".
+    public static func isSearching(query: String) -> Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The rows of one section of the table — the installed runtimes or the devices — whose name, detail or path contains
     /// `query` (ignoring case and diacritics; empty matches all), sorted by `order`, ties by name then id.

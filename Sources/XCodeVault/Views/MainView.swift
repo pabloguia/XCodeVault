@@ -89,14 +89,15 @@ struct MainView: View {
                     ScanningView()
                 }
             }
+            // The last action's result, inline above the screen until the next action or its × (HIG review N11). Inside the
+            // zero-ideal-height frame below, so its wrapped lines never ask the window for height (R5 review I2).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let feedback = model.feedback { FeedbackBanner(feedback: feedback) { model.dismissFeedback() } }
+            }
             // The detail takes the column it is given and proposes no height of its own to the window. Without this a screen
             // whose wrapped text is measured at the split view's near-zero ideal width (Delete's header, access row and footer)
             // asked the window for ~4000 pt; the window, centred on that, showed neither the sidebar nor the table (R1, measured).
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, idealHeight: 0, maxHeight: .infinity, alignment: .top)
-            // The last action's result, inline above the screen until the next action or its × (HIG review N11).
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if let feedback = model.feedback { FeedbackBanner(feedback: feedback) { model.dismissFeedback() } }
-            }
             .toolbar {
                 // Back and Forward (R5, HIG review N1): icon-only chevrons with tooltips, ⌘[ and ⌘] as in Safari and
                 // Finder, always shown and disabled when there is nowhere to go, so the title never shifts.
@@ -122,7 +123,7 @@ struct MainView: View {
                         Task { await model.refresh() }
                     } label: {
                         if model.isScanning {
-                            ProgressView().controlSize(.small)
+                            ProgressView().controlSize(.small).accessibilityLabel(Text(verbatim: L10n.tr("app.scanning.title")))
                         } else {
                             Label(L10n.tr("app.action.rescan"), systemImage: "arrow.clockwise")
                         }

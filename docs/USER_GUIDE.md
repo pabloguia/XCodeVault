@@ -141,12 +141,15 @@ needs root. Each row has one button: **Open System Settings** (or **Check Again*
 **Install Helper…** or **Approve in System Settings…** for the helper; once the helper is enabled, Permissions offers
 **Uninstall…**, with a confirmation. **Open System Settings** first makes one attempt to open a folder macOS guards with
 Full Disk Access (`~/Library/Safari`; it reads nothing), which puts XCodeVault in the pane's list, then opens System
-Settings ▸ Privacy & Security ▸ Full Disk Access. After that the row says: XCodeVault is now in the list — turn its
-switch on; if it isn't there, click **+** and choose XCodeVault (verified on macOS 26.7.1 by a user on 2026-10-04;
-other versions are unmeasured, hence the fallback; H16). Whenever you come back to the app it checks again and updates
+Settings ▸ Privacy & Security ▸ Full Disk Access, with a small floating **Allow Full Disk Access** panel beside it.
+XCodeVault is in the list, near the end — the list is alphabetical — with its switch off: turn it on. If it isn't there,
+click **+** and choose XCodeVault, or drag the app's icon from the panel into the list (verified on macOS 26.7.1 by a
+user on 2026-10-04; other versions are unmeasured, hence the fallback; H16; whether the drag is accepted is not
+measured). The panel closes with **Done**, or by itself once XCodeVault sees the grant. Whenever you come back to the app it checks again and updates
 the row, the banner and the Overview; it rescans once if Full Disk Access was just granted. If the app still does not
-see it — macOS may ask you to relaunch — the row offers **Relaunch XCodeVault**, which opens a new copy and quits this
-one (asking first if an operation is running). A build you made yourself (ad hoc
+see it — macOS may ask you to relaunch — the row offers **Relaunch XCodeVault**, which quits this copy and opens a
+new one. It is not offered while an operation or a Delete runs, and quitting during a Delete only offers **Keep
+Running**: a Delete moves or deletes items one by one, and stopping it part-way is untested. A build you made yourself (ad hoc
 signed, not a release) may appear in the list under its path, such as `…/XCodeVault.app`, rather than under its name and
 icon; it is the same app. **Install Helper…**
 registers the helper and opens Login Items & Extensions, where you approve it; the sheet waits for your approval, with

@@ -49,17 +49,6 @@ private struct ChartClick: ViewModifier {
     }
 }
 
-/// A bar's opacity: the bar under the pointer solid, the others a little lighter while one is hovered, and those outside
-/// the filter or selection faded (the hover highlight, R5).
-private func barOpacity(isHovered: Bool, isAnyHovered: Bool, isFilteredOut: Bool) -> Double {
-    if isHovered { return 1 }
-    if isFilteredOut { return 0.35 }
-    return isAnyHovered ? 0.7 : 1
-}
-
-/// An axis label for a size: "0" at the origin rather than "0 bytes" (R5, HIG review C2).
-private func axisSize(_ bytes: Double) -> String { bytes <= 0 ? "0" : ByteCount.format(UInt64(bytes)) }
-
 /// Storage: one horizontal bar per bucket with rows, in the bucket's color as a fill, labelled on the leading axis with its
 /// symbol and short name, its size at the end of the bar. The buckets in the filter stay solid while there is a filter; the
 /// others fade. The bar under the pointer is solid and its label bold.
@@ -74,7 +63,7 @@ struct StorageBucketChart: View {
             BarMark(x: .value(L10n.tr("app.column.size"), Double(bar.bytes)), y: .value(L10n.tr("app.column.bucket"), bar.id))
                 .foregroundStyle(bar.bucket.color)
                 .opacity(
-                    barOpacity(
+                    ChartEmphasis.opacity(
                         isHovered: hovered == bar.id, isAnyHovered: hovered != nil, isFilteredOut: !selected.isEmpty && !selected.contains(bar.bucket))
                 )
                 .annotation(position: .trailing, alignment: .leading) {
@@ -100,7 +89,7 @@ struct StorageBucketChart: View {
             AxisMarks { value in
                 AxisGridLine()
                 AxisValueLabel {
-                    if let bytes = value.as(Double.self) { Text(verbatim: axisSize(bytes)) }
+                    if let bytes = value.as(Double.self) { Text(verbatim: ChartEmphasis.axisLabel(bytes)) }
                 }
             }
         }
@@ -131,7 +120,10 @@ struct SimulatorsChartView: View {
         Chart(bars) { bar in
             BarMark(x: .value(L10n.tr("app.column.size"), Double(bar.bytes)), y: .value(L10n.tr("app.column.name"), bar.id))
                 .foregroundStyle(by: .value(L10n.tr("app.simulators.chart.kind"), Self.kindTitle(bar.kind)))
-                .opacity(barOpacity(isHovered: hovered == bar.id, isAnyHovered: hovered != nil, isFilteredOut: anySelected && !selection.contains(bar.id)))
+                .opacity(
+                    ChartEmphasis.opacity(
+                        isHovered: hovered == bar.id, isAnyHovered: hovered != nil, isFilteredOut: anySelected && !selection.contains(bar.id))
+                )
                 .annotation(position: .trailing, alignment: .leading) {
                     Text(verbatim: ByteCount.format(bar.bytes)).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
                 }
@@ -159,7 +151,7 @@ struct SimulatorsChartView: View {
             AxisMarks { value in
                 AxisGridLine()
                 AxisValueLabel {
-                    if let bytes = value.as(Double.self) { Text(verbatim: axisSize(bytes)) }
+                    if let bytes = value.as(Double.self) { Text(verbatim: ChartEmphasis.axisLabel(bytes)) }
                 }
             }
         }

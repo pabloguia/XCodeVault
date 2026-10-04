@@ -108,31 +108,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "XCodeVault is now in the list — turn its switch on. If it isn’t there, click + and choose XCodeVault."
+            "value" : "Scroll to the end of the list — XCodeVault is listed alphabetically, near the bottom — and turn its switch on. If it isn’t there, click + and choose XCodeVault."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault ya está en la lista: activa su interruptor. Si no aparece, haz clic en + y elige XCodeVault."
+            "value" : "Desplázate hasta el final de la lista (XCodeVault aparece por orden alfabético, cerca del final) y activa su interruptor. Si no aparece, haz clic en + y elige XCodeVault."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault がリストに追加されました。スイッチをオンにしてください。表示されない場合は、+ をクリックして XCodeVault を選択します。"
+            "value" : "リストの末尾までスクロールし（XCodeVault はアルファベット順で下の方にあります）、スイッチをオンにしてください。表示されない場合は、+ をクリックして XCodeVault を選択します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O XCodeVault agora está na lista — ative a chave dele. Se ele não estiver lá, clique em + e escolha o XCodeVault."
+            "value" : "Role até o fim da lista — o XCodeVault aparece em ordem alfabética, perto do final — e ative a chave dele. Se ele não estiver lá, clique em + e escolha o XCodeVault."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "XCodeVault 现已在列表中 — 请打开它的开关。如果没有，请点按 + 并选择 XCodeVault。"
+            "value" : "滚动到列表末尾（XCodeVault 按字母顺序排在靠下的位置），然后打开它的开关。如果没有，请点按 + 并选择 XCodeVault。"
           }
         }
       }
@@ -385,6 +385,108 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "app.access.guide.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "OK"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "完了"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "OK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "完成"
+          }
+        }
+      }
+    },
+    "app.access.guide.drag" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If XCodeVault isn’t in the list, drag this icon into it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Si XCodeVault no está en la lista, arrastra este icono a ella."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault がリストにない場合は、このアイコンをリストにドラッグします。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Se o XCodeVault não estiver na lista, arraste este ícone para ela."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "如果 XCodeVault 不在列表中，请将此图标拖入列表。"
+          }
+        }
+      }
+    },
+    "app.access.guide.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Full Disk Access"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permitir el acceso total al disco"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "フルディスクアクセスを許可"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permitir Acesso Total ao Disco"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "允许完全磁盘访问"
           }
         }
       }
@@ -1351,6 +1453,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "你可以在“历史记录”中查看此次删除。"
+          }
+        }
+      }
+    },
+    "app.clean.confirm.nonRegenerable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some of these can’t be recreated."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Algunos de estos no se pueden volver a crear."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "一部は作り直せません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Alguns destes não podem ser recriados."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "其中一些无法重新创建。"
           }
         }
       }
@@ -3323,6 +3459,108 @@
         }
       }
     },
+    "app.error.helper.unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This build can’t reach the privileged helper: it isn’t signed by a usable Apple team, or the helper isn’t in it. That needs a signed build that includes the helper."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta compilación no puede comunicarse con el asistente privilegiado: no está firmada por un equipo de Apple válido o no incluye el asistente. Hace falta una compilación firmada que lo incluya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このビルドは特権ヘルパーに接続できません。使用可能な Apple チームで署名されていないか、ヘルパーが含まれていません。ヘルパーを含む署名済みビルドが必要です。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: ela não é assinada por uma equipe Apple utilizável ou não inclui o auxiliar. É preciso uma versão assinada que inclua o auxiliar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此版本无法连接特权助手：它未由可用的 Apple 团队签名，或未包含助手。需要一个包含助手的已签名版本。"
+          }
+        }
+      }
+    },
+    "app.error.relaunch.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something is running. Relaunch XCodeVault when it finishes; nothing was opened or quit."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Hay algo en ejecución. Vuelve a abrir XCodeVault cuando termine; no se abrió ni se cerró nada."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "処理を実行中です。完了してから XCodeVault を再起動してください。何も開いたり終了したりしていません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Algo está em execução. Reabra o XCodeVault quando terminar; nada foi aberto nem encerrado."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "有操作正在运行。请在完成后重新启动 XCodeVault；没有打开或退出任何内容。"
+          }
+        }
+      }
+    },
+    "app.error.relaunch.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault can’t relaunch now"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault no puede volver a abrirse ahora"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault は今は再起動できません"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault não pode reabrir agora"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 现在无法重新启动"
+          }
+        }
+      }
+    },
     "app.error.uninstall.title" : {
       "localizations" : {
         "en" : {
@@ -5175,6 +5413,40 @@
         }
       }
     },
+    "app.marker.needsRootWithFullDiskAccess" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Root with Full Disk Access"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Root con acceso total al disco"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "フルディスクアクセス付きの root"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Root com Acesso Total ao Disco"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "具有完全磁盘访问权限的 root"
+          }
+        }
+      }
+    },
     "app.overview.bar.a11y" : {
       "localizations" : {
         "en" : {
@@ -5670,31 +5942,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Options marked Experimental haven’t been verified on your versions of macOS and Xcode. XCodeVault never deletes data that can’t be recreated without asking you first."
+            "value" : "Options marked Experimental haven’t been verified on your versions of macOS and Xcode. XCodeVault never deletes non-regenerable data automatically."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Las opciones marcadas como experimentales no se han verificado en tus versiones de macOS y Xcode. XCodeVault nunca elimina datos que no se pueden volver a crear sin preguntarte antes."
+            "value" : "Las opciones marcadas como experimentales no se han verificado en tus versiones de macOS y Xcode. XCodeVault nunca elimina automáticamente datos que no se pueden regenerar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "「実験的」と表示されたオプションは、お使いの macOS と Xcode のバージョンでは検証されていません。XCodeVault は、作り直せないデータを確認なしに削除することはありません。"
+            "value" : "「実験的」と表示されたオプションは、お使いの macOS と Xcode のバージョンでは検証されていません。XCodeVault は再生成できないデータを自動的に削除することはありません。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "As opções marcadas como Experimental não foram verificadas nas suas versões do macOS e do Xcode. O XCodeVault nunca apaga dados que não podem ser recriados sem perguntar antes."
+            "value" : "As opções marcadas como Experimental não foram verificadas nas suas versões do macOS e do Xcode. O XCodeVault nunca apaga automaticamente dados que não podem ser regenerados."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "标为“实验性”的选项尚未在你的 macOS 和 Xcode 版本上验证。对于无法重新创建的数据，XCodeVault 在删除前一定会先询问你。"
+            "value" : "标为“实验性”的选项尚未在你的 macOS 和 Xcode 版本上验证。XCodeVault 绝不会自动删除无法重新生成的数据。"
           }
         }
       }
@@ -6685,6 +6957,40 @@
         }
       }
     },
+    "app.quit.keepRunningOnly.clean" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XCodeVault is deleting or moving items to the Trash. Stopping part-way hasn’t been tested, so it can’t quit until this finishes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault está eliminando elementos o trasladándolos a la papelera. No se ha probado detenerlo a medias, así que no puede salir hasta que termine."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault は項目を削除またはゴミ箱に移動しています。途中で止めることはテストされていないため、完了するまで終了できません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O XCodeVault está apagando itens ou movendo-os para o Lixo. Interromper no meio não foi testado, então ele só pode encerrar quando isso terminar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "XCodeVault 正在删除项目或将其移到废纸篓。中途停止尚未经过测试，因此需要等它完成后才能退出。"
+          }
+        }
+      }
+    },
     "app.quit.keepRunningOnly.export" : {
       "localizations" : {
         "en" : {
@@ -6885,6 +7191,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "有操作正在运行"
+          }
+        }
+      }
+    },
+    "app.requirement.helperWithFullDiskAccess.why" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This path belongs to root, inside a folder root can read only with Full Disk Access. Whether the helper has that access isn’t known until it first runs."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta ruta pertenece a root, dentro de una carpeta que root solo puede leer con acceso total al disco. No se sabrá si el asistente tiene ese acceso hasta que se ejecute por primera vez."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このパスは root が所有し、root がフルディスクアクセスでしか読めないフォルダの中にあります。ヘルパーにそのアクセス権があるかは、初めて実行するまでわかりません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Este caminho pertence ao root, dentro de uma pasta que o root só lê com Acesso Total ao Disco. Só se sabe se o auxiliar tem esse acesso quando ele rodar pela primeira vez."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此路径属于 root，位于 root 只有在具有完全磁盘访问权限时才能读取的文件夹中。助手是否具有该权限，要到它首次运行时才能知道。"
           }
         }
       }
@@ -15334,31 +15674,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This process can open a file only Full Disk Access opens; nothing is read from it."
+            "value" : "This process can open the one file only Full Disk Access opens (H15's indicator; nothing is read from it)."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este proceso puede abrir un archivo que solo abre el acceso total al disco; no se lee nada de él."
+            "value" : "Este proceso puede abrir el único archivo que solo abre el Acceso total al disco (el indicador de H15; no se lee nada de él)."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このプロセスは、フルディスクアクセスでのみ開けるファイルを開けます。内容は読み取りません。"
+            "value" : "このプロセスは、フルディスクアクセスでしか開けないファイルを開けます（H15 の指標。内容は読み取りません）。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este processo consegue abrir um arquivo que só o Acesso Total ao Disco abre; nada é lido dele."
+            "value" : "Este processo consegue abrir o único arquivo que só o Acesso Total ao Disco abre (o indicador do H15; nada é lido dele)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此进程可以打开只有“完全磁盘访问权限”才能打开的文件；不会读取其内容。"
+            "value" : "此进程可以打开只有完全磁盘访问权限才能打开的那个文件（H15 的指示文件；不会读取其中任何内容）。"
           }
         }
       }
@@ -15844,31 +16184,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This build can’t reach the privileged helper: it isn’t signed by a usable Apple team, or the helper isn’t in it. That needs a signed build that includes the helper."
+            "value" : "This build cannot reach the privileged helper: it is not signed by a usable Apple team, or the helper is not in it. That takes a signed build that includes the helper (issue #30)."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta compilación no puede comunicarse con el asistente privilegiado: no está firmada por un equipo de Apple válido o no incluye el asistente. Hace falta una compilación firmada que lo incluya."
+            "value" : "Esta compilación no puede acceder al asistente privilegiado: no está firmada por un equipo de Apple utilizable, o el asistente no está incluido. Hace falta una compilación firmada que incluya el asistente (issue #30)."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このビルドは特権ヘルパーに接続できません。使用可能な Apple チームで署名されていないか、ヘルパーが含まれていません。ヘルパーを含む署名済みビルドが必要です。"
+            "value" : "このビルドからは特権ヘルパーを利用できません。使用可能な Apple チームの署名がないか、ヘルパーが含まれていません。ヘルパーを含む署名済みビルドが必要です（issue #30）。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: ela não é assinada por uma equipe Apple utilizável ou não inclui o auxiliar. É preciso uma versão assinada que inclua o auxiliar."
+            "value" : "Esta versão não consegue acessar o auxiliar privilegiado: não está assinada por uma equipe Apple utilizável, ou o auxiliar não está nela. É preciso uma versão assinada que inclua o auxiliar (issue #30)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此版本无法连接特权助手：它未由可用的 Apple 团队签名，或未包含助手。需要一个包含助手的已签名版本。"
+            "value" : "此版本无法使用特权助手：它没有由可用的 Apple 团队签名，或者未包含该助手。需要包含助手的已签名版本（issue #30）。"
           }
         }
       }
@@ -16014,31 +16354,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "root with Full Disk Access — privileged helper"
+            "value" : "root with Full Disk Access — privileged helper; its Full Disk Access is unmeasured"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "root con acceso total al disco: asistente privilegiado"
+            "value" : "root con Acceso total al disco — asistente privilegiado; su Acceso total al disco no se ha medido"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "フルディスクアクセス付きの root — 特権ヘルパー"
+            "value" : "フルディスクアクセス付きの root — 特権ヘルパー。ヘルパーのフルディスクアクセスは未計測"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "root com Acesso Total ao Disco — auxiliar privilegiado"
+            "value" : "root com Acesso Total ao Disco — auxiliar privilegiado; o Acesso Total ao Disco dele não foi medido"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "具有完全磁盘访问权限的 root — 特权助手"
+            "value" : "带完全磁盘访问权限的 root — 特权助手；其完全磁盘访问权限尚未测定"
           }
         }
       }
@@ -16048,31 +16388,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This path belongs to root, inside a folder root can read only with Full Disk Access. Whether the helper has that access isn’t known until it first runs."
+            "value" : "This path belongs to root inside a folder where root was refused without Full Disk Access (H15); whether the helper has that access is unmeasured until its first live run (#30)."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Esta ruta pertenece a root, dentro de una carpeta que root solo puede leer con acceso total al disco. No se sabrá si el asistente tiene ese acceso hasta que se ejecute por primera vez."
+            "value" : "Esta ruta pertenece a root, dentro de una carpeta donde se rechazó a root sin Acceso total al disco (H15); si el asistente tiene ese acceso no se habrá medido hasta su primera ejecución real (#30)."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "このパスは root が所有し、root がフルディスクアクセスでしか読めないフォルダの中にあります。ヘルパーにそのアクセス権があるかは、初めて実行するまでわかりません。"
+            "value" : "このパスは、フルディスクアクセスなしでは root でも拒否されたフォルダ内にある root 所有のパスです（H15）。ヘルパーにそのアクセスがあるかは、最初の実運用まで未計測です（#30）。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Este caminho pertence ao root, dentro de uma pasta que o root só lê com Acesso Total ao Disco. Só se sabe se o auxiliar tem esse acesso quando ele rodar pela primeira vez."
+            "value" : "Este caminho pertence ao root, dentro de uma pasta onde o root foi recusado sem Acesso Total ao Disco (H15); se o auxiliar tem esse acesso não foi medido até a sua primeira execução real (#30)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "此路径属于 root，位于 root 只有在具有完全磁盘访问权限时才能读取的文件夹中。助手是否具有该权限，要到它首次运行时才能知道。"
+            "value" : "此路径归 root 所有，位于一个在没有完全磁盘访问权限时连 root 也被拒绝的文件夹中（H15）；助手是否拥有该权限，在其首次实际运行之前尚未测定（#30）。"
           }
         }
       }
