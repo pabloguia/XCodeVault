@@ -188,21 +188,20 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         XCTAssertFalse(list.groups.isEmpty)
         let root = plan.actions.filter { $0.privilegedAction != nil }.count
         XCTAssertEqual(root, 1, "the sample's dyld cache row")
-        let notes = DeleteNotes.make(plan: plan, list: list, hasAccessRow: true)
-        XCTAssertEqual(notes.count, 1 + 2 + root + list.otherTools.count + 3)
+        let notes = DeleteNotes.make(plan: plan, list: list)
+        XCTAssertEqual(notes.count, 2 + root + list.otherTools.count + 3, "the access row is not a note: it stays above the table")
         XCTAssertFalse(notes.startsExpanded)
-        XCTAssertEqual(DeleteNotes.make(plan: plan, list: list, hasAccessRow: false).count, notes.count - 1)
     }
 
     func testTheNotesStartOpenWhenTheTableIsEmptyAndAreAbsentWhenThereAreNone() {
         let survey = sampleSurvey()
         let empty = CleanPlan(actions: [], skipped: [], warnings: [])
         let list = DeleteList.make(plan: empty, report: survey.0)
-        let none = DeleteNotes.make(plan: empty, list: list, hasAccessRow: false)
+        let none = DeleteNotes.make(plan: empty, list: list)
         XCTAssertTrue(none.isEmpty)
         XCTAssertFalse(none.startsExpanded, "no panel at all")
         let warned = CleanPlan(actions: [], skipped: [], warnings: ["w"])
-        let open = DeleteNotes.make(plan: warned, list: DeleteList.make(plan: warned, report: survey.0), hasAccessRow: false)
+        let open = DeleteNotes.make(plan: warned, list: DeleteList.make(plan: warned, report: survey.0))
         XCTAssertEqual(open.count, 1)
         XCTAssertTrue(open.startsExpanded)
     }
@@ -221,6 +220,6 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         XCTAssertNil(model.deleteNotes, "nothing before the first scan")
         await model.refresh()
         let plan = try XCTUnwrap(model.cleanPlan), list = try XCTUnwrap(model.deleteList)
-        XCTAssertEqual(model.deleteNotes, DeleteNotes.make(plan: plan, list: list, hasAccessRow: model.deleteAccessRow != nil))
+        XCTAssertEqual(model.deleteNotes, DeleteNotes.make(plan: plan, list: list))
     }
 }

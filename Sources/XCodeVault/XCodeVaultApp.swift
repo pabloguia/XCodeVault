@@ -231,7 +231,7 @@ final class AppModel {
     /// The Delete screen's notes panel (`DeleteNotes.make`); nil until there is a plan and a list.
     var deleteNotes: DeleteNotes? {
         guard let plan = cleanPlan, let list = deleteList else { return nil }
-        return DeleteNotes.make(plan: plan, list: list, hasAccessRow: deleteAccessRow != nil)
+        return DeleteNotes.make(plan: plan, list: list)
     }
 
     /// The Overview's one access banner: the first `AccessChecklist` row that holds back something the scan measured

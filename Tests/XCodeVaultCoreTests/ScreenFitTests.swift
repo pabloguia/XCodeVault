@@ -84,6 +84,21 @@ final class ScreenFitTests: XCTestCase {
         try await assertEveryScreenFits(survey, "notes only")
     }
 
+    /// Delete with the helper's access row showing above the table (spec §6.3: never folded away) still fits, in en and ja.
+    func testDeleteFitsWithTheAccessRowShowing() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let t = TempDir()
+            let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, fullDiskAccess: .notGranted, survey: screenFitStressSurvey())
+            await model.refresh()
+            XCTAssertNotNil(model.deleteAccessRow, "the stress fixture shows the access row")
+            model.section = .delete
+            let height = minimumHeight(MainView(model: model).detail(try XCTUnwrap(model.report)))
+            print("SCREENFIT delete-with-access-row \(language): \(height)")
+            XCTAssertLessThanOrEqual(height, Self.ceiling, "\(language): Delete with the access row, minimum height \(height)")
+        }
+    }
+
     /// Control: the measurement does catch a screen with a rigid floor, as Delete's `Table.frame(minHeight: 200)` was.
     func testTheMeasureCatchesARigidMinimum() {
         XCTAssertGreaterThan(minimumHeight(Color.clear.frame(minHeight: 451)), Self.ceiling)

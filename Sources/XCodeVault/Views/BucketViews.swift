@@ -181,6 +181,11 @@ struct DeleteView: View {
         if let plan = model.cleanPlan, let list = model.deleteList {
             VStack(alignment: .leading, spacing: 10) {
                 BucketHeaderView(bucket: .deleteAndRegenerate).padding([.horizontal, .top])
+                // Asked for where it matters (spec §6.3), and so never folded away: the helper's row, when a listed row needs
+                // root and the helper is not enabled (`AppModel.deleteAccessRow`, from `AccessChecklist.deleteRow`).
+                if let access = model.deleteAccessRow {
+                    GroupBox { AccessRowView(row: access) { model.handle($0) } }.padding(.horizontal)
+                }
                 // No floor for the table (R1): a rigid minimum made the screen taller than the window, which pushed the split
                 // view's sidebar off the top and left the table undrawn. The table takes whatever the notes and footer leave.
                 table(list)
@@ -241,9 +246,8 @@ struct DeleteView: View {
         }
     }
 
-    /// Everything below the table, in one panel folded by default (R1): the helper's access row (asked for where it matters,
-    /// spec §6.3 — `AppModel.deleteAccessRow`), the planner's warnings, the root rows, the rows another tool deletes and the
-    /// skipped lines. Open, it scrolls inside a bounded height, so it can never push the footer out of the window.
+    /// Everything below the table, in one panel folded by default (R1): the planner's warnings, the root rows, the rows
+    /// another tool deletes and the skipped lines. The access row is not here: it stays above the table. Open, it scrolls inside a bounded height, so it can never push the footer out of the window.
     private func notesPanel(_ plan: CleanPlan, _ list: DeleteList, _ notes: DeleteNotes) -> some View {
         let expanded = notesExpanded ?? notes.startsExpanded
         return VStack(alignment: .leading, spacing: 6) {
@@ -262,9 +266,6 @@ struct DeleteView: View {
     private func notesContent(_ plan: CleanPlan, _ list: DeleteList) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                if let access = model.deleteAccessRow {
-                    GroupBox { AccessRowView(row: access) { model.handle($0) } }
-                }
                 ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
                 privileged(plan)
                 otherTools(list)

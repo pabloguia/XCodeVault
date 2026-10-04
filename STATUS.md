@@ -3165,9 +3165,9 @@ earlier snapshot tests would have failed it. Follow-ups are in "Blocked / pendin
 Brief `.superpowers/sdd/r1/brief.md`, branch `fix/r1-layout-navigation`. The user's "the sidebar gets lost" and the
 undrawn Delete table had one cause, measured: Delete asked for 451 pt minimum (a `Table.frame(minHeight: 200)` plus the
 blocks around it) and Simulators for 410 pt (two tables with `minHeight: 140`), so with real data the split view grew
-taller than the window and was centered off the top. Delete's table now takes the remaining height and everything below
-it sits in one notes panel folded by default (`DeleteNotes`); Simulators is one scrolling page whose tables are as tall
-as their rows (`SimulatorsTable.fittedTableHeight`). Minimums now: Delete 182 pt (188 with the panel open), every other
+taller than the window and was centered off the top. Delete's table now takes the remaining height; the helper's access row
+stays above it and everything else sits below in one notes panel folded by default (`DeleteNotes`); Simulators is one scrolling page whose tables are as tall
+as their rows (`SimulatorsTable.fittedTableHeight`). Minimums now: Delete 182 pt (188 with the panel open, 274 with the access row), every other
 screen 1 pt; `ScreenFitTests` holds every screen to 300 pt in en and ja over the sample and a stress fixture, without a
 window. **Back** (⌘[): `NavigationHistory` in Core, recorded by every section change in `AppModel`. **Drives**:
 `DrivesList` groups the boot System and Data volumes on one APFS container into one row, shows a mounted vault as a

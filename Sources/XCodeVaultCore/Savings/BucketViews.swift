@@ -179,19 +179,20 @@ public enum InlineCode {
     }
 }
 
-/// The Delete screen's one notes panel below the table (R1): the helper's access row, the planner's warnings, the root
-/// rows the helper acts on, the rows another tool deletes, and what the planner skipped. Folded by default so the table
+/// The Delete screen's one notes panel below the table (R1): the planner's warnings, the root rows the helper acts on, the
+/// rows another tool deletes, and what the planner skipped. The helper's access row is not a note: it stays above the
+/// table, where access is asked for (spec §6.3). Folded by default so the table
 /// keeps the window's height; open from the start only when the table is empty, when the notes are all there is.
 public struct DeleteNotes: Sendable, Equatable {
-    /// How many notes the panel holds: one per warning, root row, other-tool row and skipped line, plus the access row.
+    /// How many notes the panel holds: one per warning, root row, other-tool row and skipped line.
     public let count: Int
     public let startsExpanded: Bool
     /// Nothing to note: the screen shows no panel.
     public var isEmpty: Bool { count == 0 }
 
-    public static func make(plan: CleanPlan, list: DeleteList, hasAccessRow: Bool) -> DeleteNotes {
+    public static func make(plan: CleanPlan, list: DeleteList) -> DeleteNotes {
         let root = plan.actions.filter { $0.privilegedAction != nil }.count
-        let count = (hasAccessRow ? 1 : 0) + plan.warnings.count + root + list.otherTools.count + plan.skipped.count
+        let count = plan.warnings.count + root + list.otherTools.count + plan.skipped.count
         return DeleteNotes(count: count, startsExpanded: count > 0 && list.groups.isEmpty)
     }
 }
