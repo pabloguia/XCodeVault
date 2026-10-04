@@ -837,6 +837,48 @@ extension L10nCatalog {
                 "ja": "空き容量を増やす",
                 "zh-Hans": "释放空间",
             ],
+            "app.simulators.chart.caption": [
+                "en": "Click a bar to select its row in the table below.",
+                "pt-BR": "Clique numa barra para selecionar a linha dela na tabela abaixo.",
+                "es": "Haz clic en una barra para seleccionar su fila en la tabla de abajo.",
+                "ja": "バーをクリックすると、下の表の該当する行を選択します。",
+                "zh-Hans": "点按一个条形即可在下方表格中选择其行。",
+            ],
+            "app.simulators.chart.kind": [
+                "en": "Kind",
+                "pt-BR": "Tipo",
+                "es": "Tipo",
+                "ja": "種類",
+                "zh-Hans": "类型",
+            ],
+            "app.simulators.chart.kind.device": [
+                "en": "Device",
+                "pt-BR": "Dispositivo",
+                "es": "Dispositivo",
+                "ja": "デバイス",
+                "zh-Hans": "设备",
+            ],
+            "app.simulators.chart.kind.runtime": [
+                "en": "Runtime",
+                "pt-BR": "Runtime",
+                "es": "Runtime",
+                "ja": "ランタイム",
+                "zh-Hans": "运行时",
+            ],
+            "app.simulators.chart.none": [
+                "en": "Nothing measured to chart.",
+                "pt-BR": "Nada medido para o gráfico.",
+                "es": "No hay nada medido para el gráfico.",
+                "ja": "グラフにする測定結果はありません。",
+                "zh-Hans": "没有可绘制的测量结果。",
+            ],
+            "app.simulators.chart.title": [
+                "en": "Size of each runtime and device",
+                "pt-BR": "Tamanho de cada runtime e dispositivo",
+                "es": "Tamaño de cada runtime y dispositivo",
+                "ja": "各ランタイムとデバイスのサイズ",
+                "zh-Hans": "每个运行时和设备的大小",
+            ],
             "app.simulators.devices.caption": [
                 "en": "Each device\'s data folder, as simctl reports it. Delete measures the whole Devices folder, so its total can differ.",
                 "pt-BR": "A pasta de dados de cada dispositivo, como o simctl a informa. Apagar mede a pasta Devices inteira, então o total lá pode ser diferente.",
@@ -878,6 +920,41 @@ extension L10nCatalog {
                 "es": "Runtimes: %@",
                 "ja": "ランタイム：%@",
                 "zh-Hans": "运行时：%@",
+            ],
+            "app.storage.chart.caption": [
+                "en": "Each item counted once. Click a bar to show only its rows.",
+                "pt-BR": "Cada item é contado uma vez. Clique numa barra para ver só as linhas dela.",
+                "es": "Cada elemento se cuenta una vez. Haz clic en una barra para ver solo sus filas.",
+                "ja": "各項目は一度だけ数えます。バーをクリックすると、その行だけを表示します。",
+                "zh-Hans": "每个项目只计算一次。点按一个条形即可只显示其行。",
+            ],
+            "app.storage.chart.title": [
+                "en": "Size by bucket",
+                "pt-BR": "Tamanho por grupo",
+                "es": "Tamaño por grupo",
+                "ja": "グループ別のサイズ",
+                "zh-Hans": "按分组的大小",
+            ],
+            "app.storage.filter.active": [
+                "en": "Showing: %@",
+                "pt-BR": "Mostrando: %@",
+                "es": "Mostrando: %@",
+                "ja": "表示中: %@",
+                "zh-Hans": "正在显示：%@",
+            ],
+            "app.storage.filter.all": [
+                "en": "All",
+                "pt-BR": "Tudo",
+                "es": "Todo",
+                "ja": "すべて",
+                "zh-Hans": "全部",
+            ],
+            "app.storage.filter.clear": [
+                "en": "Show every bucket",
+                "pt-BR": "Mostrar todos os grupos",
+                "es": "Mostrar todos los grupos",
+                "ja": "すべてのグループを表示",
+                "zh-Hans": "显示所有分组",
             ],
             "app.storage.mountPoint": [
                 "en": "[mount point]",
@@ -962,6 +1039,20 @@ extension L10nCatalog {
                 "es": "VERIFICADO",
                 "ja": "確認済み",
                 "zh-Hans": "已验证",
+            ],
+            "app.volumes.bar.a11y": [
+                "en": "Space on %@",
+                "pt-BR": "Espaço em %@",
+                "es": "Espacio en %@",
+                "ja": "%@ の容量",
+                "zh-Hans": "%@ 上的空间",
+            ],
+            "app.volumes.bar.vault": [
+                "en": "A vault: the bar shows the developer data the scan found on this drive, against other data. XCodeVault’s records keep no sizes.",
+                "pt-BR": "Um cofre: a barra mostra os dados de desenvolvimento que a varredura encontrou neste disco, contra os outros dados. Os registros do XCodeVault não guardam tamanhos.",
+                "es": "Una bóveda: la barra muestra los datos de desarrollo que el análisis encontró en esta unidad, frente a otros datos. Los registros de XCodeVault no guardan tamaños.",
+                "ja": "保管庫: バーには、スキャンがこのドライブで見つけた開発データとその他のデータを示します。XCodeVault の記録にはサイズは保存されません。",
+                "zh-Hans": "保险库：条形显示扫描在此驱动器上找到的开发数据与其他数据。XCodeVault 的记录不保存大小。",
             ],
             "app.volumes.bootGroup": [
                 "en": "Internal disk (boot)",
@@ -2039,6 +2130,26 @@ extension L10nCatalog {
                 ],
                 "zh-Hans": [
                     "other": "诊断：%lld 个问题需要处理",
+                ],
+            ],
+            "app.simulators.chart.unmeasured": [
+                "en": [
+                    "one": "%lld runtime or device not measured: in the tables, not in the chart.",
+                    "other": "%lld runtimes or devices not measured: in the tables, not in the chart.",
+                ],
+                "pt-BR": [
+                    "one": "%lld runtime ou dispositivo não medido: nas tabelas, não no gráfico.",
+                    "other": "%lld runtimes ou dispositivos não medidos: nas tabelas, não no gráfico.",
+                ],
+                "es": [
+                    "one": "%lld runtime o dispositivo sin medir: en las tablas, no en el gráfico.",
+                    "other": "%lld runtimes o dispositivos sin medir: en las tablas, no en el gráfico.",
+                ],
+                "ja": [
+                    "other": "測定されていないランタイムまたはデバイス %lld 件: 表には載り、グラフには含まれません。",
+                ],
+                "zh-Hans": [
+                    "other": "%lld 个运行时或设备未测量：列在表格中，不在图表中。",
                 ],
             ],
             "app.volumes.warnings.count": [

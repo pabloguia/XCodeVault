@@ -165,9 +165,9 @@ struct MainView: View {
         case .delete: DeleteView(model: model)
         case .park: PlanView(bucket: .parkExternally, rows: model.rows(for: .parkExternally), vault: model.vaultStatus) { model.copyCommand($0) }
         case .runExternally: PlanView(bucket: .runFromExternal, rows: model.rows(for: .runFromExternal), vault: nil) { model.copyCommand($0) }
-        case .storage: StorageView(report: r)
-        case .simulators: SimulatorsView(report: r)
-        case .drives: DrivesView(list: model.drivesList(r))
+        case .storage: StorageView(model: model, report: r)
+        case .simulators: SimulatorsView(model: model, report: r)
+        case .drives: DrivesView(list: model.drivesList(r)) { model.driveBar($0, report: r) }
         case .health: HealthView(model: model)
         case .history: HistoryView(entries: model.journal)
         case .access: AccessView(model: model)

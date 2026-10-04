@@ -17,6 +17,9 @@ public struct StorageRow: Sendable, Equatable, Identifiable {
     public let isExperimental: Bool
     /// Nil only when the catalog does not know the category: a row is never put in a bucket by guess.
     public let bucket: SavingsBucket?
+    /// The row's bytes count once in its bucket's total (R2's chart): not a symlink, and of a known category that is not
+    /// a breakdown of another row's (`StorageCategory.isBreakdownOf`), whose bytes are already in that row.
+    public let countsInBucketTotal: Bool
 
     public var id: String { item.id }
 }
@@ -30,7 +33,8 @@ public enum StorageTable {
                 let category = report.category(for: item)
                 return StorageRow(
                     item: item, categoryName: category?.name ?? item.categoryID, outcome: category?.outcomeLabel ?? "",
-                    strategy: category?.recommendedStrategy, isExperimental: category?.isExperimental ?? false, bucket: category?.primaryBucket)
+                    strategy: category?.recommendedStrategy, isExperimental: category?.isExperimental ?? false, bucket: category?.primaryBucket,
+                    countsInBucketTotal: !item.isSymlink && category != nil && category?.isBreakdownOf == nil)
             }
     }
 }

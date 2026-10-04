@@ -3182,3 +3182,24 @@ container keeps its own rows. **Known limitation:** `Volume` does not carry the 
 its Data sibling are tied by those mount points, not by the group itself. Also: the Delete notes label names its
 warnings, the table gets layout priority over the notes, duplicate registry entries are shown rather than dropped, and
 the not-mounted vaults' symbol follows their state.
+
+## 2026-10-04 — R2: charts and sortable, filterable tables (Storage, Simulators, Drives)
+
+Brief `.superpowers/sdd/r2/brief.md`, branch `feat/r2-charts` (stacked on R1). **Storage**: a Swift Charts bar per bucket
+with rows (bucket color as fill, symbol + title on the axis, size at the bar's end), 150 pt high; a click on a bar filters
+the table (`StorageTable.filter(after:clicked:)`, `AppModel.storageBucketFilter`), a chip with × and **All** clear it; every
+column sorts through Core comparators (`StorageTable.Column`, default size descending, ties by path). Bars sum only the
+rows that `countsInBucketTotal` (no symlinks, no breakdowns). The click is read with a `chartOverlay` tap and
+`ChartProxy.value(atY:)`, not `chartYSelection`, whose value resets when the gesture ends. **Simulators**: horizontal bars
+per measured runtime and device (`SimulatorsChart.bars`), colored and marked by kind, unmeasured counted under the chart;
+a click selects the row (`SimulatorSelection`, in the model) and scrolls the page to it (`SimulatorsChart.rowAnchor`);
+both tables sort. The chart is as tall as its bars inside the page's ScrollView. **Drives**: `DiskBar` gained a general
+`init(totalBytes:freeBytes:bucketBytes:)` (the Overview's init now calls it) and `DiskBar.drive(_:report:)`; each measured
+drive row draws `DiskBarView` with its legend. `Volume.totalBytes` already existed and is Codable, so the scan was not
+changed. `ScreenFitTests` passes unchanged. 15 new keys, drafts `needs_review`.
+
+**Follow-up (vault contents):** the vault's bar shows only what the scan found on that volume (items whose mount point is
+the vault's). The registry records no sizes of what XCodeVault placed there, so the bar cannot show "vault contents" as
+such without measuring the vault directory, which this change does not do; the row says so in a caption.
+**Needs a real window:** the click-to-filter and click-to-select gestures (no test can click), the scroll to a selected row,
+and the tables' sort headers — off-screen drawing leaves `Table`/`List` rows blank.
