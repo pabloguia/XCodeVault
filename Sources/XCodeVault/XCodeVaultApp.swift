@@ -669,7 +669,9 @@ final class AppModel {
     func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
-        guard let plan = cleanPlan else { return }
+        // One clean at a time: a second one finishing first would clear `isCleaning` while this one still deletes, and the
+        // quit guard and Relaunch would open in the middle of a clean (R5 re-review NEW-1).
+        guard !isCleaning, let plan = cleanPlan else { return }
         feedback = nil
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
         let clean = environment.clean
@@ -694,7 +696,7 @@ final class AppModel {
     /// Selected…** would delete any of them (`DeleteList.deletable`), nil when it would delete none and no confirmation
     /// opens. The confirmation's count is still `deletable(selected:)` of the selection this returns.
     func deletionToConfirm(_ paths: Set<String>) -> Set<String>? {
-        guard let list = deleteList, !list.deletable(selected: paths).isEmpty else { return nil }
+        guard !isCleaning, let list = deleteList, !list.deletable(selected: paths).isEmpty else { return nil }
         return paths
     }
 

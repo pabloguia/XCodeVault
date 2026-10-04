@@ -464,7 +464,7 @@ struct DeleteView: View {
             // A destructive verb with ⌘⌫ (HIG review D1); it only opens the confirmation.
             Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) { confirm = true }
                 .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(chosen.isEmpty)
+                .disabled(chosen.isEmpty || model.isCleaning)
         }
         .padding()
     }

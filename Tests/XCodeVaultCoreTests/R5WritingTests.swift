@@ -168,6 +168,11 @@ final class R5RelaunchAppTests: XCTestCase {
         XCTAssertFalse(model.relaunchRequested)
         XCTAssertFalse(log.events.contains("terminate") || log.events.contains("launch"), "\(log.events)")
         XCTAssertEqual(model.lastError?.title, L10n.tr("app.error.relaunch.title"), "it says why")
+        // R5 re-review NEW-1: no second clean can start, or be confirmed, while one runs, so none can clear the guard early.
+        XCTAssertNil(model.deletionToConfirm([action.path]), "nothing to confirm while a clean runs")
+        await model.applyClean(actions: [action], useTrash: true)
+        XCTAssertTrue(model.isCleaning, "the refused second clean did not reset the flag")
+        XCTAssertEqual(model.quitChoice, .keepRunningOnly(.clean))
         gate.signal()
         await cleaning.value
         XCTAssertFalse(model.isCleaning)
