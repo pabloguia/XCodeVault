@@ -265,7 +265,7 @@ Sidebar, two groups:
 
 ## 7. S5 — Visual identity
 
-- Concept: a rounded-square vault door seen front-on, its dial's notches forming an outward arrow —
+- Concept: a rounded-square vault door seen front-on, its dial's handle leaving the door as an outward arrow —
   "storage, safely moved out". No hammer, no Xcode or Apple marks (trademark).
 - Palette: deep indigo `#2B2D6E` (primary), teal `#1FB5A8` (accent), plus bucket colors used
   everywhere a bucket appears, in both the GUI and colored CLI output (respecting `NO_COLOR` and

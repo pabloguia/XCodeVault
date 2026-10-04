@@ -1,3 +1,5 @@
+<img src="docs/brand/logo-256.png" width="128" alt="XCodeVault">
+
 # XCodeVault
 
 XCodeVault shows what Xcode, the Simulator and their tools keep on your Mac's internal disk, and

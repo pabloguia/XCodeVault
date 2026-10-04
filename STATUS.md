@@ -46,7 +46,7 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 - **Savings visibility, i18n and identity** — spec `docs/superpowers/specs/2026-10-03-savings-visibility-i18n-identity-design.md`.
   S1 (savings model in Core), S2 (localization) and S3 (CLI: savings-first `scan`/`status`, `plan`,
   `--lang`, grouped help) done — non-English strings need native review (docs/process/LOCALIZATION.md);
-  S4 (GUI) and S5 (identity) pending, in that order. In the translated help, ArgumentParser's own
+  S4 (GUI) pending; S5 (identity: logo, app icon, bucket tokens, CLI colors, `docs/brand/BRAND.md`) done. In the translated help, ArgumentParser's own
   headers (OVERVIEW, USAGE, OPTIONS, SUBCOMMANDS, and "<GROUP> SUBCOMMANDS") stay English — the library
   prints them and offers no hook — and Japanese help wraps only at spaces, so a long Japanese abstract runs
   past the column width instead of breaking mid-phrase.
