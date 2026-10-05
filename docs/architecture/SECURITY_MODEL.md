@@ -107,8 +107,10 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
 - **One process execution.** `posix_spawn` in `HelperCore/HelperDiskutil.swift` only, named once, on the constant
   `/usr/sbin/diskutil`; no `posix_spawnp`, no shell, no other absolute path, none of the routes around those rules
   (`dlsym`, `fork`, `@_silgen_name`, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, the API bound to a value). The argv comes
-  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership <UUID>`), the UUID the helper's own
-  parse, re-serialized; the lines that build it are pinned by the script. Environment: one PATH entry. stdin/stderr
+  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership <diskNsM>`): the UUID the helper's
+  own parse, re-serialized; the disk identifier the bare `f_mntfromname` of the mount the helper holds open, validated
+  by `DiskIdentifier` (anchored, on bytes) and re-verified immediately before the spawn. The lines that build it, the
+  environment and the identifier's one assignment are pinned by the script. Environment: one PATH entry. stdin/stderr
   `/dev/null`, every other descriptor closed in the child, an empty signal mask and default dispositions, every setup
   call checked, output capped, a deadline after which the child is killed and reaped without blocking past it.
 - **One right check, never on the helper's own reference.** `AuthorizationCopyRights` in
@@ -123,11 +125,15 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
   a writer other than `com.xcodevault.helper` — is rewritten and that call refused.
 - **The client sends the credential only to a validated helper**: `version()` first on the same connection (replies are
   checked against the helper's requirement), then the password, then the verb.
+- **A tripwire, not the control.** `helper-invariants.sh` and its mutation tests catch every route the reviews found,
+  but a source lint cannot prove the absence of every encoding of a forbidden call; the mandatory helper-security
+  review is the control.
 - **The volume is the helper's to resolve.** Mount table + `getattrlist`, then the mount point opened
   `O_RDONLY|O_DIRECTORY|O_NOFOLLOW` and held; `fstatfs` on that descriptor and `diskutil info -plist` agree on UUID,
   mount point and device node, and the descriptor must still name the same device and `f_fsid` immediately before the
   command. Refused unless mounted, local, writable, external, APFS or HFS+, not the boot volume or its container, not a
-  disk image or virtual, not Time Machine — and refused when the plist lacks a key those answers rest on. Verified
+  disk image or virtual, not Time Machine — and refused when the plist lacks a key those answers rest on, or when more
+  than one mounted volume carries the UUID (checked when pinning and again before the command). Verified
   afterwards by reading it again through the same descriptor.
 
 `authenticate-admin` on this Mac: `allow-root = false`, `shared = true`, `timeout = 0` (read by the reviewer,

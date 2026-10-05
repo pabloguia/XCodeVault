@@ -31,7 +31,7 @@ the second because a root process asking the rights API about a reference it mad
       agreeing on UUID, mount point and device node) and refuses unless it is mounted, local, writable, external, APFS or
       HFS+, not the boot volume or its container, not a disk image, not Time Machine (role or marker);
    5. runs nothing if ownership is already on;
-   6. runs `/usr/sbin/diskutil enableOwnership <UUID>` — fixed argv, absolute path, no shell, an environment of one
+   6. runs `/usr/sbin/diskutil enableOwnership <diskNsM>` — the bare disk identifier of the mount it holds open; fixed argv, absolute path, no shell, an environment of one
       PATH entry, an empty signal mask and default dispositions, every setup call checked, a deadline after which the
       child is killed and reaped — and verifies by reading the volume again.
 
@@ -45,6 +45,13 @@ the second because a root process asking the rights API about a reference it mad
    `.destroyRights`, so an externalized form works once (L3), and a right definition counts as ours only when the
    database records `com.xcodevault.helper` as its writer (L4). The contract version moved to `0.2.0-dev` with the
    product's (L5).
+
+   *Fix round 2 (2026-10-05):* the command takes the **bare disk identifier** (`diskNsM`) of the held descriptor's
+   `f_mntfromname`, validated against an anchored pattern and re-verified immediately before the spawn (N2), rather
+   than the UUID: a UUID names whichever volume carries it when diskutil looks, and two mounted volumes can carry one.
+   The helper refuses unless exactly one mounted volume carries the UUID — when it pins and again right before the
+   command — and unless `diskutil info -plist <UUID>`'s `DeviceNode` is the pinned one. `info -plist` still takes the
+   UUID. A `Virtual` key as a Bool refuses too (N3).
    It returns a `HelperResult` with a closed `HelperResultCode`, which the audit logs `.public` with the caller uid, the
    UUID hashed and the authorization outcome; the authorization form is never logged.
 2. **Per-call admin authorization.** A custom right, `com.xcodevault.helper.enable-ownership`, defined with
@@ -71,6 +78,8 @@ the second because a root process asking the rights API about a reference it mad
      value, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, and either API bound to a value. The hooks match the two files by
      exact path (proposed in `.superpowers/sdd/r8/hook-change-2.patch`, applied by the maintainer).
    `R8HelperInvariantsTests` mutates a copy of the tree for each of these and requires the script to fail.
+   **The static invariants are a tripwire, and the mandatory helper-security review is the control:** a source lint
+   cannot prove the absence of every encoding of a forbidden call.
 6. **The fallback stays.** The app shows R7-D's guided route (Show in Finder + Copy Command) with the reason whenever
    the click is not offered or did not work: the build is not signed by a usable team with the daemon; the helper was
    not approved; the helper refused; the verb failed. `OwnershipRoute` in Core decides; the views render.
