@@ -1210,7 +1210,10 @@ substitution may not be waved through. Issue #29 stays open.
 - Hypothesis reference: H18; ADR-0014.
 - Evidence: `docs/research/evidence/h18-enable-ownership-helper-macos26.7.1-25G241-x86_64.txt`.
 - Result with the stock admin rule: **FAIL** — the helper's re-check returned -60007 (`timeout = 0`); nothing changed,
-  and the guided fallback was shown. Fix round 4 (the right's own rule, contract 0.2.1-dev): **pending** a re-test.
+  and the guided fallback was shown. Fix round 4 (the right's own rule, contract 0.2.1-dev) and fix round 5 (`tries`,
+  the writer's team and the prompt checked in the read-back; no downgrade of a newer helper): **pending** a re-test,
+  which also captures `security authorizationdb read com.xcodevault.helper.enable-ownership` after the new daemon wrote
+  the right, and checks that two clicks within 10 s both prompt and a replayed external form is denied.
 - Test to perform: in a build signed with the user's Developer ID team and `--with-helper`, approve the helper, press
   **Turn On Ownership** for an external volume with Owners: Disabled, enter the administrator password; once more with
   the dialog cancelled.

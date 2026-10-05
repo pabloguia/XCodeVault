@@ -2115,4 +2115,17 @@ daemon removes its registration and installs this build's through the approval f
 same procedure; also confirm `security authorizationdb read com.xcodevault.helper.enable-ownership` shows the new
 dictionary.
 
+**Fix round 5 (still pending the same re-test).** The helper reviewer read `"tries" => 10000` on this Mac's
+`authenticate-admin-30` and `authenticate-admin-nonshared`: authd adds it to every user-class rule, and the round-4
+read-back check, which did not allow it, would have refused every call with `authorizationUnavailable`. It is now
+allowed as a whole number of at least 1. A read-back also counts as ours only when its `default-prompt` is absent or
+ours, and its `requirement` names this build's team. The re-test must therefore **capture `security authorizationdb
+read com.xcodevault.helper.enable-ownership` after the new daemon has written the right** and record the dictionary in
+the evidence file — `tries`, `requirement` and `default-prompt` exactly as authd stores them — since the check now
+depends on all three. Also, where feasible: two clicks within 10 s must **both** prompt (the 10 s bounds the right, but
+the reference is destroyed by both sides after each call), and replaying a captured external form must be denied. The
+10 s bounds only this right: the client's reference holds an admin credential that other user-class admin rules (e.g.
+`system.privilege.admin`, 300 s, not shared) could accept until it is destroyed; `.destroyRights` on both sides is
+what bounds it.
+
 **Status: (a)/(b) FAILED with the stock rule; the right's own rule PENDING.** Experimental everywhere (rule 10).

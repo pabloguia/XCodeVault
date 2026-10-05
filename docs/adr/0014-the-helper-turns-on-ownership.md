@@ -62,12 +62,27 @@ the second because a root process asking the rights API about a reference it mad
    client's one reference, which the client destroys afterwards and the helper frees with `.destroyRights`, so the next
    click asks for the password again; `allow-root false` means the helper's being root never satisfies it. The daemon
    rewrites the old definition at start, the contract moved to 0.2.1-dev, and an app that meets the old daemon removes
-   its registration and installs the new one through the approval flow, once per click. The client obtains it on a fresh reference with the system password dialog
-   every time and destroys the reference afterwards. Cancelling the dialog is a quiet cancel.
+   its registration and installs the new one through the approval flow, once per click — and only when that daemon is
+   **older** (fix round 5, F2: semantic-version precedence; a newer daemon is never replaced by this copy's older one,
+   and the app falls back with "a newer XCodeVault installed this helper; update this copy"). The client obtains it on
+   a fresh reference with the system password dialog every time and destroys the reference afterwards. Cancelling the
+   dialog is a quiet cancel.
+
+   **What the 10 seconds do and do not bound (fix round 5, F5).** `timeout 10` bounds **this right only**. Granting it
+   puts an administrator credential in the client's reference, and while that reference lives the credential can also
+   satisfy *other* user-class admin rules evaluated against it, each up to its **own** timeout — for example
+   `system.privilege.admin` (300 s, `shared` false). What actually limits the credential is `.destroyRights` on both
+   sides: the client destroys its reference as soon as the call returns, and the helper frees its imported copy with
+   `.destroyRights` after its one check, so the credential does not outlive the call on either side. The H18 re-test
+   checks, where feasible, that two clicks within 10 s both prompt, and that replaying the same external form is denied.
 3. **The daemon defines the right**, at startup (before the listener resumes) and again on every call. Stock macOS lets
    any local user *add* an undefined right; a squatter could add this name as `allow`. The daemon is root, relies on the
-   definition, and so owns it: anything but `class=rule, rule=authenticate-admin` is rewritten **and that call is
-   refused**.
+   definition, and so owns it: anything but its own rule is rewritten **and that call is refused**. Since fix round 5 a
+   read-back counts as ours only when, beyond the rule's fields: the writer's code identifier is `com.xcodevault.helper`
+   and its code requirement names this build's team (`subject.OU] = "<team>"`, the team `scripts/bundle-app.sh`
+   substitutes); `default-prompt` is absent or every text in it is ours (a squatter's wording is never shown under our
+   name); and `tries`, which authd adds to every user-class rule (10000 on this Mac), is a whole number of at least 1.
+   `scripts/helper-invariants.sh` pins the read-back check whole, line for line.
 4. **The client validates the helper before sending the credential**: one connection, `version()` first (replies are
    checked against the helper's code-signing requirement), the password second, the verb third. Without it the
    externalized authorization would go to whoever holds the Mach name — the requirement checks replies, not requests.

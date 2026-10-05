@@ -124,8 +124,17 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
   the helper's re-check fail with -60007 in the real-window test (H18); ten seconds covers that re-check only, the
   credential is never shared beyond the client's one reference (destroyed by both sides), and root never satisfies it.
   A password every call. The daemon writes it at startup and checks it on every call, because
-  stock macOS lets any user *add* an undefined right: a definition that is not ours — another rule, an extra key, or
-  a writer other than `com.xcodevault.helper` — is rewritten and that call refused.
+  stock macOS lets any user *add* an undefined right: a definition that is not ours — another rule, an extra key, a
+  writer other than `com.xcodevault.helper`, a writer requirement that does not name this build's team, a
+  `default-prompt` that is not our text, or a `tries` that is not a whole number of at least 1 (authd adds 10000) — is
+  rewritten and that call refused. The read-back check is pinned whole by `scripts/helper-invariants.sh` (fix round 5).
+- **What the 10 seconds bound (fix round 5, F5).** `timeout 10` bounds this right only. The credential the client's
+  reference holds after the password is an administrator credential, and while the reference lives it can satisfy
+  other user-class admin rules evaluated against it, each up to its own timeout — `system.privilege.admin`, for
+  example, is 300 s with `shared` false. The real limit is `.destroyRights` on both sides: the client destroys its
+  reference when the call returns, and the helper frees its imported copy with `.destroyRights` after its one check.
+  The H18 re-test checks, where feasible, that two clicks within 10 s both prompt and that a replayed external form is
+  denied.
 - **The client sends the credential only to a validated helper**: `version()` first on the same connection (replies are
   checked against the helper's requirement), then the password, then the verb.
 - **A tripwire, not the control.** `helper-invariants.sh` and its mutation tests catch every route the reviews found,
