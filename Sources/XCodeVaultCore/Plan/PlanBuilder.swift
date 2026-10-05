@@ -242,13 +242,19 @@ public enum PlanBuilder {
         let usable = vaults.filter { $0.isUsable && $0.currentMountPoint != nil }
         // A good vault: usable, and not on a volume whose case-sensitivity or ignored ownership the drive's own fix is for
         // (PABLO's case: the plan's path goes through the recommended new volume first).
-        let good = usable.first { v in !isFixable(v, drives) }
+        // R8 fix round 2, F1: and its OWN volume — found by UUID across every drive's volumes, not through `drive.vault`,
+        // which names one vault per drive — must be a right one. A second vault on the same disk is judged by its volume.
+        let registered = Set(vaults.map { $0.volume.volumeUUID.uppercased() })
+        let good = usable.first { v in
+            if let own = volume(of: v, in: drives), !isGoodVolume(own) { return false }
+            return !isFixable(v, drives, registered: registered)
+        }
         let fixableVolume = { (v: VaultVolumeCheck) -> Volume? in
             drives.lazy.compactMap { d in d.volumes.first { $0.volumeUUID?.uppercased() == v.volume.volumeUUID.uppercased() } }.first
         }
-        let fixable = good == nil ? usable.first { v in isFixable(v, drives) } : nil
+        let fixable = good == nil ? usable.first { v in isFixable(v, drives, registered: registered) } : nil
         let chosen = chosenDrive(good: good, fixable: fixable, drives: drives)
-        let candidate = chosen.flatMap(registrationCandidate)
+        let candidate = chosen.flatMap { registrationCandidate($0, registered: registered) }
 
         // 1. Choose a drive. Shadow data at a vault's mount point is reported first (rule 6).
         var choose = step(.chooseDrive)
@@ -286,7 +292,7 @@ public enum PlanBuilder {
             prepare.state = .blocked(.needsEarlierStep)
         } else if let good {
             // The vault is suitable: done when its drive also has the unsuitable volume the fix was for, else not needed.
-            let drive = drives.first { $0.vault?.volume.volumeUUID == good.volume.volumeUUID }
+            let drive = drive(holding: good, in: drives)
             if let drive, DriveEvaluation.wantsANewVolume(drive.volumes) {
                 prepare.state = .done
                 prepare.note = .suitableVolume(drive: drive.displayName, volume: good.volume.volumeName)
@@ -399,24 +405,39 @@ public enum PlanBuilder {
     /// A usable vault on a volume of the wrong kind — case-sensitive, or ownership ignored — whose drive has a way to a
     /// right one: a recommended fix (a new volume, or ownership on an existing one), or a right volume already there to
     /// register (R7-D: after ownership is turned on, the path still goes through that volume, not the old vault).
-    static func isFixable(_ vault: VaultVolumeCheck, _ drives: [DriveAssessment]) -> Bool {
-        guard let drive = drives.first(where: { $0.vault?.volume.volumeUUID == vault.volume.volumeUUID }) else { return false }
+    static func isFixable(_ vault: VaultVolumeCheck, _ drives: [DriveAssessment], registered: Set<String> = []) -> Bool {
+        guard let drive = drive(holding: vault, in: drives) else { return false }
         guard let volume = drive.volumes.first(where: { $0.volumeUUID?.uppercased() == vault.volume.volumeUUID.uppercased() }) else { return false }
-        return !isGoodVolume(volume) && (drive.recommendedOption != nil || registrationCandidate(drive) != nil)
+        return !isGoodVolume(volume) && (drive.recommendedOption != nil || registrationCandidate(drive, registered: registered) != nil)
+    }
+
+    /// The drive one of whose volumes is `vault`'s, by UUID (F1): a drive with two vaults is found for either.
+    static func drive(holding vault: VaultVolumeCheck, in drives: [DriveAssessment]) -> DriveAssessment? {
+        let uuid = vault.volume.volumeUUID.uppercased()
+        return drives.first { d in d.volumes.contains { $0.volumeUUID?.uppercased() == uuid } }
+            ?? drives.first { $0.vault?.volume.volumeUUID == vault.volume.volumeUUID }
+    }
+
+    /// `vault`'s own volume as the drives show it now, by UUID across every drive (F1); nil when no drive shows it.
+    static func volume(of vault: VaultVolumeCheck, in drives: [DriveAssessment]) -> Volume? {
+        let uuid = vault.volume.volumeUUID.uppercased()
+        return drives.lazy.compactMap { d in d.volumes.first { $0.volumeUUID?.uppercased() == uuid } }.first
     }
 
     /// The drive the path goes through: the good vault's; else the drive holding a vault that needs its fix (PABLO); else
     /// one that can be used; else one that needs preparation. `drives` is already ranked (`DriveEvaluation`).
     static func chosenDrive(good: VaultVolumeCheck?, fixable: VaultVolumeCheck?, drives: [DriveAssessment]) -> DriveAssessment? {
-        if let good { return drives.first { $0.vault?.volume.volumeUUID == good.volume.volumeUUID } }
-        if let fixable, let drive = drives.first(where: { $0.vault?.volume.volumeUUID == fixable.volume.volumeUUID }) { return drive }
+        if let good { return drive(holding: good, in: drives) }
+        if let fixable, let drive = drive(holding: fixable, in: drives) { return drive }
         return drives.first { $0.verdict == .ready } ?? drives.first { $0.verdict == .canBeUsed } ?? drives.first { $0.verdict == .needsPreparation }
     }
 
     /// A volume on the chosen drive that can be registered as a good vault as it is: mounted, suitable, not registered,
     /// case-insensitive with ownership on. After the recommended new volume is added, this is that volume.
-    static func registrationCandidate(_ drive: DriveAssessment) -> Volume? {
-        let registered = drive.vault.map { Set([$0.volume.volumeUUID.uppercased()]) } ?? []
+    /// `registered` is every registered vault's UUID (F1), not only the one `drive.vault` names: a second vault on the
+    /// same disk is never proposed for registration again.
+    static func registrationCandidate(_ drive: DriveAssessment, registered extra: Set<String> = []) -> Volume? {
+        let registered = extra.union(drive.vault.map { [$0.volume.volumeUUID.uppercased()] } ?? [])
         return drive.volumes.filter { v in
             guard let uuid = v.volumeUUID?.uppercased(), !registered.contains(uuid), v.mountPoint != nil else { return false }
             return isGoodVolume(v) && drive.qualifications[v.deviceNode]?.verdict != .unsuitable
