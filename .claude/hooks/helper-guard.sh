@@ -39,12 +39,26 @@ has() { printf '%s' "$content" | grep -nE "$1" >/dev/null; }
 
 case "$path" in
   *Sources/XCodeVaultHelper/*|*Sources/XCodeVaultHelperCore/*|*Sources/XCodeVaultHelperProtocol/*)
-    has '/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawn|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun|"-c"' \
-      && deny "process/shell execution in the privileged helper ($path)"
+    # R8 exception (approved by the maintainer on 2026-10-05; ADR-0014). Exactly two files, and one token each:
+    #   - HelperCore/HelperDiskutil.swift may use `posix_spawn` to run /usr/sbin/diskutil with a fixed argv.
+    #   - HelperCore/HelperAuthorizationRight.swift may call `AuthorizationCopyRights`, on the client's
+    #     externalized reference only.
+    # scripts/helper-invariants.sh enforces the rest: one call each, no shell, no other path, and `clientRef` first.
+    spawn_ok=0; authz_ok=0
+    case "$path" in
+      *Sources/XCodeVaultHelperCore/HelperDiskutil.swift) spawn_ok=1 ;;
+      *Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift) authz_ok=1 ;;
+    esac
+    exec_pat='/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawnp|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun|"-c"'
+    [ "$spawn_ok" = 1 ] || exec_pat="$exec_pat|posix_spawn"
+    has "$exec_pat" && deny "process/shell execution in the privileged helper ($path)"
     # `.run()` on anything except the main RunLoop (Process.run() is the exec API).
     printf '%s' "$content" | grep -nE '\.run\(\)' | grep -vE 'RunLoop' >/dev/null && deny "Process.run() in the privileged helper ($path)"
-    has 'AuthorizationCopyRights|processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity' \
-      && deny "forbidden peer-validation pattern (PID / hand-rolled validation / AuthorizationCopyRights) in helper ($path)"
+    peer_pat='processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity'
+    [ "$authz_ok" = 1 ] || peer_pat="$peer_pat|AuthorizationCopyRights"
+    has "$peer_pat" && deny "forbidden peer-validation pattern (PID / hand-rolled validation / AuthorizationCopyRights) in helper ($path)"
+    # The helper never shows an authorization dialog of its own: interaction belongs to the client.
+    has 'interactionAllowed' && deny "authorization interaction in the privileged helper ($path)"
     if has 'shouldAcceptNewConnection' && ! has 'setCodeSigningRequirement'; then deny "connection acceptance without setCodeSigningRequirement ($path)"; fi
     has 'dlopen|Bundle\(path:|Bundle\(url:|\.load\(\)|NSBundle' && deny "dynamic code loading in the privileged helper ($path)"
     # `atPath:` was missing, which is the form main.swift actually uses — the rule named the one
