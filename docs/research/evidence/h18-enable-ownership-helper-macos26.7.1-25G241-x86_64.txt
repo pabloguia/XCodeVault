@@ -5,14 +5,15 @@
 # Build: signed with the user's Developer ID team (debug configuration, --with-helper), branch feat/r8-helper-ownership
 #        at 5182979 (helper contract 0.2.0-dev)
 # Runner: <user> (uid 501, administrator), by hand in the app's window; reported to the controller, recorded here
-# Redaction: user name and home as <user>; volume and disk UUIDs omitted (the format of common.sh's xcv_redact).
+# Redaction: user name and home as <user>; mounted volume names as <vault> and <volume-N>; volume and disk UUIDs
+#            omitted (the format of common.sh's xcv_redact).
 #            Not captured by a script: the steps are the user's clicks, and the outputs below are what they copied.
 
 ## Steps
-1. In the Plan (step 2, "Turn on ownership for XCodeVault"), clicked **Turn On Ownership**.
+1. In the Plan (step 2, "Turn on ownership for <vault>"), clicked **Turn On Ownership**.
 2. The helper was not registered: the app registered it; System Settings ▸ Login Items & Extensions showed the item; the
    user approved it.
-3. The macOS administrator password dialog appeared ("XCodeVault wants to turn on ownership on an external volume.");
+3. The macOS administrator password dialog appeared (the app's prompt: "… wants to turn on ownership on an external volume.");
    the user entered the password.
 
 ## Result
@@ -21,13 +22,13 @@ The app fell back to the guided route (Show in Finder, Copy Command) with the re
 -60007 is errAuthorizationInteractionNotAllowed.
 
 ## After
-$ diskutil info /Volumes/XCodeVault | grep -i owners
+$ diskutil info /Volumes/<vault> | grep -i owners
    Owners:                    Disabled
 $ ls /Volumes
-MacOS
-PABLO
-XCodeVault
-(no "XCodeVault 1": nothing was remounted; nothing changed — the fallback behaved as designed)
+<volume-1>
+<volume-2>
+<vault>
+(no "<vault> 1": nothing was remounted; nothing changed — the fallback behaved as designed)
 
 $ security authorizationdb read com.xcodevault.helper.enable-ownership
 class      = rule
