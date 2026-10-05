@@ -129,6 +129,7 @@ enum GuideText {
         case .showHealth: L10n.tr("app.guide.action.showHealth")
         case .showInFinder: L10n.tr("app.drives.ownership.show")
         case .copyOwnershipCommand: L10n.tr("app.plan.copyCommand")
+        case .turnOnOwnership: L10n.tr("app.ownership.turnOn")
         }
     }
 
@@ -286,6 +287,16 @@ private struct StepView: View {
                 StatusLabel(s.kind, s.text, symbol: s.symbol).font(.callout)
             }
             Text.l10n(GuideText.explanation(step)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // R8: why the guided ownership route is shown instead of the click, and the click's progress.
+            if let why = step.ownershipFallback {
+                Text(verbatim: why.reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if step.ownershipWorking {
+                HStack(spacing: Spacing.s) {
+                    ProgressView().controlSize(.small)
+                    Text(verbatim: L10n.tr("app.ownership.working")).font(.callout).foregroundStyle(.secondary)
+                }
+            }
             if !step.items.isEmpty {
                 Text.l10n(GuideText.legend).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: Spacing.s) {

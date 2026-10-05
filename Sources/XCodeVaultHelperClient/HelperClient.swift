@@ -31,6 +31,12 @@ public struct HelperClient: Sendable {
         /// What came back was not the helper's interface. Unreachable with a connection `connect()`
         /// configured; stated so a future change turns it into an error rather than a crash.
         case unexpectedProxy
+        /// R8: the helper that answered reports another version than this build's. The authorization is not sent.
+        case versionMismatch(String)
+        /// R8: the user cancelled the system password dialog. Not an error: nothing was asked of the helper.
+        case authorizationCanceled
+        /// R8: the right was not obtained (wrong password three times, or the authorization service refused).
+        case authorizationDenied(Int32)
 
         public var description: String {
             switch self {
@@ -53,6 +59,12 @@ public struct HelperClient: Sendable {
                 return "The privileged helper did not reply (\(why)). Whether it acted is unknown; rescan to see."
             case .unexpectedProxy:
                 return "The connection did not return the privileged helper's interface. Refusing to use it."
+            case .versionMismatch(let v):
+                return "The privileged helper that answered is version \(v), not \(HelperIdentity.version). Nothing was sent to it; reinstall the helper."
+            case .authorizationCanceled:
+                return "The administrator password was not given."
+            case .authorizationDenied(let status):
+                return "Administrator authorization was not granted (\(status))."
             }
         }
     }
@@ -105,6 +117,23 @@ public struct HelperClient: Sendable {
     }
     let daemon: Daemon
 
+    /// The user's side of the authorization (R8): a fresh `AuthorizationRef`, the right obtained on it with the system
+    /// password dialog, and its externalized form. One value so a test fakes all of it and none of it reaches the
+    /// authorization service. Internal, like `makeConnection`: the public initialiser installs `.live` only.
+    struct Authorizer: Sendable {
+        /// Obtains `right` — the dialog appears — and returns the externalized form and a release that destroys the
+        /// reference. Throws `Failure.authorizationCanceled` or `.authorizationDenied`.
+        let acquire: @Sendable (String) throws -> AcquiredAuthorization
+
+        static let live = Authorizer(acquire: HelperClient.acquireLive)
+    }
+
+    struct AcquiredAuthorization: Sendable {
+        let externalForm: Data
+        let release: @Sendable () -> Void
+    }
+    let authorizer: Authorizer
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -115,17 +144,20 @@ public struct HelperClient: Sendable {
         self.bundleURL = Bundle.main.bundleURL
         self.runningTeam = HelperClient.teamOfRunningCode
         self.daemon = .live
+        self.authorizer = .live
     }
 
     init(
         team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
-        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live
+        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live,
+        authorizer: Authorizer = .live
     ) {
         self.team = team
         self.makeConnection = makeConnection
         self.bundleURL = bundleURL
         self.runningTeam = runningTeam
         self.daemon = daemon
+        self.authorizer = authorizer
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -269,6 +301,70 @@ public struct HelperClient: Sendable {
         try await send { helper, reply in helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply) }
     }
 
+    /// R8 (ADR-0014): turns ownership on for the volume `volumeUUID`. EXPERIMENTAL (rule 10). One connection, in order:
+    ///
+    ///   1. `version()`, and its reply checked: a reply from a peer that fails the code-signing requirement never comes
+    ///      back (`connect()`), and the request carries nothing. This is the M5 round trip for the one verb that sends
+    ///      a credential — without it the externalized authorization would go to whoever holds the Mach name, since
+    ///      the requirement checks replies, not requests;
+    ///   2. the right, on a fresh reference, with the system password dialog (`Authorizer`). Cancel returns a result
+    ///      with code `authorizationCanceled` and nothing is sent;
+    ///   3. the verb, with the reference's externalized form;
+    ///   4. the reference destroyed whatever happened, so the next call asks for the password again.
+    public func enableOwnership(volumeUUID: String) async throws -> HelperResult {
+        let connection = try connect()
+        defer { connection.invalidate() }
+        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
+        guard version == HelperIdentity.version else { throw Failure.versionMismatch(version) }
+        let right = HelperIdentity.enableOwnershipRight
+        let authorizer = self.authorizer
+        let acquired: AcquiredAuthorization
+        do {
+            acquired = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AcquiredAuthorization, any Error>) in
+                // Off the caller's thread: the dialog blocks until the user answers.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do { continuation.resume(returning: try authorizer.acquire(right)) } catch { continuation.resume(throwing: error) }
+                }
+            }
+        } catch Failure.authorizationCanceled {
+            // A result, not a throw, so the app can tell a cancel without naming this type (helper-invariants).
+            return HelperResult(ok: false, message: Failure.authorizationCanceled.description, code: .authorizationCanceled)
+        }
+        defer { acquired.release() }
+        return try await call(connection) { helper, reply in
+            helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
+        }
+    }
+
+    /// The live `Authorizer`: never called by a test.
+    static func acquireLive(_ right: String) throws -> AcquiredAuthorization {
+        var created: AuthorizationRef?
+        let status = AuthorizationCreate(nil, nil, [], &created)
+        guard status == errAuthorizationSuccess, let ref = created else { throw Failure.authorizationDenied(status) }
+        let granted = right.withCString { name -> OSStatus in
+            var item = AuthorizationItem(name: name, valueLength: 0, value: nil, flags: 0)
+            return withUnsafeMutablePointer(to: &item) { pointer in
+                var rights = AuthorizationRights(count: 1, items: pointer)
+                return AuthorizationCopyRights(ref, &rights, nil, [.interactionAllowed, .extendRights], nil)
+            }
+        }
+        guard granted == errAuthorizationSuccess else {
+            AuthorizationFree(ref, [.destroyRights])
+            if granted == errAuthorizationCanceled { throw Failure.authorizationCanceled }
+            throw Failure.authorizationDenied(granted)
+        }
+        var form = AuthorizationExternalForm()
+        let made = AuthorizationMakeExternalForm(ref, &form)
+        guard made == errAuthorizationSuccess else {
+            AuthorizationFree(ref, [.destroyRights])
+            throw Failure.authorizationDenied(made)
+        }
+        let data = withUnsafeBytes(of: &form.bytes) { Data($0) }
+        // `AuthorizationRef` is an opaque pointer; freeing it once, on this path, is the whole of its lifetime.
+        nonisolated(unsafe) let owned = ref
+        return AcquiredAuthorization(externalForm: data, release: { AuthorizationFree(owned, [.destroyRights]) })
+    }
+
     /// One message over one connection, then the connection is invalidated.
     ///
     /// **The peer check is `connect()`'s and only `connect()`'s**, whatever `serviceStatus()` reports: a reply
@@ -286,7 +382,14 @@ public struct HelperClient: Sendable {
     func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await call(connection, message)
+    }
+
+    /// One message on an open connection, with its own error handler. `ResumeOnce`, for the reasons `send` gives.
+    func call<T: Sendable>(
+        _ connection: NSXPCConnection, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
                 once.resume(throwing: Failure.connectionFailed(error.localizedDescription))

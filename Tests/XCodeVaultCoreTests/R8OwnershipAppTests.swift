@@ -1,0 +1,279 @@
+import Foundation
+import XCTest
+
+@testable import XCodeVault
+@testable import XCodeVaultCore
+@testable import XCodeVaultHelperClient
+@testable import XCodeVaultHelperProtocol
+
+/// R8 (ADR-0014): **Turn On Ownership** in the client, Core and the app. Fakes only: no connection reaches a daemon, no
+/// authorization dialog appears, no drive is read, and launchd is never asked anything.
+@MainActor
+final class R8OwnershipAppTests: XCTestCase {
+    override func tearDown() { L10n.configure(override: "en", environment: [:], preferred: []) }
+
+    private let team = "ABCDE12345"
+
+    /// A journal file nobody else uses, under the test run's temporary directory.
+    static func scratch() -> URL { URL(fileURLWithPath: NSTemporaryDirectory() + "xcv-r8-\(UUID().uuidString).jsonl") }
+
+    // MARK: - The client: handshake, then the password, then the verb
+
+    final class Acquisitions: @unchecked Sendable {
+        let lock = NSLock()
+        var events: [String] = []
+        func add(_ e: String) { lock.withLock { events.append(e) } }
+        var all: [String] { lock.withLock { events } }
+    }
+
+    private func authorizer(_ log: Acquisitions, fail: (any Error)? = nil) -> HelperClient.Authorizer {
+        HelperClient.Authorizer(acquire: { right in
+            log.add("acquire:\(right)")
+            if let fail { throw fail }
+            return HelperClient.AcquiredAuthorization(externalForm: Data(repeating: 9, count: 32), release: { log.add("release") })
+        })
+    }
+
+    func testTheClientChecksTheHelpersVersionBeforeAskingForThePasswordAndSendsTheForm() async throws {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "ownership is on", code: .enabled), versionReply: HelperIdentity.version)
+        let log = Acquisitions()
+        let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
+        let result = try await client.enableOwnership(volumeUUID: "U-1")
+        XCTAssertEqual(result.code, .enabled)
+        XCTAssertEqual(daemon.calls, ["version", "ownership:U-1"])
+        XCTAssertEqual(daemon.forms, [Data(repeating: 9, count: 32)])
+        XCTAssertEqual(log.all, ["acquire:com.xcodevault.helper.enable-ownership", "release"], "one fresh reference per call, destroyed after")
+    }
+
+    func testAHelperOfAnotherVersionNeverReceivesTheAuthorization() async {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.0.9")
+        let log = Acquisitions()
+        let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
+        do {
+            _ = try await client.enableOwnership(volumeUUID: "U-1")
+            XCTFail("a version mismatch must throw")
+        } catch {
+            XCTAssertEqual(error as? HelperClient.Failure, .versionMismatch("0.0.9"))
+        }
+        XCTAssertEqual(daemon.calls, ["version"])
+        XCTAssertEqual(log.all, [], "no password is asked for a helper that is not this build's")
+    }
+
+    func testCancellingThePasswordIsAQuietResultAndSendsNothing() async throws {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: HelperIdentity.version)
+        let log = Acquisitions()
+        let client = HelperClient(
+            team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log, fail: HelperClient.Failure.authorizationCanceled))
+        let result = try await client.enableOwnership(volumeUUID: "U-1")
+        XCTAssertEqual(result.code, .authorizationCanceled)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(daemon.calls, ["version"], "the verb is never sent")
+        // LiveHelper turns that into the runner's quiet cancel.
+        let live = LiveHelper(client: client)
+        do {
+            _ = try await live.perform(.enableOwnership(volumeUUID: "U-1"))
+            XCTFail("expected a cancel")
+        } catch { XCTAssertTrue(error is PrivilegedActionCancelled) }
+    }
+
+    func testADeniedPasswordThrows() async {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: HelperIdentity.version)
+        let client = HelperClient(
+            team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) },
+            authorizer: authorizer(Acquisitions(), fail: HelperClient.Failure.authorizationDenied(-60005)))
+        do {
+            _ = try await client.enableOwnership(volumeUUID: "U-1")
+            XCTFail("expected a denial")
+        } catch { XCTAssertEqual(error as? HelperClient.Failure, .authorizationDenied(-60005)) }
+        XCTAssertEqual(daemon.calls, ["version"])
+    }
+
+    // MARK: - Core: the runner, the route, the vault folder
+
+    final class OwnershipHelper: PrivilegedHelper, @unchecked Sendable {
+        let lock = NSLock()
+        var current: HelperState
+        var result: Result<PrivilegedActionReply, any Error>
+        var onPerform: @Sendable () -> Void = {}
+        private(set) var performed: [PrivilegedAction] = []
+        init(_ state: HelperState, result: Result<PrivilegedActionReply, any Error>) {
+            self.current = state
+            self.result = result
+        }
+        func state() -> HelperState { lock.withLock { current } }
+        func register() throws {}
+        func openApprovalSettings() {}
+        func unregister() async throws {}
+        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply {
+            lock.withLock { performed.append(action) }
+            onPerform()
+            return try result.get()
+        }
+    }
+
+    func testTheRunnerJournalsOwnershipAsADiskPreparationAndACancelAsSkipped() async throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let ok = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: true, message: "ownership is on")))
+        let done = await PrivilegedActionRunner(helper: ok, journal: journal, isXcodeRunning: { true }, isSimulatorWorkRunning: { true })
+            .run(.enableOwnership(volumeUUID: "U-1"))
+        XCTAssertEqual(done, .done(PrivilegedActionReply(ok: true, message: "ownership is on")), "Xcode running does not matter to ownership")
+        let cancelled = await PrivilegedActionRunner(
+            helper: OwnershipHelper(.enabled, result: .failure(PrivilegedActionCancelled())), journal: journal, isXcodeRunning: { false },
+            isSimulatorWorkRunning: { false }
+        ).run(.enableOwnership(volumeUUID: "U-2"))
+        XCTAssertEqual(cancelled, .cancelled)
+        let entries = try journal.entries()
+        XCTAssertTrue(entries.allSatisfy { $0.kind == .diskPreparation && $0.detail["action"] == "enableOwnership" })
+        XCTAssertEqual(entries.map(\.state), [.planned, .completed, .planned, .skipped])
+        XCTAssertEqual(PrivilegedAction.enableOwnership(volumeUUID: "U").requirement, .helper)
+        XCTAssertEqual(PrivilegedAction.enableOwnership(volumeUUID: "U").title, "Turn on ownership")
+    }
+
+    func testTheRouteIsDecidedInCore() {
+        XCTAssertEqual(OwnershipRoute.decide(helper: .enabled, working: false, fallback: nil), .oneClick)
+        XCTAssertEqual(OwnershipRoute.decide(helper: .notInstalled, working: false, fallback: nil), .oneClick, "the click installs the helper first")
+        XCTAssertEqual(OwnershipRoute.decide(helper: .unavailableInThisBuild, working: false, fallback: nil), .guided(.unavailableInThisBuild))
+        XCTAssertEqual(OwnershipRoute.decide(helper: .enabled, working: true, fallback: nil), .working)
+        XCTAssertEqual(OwnershipRoute.decide(helper: .enabled, working: false, fallback: .didNotWork("x")), .guided(.didNotWork("x")))
+        XCTAssertNil(OwnershipRoute.fallback(after: PrivilegedActionOutcome.cancelled), "a cancelled password is quiet")
+        XCTAssertNil(OwnershipRoute.fallback(after: PrivilegedActionOutcome.done(PrivilegedActionReply(ok: true, message: ""))))
+        XCTAssertEqual(OwnershipRoute.fallback(after: PrivilegedActionOutcome.failed("refused")), .didNotWork("refused"))
+        XCTAssertEqual(OwnershipRoute.fallback(after: HelperApprovalOutcome.notAvailableInThisBuild), .unavailableInThisBuild)
+        XCTAssertEqual(OwnershipRoute.fallback(after: HelperApprovalOutcome.failed("denied")), .approvalNotGiven("denied"))
+        XCTAssertNil(OwnershipRoute.fallback(after: HelperApprovalOutcome.cancelled))
+        XCTAssertEqual(
+            OwnershipFallback.didNotWork("the volume is read-only").reason(in: "en"),
+            "Turning ownership on through the helper did not work: the volume is read-only. Turn it on in Finder instead, or copy the command.")
+    }
+
+    func testThePlansStepTwoFollowsTheRoute() throws {
+        let snapshot = try R7ACoreTests.snapshotWithMadeVolume(owners: false)
+        let drives = snapshot.disks.map { DriveEvaluation.assess($0, in: snapshot, vaults: [PlanBuilderTests.mediaVault()]) }
+        func step(_ route: OwnershipRoute?) -> PlanStep? {
+            PlanBuilder.plan(
+                report: PlanBuilderTests.report(), drives: drives, vaults: [PlanBuilderTests.mediaVault()], locations: nil, parked: [], findings: [],
+                ownership: route
+            ).step(.prepareDrive)
+        }
+        let one = try XCTUnwrap(step(.oneClick))
+        XCTAssertEqual(one.action, .turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault"))
+        XCTAssertNil(one.secondaryAction)
+        XCTAssertTrue(one.isExperimental, "rule 10: the helper route is experimental")
+        let working = try XCTUnwrap(step(.working))
+        XCTAssertNil(working.action)
+        XCTAssertTrue(working.ownershipWorking)
+        let guided = try XCTUnwrap(step(.guided(.didNotWork("no"))))
+        XCTAssertEqual(guided.action, .showInFinder(path: "/Volumes/XCodeVault"))
+        XCTAssertEqual(guided.secondaryAction, .copyOwnershipCommand(mountPoint: "/Volumes/XCodeVault"))
+        XCTAssertEqual(guided.ownershipFallback, .didNotWork("no"))
+        let r7d = try XCTUnwrap(step(nil))
+        XCTAssertEqual(r7d.action, .showInFinder(path: "/Volumes/XCodeVault"), "a caller that knows nothing of the helper: R7-D")
+        XCTAssertNil(r7d.ownershipFallback)
+    }
+
+    func testUseThisDriveOffersTheHelpersVaultFolderOnlyForARootTheUserCannotWrite() throws {
+        let volume = try XCTUnwrap(try R7ACoreTests.snapshotWithMadeVolume(owners: true).volumes.first { $0.volumeUUID == R6DriveTests.u(302) })
+        XCTAssertEqual(
+            DriveRegistration.vaultFolderHelperStep(volume, rootIsWritable: { _ in false }, folderIsAbsent: { _ in true }),
+            .createVaultDirectory(volumeUUID: R6DriveTests.u(302)))
+        XCTAssertNil(DriveRegistration.vaultFolderHelperStep(volume, rootIsWritable: { _ in true }, folderIsAbsent: { _ in true }), "the user's own root")
+        XCTAssertNil(DriveRegistration.vaultFolderHelperStep(volume, rootIsWritable: { _ in false }, folderIsAbsent: { _ in false }), "already there")
+        var nested = volume
+        nested.mountPoint = "/Volumes/A/B"
+        XCTAssertNil(DriveRegistration.vaultFolderHelperStep(nested, rootIsWritable: { _ in false }, folderIsAbsent: { _ in true }), "the helper refuses it")
+    }
+
+    // MARK: - The app
+
+    private func model(_ helper: OwnershipHelper, drives: ScriptedDrives, journal url: URL) -> AppModel {
+        let survey = bucketSampleSurvey(checks: [PlanBuilderTests.mediaVault()])
+        var env = AppEnvironment(
+            survey: { survey }, fullDiskAccess: { .granted }, helper: helper,
+            approvalFlow: { HelperApprovalFlow(helper: $0, pollInterval: .milliseconds(1), maxPolls: 2) },
+            runner: { PrivilegedActionRunner(helper: $0, journal: Journal(url: url), isXcodeRunning: { false }, isSimulatorWorkRunning: { false }) },
+            clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in })
+        env.drives = drives.services
+        env.reveal = { _ in }
+        return AppModel(environment: env)
+    }
+
+    func testTurnOnOwnershipRunsTheVerbRereadsTheDrivesAndThePlanMovesOn() async throws {
+        let drives = ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false))
+        let helper = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: true, message: "ownership is on")))
+        let after = try R7ACoreTests.snapshotWithMadeVolume(owners: true)
+        helper.onPerform = { drives.snapshot = after }
+        let m = model(helper, drives: drives, journal: Self.scratch())
+        await m.refresh()
+        let action = try XCTUnwrap(m.plan?.step(.prepareDrive)?.action)
+        XCTAssertEqual(m.planTarget(action, vault: nil), .turnOnOwnership(R6DriveTests.u(302)))
+        XCTAssertEqual(GuideText.actionTitle(action), "Turn On Ownership")
+        m.performPlanAction(action)
+        XCTAssertEqual(m.ownershipRoute, .working)
+        XCTAssertEqual(m.quitChoice, .keepRunningOnly(.diskPreparation), "not stoppable: Keep Running only")
+        for _ in 0..<200 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNil(m.ownershipInFlight)
+        XCTAssertEqual(helper.performed, [.enableOwnership(volumeUUID: R6DriveTests.u(302))])
+        XCTAssertEqual(m.plan?.step(.prepareDrive)?.state, .done, "the drives were read again and step 2 is done")
+        XCTAssertEqual(m.plan?.step(.registerVault)?.state, .next)
+        XCTAssertNil(m.ownershipFallback)
+        XCTAssertEqual(m.quitChoice, .quitNow)
+    }
+
+    func testAFailureFallsBackToTheGuidedRouteWithTheReasonAndACancelDoesNot() async throws {
+        let drives = ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false))
+        let refused = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: false, message: "a disk image is not eligible")))
+        let m = model(refused, drives: drives, journal: Self.scratch())
+        await m.refresh()
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        for _ in 0..<200 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(m.ownershipRoute, .guided(.didNotWork("a disk image is not eligible")))
+        XCTAssertNil(m.lastError, "the reason is inline, beside the guided route, not an alert")
+        let step = try XCTUnwrap(m.plan?.step(.prepareDrive))
+        XCTAssertEqual(step.action, .showInFinder(path: "/Volumes/XCodeVault"))
+        XCTAssertEqual(step.ownershipFallback, .didNotWork("a disk image is not eligible"))
+
+        let cancel = OwnershipHelper(.enabled, result: .failure(PrivilegedActionCancelled()))
+        let c = model(cancel, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
+        await c.refresh()
+        c.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        for _ in 0..<200 where c.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(c.ownershipRoute, .oneClick, "a cancelled password offers the click again, quietly")
+        XCTAssertNil(c.lastError)
+    }
+
+    func testAnUnsignedBuildShowsTheGuidedRouteAndRunsNothing() async throws {
+        let helper = OwnershipHelper(.unavailableInThisBuild, result: .success(PrivilegedActionReply(ok: true, message: "")))
+        let m = model(helper, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
+        await m.refresh()
+        XCTAssertEqual(m.ownershipRoute, .guided(.unavailableInThisBuild))
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        XCTAssertTrue(helper.performed.isEmpty)
+        XCTAssertEqual(m.plan?.step(.prepareDrive)?.ownershipFallback, .unavailableInThisBuild)
+    }
+
+    func testAnApprovalThatIsNotGivenFallsBack() async throws {
+        let helper = OwnershipHelper(.awaitingApproval, result: .success(PrivilegedActionReply(ok: true, message: "")))
+        let m = model(helper, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
+        await m.refresh()
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        XCTAssertTrue(m.showsHelperSheet, "the helper is requested first")
+        XCTAssertEqual(m.ownershipRoute, .working)
+        m.installHelper(then: m.pendingPrivilegedAction)
+        for _ in 0..<300 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(m.ownershipRoute, .guided(.approvalNotGiven(L10n.tr("app.helper.error.timedOut"))))
+        XCTAssertTrue(helper.performed.isEmpty)
+        // Closing the sheet instead is a quiet cancel.
+        m.ownershipFallback = nil
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        m.dismissHelperSheet()
+        XCTAssertEqual(m.ownershipRoute, .oneClick)
+    }
+
+    func testTheQuitRuleForOwnership() {
+        XCTAssertEqual(AppModel.quitChoice(operation: .quitNow, enablingOwnership: true), .keepRunningOnly(.diskPreparation))
+        XCTAssertEqual(AppModel.quitChoice(operation: .stopThenQuit, enablingOwnership: true), .keepRunningOnly(.diskPreparation))
+        XCTAssertEqual(AppModel.quitChoice(operation: .keepRunningOnly(.export), enablingOwnership: true), .keepRunningOnly(.export))
+        XCTAssertEqual(AppModel.quitChoice(operation: .quitNow, enablingOwnership: false), .quitNow)
+    }
+}

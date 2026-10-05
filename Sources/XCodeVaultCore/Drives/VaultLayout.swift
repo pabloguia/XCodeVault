@@ -131,6 +131,24 @@ public enum DriveRegistration {
         return outcome(vault: vault) { try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp)) }
     }
 
+    /// R8: the privileged step **Use This Drive** needs first, or nil when there is none. With ownership on, a volume's
+    /// root keeps its real owner: a volume the user made is theirs, and `XCodeVault/` is created without root. A root
+    /// the user cannot write to — root-owned — needs the helper's `createVaultDirectory`, which makes the folder and hands
+    /// it to the user; registration then finds it there. Offered only where the helper accepts the volume
+    /// (`VaultDirectoryRefusal.helperAccepts`) and only while the folder is known to be absent: never for a folder that
+    /// is there, or that cannot be looked at.
+    public static func vaultFolderHelperStep(
+        _ volume: Volume, rootIsWritable: (String) -> Bool = { access($0, W_OK) == 0 },
+        folderIsAbsent: ((String) -> Bool)? = nil
+    ) -> PrivilegedAction? {
+        let folderIsAbsent = folderIsAbsent ?? { VaultDirectoryRefusal.folderState($0) == .absent }
+        guard let mp = volume.mountPoint, let uuid = volume.volumeUUID, VaultDirectoryRefusal.helperAccepts(mountPoint: mp, volumeUUID: uuid) else {
+            return nil
+        }
+        guard folderIsAbsent(mp + "/" + VaultVolume.directoryName), !rootIsWritable(mp) else { return nil }
+        return .createVaultDirectory(volumeUUID: uuid)
+    }
+
     /// The registered vault and what creating its folders gave: the folders, or the error as a partial outcome.
     public static func outcome(vault: VaultVolume, createFolders: () throws -> [String]) -> Outcome {
         do {

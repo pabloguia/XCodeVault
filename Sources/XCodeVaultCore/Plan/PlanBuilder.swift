@@ -35,6 +35,9 @@ public enum PlanAction: Sendable, Equatable {
     case showInFinder(path: String)
     /// R7-D: copies `sudo diskutil enableOwnership <mountPoint>` for Terminal. The app never asks for a password or runs it.
     case copyOwnershipCommand(mountPoint: String)
+    /// R8: **Turn On Ownership** — the helper's `enableOwnership` for that volume, behind the system password dialog.
+    /// EXPERIMENTAL (rule 10). The app runs it through the privileged-action runner, which journals it.
+    case turnOnOwnership(volumeUUID: String, mountPoint: String)
 }
 
 /// Why a step cannot be done yet.
@@ -170,6 +173,10 @@ public struct PlanStep: Sendable, Equatable, Identifiable {
     public var action: PlanAction?
     /// A second button beside `action` (R7-D: Copy Command next to Show in Finder); never prominent.
     public var secondaryAction: PlanAction? = nil
+    /// R8: why step 2 shows the guided ownership route rather than **Turn On Ownership**; nil when it does not.
+    public var ownershipFallback: OwnershipFallback? = nil
+    /// R8: turning ownership on is in progress for step 2's volume; the step shows progress instead of a button.
+    public var ownershipWorking: Bool = false
     /// The move step's items; empty for the others.
     public var items: [PlanItem]
     /// The preparation the step proposes (prepare step only).
@@ -230,7 +237,7 @@ public enum PlanBuilder {
     /// The plan for this Mac now. Pure: the same inputs give the same plan.
     public static func plan(
         report: ScanReport, drives: [DriveAssessment], vaults: [VaultVolumeCheck], locations: XcodeLocations?, parked: [ParkedRuntime],
-        findings: [Finding]
+        findings: [Finding], ownership: OwnershipRoute? = nil
     ) -> Plan {
         let usable = vaults.filter { $0.isUsable && $0.currentMountPoint != nil }
         // A good vault: usable, and not on a volume whose case-sensitivity or ignored ownership the drive's own fix is for
@@ -302,8 +309,20 @@ public enum PlanBuilder {
                 prepare.option = chosen.recommendedOption
                 prepare.subject = volume.volumeName
                 prepare.note = .turnOnOwnership(volume: volume.volumeName)
-                prepare.action = .showInFinder(path: mp)
-                prepare.secondaryAction = .copyOwnershipCommand(mountPoint: mp)
+                // R8: one click through the helper when this build can, the R7-D guided route (with its reason) when not.
+                // `ownership` nil is the caller that knows nothing of the helper (the CLI's text plan, older tests): R7-D.
+                switch (ownership, volume.volumeUUID) {
+                case (.oneClick?, let uuid?):
+                    prepare.action = .turnOnOwnership(volumeUUID: uuid, mountPoint: mp)
+                    prepare.isExperimental = true
+                case (.working?, _?):
+                    prepare.ownershipWorking = true
+                    prepare.isExperimental = true
+                default:
+                    prepare.action = .showInFinder(path: mp)
+                    prepare.secondaryAction = .copyOwnershipCommand(mountPoint: mp)
+                    if case .guided(let why)? = ownership { prepare.ownershipFallback = why }
+                }
             } else if let option = chosen.recommendedOption {
                 prepare.state = .next
                 prepare.option = option

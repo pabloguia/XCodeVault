@@ -34,6 +34,10 @@ struct LiveHelper: PrivilegedHelper {
             result = try await client.createVaultDirectory(volumeUUID: volumeUUID)
         case .emptyCoreSimulatorDyldCache:
             result = try await client.removeRegenerableSystemDirectoryContents(target: .coreSimulatorDyldCache)
+        case .enableOwnership(let volumeUUID):
+            result = try await client.enableOwnership(volumeUUID: volumeUUID)
+            // R8: the password dialog is the client's; cancelling it is not a failure (`PrivilegedActionCancelled`).
+            if result.code == .authorizationCanceled { throw PrivilegedActionCancelled() }
         }
         return PrivilegedActionReply(ok: result.ok, message: result.message, bytesFreed: result.bytesFreed)
     }

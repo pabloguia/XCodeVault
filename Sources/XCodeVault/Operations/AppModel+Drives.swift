@@ -84,7 +84,13 @@ extension AppModel {
         switch assessment.prepareAction {
         case .useDrive: openUseDrive(assessment)
         case .prepare(let option): openPreparation(assessment, option: option)
-        case .ownership(let mountPoint): showVolumeForOwnership(mountPoint)
+        case .ownership(let mountPoint):
+            // R8: the click when this build offers it, Finder otherwise.
+            if ownershipRoute == .oneClick, let uuid = ownershipVolumeUUID(assessment, mountPoint: mountPoint) {
+                turnOnOwnership(volumeUUID: uuid)
+            } else {
+                showVolumeForOwnership(mountPoint)
+            }
         case .nothing: break
         }
     }
@@ -225,11 +231,28 @@ extension AppModel {
         environment.copy(plan.command)
     }
 
+    /// The UUID of the volume of `assessment` mounted at `mountPoint`, which **Turn On Ownership** sends (R8).
+    func ownershipVolumeUUID(_ assessment: DriveAssessment, mountPoint: String) -> String? {
+        assessment.volumes.first { $0.mountPoint == mountPoint }?.volumeUUID
+    }
+
     /// The Drives screen's buttons (`ExternalDriveActions`).
     var externalDriveActions: ExternalDriveActions {
         ExternalDriveActions(
             prepare: { [weak self] a, o in self?.openPreparation(a, option: o) }, useDrive: { [weak self] in self?.openUseDrive($0) },
-            showInFinder: { [weak self] in self?.showVolumeForOwnership($0) }, copyOwnershipCommand: { [weak self] in self?.copyOwnershipCommand($0) })
+            showInFinder: { [weak self] in self?.showVolumeForOwnership($0) }, copyOwnershipCommand: { [weak self] in self?.copyOwnershipCommand($0) },
+            turnOnOwnership: { [weak self] a, mp in
+                guard let self, let uuid = self.ownershipVolumeUUID(a, mountPoint: mp) else { return }
+                self.turnOnOwnership(volumeUUID: uuid)
+            },
+            ownershipRoute: ownershipRoute)
+    }
+
+    /// R8: the privileged step **Use This Drive**'s review offers first — the vault folder made by the helper, when the
+    /// volume's root is not writable by the user (`DriveRegistration.vaultFolderHelperStep`); nil otherwise.
+    var useDriveHelperStep: PrivilegedAction? {
+        guard let s = operationSheet, s.kind == .useDrive, case .useDrive(let volume)? = s.preview?.prepared else { return nil }
+        return DriveRegistration.vaultFolderHelperStep(volume)
     }
 
     // MARK: - The form

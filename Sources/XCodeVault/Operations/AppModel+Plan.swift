@@ -8,7 +8,8 @@ extension AppModel {
     var plan: Plan? {
         guard let report else { return nil }
         return PlanBuilder.plan(
-            report: report, drives: driveAssessments, vaults: vaultChecks, locations: xcodeLocations, parked: parkedRuntimes, findings: findings)
+            report: report, drives: driveAssessments, vaults: vaultChecks, locations: xcodeLocations, parked: parkedRuntimes, findings: findings,
+            ownership: ownershipRoute)
     }
 
     /// Where a plan action leads: the whole step→sheet mapping, as a value so it is tested case by case.
@@ -25,6 +26,8 @@ extension AppModel {
         case reveal(String)
         /// R7-D: `sudo diskutil enableOwnership` on the pasteboard. Nothing runs.
         case copyOwnershipCommand(String)
+        /// R8: **Turn On Ownership** for that volume UUID, through the helper.
+        case turnOnOwnership(String)
     }
 
     /// The target of `action` against the model's current state. A drive, volume or row that is no longer there falls back
@@ -59,6 +62,11 @@ extension AppModel {
             guard driveAssessments.contains(where: { $0.ownershipMountPoints.contains(path) }) else { return .section(.drives) }
             if case .showInFinder = action { return .reveal(path) }
             return .copyOwnershipCommand(path)
+        case .turnOnOwnership(let uuid, let mountPoint):
+            // The same check: only a volume a drive shows ownership off on now, and that drive's volume of that UUID.
+            guard driveAssessments.contains(where: { a in a.ownershipMountPoints.contains(mountPoint) && a.volumes.contains { $0.volumeUUID == uuid } })
+            else { return .section(.drives) }
+            return .turnOnOwnership(uuid)
         }
     }
 
@@ -73,6 +81,7 @@ extension AppModel {
         case .run(let row, let vault): openRun(row, vault: vault)
         case .reveal(let path): showVolumeForOwnership(path)
         case .copyOwnershipCommand(let mp): copyOwnershipCommand(mp)
+        case .turnOnOwnership(let uuid): turnOnOwnership(volumeUUID: uuid)
         }
     }
 }

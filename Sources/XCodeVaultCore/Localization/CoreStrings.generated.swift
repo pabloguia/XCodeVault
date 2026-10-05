@@ -760,6 +760,13 @@ extension L10nCatalog {
                 "ja": "dyld キャッシュを空にできませんでした",
                 "zh-Hans": "无法清空 dyld 缓存",
             ],
+            "app.error.enableOwnership.title": [
+                "en": "Ownership Was Not Turned On",
+                "pt-BR": "A Propriedade Não Foi Ativada",
+                "es": "No se activó la propiedad",
+                "ja": "所有権は有効になりませんでした",
+                "zh-Hans": "未启用所有权",
+            ],
             "app.error.helper.title": [
                 "en": "Couldn’t set up the helper",
                 "pt-BR": "Não foi possível configurar o auxiliar",
@@ -815,6 +822,13 @@ extension L10nCatalog {
                 "es": "Se vació la caché dyld.",
                 "ja": "dyld キャッシュを空にしました。",
                 "zh-Hans": "已清空 dyld 缓存。",
+            ],
+            "app.feedback.enableOwnership": [
+                "en": "Ownership is on",
+                "pt-BR": "A propriedade está ativada",
+                "es": "La propiedad está activada",
+                "ja": "所有権が有効になりました",
+                "zh-Hans": "所有权已启用",
             ],
             "app.guide.action.showDrives": [
                 "en": "Open Drives",
@@ -1894,6 +1908,41 @@ extension L10nCatalog {
                 "ja": "操作の前に",
                 "zh-Hans": "操作之前",
             ],
+            "app.ownership.fallback.approval": [
+                "en": "The privileged helper was not approved (%@). Turn ownership on in Finder instead, or copy the command.",
+                "pt-BR": "O auxiliar privilegiado não foi aprovado (%@). Ative a propriedade no Finder ou copie o comando.",
+                "es": "El asistente privilegiado no se aprobó (%@). Activa la propiedad en el Finder o copia el comando.",
+                "ja": "特権ヘルパーが承認されませんでした（%@）。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。",
+                "zh-Hans": "特权助手未获批准（%@）。请改为在访达中启用所有权，或拷贝命令。",
+            ],
+            "app.ownership.fallback.failed": [
+                "en": "Turning ownership on through the helper did not work: %@. Turn it on in Finder instead, or copy the command.",
+                "pt-BR": "Não foi possível ativar a propriedade pelo auxiliar: %@. Ative-a no Finder ou copie o comando.",
+                "es": "No se pudo activar la propiedad con el asistente: %@. Actívala en el Finder o copia el comando.",
+                "ja": "ヘルパーによる所有権の有効化に失敗しました：%@。代わりに Finder で有効にするか、コマンドをコピーしてください。",
+                "zh-Hans": "通过助手启用所有权未成功：%@。请改为在访达中启用，或拷贝命令。",
+            ],
+            "app.ownership.fallback.unavailable": [
+                "en": "One click needs a signed build that includes the privileged helper. Turn ownership on in Finder instead, or copy the command.",
+                "pt-BR": "O clique único exige uma versão assinada que inclua o auxiliar privilegiado. Ative a propriedade no Finder ou copie o comando.",
+                "es": "Un solo clic requiere una compilación firmada que incluya el asistente privilegiado. Activa la propiedad en el Finder o copia el comando.",
+                "ja": "ワンクリックには、特権ヘルパーを含む署名済みビルドが必要です。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。",
+                "zh-Hans": "一键操作需要包含特权助手的已签名版本。请改为在访达中启用所有权，或拷贝命令。",
+            ],
+            "app.ownership.turnOn": [
+                "en": "Turn On Ownership",
+                "pt-BR": "Ativar Propriedade",
+                "es": "Activar propiedad",
+                "ja": "所有権を有効にする",
+                "zh-Hans": "启用所有权",
+            ],
+            "app.ownership.working": [
+                "en": "Turning on ownership… Enter your administrator password when macOS asks.",
+                "pt-BR": "Ativando a propriedade… Digite sua senha de administrador quando o macOS pedir.",
+                "es": "Activando la propiedad… Introduce tu contraseña de administrador cuando macOS la pida.",
+                "ja": "所有権を有効にしています… macOS に求められたら管理者パスワードを入力してください。",
+                "zh-Hans": "正在启用所有权… macOS 询问时请输入管理员密码。",
+            ],
             "app.permissions.footer": [
                 "en": "XCodeVault never runs a shell and never asks for your password itself.",
                 "pt-BR": "O XCodeVault nunca executa um shell e nunca pede a sua senha por conta própria.",
@@ -2174,6 +2223,13 @@ extension L10nCatalog {
                 "ja": "XCodeVault はこのボリュームを保管庫として登録し、XCodeVault/DerivedData、XCodeVault/Archives、XCodeVault/Runtimes を作成します。何も消去しません。",
                 "zh-Hans": "XCodeVault 将此宗卷登记为保险库，然后在其上创建 XCodeVault/DerivedData、XCodeVault/Archives 和 XCodeVault/Runtimes。不会抹掉任何内容。",
             ],
+            "app.prep.useDrive.needsHelper": [
+                "en": "You cannot write to this volume\'s top folder, so the privileged helper creates the XCodeVault folder first and makes it yours.",
+                "pt-BR": "Você não pode gravar na pasta principal deste volume, então o auxiliar privilegiado cria primeiro a pasta XCodeVault e a torna sua.",
+                "es": "No puedes escribir en la carpeta superior de este volumen, así que el asistente privilegiado crea primero la carpeta XCodeVault y te la asigna.",
+                "ja": "このボリュームの最上位フォルダに書き込めないため、特権ヘルパーが先に XCodeVault フォルダを作成し、あなたの所有にします。",
+                "zh-Hans": "你无法写入此宗卷的顶层文件夹，因此特权助手会先创建 XCodeVault 文件夹并将其归你所有。",
+            ],
             "app.privileged.button.createVaultDirectory": [
                 "en": "Create Vault Folder",
                 "pt-BR": "Criar Pasta do Cofre",
@@ -2188,6 +2244,13 @@ extension L10nCatalog {
                 "ja": "dyld キャッシュを空にする（実験的）",
                 "zh-Hans": "清空 dyld 缓存（实验性）",
             ],
+            "app.privileged.button.enableOwnership": [
+                "en": "Turn On Ownership",
+                "pt-BR": "Ativar Propriedade",
+                "es": "Activar propiedad",
+                "ja": "所有権を有効にする",
+                "zh-Hans": "启用所有权",
+            ],
             "app.privileged.confirm.createVaultDirectory": [
                 "en": "Create the vault folder?",
                 "pt-BR": "Criar a pasta do cofre?",
@@ -2201,6 +2264,13 @@ extension L10nCatalog {
                 "es": "¿Vaciar la caché dyld de CoreSimulator (experimental)?",
                 "ja": "CoreSimulator の dyld キャッシュを空にしますか？（実験的）",
                 "zh-Hans": "要清空 CoreSimulator 的 dyld 缓存吗？（实验性）",
+            ],
+            "app.privileged.confirm.enableOwnership": [
+                "en": "Turn on ownership for this volume?",
+                "pt-BR": "Ativar a propriedade neste volume?",
+                "es": "¿Activar la propiedad en este volumen?",
+                "ja": "このボリュームの所有権を有効にしますか？",
+                "zh-Hans": "要为此宗卷启用所有权吗？",
             ],
             "app.quit.couldNotStop.message": [
                 "en": "The running command did not stop, even when forced. XCodeVault stays open so nothing goes on running unseen; the operation is still shown in its sheet.",
@@ -4154,6 +4224,13 @@ extension L10nCatalog {
                 "es": "Vaciar la caché dyld de CoreSimulator (experimental)",
                 "ja": "CoreSimulator の dyld キャッシュを空にする（実験的）",
                 "zh-Hans": "清空 CoreSimulator 的 dyld 缓存（实验性）",
+            ],
+            "perm.action.enableOwnership.title": [
+                "en": "Turn on ownership",
+                "pt-BR": "Ativar a propriedade",
+                "es": "Activar la propiedad",
+                "ja": "所有権を有効にする",
+                "zh-Hans": "启用所有权",
             ],
             "perm.fda.next.granted": [
                 "en": "Nothing to do.",

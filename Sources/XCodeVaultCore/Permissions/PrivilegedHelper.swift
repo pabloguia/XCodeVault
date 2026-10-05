@@ -86,6 +86,14 @@ public enum PrivilegedActionOutcome: Sendable, Equatable {
     case done(PrivilegedActionReply)
     case refused(String)
     case failed(String)
+    /// R8: the user cancelled the system password dialog. Not an error, and nothing reached the helper.
+    case cancelled
+}
+
+/// What a `PrivilegedHelper` throws when the user cancelled the system password dialog (R8): the runner reports
+/// `.cancelled` and journals the step as skipped, never as failed.
+public struct PrivilegedActionCancelled: Error, Equatable {
+    public init() {}
 }
 
 /// Runs one privileged action through the helper, journaled like every change the product makes.
@@ -144,6 +152,11 @@ public struct PrivilegedActionRunner: Sendable {
                 id: id, kind: action.journalKind, state: reply.ok ? .completed : .failed, summary: "helper: \(action.title): \(reply.message)",
                 paths: action.journalPaths, bytes: bytes, detail: action.journalDetail)
             return reply.ok ? .done(reply) : .failed(reply.message)
+        } catch is PrivilegedActionCancelled {
+            _ = try? journal.record(
+                id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): cancelled at the password dialog",
+                paths: action.journalPaths, detail: action.journalDetail)
+            return .cancelled
         } catch {
             _ = try? journal.record(
                 id: id, kind: action.journalKind, state: .failed, summary: "helper: \(action.title): \(error)", paths: action.journalPaths,

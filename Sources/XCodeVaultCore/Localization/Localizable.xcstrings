@@ -4411,6 +4411,40 @@
         }
       }
     },
+    "app.error.enableOwnership.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ownership Was Not Turned On"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se activó la propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権は有効になりませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A Propriedade Não Foi Ativada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "未启用所有权"
+          }
+        }
+      }
+    },
     "app.error.helper.title" : {
       "localizations" : {
         "en" : {
@@ -4843,6 +4877,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "已清空 dyld 缓存。"
+          }
+        }
+      }
+    },
+    "app.feedback.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ownership is on"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "La propiedad está activada"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権が有効になりました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A propriedade está ativada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有权已启用"
           }
         }
       }
@@ -10493,6 +10561,176 @@
         }
       }
     },
+    "app.ownership.fallback.approval" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The privileged helper was not approved (%@). Turn ownership on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El asistente privilegiado no se aprobó (%@). Activa la propiedad en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "特権ヘルパーが承認されませんでした（%@）。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O auxiliar privilegiado não foi aprovado (%@). Ative a propriedade no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "特权助手未获批准（%@）。请改为在访达中启用所有权，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.fallback.failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning ownership on through the helper did not work: %@. Turn it on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo activar la propiedad con el asistente: %@. Actívala en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ヘルパーによる所有権の有効化に失敗しました：%@。代わりに Finder で有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível ativar a propriedade pelo auxiliar: %@. Ative-a no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "通过助手启用所有权未成功：%@。请改为在访达中启用，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.fallback.unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One click needs a signed build that includes the privileged helper. Turn ownership on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Un solo clic requiere una compilación firmada que incluya el asistente privilegiado. Activa la propiedad en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ワンクリックには、特権ヘルパーを含む署名済みビルドが必要です。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O clique único exige uma versão assinada que inclua o auxiliar privilegiado. Ative a propriedade no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "一键操作需要包含特权助手的已签名版本。请改为在访达中启用所有权，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.turnOn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn On Ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar Propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
+          }
+        }
+      }
+    },
+    "app.ownership.working" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning on ownership… Enter your administrator password when macOS asks."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activando la propiedad… Introduce tu contraseña de administrador cuando macOS la pida."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にしています… macOS に求められたら管理者パスワードを入力してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativando a propriedade… Digite sua senha de administrador quando o macOS pedir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在启用所有权… macOS 询问时请输入管理员密码。"
+          }
+        }
+      }
+    },
     "app.permissions.footer" : {
       "localizations" : {
         "en" : {
@@ -11853,6 +12091,40 @@
         }
       }
     },
+    "app.prep.useDrive.needsHelper" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You cannot write to this volume's top folder, so the privileged helper creates the XCodeVault folder first and makes it yours."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No puedes escribir en la carpeta superior de este volumen, así que el asistente privilegiado crea primero la carpeta XCodeVault y te la asigna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このボリュームの最上位フォルダに書き込めないため、特権ヘルパーが先に XCodeVault フォルダを作成し、あなたの所有にします。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Você não pode gravar na pasta principal deste volume, então o auxiliar privilegiado cria primeiro a pasta XCodeVault e a torna sua."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "你无法写入此宗卷的顶层文件夹，因此特权助手会先创建 XCodeVault 文件夹并将其归你所有。"
+          }
+        }
+      }
+    },
     "app.privileged.button.createVaultDirectory" : {
       "localizations" : {
         "en" : {
@@ -11921,6 +12193,40 @@
         }
       }
     },
+    "app.privileged.button.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn On Ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar Propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
+          }
+        }
+      }
+    },
     "app.privileged.confirm.createVaultDirectory" : {
       "localizations" : {
         "en" : {
@@ -11985,6 +12291,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "要清空 CoreSimulator 的 dyld 缓存吗？（实验性）"
+          }
+        }
+      }
+    },
+    "app.privileged.confirm.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on ownership for this volume?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "¿Activar la propiedad en este volumen?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このボリュームの所有権を有効にしますか？"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar a propriedade neste volume?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "要为此宗卷启用所有权吗？"
           }
         }
       }
@@ -21717,6 +22057,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "清空 CoreSimulator 的 dyld 缓存（实验性）"
+          }
+        }
+      }
+    },
+    "perm.action.enableOwnership.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar la propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar a propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
           }
         }
       }

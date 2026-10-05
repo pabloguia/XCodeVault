@@ -328,7 +328,16 @@ extension AppModel {
         // Running implies a sheet (`isOperationRunning`), so a kind always reaches the rule; without one, nothing runs.
         let operation = operationSheet.map { Self.quitChoice(running: isOperationRunning, stage: $0.stage, kind: $0.kind) } ?? .quitNow
         // A clean running beside it keeps the app open whatever the operation allows: it cannot be stopped (R5).
-        return Self.quitChoice(operation: operation, cleaning: isCleaning)
+        return Self.quitChoice(operation: Self.quitChoice(operation: operation, cleaning: isCleaning), enablingOwnership: ownershipInFlight != nil)
+    }
+
+    /// R8: turning ownership on — the helper's `diskutil enableOwnership`, or the wait for its approval — cannot be
+    /// stopped from here: quitting offers only **Keep Running**, as for any other disk preparation. Another reason to
+    /// keep running stays the one shown.
+    static func quitChoice(operation: QuitChoice, enablingOwnership: Bool) -> QuitChoice {
+        guard enablingOwnership else { return operation }
+        if case .keepRunningOnly = operation { return operation }
+        return .keepRunningOnly(.diskPreparation)
     }
 
     /// The operation's choice, with a running clean on top (R5): a clean only ever keeps running, so it overrides quitting
