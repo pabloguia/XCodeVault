@@ -148,7 +148,9 @@ public struct Doctor: Sendable {
                 // The path stays forbidden — the reason is "unverified and known to leave shadow
                 // data", not "proven to break".
                 why =
-                    "Unsupported redirect (this is what mac-ssd-rescue creates). CoreSimulator caches the resolved target, so this layout leaves shadow device sets behind. An Aug 2025 report also describes the Simulator's Files app losing share/save/create-folder on this configuration; we could not reproduce that on macOS 26.6.2 / Xcode 26.5, so treat it as unverified rather than safe."
+                    "Unsupported redirect (this is what mac-ssd-rescue creates). CoreSimulator caches the resolved target, so this layout leaves shadow "
+                    + "device sets behind. An Aug 2025 report also describes the Simulator's Files app losing share/save/create-folder on this "
+                    + "configuration; we could not reproduce that on macOS 26.6.2 / Xcode 26.5, so treat it as unverified rather than safe."
             case "~/Library/Developer/DeveloperDiskImages": why = "Must be a real directory for device support to work (FB12363725)."
             default: why = "This path must never be redirected wholesale."
             }
@@ -158,7 +160,8 @@ public struct Doctor: Sendable {
                     detail: why + " This configuration was not created by XCodeVault (it is exactly what mac-ssd-rescue creates).",
                     path: p,
                     remediation:
-                        "Move the data back to \(p) as a real directory (copy with `ditto`, verify, then replace the symlink). XCodeVault will offer a verified restore in a later milestone.",
+                        "Move the data back to \(p) as a real directory (copy with `ditto`, verify, then replace the symlink). XCodeVault will offer a "
+                        + "verified restore in a later milestone.",
                     evidence: "docs/research/FINDINGS-2026-09-05.md §F3"))
         }
         return out
@@ -184,14 +187,16 @@ public struct Doctor: Sendable {
                         detail: "\(p) → \(target) (target missing). Typical of a relocation tool whose destination volume is not mounted.",
                         path: p,
                         remediation:
-                            "Reconnect the destination volume, or restore the directory. Do not let Xcode recreate it as a local directory first — that creates shadow data.",
+                            "Reconnect the destination volume, or restore the directory. Do not let Xcode recreate it as a local directory first — that "
+                            + "creates shadow data.",
                         evidence: "docs/process/PRIOR_ART.md"))
             } else if target.hasPrefix("/Volumes/") {
                 out.append(
                     Finding(
                         id: "external-symlink:\(rel)", severity: .warning, title: "Symlink into /Volumes under ~/Library/Developer",
                         detail:
-                            "\(p) → \(target). Absolute symlinks into /Volumes break when the volume mounts under a different name (e.g. 'Name 1') or is absent.",
+                            "\(p) → \(target). Absolute symlinks into /Volumes break when the volume mounts under a different name (e.g. 'Name 1') or is "
+                            + "absent.",
                         path: p, remediation: "Prefer XCodeVault's UUID-identified strategies; keep the volume connected until migrated.",
                         evidence: "docs/architecture/MIGRATION_ENGINE.md"))
             }
@@ -270,10 +275,13 @@ public struct Doctor: Sendable {
                         id: "shadow-coresimulator-unscannable:\(root.scope)", severity: .warning,
                         title: "Could not scan \(root.display) for stray CoreSimulator device sets",
                         detail:
-                            "\(root.path) could not be enumerated (permissions). This rule reports nothing about that location — treat it as unknown, not as clean. Note it does NOT catch a volume that merely went away: an unmounted mount point that is still a readable empty directory enumerates fine and produces no finding at all.",
+                            "\(root.path) could not be enumerated (permissions). This rule reports nothing about that location — treat it as unknown, not as "
+                            + "clean. Note it does NOT catch a volume that merely went away: an unmounted mount point that is still a readable empty "
+                            + "directory enumerates fine and produces no finding at all.",
                         path: root.path,
                         remediation:
-                            "Re-run `xcodevaultctl doctor` with the volume mounted and readable. If it stays unreadable, inspect it manually before assuming no shadow data is there.",
+                            "Re-run `xcodevaultctl doctor` with the volume mounted and readable. If it stays unreadable, inspect it manually before assuming "
+                            + "no shadow data is there.",
                         evidence: "docs/architecture/COMPATIBILITY_MATRIX.md (E9, 2026-09-08); NON_GOALS_AND_SAFETY.md rule 6"))
                 continue
             }
@@ -306,7 +314,8 @@ public struct Doctor: Sendable {
                                 id: "shadow-coresimulator-unscannable:\(root.scope):\(parent)", severity: .warning,
                                 title: "Could not scan \(parent) on \(root.display) for stray CoreSimulator device sets",
                                 detail:
-                                    "\(root.path)/\(parent) could not be enumerated (permissions). Anything below it — including a whole CoreSimulator device set — is invisible to this check. Treat it as unknown, not as clean.",
+                                    "\(root.path)/\(parent) could not be enumerated (permissions). Anything below it — including a whole CoreSimulator device "
+                                    + "set — is invisible to this check. Treat it as unknown, not as clean.",
                                 path: root.path + "/" + parent,
                                 remediation:
                                     "Inspect it as a user who can read it before assuming no shadow data is there, then re-run `xcodevaultctl doctor`.",
@@ -382,12 +391,14 @@ public struct Doctor: Sendable {
                     // anything, including a second set actively taking writes.
                     severity = liveRedirect ? .critical : .error
                     detail =
-                        "\(candidate) looks like a CoreSimulator device set, but its contents could not be read (permissions). It cannot be classified as empty residue or as live data, so it is reported at the higher severity on purpose."
+                        "\(candidate) looks like a CoreSimulator device set, but its contents could not be read (permissions). It cannot be classified as "
+                        + "empty residue or as live data, so it is reported at the higher severity on purpose."
                         + (liveRedirect ? " A forbidden symlink under ~/Library/Developer is present at the same time." : "")
                     // No shell command here either: the path would need escaping for volume names
                     // containing spaces or quotes, which is the same trap the residue branch avoids.
                     remediation =
-                        "Inspect the directory yourself before doing anything — list the contents of its `Devices` subdirectory as a user who can read it. Do not delete it: an unreadable directory is not an empty one."
+                        "Inspect the directory yourself before doing anything — list the contents of its `Devices` subdirectory as a user who can read it. Do "
+                        + "not delete it: an unreadable directory is not an empty one."
                 case .holdsDevices:
                     // Two device sets that can both take writes right now — the shadow set plus a
                     // live redirect pointing simulator traffic away from the canonical path — is
@@ -398,12 +409,16 @@ public struct Doctor: Sendable {
                         + (udids.isEmpty
                             ? "a device_set.plist and no device directories"
                             : "\(udids.count) device director\(udids.count == 1 ? "y" : "ies")\(hasDeviceSet ? " and a device_set.plist" : "")")
-                        + ". Either this is a live device set reached through a redirect — an unsupported configuration — or it is a stale duplicate left behind by one, or a deliberate cold backup. All three mean simulator state exists in two places, which is the shadow-data failure mode; this rule cannot tell them apart."
+                        + ". Either this is a live device set reached through a redirect — an unsupported configuration — or it is a stale duplicate left "
+                        + "behind by one, or a deliberate cold backup. All three mean simulator state exists in two places, which is the shadow-data "
+                        + "failure mode; this rule cannot tell them apart."
                         + (liveRedirect
-                            ? " A forbidden symlink under ~/Library/Developer is present at the same time, so both sets can be taking writes right now — resolve that redirect first."
+                            ? " A forbidden symlink under ~/Library/Developer is present at the same time, so both sets can be taking writes right now — "
+                                + "resolve that redirect first."
                             : "")
                     remediation =
-                        "Do not delete it yet. Compare it against ~/Library/Developer/CoreSimulator/Devices first — check which set `xcrun simctl list devices` actually reports, and confirm no path still points here. XCodeVault `verify` will diff the two in a later milestone."
+                        "Do not delete it yet. Compare it against ~/Library/Developer/CoreSimulator/Devices first — check which set `xcrun simctl list "
+                        + "devices` actually reports, and confirm no path still points here. XCodeVault `verify` will diff the two in a later milestone."
                 case .otherContent:
                     severity = .warning
                     // Name what is actually there, on both levels. Saying only "not empty" invites
@@ -413,19 +428,25 @@ public struct Doctor: Sendable {
                     let insideDevices = (deviceEntries ?? []).sorted()
                     if !insideDevices.isEmpty { leftovers.append("inside `Devices`: " + insideDevices.joined(separator: ", ")) }
                     detail =
-                        "\(candidate) holds no UUID-named devices and no device_set.plist, but it is not empty either — \(leftovers.joined(separator: "; ")). Not removable residue: CoreSimulator keeps multi-gigabyte caches next to the device set, a device may have been restored under a non-UUID name, and even a stray `.DS_Store` is enough for `rmdir` to refuse."
+                        "\(candidate) holds no UUID-named devices and no device_set.plist, but it is not empty either — \(leftovers.joined(separator: "; ")). "
+                        + "Not removable residue: CoreSimulator keeps multi-gigabyte caches next to the device set, a device may have been restored under "
+                        + "a non-UUID name, and even a stray `.DS_Store` is enough for `rmdir` to refuse."
                     remediation =
-                        "Inspect what remains before removing anything — `Caches` in particular can be several GB, and a non-UUID entry under `Devices` may still be a real device directory. Confirm what each item is rather than assuming it is junk."
+                        "Inspect what remains before removing anything — `Caches` in particular can be several GB, and a non-UUID entry under `Devices` may "
+                        + "still be a real device directory. Confirm what each item is rather than assuming it is junk."
                 case .pureResidue:
                     severity = .warning
                     detail =
-                        "\(candidate) contains nothing but an empty `Devices` directory. This is residue: CoreSimulator caches the resolved target path while a redirect is in place and can recreate the skeleton there after the redirect is gone (observed in E9)."
+                        "\(candidate) contains nothing but an empty `Devices` directory. This is residue: CoreSimulator caches the resolved target path while "
+                        + "a redirect is in place and can recreate the skeleton there after the redirect is gone (observed in E9)."
                     // No copy-pasteable command on purpose. The path would need shell-escaping for
                     // volume names containing quotes, and `report` redacts $HOME to a literal `~`,
                     // which does not expand inside quotes — so an emitted command is the one thing
                     // a user is most likely to copy and the most likely to be subtly wrong.
                     remediation =
-                        "Empty as of this scan. Remove it with `rmdir` — never `rm -rf` — taking `Devices` first and then the directory itself; `rmdir` refuses a non-empty directory, so it cannot take data with it. If `rmdir` refuses, the directory is no longer empty: stop, and re-run `xcodevaultctl doctor` to see what appeared."
+                        "Empty as of this scan. Remove it with `rmdir` — never `rm -rf` — taking `Devices` first and then the directory itself; `rmdir` "
+                        + "refuses a non-empty directory, so it cannot take data with it. If `rmdir` refuses, the directory is no longer empty: stop, and "
+                        + "re-run `xcodevaultctl doctor` to see what appeared."
                 }
 
                 out.append(
@@ -455,7 +476,8 @@ public struct Doctor: Sendable {
                         id: "prior-tool:mac-ssd-rescue:\(v.id)", severity: .warning,
                         title: "mac-ssd-rescue on \(v.volumeName) is a symlink",
                         detail:
-                            "\(candidate) is a symlink to \(target), not a directory. Whatever it reports would be that other tree's contents, so this rule does not follow it.",
+                            "\(candidate) is a symlink to \(target), not a directory. Whatever it reports would be that other tree's contents, so this rule "
+                            + "does not follow it.",
                         path: candidate,
                         remediation: "Inspect the link and its target yourself. Removing the link does not remove the data it points at.",
                         evidence: "docs/process/PRIOR_ART.md"))
@@ -494,15 +516,20 @@ public struct Doctor: Sendable {
                     detail =
                         "\(candidate) is empty — the prior tool's data is gone and only the directory itself remains."
                         + (stillTargeted
-                            ? " But something under ~/Library/Developer still redirects here, so this is a live redirect pointing at an empty tree — resolve that first."
+                            ? " But something under ~/Library/Developer still redirects here, so this is a live redirect pointing at an empty tree — resolve "
+                                + "that first."
                             : " Nothing to compare and nothing at risk.")
                     remediation =
                         stillTargeted
                         ? "Do not remove it yet: fix the redirect under ~/Library/Developer first, then this directory is safe to delete."
-                        : "Remove the empty directory. The volume root is root-owned, so this one needs sudo:\n  sudo rmdir \(OwnershipAdvice.shellQuoted(candidate))\nUse `rmdir`, not `rm -rf` — it refuses if anything reappeared inside."
+                        : "Remove the empty directory. The volume root is root-owned, so this one needs sudo:\n  sudo rmdir "
+                            + "\(OwnershipAdvice.shellQuoted(candidate))\nUse `rmdir`, not `rm -rf` — it refuses if anything reappeared inside."
                 } else {
                     detail =
-                        "\(candidate) contains: \(visible.isEmpty ? "(only hidden entries)" : visible.joined(separator: ", "))\(hiddenNote). If ~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported configuration (the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves shadow device sets behind)."
+                        "\(candidate) contains: \(visible.isEmpty ? "(only hidden entries)" : visible.joined(separator: ", "))\(hiddenNote). If "
+                        + "~/Library/Developer no longer links here, these are stale duplicates; if it does, they are live data in an unsupported "
+                        + "configuration (the Aug 2025 Files-app breakage did not reproduce on macOS 26.6.2 / Xcode 26.5, but the layout still leaves "
+                        + "shadow device sets behind)."
                     remediation = "Compare with the local copies before deleting anything. XCodeVault `verify` will diff them in a later milestone."
                 }
                 out.append(
@@ -525,10 +552,12 @@ public struct Doctor: Sendable {
             Finding(
                 id: "low-free-space", severity: sev, title: "Low free space on the internal volume: \(ByteCount.english(free))",
                 detail:
-                    "Simulator runtime installs stage on the internal volume and reportedly need ~40 GB free even when the installer is elsewhere; Xcode itself needs headroom for indexes and builds.",
+                    "Simulator runtime installs stage on the internal volume and reportedly need ~40 GB free even when the installer is elsewhere; Xcode "
+                    + "itself needs headroom for indexes and builds.",
                 path: host.homeDirectory,
                 remediation:
-                    "Run `xcodevaultctl scan` and clean regenerable categories first (DerivedData, old Device Support, unused runtimes via `simctl runtime delete`).",
+                    "Run `xcodevaultctl scan` and clean regenerable categories first (DerivedData, old Device Support, unused runtimes via `simctl runtime "
+                    + "delete`).",
                 evidence: "docs/research/FINDINGS-2026-09-05.md §F9 (E11)")
         ]
     }
@@ -606,7 +635,8 @@ public struct Doctor: Sendable {
                 Finding(
                     id: "deriveddata-external", severity: .info, title: "DerivedData is on an external volume (\(loc))",
                     detail:
-                        "Apple's supported relocation, but framework unit tests are reported to fail loading test bundles from external volumes (F4). E2 on this machine: see COMPATIBILITY_MATRIX.md.",
+                        "Apple's supported relocation, but framework unit tests are reported to fail loading test bundles from external volumes (F4). E2 on "
+                        + "this machine: see COMPATIBILITY_MATRIX.md.",
                     path: loc, remediation: "If `xcodebuild test` fails with a bundle-load error, point DerivedData back to the internal disk.",
                     evidence: "docs/research/FINDINGS-2026-09-05.md §F4; H6")
             ]

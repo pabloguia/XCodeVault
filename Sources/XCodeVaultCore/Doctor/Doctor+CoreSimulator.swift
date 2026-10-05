@@ -36,7 +36,8 @@ extension Doctor {
                         detail: "Registry says Ready; nothing is mounted at \(mp). Xcode will not see this runtime.",
                         path: mp,
                         remediation:
-                            "`xcrun simctl runtime verify \(r.identifier)` then restart CoreSimulator (`launchctl kickstart -k`) or reboot. Never remount with Disk Utility (Apple DTS).",
+                            "`xcrun simctl runtime verify \(r.identifier)` then restart CoreSimulator (`launchctl kickstart -k`) or reboot. Never remount "
+                            + "with Disk Utility (Apple DTS).",
                         evidence: "docs/research/FINDINGS-2026-09-05.md §F1"))
             }
             if let sig = r.signatureState, sig != "Verified" {
@@ -69,10 +70,12 @@ extension Doctor {
                     Finding(
                         id: "stranded-inbox:\(n)", severity: .warning, title: "Stranded runtime download: \(n) (\(ByteCount.english(size)))",
                         detail:
-                            "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful `-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
+                            "Files left in the Inbox after a runtime download/install are not reclaimed by Xcode — observed even after a successful "
+                            + "`-downloadPlatform -exportPath` followed by `simctl runtime delete`.",
                         path: p,
                         remediation:
-                            "Restart the Mac: simdiskimaged reaps the Inbox at startup (verified 2026-09-07, 5 GB reclaimed). Deleting by hand does not work — even `sudo rm` is refused (Operation not permitted) on macOS 26.5. If it survives a reboot, report to Apple.",
+                            "Restart the Mac: simdiskimaged reaps the Inbox at startup (verified 2026-09-07, 5 GB reclaimed). Deleting by hand does not work "
+                            + "— even `sudo rm` is refused (Operation not permitted) on macOS 26.5. If it survives a reboot, report to Apple.",
                         evidence: "docs/research/FINDINGS-2026-09-05.md §F1 + 2026-09-06 root-EPERM note"))
             }
         }
@@ -240,7 +243,8 @@ extension Doctor {
                     id: id, severity: .warning, title: "Orphaned dyld cache: \(dirName) (\(size))",
                     detail:
                         "\(reason)\(age) Nothing will rebuild it, because the runtime it belongs to is gone — unlike the rest of this tree, "
-                        + "where on one machine the caches for installed runtimes were rebuilt after a macOS update (the one rebuild recorded; its trigger is not identified).",
+                        + "where on one machine the caches for installed runtimes were rebuilt after a macOS update (the one rebuild recorded; its trigger is "
+                        + "not identified).",
                     path: path,
                     remediation:
                         "Do not start with a restart: where this was measured (macOS 26.6.2 / 25G83, 2026-09-16) the tree came back byte-identical across "
@@ -282,7 +286,8 @@ extension Doctor {
                     Finding(
                         id: "orphan-dyld-host:\(buildDir)", severity: .info,
                         title:
-                            "Dyld caches for macOS \(buildDir), which this machine no longer runs (\(usage.map { ByteCount.english($0.allocatedBytes) } ?? "size unknown"))",
+                            "Dyld caches for macOS \(buildDir), which this machine no longer runs "
+                            + "(\(usage.map { ByteCount.english($0.allocatedBytes) } ?? "size unknown"))",
                         detail:
                             "This machine runs \(hostBuild). Caches under another build are not read by anything — but XCodeVault has never observed a stale "
                             + "build directory in the field, so this is reported for inspection only and carries no command.",
@@ -365,10 +370,12 @@ extension Doctor {
                         Finding(
                             id: "orphan-asset:\(e)", severity: .warning, title: "Runtime asset not referenced by any runtime (\(ByteCount.english(size)))",
                             detail:
-                                "\(p) exists in the MobileAsset store but `simctl runtime list` references no runtime backed by it. Likely a NeverCollected orphan (F1).",
+                                "\(p) exists in the MobileAsset store but `simctl runtime list` references no runtime backed by it. Likely a NeverCollected "
+                                + "orphan (F1).",
                             path: p,
                             remediation:
-                                "Do not delete by hand (under /System). Try `xcrun simctl runtime delete all --dry-run` to see whether simctl knows it; otherwise it is an Apple bug to report.",
+                                "Do not delete by hand (under /System). Try `xcrun simctl runtime delete all --dry-run` to see whether simctl knows it; "
+                                + "otherwise it is an Apple bug to report.",
                             evidence: "docs/research/FINDINGS-2026-09-05.md §F1 (forum thread 812992)"))
                 }
             }

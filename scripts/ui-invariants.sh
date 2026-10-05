@@ -26,8 +26,10 @@ lint() {  # lint <root>: prints violations, returns their count (capped at 255)
     report() { echo "$1"; n=$((n + 1)); }
 
     # U1 No capsule containers outside the design system: only FilterChip is a capsule (§2.3).
+    local u1='in: Capsule\(\)|Capsule\(\)\.(fill|stroke|strokeBorder)|'
+    u1+='clipShape\(Capsule\(\)\)|(background|overlay)\( *Capsule\(\)'
     while IFS= read -r hit; do [ -n "$hit" ] && report "$hit [U1] capsule container outside DesignSystem/ (only FilterChipStyle is a capsule)"; done \
-        < <($GREP -nE 'in: Capsule\(\)|Capsule\(\)\.(fill|stroke|strokeBorder)|clipShape\(Capsule\(\)\)|(background|overlay)\( *Capsule\(\)' "${files[@]}" /dev/null)
+        < <($GREP -nE "$u1" "${files[@]}" /dev/null)
     # U2 No button-styled toggles: filters use FilterChipStyle (§3.3).
     while IFS= read -r hit; do [ -n "$hit" ] && report "$hit [U2] .toggleStyle(.button): use FilterChipStyle"; done \
         < <($GREP -nE '\.toggleStyle\(\.button\)' "${files[@]}" /dev/null)
@@ -128,8 +130,9 @@ if [ "${1:-}" = "--self-test" ]; then
     inject U4 "$v/DetailViews.swift" '        let x = Image(systemName: "exclamationmark.triangle")'
     inject U5 "$v/ChartViews.swift" '        let x = Text("a").lineLimit(1)'
     inject U6 "$v/DetailViews.swift" '        let x = MarkerBadges(markers: [])'
-    inject U7 "$v/DetailViews.swift" '    private struct NestedTwice: View { var body: some View { HStack { Button("a") {}.buttonStyle(.borderedProminent); Button("b") {}.buttonStyle(.borderedProminent) } } }'
-    inject U7 "$v/DetailViews.swift" 'struct Twice: View { var body: some View { HStack { Button("a") {}.buttonStyle(.borderedProminent); Button("b") {}.buttonStyle(.borderedProminent) } } }'
+    twice='HStack { Button("a") {}.buttonStyle(.borderedProminent); Button("b") {}.buttonStyle(.borderedProminent) }'
+    inject U7 "$v/DetailViews.swift" "    private struct NestedTwice: View { var body: some View { $twice } }"
+    inject U7 "$v/DetailViews.swift" "struct Twice: View { var body: some View { $twice } }"
     inject U8 "$v/DetailViews.swift" '        let x = Text("a").opacity(isEnabled ? 1 : 0.4)'
     cp "$v/OperationSheetView.swift" "$v/OperationSheetView.swift.orig"
     /usr/bin/sed -i '' 's/\.onExitCommand {/.removedExitCommand {/' "$v/OperationSheetView.swift"

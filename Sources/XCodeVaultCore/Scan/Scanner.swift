@@ -39,7 +39,8 @@ public struct Scanner: Sendable {
         // Disclose-don't-bury warnings (NON_GOALS_AND_SAFETY.md).
         if host.dataVolumeFreeBytes < 40 * 1_000_000_000 {
             warnings.append(
-                "Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume. Installing a simulator runtime needs internal staging space (reported ~40 GB) even when the installer is stored externally."
+                "Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume. Installing a simulator runtime needs internal staging space "
+                    + "(reported ~40 GB) even when the installer is stored externally."
             )
         }
         if !host.isAppleSilicon {

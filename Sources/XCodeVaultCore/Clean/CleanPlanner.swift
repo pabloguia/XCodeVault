@@ -128,8 +128,10 @@ public struct CleanPlanner: Sendable {
                 "CoreSimulator dyld caches are root-owned and need root with Full Disk Access. `clean` lists them for accounting and never "
                     + "deletes them; the app can empty them through the privileged helper (experimental), which needs a signed build and whose own Full Disk "
                     + "Access is unmeasured. "
-                    + "Most of this total is NOT durable free space — on one machine, caches for installed runtimes were rebuilt within an hour after a macOS update, "
-                    + "but no deleted cache has been seen rebuilt and the trigger is not identified; until a rebuild those simulators run without a dyld shared cache. "
+                    + "Most of this total is NOT durable free space — on one machine, caches for installed runtimes were rebuilt within an hour after a macOS "
+                    + "update, "
+                    + "but no deleted cache has been seen rebuilt and the trigger is not identified; until a rebuild those simulators run without a dyld "
+                    + "shared cache. "
                     + "`doctor` reports the part nothing was seen to rebuild — caches whose runtime is gone — and a restart does not reclaim those "
                     + "either, measured byte-identical across a reboot.")
         }
@@ -341,7 +343,8 @@ public struct CleanExecutor: Sendable {
         try journal.record(
             id: opID, kind: .clean, state: .completed,
             summary:
-                "\(useTrash ? "moved to Trash" : "freed") \(ByteCount.format(Int64(clamping: deleted.reduce(0) { $0 + $1.bytes }), locale: "en")), \(failed.count) failure(s)",
+                "\(useTrash ? "moved to Trash" : "freed") \(ByteCount.format(Int64(clamping: deleted.reduce(0) { $0 + $1.bytes }), locale: "en")), "
+                + "\(failed.count) failure(s)",
             paths: deleted.map(\.path), bytes: deleted.reduce(0) { $0 + $1.bytes })
         return CleanResult(deleted: deleted, failedPairs: failed)
     }
