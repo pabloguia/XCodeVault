@@ -211,11 +211,27 @@ done
 helper_files=$(find $HELPER_DIRS -name '*.swift' -type f | sort)
 [ -n "$helper_files" ] || { echo "helper invariants: no Swift sources under the helper targets; refusing to report ok" >&2; exit 2; }
 
+# **The R8 exception (ADR-0014; approved by the maintainer on 2026-10-05).** Exactly two files each lift exactly one
+# token from the two rules below, and the shape of what they do with it is checked further down:
+#   - SPAWN_SITE may call `posix_spawn` — once, on `DiskutilInvocation.executable`, which is `/usr/sbin/diskutil`;
+#     `posix_spawnp` (a PATH search) stays forbidden there as everywhere;
+#   - AUTHZ_SITE may call `AuthorizationCopyRights` — once, on `clientRef`, which only `AuthorizationCreateFromExternalForm`
+#     assigns: the reference the client made, never one the root daemon made itself (the CVE-2025-65842 shape).
+# Every other helper file keeps both prohibitions, and `interactionAllowed` is forbidden in all of them: the helper
+# never shows an authorization dialog of its own.
+SPAWN_SITE=Sources/XCodeVaultHelperCore/HelperDiskutil.swift
+AUTHZ_SITE=Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift
 for f in $helper_files; do
-    forbid "$f" '/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawn|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun' \
+    spawn_token='posix_spawn'
+    [ "$f" = "$SPAWN_SITE" ] && spawn_token='posix_spawnp'
+    authz_token='AuthorizationCopyRight[s]|'
+    [ "$f" = "$AUTHZ_SITE" ] && authz_token=''
+    forbid "$f" "/bin/(ba|z)?sh|\\bsystem\\(|\\bpopen\\(|$spawn_token|\\bexec(v|ve|vp|l|lp|le)\\(|NSTask|\\bProcess\\(|executableURL|launchPath|/usr/bin/env|xcrun" \
         "process or shell execution in the privileged helper"
-    forbid "$f" 'AuthorizationCopyRight[s]|processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity' \
+    forbid "$f" "${authz_token}processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity" \
         "hand-rolled or PID-based peer validation; the connection code-signing requirement is the only accepted form"
+    forbid "$f" 'interactionAllowed|kAuthorizationFlagInteractionAllowed' \
+        "an authorization dialog in the privileged helper; interaction is the client's (ADR-0014)"
     forbid "$f" 'dlopen|Bundle\(path:|Bundle\(url:|NSBundle' \
         "dynamic code loading in the privileged helper"
     # `fchown`/`fchmod` are deliberately NOT matched: a descriptor already opened O_NOFOLLOW is the
@@ -373,6 +389,41 @@ for f in $helper_files; do
 done
 
 # ---- the authorization gate ------------------------------------------------------------------------
+# ---- the R8 exception's shape (ADR-0014) -------------------------------------------------------------
+# The loop above lets one token into each of two files. These say what each may do with it. A missing file is a
+# violation, not a pass: the rules would otherwise check nothing.
+if [ -f "$SPAWN_SITE" ]; then
+    spawn_calls=$(code_of "$SPAWN_SITE" | grep -cE '(^|[^_[:alnum:]])posix_spawn\(')
+    [ "$spawn_calls" -eq 1 ] \
+        || violation "$SPAWN_SITE — $spawn_calls posix_spawn calls" "exactly one process execution is allowed in the helper"
+    code_of "$SPAWN_SITE" | grep -E '(^|[^_[:alnum:]])posix_spawn\(' | grep -qE 'posix_spawn\(&pid, DiskutilInvocation\.executable,' \
+        || violation "$SPAWN_SITE — posix_spawn does not run DiskutilInvocation.executable" "the executable is the fixed constant, never a variable"
+    code_of "$SPAWN_SITE" | grep -qE '^    static let executable = "/usr/sbin/diskutil"$' \
+        || violation "$SPAWN_SITE — DiskutilInvocation.executable is not /usr/sbin/diskutil" "the one program the helper may run"
+    # Every absolute path literal in the file is one of these. `/dev/disk` is the device-node prefix the argument
+    # check compares against; `/dev/null` is stdin and stderr.
+    bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"|"/dev/disk"' | sort -u | tr '\n' ' ')
+    [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
+else
+    violation "$SPAWN_SITE — missing" "the R8 spawn rules check nothing; move them with the file"
+fi
+if [ -f "$AUTHZ_SITE" ]; then
+    copy_calls=$(code_of "$AUTHZ_SITE" | grep -cE 'AuthorizationCopyRights\(')
+    [ "$copy_calls" -eq 1 ] \
+        || violation "$AUTHZ_SITE — $copy_calls AuthorizationCopyRights calls" "exactly one right check is allowed in the helper"
+    code_of "$AUTHZ_SITE" | grep -E 'AuthorizationCopyRights\(' | grep -qE 'AuthorizationCopyRights\(clientRef, ' \
+        || violation "$AUTHZ_SITE — AuthorizationCopyRights is not called on clientRef" "only the client's externalized reference may be checked"
+    # `clientRef` is written only by `AuthorizationCreateFromExternalForm`: no `&clientRef` elsewhere, no assignment.
+    hit=$(code_of "$AUTHZ_SITE" | grep -nE '&clientRef' | grep -vE 'AuthorizationCreateFromExternalForm\(&form, &clientRef\)' | head -3)
+    [ -z "$hit" ] || violation "$AUTHZ_SITE — clientRef is written by something other than AuthorizationCreateFromExternalForm" "$hit"
+    hit=$(code_of "$AUTHZ_SITE" | grep -nE '(^|[^_[:alnum:]])clientRef[[:space:]]*=[^=]' | head -3)
+    [ -z "$hit" ] || violation "$AUTHZ_SITE — clientRef is assigned" "$hit"
+    code_of "$AUTHZ_SITE" | grep -qE 'AuthorizationCreateFromExternalForm\(&form, &clientRef\)' \
+        || violation "$AUTHZ_SITE — clientRef does not come from AuthorizationCreateFromExternalForm" "the reference checked is the client's"
+else
+    violation "$AUTHZ_SITE — missing" "the R8 authorization rules check nothing; move them with the file"
+fi
+
 # Expected count comes from the XPC surface, not from a naming convention: a new verb that does not
 # happen to be called `doSomething` used to be invisible.
 # Counted by excluding the read-only verb **by name**, not by subtracting one from a pattern that
@@ -557,12 +608,12 @@ while IFS= read -r f; do
             [ -n "$hit" ] && violation "$f — names the helper client outside its two allowed lines" "$(printf '%s' "$hit" | tr '\n' ' ')" ;;
         Sources/xcodevaultctl/PermissionsCommand.swift)
             seen_permissions=1
-            forbid "$f" 'removeRegenerableSystemDirectoryContents|createVaultDirectory' \
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|createVaultDirectory|enableOwnership' \
                 "the permissions command reads the helper's state and calls no verb" ;;
         *)
             forbid "$f" '[[:<:]](XCodeVaultHelperClient|HelperClient)[[:>:]]' \
                 "only LiveHelper and PermissionsCommand may use the helper client, whatever the import spelling"
-            forbid "$f" 'removeRegenerableSystemDirectoryContents|[[:alnum:]_)][[:space:]]*\.createVaultDirectory\(volumeUUID' \
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|[[:alnum:]_)][[:space:]]*\.(createVaultDirectory|enableOwnership)\(volumeUUID' \
                 "only LiveHelper, driven by PrivilegedActionRunner, may call a verb: the journal and the in-use refusal are there" ;;
     esac
 done < <(find Sources/XCodeVault Sources/xcodevaultctl -type f -name '*.swift' 2>/dev/null | sort)
