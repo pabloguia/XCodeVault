@@ -33,6 +33,8 @@ public struct HelperClient: Sendable {
         case unexpectedProxy
         /// R8: the helper that answered reports another version than this build's. The authorization is not sent.
         case versionMismatch(String)
+        /// R8 round 5: the helper that answered is newer than this build, or of a version it cannot order. Not reinstalled.
+        case helperNewer(String)
         /// R8: the user cancelled the system password dialog. Not an error: nothing was asked of the helper.
         case authorizationCanceled
         /// R8: the right was not obtained (wrong password three times, or the authorization service refused).
@@ -63,6 +65,9 @@ public struct HelperClient: Sendable {
                 return "The connection did not return the privileged helper's interface. Refusing to use it."
             case .versionMismatch(let v):
                 return "The privileged helper that answered is version \(v), not \(HelperIdentity.version). Nothing was sent to it; reinstall the helper."
+            case .helperNewer(let v):
+                return "A newer XCodeVault installed this helper (version \(v); this copy is \(HelperIdentity.version)); update this copy. "
+                    + "Nothing was sent to the helper."
             case .authorizationCanceled:
                 return "The administrator password was not given."
             case .authorizationDenied(let status):
@@ -320,9 +325,13 @@ public struct HelperClient: Sendable {
         defer { connection.invalidate() }
         let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
         // A result, not a throw, so the app can tell an outdated helper without naming this type (helper-invariants), and
-        // reinstall it (R8 fix round 4: the 0.2.0 daemon still running after an update).
+        // reinstall it (R8 fix round 4: the 0.2.0 daemon still running after an update) — but only an OLDER one (round 5,
+        // F2). A newer helper, or one whose version cannot be ordered, is left alone: reinstalling would downgrade it.
         guard version == HelperIdentity.version else {
-            return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
+            if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
+                return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
+            }
+            return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
         }
         let right = HelperIdentity.enableOwnershipRight
         let authorizer = self.authorizer
@@ -343,6 +352,59 @@ public struct HelperClient: Sendable {
         guard authorized() else { throw Failure.notStarted }
         return try await call(connection) { helper, reply in
             helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
+        }
+    }
+
+    /// Semantic-version precedence of two `MAJOR.MINOR.PATCH[-PRERELEASE]` strings (R8 fix round 5, F2), or nil when
+    /// either does not parse. A pre-release orders before its release (`0.2.1-dev` < `0.2.1`); two pre-releases of the
+    /// same version order by their identifiers, numerically where both are numbers. Build metadata (`+…`) is ignored.
+    static func compareVersions(_ a: String, _ b: String) -> ComparisonResult? {
+        guard let x = SemanticVersion(a), let y = SemanticVersion(b) else { return nil }
+        return x.compare(y)
+    }
+
+    struct SemanticVersion {
+        let core: [Int]
+        let prerelease: [String]
+
+        init?(_ raw: String) {
+            let noBuild = raw.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            let parts = noBuild.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            let numbers = parts[0].split(separator: ".", omittingEmptySubsequences: false)
+            guard numbers.count == 3 else { return nil }
+            var core: [Int] = []
+            for n in numbers {
+                guard !n.isEmpty, n.allSatisfy({ $0.isASCII && $0.isNumber }), let v = Int(n) else { return nil }
+                core.append(v)
+            }
+            self.core = core
+            if parts.count == 2 {
+                let ids = parts[1].split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+                guard !ids.isEmpty, ids.allSatisfy({ !$0.isEmpty }) else { return nil }
+                prerelease = ids
+            } else {
+                prerelease = []
+            }
+        }
+
+        func compare(_ other: SemanticVersion) -> ComparisonResult {
+            for (l, r) in zip(core, other.core) where l != r { return l < r ? .orderedAscending : .orderedDescending }
+            switch (prerelease.isEmpty, other.prerelease.isEmpty) {
+            case (true, true): return .orderedSame
+            case (true, false): return .orderedDescending
+            case (false, true): return .orderedAscending
+            case (false, false): break
+            }
+            for (l, r) in zip(prerelease, other.prerelease) where l != r {
+                switch (Int(l), Int(r)) {
+                case (let a?, let b?): return a < b ? .orderedAscending : .orderedDescending
+                case (.some, nil): return .orderedAscending
+                case (nil, .some): return .orderedDescending
+                case (nil, nil): return l < r ? .orderedAscending : .orderedDescending
+                }
+            }
+            if prerelease.count == other.prerelease.count { return .orderedSame }
+            return prerelease.count < other.prerelease.count ? .orderedAscending : .orderedDescending
         }
     }
 

@@ -56,6 +56,59 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertEqual(log.all, [], "no password is asked for a helper that is not this build's")
     }
 
+    /// Fix round 5 (F2): only an OLDER helper is reported as outdated — the one result the app reinstalls on. A newer
+    /// one, or one whose version cannot be ordered, is never replaced by this copy's older daemon.
+    func testOnlyAnOlderHelperIsReportedOutdatedAndANewerOneIsLeftAlone() async {
+        for (reply, expected) in [
+            ("0.2.0", HelperResultCode.helperOutdated), ("0.2.1-alpha", .helperOutdated), ("0.1.9", .helperOutdated),
+            ("0.2.1", .helperNewer), ("0.2.2-dev", .helperNewer), ("0.3.0", .helperNewer), ("1.0.0", .helperNewer),
+            ("not-a-version", .helperNewer), ("", .helperNewer),
+        ] {
+            let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: reply)
+            let log = Acquisitions()
+            let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
+            let result = try? await client.enableOwnership(volumeUUID: "U-1")
+            XCTAssertEqual(result?.code, expected, reply)
+            XCTAssertEqual(result?.ok, false, reply)
+            XCTAssertEqual(daemon.calls, ["version"], reply)
+            XCTAssertEqual(log.all, [], "no password is asked: \(reply)")
+            if expected == .helperNewer {
+                XCTAssertTrue(result?.message.contains("A newer XCodeVault installed this helper") == true, reply)
+                XCTAssertTrue(result?.message.contains("update this copy") == true, reply)
+            }
+        }
+    }
+
+    func testVersionsOrderBySemanticVersionPrecedence() {
+        let ordered = ["0.1.0", "0.2.0-dev", "0.2.0", "0.2.1-alpha", "0.2.1-alpha.2", "0.2.1-alpha.10", "0.2.1-beta", "0.2.1-dev", "0.2.1", "0.10.0", "1.0.0"]
+        for (i, a) in ordered.enumerated() {
+            for (j, b) in ordered.enumerated() {
+                let want: ComparisonResult = i < j ? .orderedAscending : i > j ? .orderedDescending : .orderedSame
+                XCTAssertEqual(HelperClient.compareVersions(a, b), want, "\(a) vs \(b)")
+            }
+        }
+        XCTAssertEqual(HelperClient.compareVersions("0.2.1+build.5", "0.2.1"), .orderedSame, "build metadata is ignored")
+        for bad in ["", "0.2", "0.2.1.0", "v0.2.1", "0.2.x", "0..1", "0.2.1-", "0.2.1-a..b", " 0.2.1"] {
+            XCTAssertNil(HelperClient.compareVersions(bad, "0.2.1"), bad)
+        }
+    }
+
+    /// The app's adapter: an older helper becomes the outcome the app reinstalls on; a newer one is a plain failure whose
+    /// reason the guided route shows, and nothing is unregistered.
+    func testTheAdapterReinstallsOnlyForAnOlderHelper() async throws {
+        let older = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.2.0")
+        let liveOlder = LiveHelper(client: HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: older) }, authorizer: authorizer(Acquisitions())))
+        do {
+            _ = try await liveOlder.perform(.enableOwnership(volumeUUID: "U-1"), authorized: { true })
+            XCTFail("an older helper is reported as outdated")
+        } catch is PrivilegedHelperOutdated {}
+        let newer = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.9.0")
+        let liveNewer = LiveHelper(client: HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: newer) }, authorizer: authorizer(Acquisitions())))
+        let reply = try await liveNewer.perform(.enableOwnership(volumeUUID: "U-1"), authorized: { true })
+        XCTAssertFalse(reply.ok)
+        XCTAssertTrue(reply.message.contains("update this copy"), reply.message)
+    }
+
     func testCancellingThePasswordIsAQuietResultAndSendsNothing() async throws {
         let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: HelperIdentity.version)
         let log = Acquisitions()

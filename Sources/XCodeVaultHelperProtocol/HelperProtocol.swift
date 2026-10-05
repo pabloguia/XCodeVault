@@ -102,9 +102,13 @@ public enum HelperResultCode: String, Sendable, CaseIterable {
     /// The user cancelled the system password dialog. Produced by the client only, before anything is sent: the
     /// helper never replies with it.
     case authorizationCanceled
-    /// The helper that answered is another version than this build's (R8 fix round 4): produced by the client only,
-    /// before any password is asked; the app reinstalls the helper through the approval flow and tries once more.
+    /// The helper that answered is OLDER than this build (R8 fix rounds 4 and 5): produced by the client only, before
+    /// any password is asked; the app reinstalls the helper through the approval flow and tries once more.
     case helperOutdated
+    /// The helper that answered is NEWER than this build, or of a version this build cannot order (R8 fix round 5, F2):
+    /// produced by the client only, before any password is asked. Never a reason to reinstall — that would put an older
+    /// daemon in place of a newer one — so the app falls back to the guided route with the reason.
+    case helperNewer
 }
 
 /// Result envelope; `NSSecureCoding` so it can cross XPC.
