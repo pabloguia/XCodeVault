@@ -110,6 +110,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   screen (`AppModel.planTarget`, tested case by case); never an erase. Snapshots `r7c-plan-{en,ja}-{nodrive,pablo,done}`.
   Report: `.superpowers/sdd/r7/c-report.md`. **Manual check, open:** the Plan in a real window with a drive plugged in
   and out; a migration-safety review of the step→sheet mapping.
+  - **Fix round** (`.superpowers/sdd/r7/c-fix-round.md`, report `c-fix-report.md`): F1 simulator devices are "deleted; you
+    recreate it yourself", tagged, out of the headline; F2/I1 DerivedData split (new builds / old DerivedData, deleted);
+    F3/I2 parked runtimes from the whole journal (`ParkedRuntimes`); F4 the unusable vault's reason; F5/F6 no forged or
+    erasing option from the Plan; F7 stale-vault tests; I3 five outcomes and a legend; localized item names; the app
+    opens on the Plan while something can be done. Re-review by migration-safety-reviewer owed.
 
 ## Blocked / pending — manual (ask the user)
 

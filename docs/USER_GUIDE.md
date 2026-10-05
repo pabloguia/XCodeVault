@@ -53,28 +53,35 @@ in a line above the screen until the next action or its ×; an error says what f
 
 ### Save space
 
-**Plan** (first in the sidebar, ⌘1) is the best path for this Mac as numbered steps: choose a drive, prepare it, use it
-as your vault, move what can move, check health. The header says how much can be freed — "Up to 64 GB can be freed on
-this Mac; 18 GB is already done." — and splits it by what happens to each item. Each item is counted once, from the
-same scan as the Overview. Every step shows its state, with a word as well as a symbol: **Done**, **Next**, **Blocked**
-(with the reason, such as no drive connected) or **Not needed**. The step that is next has the one prominent button.
+**Plan** (first in the sidebar, ⌘1; the app opens on it while something can be done) is the best path for this Mac as
+numbered steps: choose a drive, prepare it, use it as your vault, move what can move, check health. The header says how
+much can be freed — "Up to 64 GB can be freed on this Mac; 18 GB is already done." — and splits it by what happens to
+each item. Each item is counted once, from the same scan as the Overview. What deleting simulator devices would free is
+not in that number: it is on its own line, because what you made in them is lost. Every step shows its state, with a
+word as well as a symbol: **Done**, **Next**, **Partly available** (deleting works now; the rest waits for the vault),
+**Blocked** (with the reason) or **Not needed**. One button is prominent: the next thing to do.
 
 The plan is worked out again every time from what the app reads — the scan, the drives, the vault, Xcode's locations,
-History and Health — and nothing about it is saved (ADR-0013). A step is done because the Mac shows it done; plug a
-drive in and the steps change. The Plan runs nothing: every button opens the sheet or screen that already does that
-job, with its own review and confirmation — **Add a Case-insensitive Volume…** or Drives for preparing, **Use This
-Drive…**, **Run…** on the vault's standard folder, **Review** for what is deleted, Health. It never proposes erasing a
-drive: when what a drive needs would erase data, the step sends you to Drives to choose.
+the whole journal and Health — and nothing about it is saved (ADR-0013). A step is done because the Mac shows it done;
+plug a drive in and the steps change. When your vault cannot be used, step 1 says why: not connected; a different
+volume mounted where it should be; or shadow data — files on this Mac where the vault mounts — with its size and a
+pointer to Health. The Plan runs nothing: every button opens the sheet or screen that already does that job, with its
+own review and confirmation. It never proposes erasing a drive, and a preparation sheet opened from it offers no erasing
+option; erasing is only in Drives.
 
-The move step lists each item with its size and one of four outcomes:
+The move step lists each item with its size and one of five outcomes. The line above the items says which need the
+drive connected and which leave their only copy on it.
 
-- **Runs from the drive** — new data is written to the vault (DerivedData, new Archives). The drive must be connected to
-  build. On macOS 26, unit tests can fail to load when DerivedData is on an external drive; the item always says so,
-  and the Run sheet asks you to confirm it.
-- **Moved to the drive** — existing Archives are copied to the vault and verified; the original is removed only in the
-  second step, when you confirm it.
-- **Leaves this Mac, comes back when needed** — a simulator runtime is parked on the vault and restored when needed.
-- **Deleted, recreated on demand** — caches and other data Xcode rebuilds. Never Archives.
+- **Runs from the drive** — keep the drive connected while you work. *New builds go to the drive* sets Xcode's
+  DerivedData location (new builds only; on macOS 26 unit tests can fail to load from an external drive, which the item
+  always says and the Run sheet asks you to confirm). *New Archives* does the same for Archives.
+- **Moved to the drive** — *Existing Archives* are copied and verified; the original is removed only after that, when
+  you confirm it.
+- **Parked on the drive** — a simulator runtime. It comes back to this Mac only when you restore it, and that needs the
+  drive. Runtimes parked earlier are listed as done, from the whole journal, until one is restored or installed again.
+- **Deleted here, rebuilt on demand** — caches, and *Old DerivedData on this Mac*: moving the location does not delete
+  the builds already here, so they are their own item, freed by deleting them. Never Archives.
+- **Deleted; you recreate it yourself** — simulator devices, marked "Deletes the apps' data": nothing recreates them.
 
 Steps and items marked **Experimental** are; the mark stays until the strategy is verified.
 

@@ -22,17 +22,27 @@ destructive operations, which ADR-0012 and rule 6 forbid (a drive can disappear 
 
 1. **The Plan is a pure function** in Core: `PlanBuilder.plan(report:drives:vaults:locations:history:findings:)`. Its
    inputs are the scan, the drives as `DriveEvaluation` assessed them, the vault registry's checks, Xcode's DerivedData
-   and Archives locations, the journal's History rows and the doctor's findings. Nothing about the Plan is written to
+   and Archives locations, the runtimes the WHOLE journal shows parked (`ParkedRuntimes`: never History's windowed rows,
+   an import cancels an offload, a runtime the scan shows installed again is not parked) and the doctor's findings. Nothing about the Plan is written to
    disk; a step is done because the state shows it done (a vault registered, Xcode's location on the vault, bytes on the
    vault and none left here, a completed runtime offload in the journal, a clean health read).
 2. **The Plan runs nothing.** Every step or item has at most one `PlanAction`, and every case opens an existing sheet or
    screen: Drives, the preparation sheet, Use This Drive, the Run sheet for a plan row, a Save Space view, Health. Each
    keeps its own review and confirmation. No step starts the next one.
-3. **The Plan never proposes an erase.** The prepare step offers only the drive's recommended option (an added APFS
-   volume, which erases nothing). A drive whose options all erase data, or need the ownership setting, gets "choose in
-   Drives" instead.
-4. **The numbers are the Overview's numbers.** Each item is counted once, in its primary bucket
-   (`SavingsCalculator.countedOnceBucket`), from the same scan; Archives are never in the delete outcome (rule 5).
+3. **The Plan never proposes an erase, and cannot be made to open one.** The prepare step offers only the drive's
+   recommended option (an added APFS volume, which erases nothing). A drive whose options all erase data, or need the
+   ownership setting, gets "choose in Drives" instead. The app opens a preparation from the Plan only when
+   `drive.isRecommended(option)` holds (anything else falls back to Drives), and a preparation sheet opened from the Plan
+   lists only options that erase nothing and refuses to switch to one (`nonErasingOnly`). Erasing is possible from the
+   Drives screen only (R7-C fix round, safety F5 and F6).
+4. **The numbers are honest about what each button does.** Each item is counted once (`SavingsCalculator.countedOnceBucket`),
+   from the same scan as the Overview; Archives are never in the delete outcome (rule 5). Where one button does not free
+   the bytes, the item is split: moving DerivedData's location sends new builds to the drive (0 GB), and the DerivedData
+   already on this Mac is its own item, freed only by deleting it (safety F2, quality I1). Data the user made — simulator
+   devices — is never "rebuilt on demand": it is its own outcome, tagged, and its bytes are not in the "up to" headline but
+   on a line of their own, as on the Overview card (safety F1).
+5. **An unusable vault says why** (safety F4): shadow data at its mount point (rule 6, with the size, pointing to Health),
+   a different volume where it should be (pointing to Drives), or not connected.
 
 ## Consequences
 
@@ -42,7 +52,10 @@ destructive operations, which ADR-0012 and rule 6 forbid (a drive can disappear 
   appears as not done. That is the honest answer; the Plan does not trust a tick it did not see.
 - There is no "skip this step" and no saved progress. If a user wants a different path, the other screens are unchanged.
 - The step-to-sheet mapping is the whole of what the Plan can reach, so it is tested explicitly (`PlanBuilderTests`,
-  and `AppModel.performPlanAction` in the app tests).
+  and `AppModel.planTarget` / `performPlanAction` in `R7CAppTests`, including forged options and a vault that vanishes
+  between the plan and the sheet).
+- The Storage chart counts DerivedData under Run Externally (its primary bucket); the Plan shows the same bytes as
+  "Deleted here, rebuilt on demand", because that is what frees them. The totals agree; the outcome differs on purpose.
 
 ## Evidence
 
