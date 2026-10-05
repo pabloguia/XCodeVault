@@ -139,7 +139,7 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
     }
 
     /// Whether a code requirement, as the database stores it, pins the leaf certificate's team to `teamID`. The
-    /// requirement language quotes a value that does not start with a letter (`"4V58BSZL3W"`) and may leave one that
+    /// requirement language quotes a value that does not start with a letter (`"0ABCDE1234"`) and may leave one that
     /// does bare, so both spellings count; the bare one only when the team ends there. Never for an unusable team.
     static func namesTeam(_ requirement: String, teamID: String) -> Bool {
         guard HelperIdentity.isUsableTeamID(teamID) else { return false }

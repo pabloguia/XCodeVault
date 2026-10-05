@@ -393,8 +393,9 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertTrue(ours(Self.readBack { $0["requirement"] = "anchor apple generic and certificate leaf[subject.OU] = ABCDE12345" }), "the bare spelling")
         XCTAssertTrue(ours(Self.readBack { $0["requirement"] = "(certificate leaf[subject.OU] = ABCDE12345)" }))
         XCTAssertFalse(ours(Self.readBack(), team: "ZZZZZ99999"), "the build's team, not any team")
-        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = "certificate leaf[subject.OU] = \"TEAMID_PLACEHOLDER\"" }, team: HelperIdentity.teamIDPlaceholder),
-            "an unsubstituted build accepts no definition")
+        let placeholder = HelperIdentity.teamIDPlaceholder
+        let placeholderWriter = Self.readBack { $0["requirement"] = "certificate leaf[subject.OU] = \"\(placeholder)\"" }
+        XCTAssertFalse(ours(placeholderWriter, team: placeholder), "an unsubstituted build accepts no definition")
         XCTAssertFalse(ours(Self.readBack(), team: ""))
         // The team reaches the check: the listener hands each connection's service the one `main.swift` validated, and a
         // service made without one holds the placeholder, which accepts nothing.

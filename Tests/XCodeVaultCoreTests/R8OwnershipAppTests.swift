@@ -97,13 +97,15 @@ final class R8OwnershipAppTests: XCTestCase {
     /// reason the guided route shows, and nothing is unregistered.
     func testTheAdapterReinstallsOnlyForAnOlderHelper() async throws {
         let older = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.2.0")
-        let liveOlder = LiveHelper(client: HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: older) }, authorizer: authorizer(Acquisitions())))
+        let olderClient = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: older) }, authorizer: authorizer(Acquisitions()))
+        let liveOlder = LiveHelper(client: olderClient)
         do {
             _ = try await liveOlder.perform(.enableOwnership(volumeUUID: "U-1"), authorized: { true })
             XCTFail("an older helper is reported as outdated")
         } catch is PrivilegedHelperOutdated {}
         let newer = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.9.0")
-        let liveNewer = LiveHelper(client: HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: newer) }, authorizer: authorizer(Acquisitions())))
+        let newerClient = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: newer) }, authorizer: authorizer(Acquisitions()))
+        let liveNewer = LiveHelper(client: newerClient)
         let reply = try await liveNewer.perform(.enableOwnership(volumeUUID: "U-1"), authorized: { true })
         XCTAssertFalse(reply.ok)
         XCTAssertTrue(reply.message.contains("update this copy"), reply.message)
