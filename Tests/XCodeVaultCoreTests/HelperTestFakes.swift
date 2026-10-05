@@ -12,9 +12,19 @@ final class FakeDaemon: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     let lock = NSLock()
     var calls: [String] = []
     let result: HelperResult
-    init(result: HelperResult) { self.result = result }
+    /// What `version()` answers. `"fake"` by default, which `enableOwnership`'s handshake refuses (R8).
+    let versionReply: String
+    /// The authorization forms `enableOwnership` received (R8).
+    var forms: [Data] = []
+    init(result: HelperResult, versionReply: String = "fake") {
+        self.result = result
+        self.versionReply = versionReply
+    }
     private func record(_ s: String) { lock.withLock { calls.append(s) } }
-    func version(reply: @escaping @Sendable (String) -> Void) { reply("fake") }
+    func version(reply: @escaping @Sendable (String) -> Void) {
+        record("version")
+        reply(versionReply)
+    }
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         record("clean:\(target)")
         reply(result)
@@ -25,6 +35,11 @@ final class FakeDaemon: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     }
     func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         record("forget:\(target)")
+        reply(result)
+    }
+    func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void) {
+        record("ownership:\(volumeUUID)")
+        lock.withLock { forms.append(authorization) }
         reply(result)
     }
 }

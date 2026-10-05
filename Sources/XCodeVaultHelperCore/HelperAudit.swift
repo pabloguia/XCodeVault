@@ -71,6 +71,10 @@ enum HelperAudit {
         /// place text gets read back later by something that trusts it.
         let validatedArguments: [String: String]
         let outcome: Outcome
+        /// The result's code (R8): a closed vocabulary the helper itself produced, so it is safe `.public`. For
+        /// `enableOwnership` it carries the authorization outcome — `authorizationDenied`, `authorizationMalformed`,
+        /// `authorizationUnavailable` — alongside the gate's own `refused-unauthorized`.
+        var code: HelperResultCode = .none
 
         /// Derived from a `HelperResult`, so a verb cannot report one thing to the caller and
         /// another to the log. `refusedUnauthorized` is the one case the result alone cannot
@@ -87,7 +91,7 @@ enum HelperAudit {
             } else {
                 outcome = .declined(result.message)
             }
-            return AuditRecord(verb: verb, callerUID: callerUID, validatedArguments: validatedArguments, outcome: outcome)
+            return AuditRecord(verb: verb, callerUID: callerUID, validatedArguments: validatedArguments, outcome: outcome, code: result.code)
         }
     }
 
@@ -102,15 +106,17 @@ enum HelperAudit {
         // qualifier has to be applied to a value and the key set differs per verb. The joined
         // string is `.private`: it is built from caller-supplied input, however well validated.
         let arguments = record.validatedArguments.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+        // The code is the helper's own fixed vocabulary (`HelperResultCode`); `-` when the verb sets none.
+        let code = record.code == .none ? "-" : record.code.rawValue
 
         switch record.outcome {
         case .refusedUnauthorized:
             log.notice(
-                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=refused-unauthorized args=\(arguments, privacy: .private(mask: .hash))"
+                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=refused-unauthorized code=\(code, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
             )
         case .succeeded(let bytes):
             log.notice(
-                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=succeeded bytesFreed=\(bytes, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
+                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=succeeded bytesFreed=\(bytes, privacy: .public) code=\(code, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
             )
         case .declined(let why):
             // The reason is `.public`, and that is a deliberate reversal.
@@ -140,8 +146,23 @@ enum HelperAudit {
             // operator who needs the name enables private-data logging. Per-verb privacy rules
             // would buy a word and cost the one property this field has: it is hashed, always.
             log.notice(
-                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=declined reason=\(why, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
+                "verb=\(record.verb, privacy: .public) uid=\(record.callerUID, privacy: .public) outcome=declined reason=\(why, privacy: .public) code=\(code, privacy: .public) args=\(arguments, privacy: .private(mask: .hash))"
             )
         }
+    }
+
+    /// The daemon's startup step (R8): whether the authorization right's definition was in place, written, or rewritten
+    /// over someone else's. A rewrite is the line to look for: it means something defined this right before the helper.
+    static func emitStartup(rightDefinition: RightDefinition) {
+        let label: String
+        switch rightDefinition {
+        case .unchanged: label = "unchanged"
+        case .defined: label = "defined"
+        case .redefined: label = "redefined"
+        case .failed(let status):
+            log.error("verb=startup right=\(HelperIdentity.enableOwnershipRight, privacy: .public) definition=failed status=\(status, privacy: .public)")
+            return
+        }
+        log.notice("verb=startup right=\(HelperIdentity.enableOwnershipRight, privacy: .public) definition=\(label, privacy: .public)")
     }
 }

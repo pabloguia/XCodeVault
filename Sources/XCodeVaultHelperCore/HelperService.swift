@@ -197,6 +197,78 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         }
     }
 
+    func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void) {
+        privilegedWork.async {
+            let result = self.doEnableOwnership(volumeUUID: volumeUUID, authorization: authorization)
+            // The authorization form is never logged, not even hashed: it is a credential. The result's code carries
+            // the authorization outcome (`HelperAudit.AuditRecord.code`).
+            HelperAudit.emit(
+                .from(
+                    verb: "enableOwnership", callerUID: self.callerUID,
+                    validatedArguments: ["volumeUUID": UUID(uuidString: volumeUUID)?.uuidString ?? "<rejected>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
+    }
+
+    /// R8 (ADR-0014). EXPERIMENTAL (rule 10). The order is the point:
+    ///
+    ///   1. the administrator gate, as every state-changing verb;
+    ///   2. the UUID, parsed and never the all-zero one;
+    ///   3. the right: its definition put in place (a rewritten one refuses this call), then checked from the client's
+    ///      externalized reference — before anything about any disk is read, so a caller without the right learns
+    ///      nothing about this Mac's volumes;
+    ///   4. the volume, resolved by the helper from the UUID, and refused unless eligible (`HelperOwnership.refusal`);
+    ///   5. nothing run when ownership is already on;
+    ///   6. `diskutil enableOwnership` on the helper's own reading of the device node, then the volume read again: the
+    ///      same device node, and ownership on. A `diskutil` that reports success without that is `notVerified`.
+    ///
+    /// `rights`, `volumes` and `diskutil` are test seams, functions of nothing on the XPC wire; the dispatch above
+    /// passes none of them.
+    func doEnableOwnership(
+        volumeUUID: String, authorization: Data, rights: any OwnershipRightAuthority = SecurityRightAuthority(),
+        volumes: (any OwnershipVolumeReading)? = nil, diskutil: any DiskutilRunning = SpawnedDiskutil()
+    ) -> HelperResult {
+        if let denied = authorize() { return HelperResult(ok: false, message: denied.message, code: .unauthorized) }
+        guard let uuid = UUID(uuidString: volumeUUID), uuid != Self.nilVolumeUUID else {
+            return HelperResult(ok: false, message: "invalid UUID", code: .invalidArgument)
+        }
+
+        switch rights.ensureDefinition() {
+        case .unchanged, .defined: break
+        case .redefined:
+            return HelperResult(
+                ok: false, message: "the authorization right had a different definition and has been reset; try again", code: .authorizationUnavailable)
+        case .failed(let status):
+            return HelperResult(ok: false, message: "the authorization right could not be defined (\(status))", code: .authorizationUnavailable)
+        }
+        switch rights.check(externalForm: authorization) {
+        case .granted: break
+        case .malformed: return HelperResult(ok: false, message: "the authorization is not valid", code: .authorizationMalformed)
+        case .denied(let status): return HelperResult(ok: false, message: "the authorization was not granted (\(status))", code: .authorizationDenied)
+        }
+
+        let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)
+        let facts: OwnershipVolumeFacts
+        switch reader.lookup(volumeUUID: uuid) {
+        case .found(let f): facts = f
+        case .notMounted: return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound)
+        case .unreadable(let why): return HelperResult(ok: false, message: "the volume could not be read: \(why)", code: .volumeNotFound)
+        }
+        if let why = HelperOwnership.refusal(facts) { return HelperResult(ok: false, message: why, code: .volumeIneligible) }
+        if facts.ownersEnabled { return HelperResult(ok: true, message: "ownership is already on", code: .alreadyEnabled) }
+
+        let run = diskutil.run(.enableOwnership(deviceNode: facts.deviceNode))
+        guard run.succeeded else {
+            let detail = run.exitStatus.map { "exit \($0)" } ?? run.failure ?? "no exit status"
+            return HelperResult(ok: false, message: "diskutil enableOwnership failed (\(detail))", code: .commandFailed)
+        }
+        guard case .found(let after) = reader.lookup(volumeUUID: uuid), after.deviceNode == facts.deviceNode, after.ownersEnabled else {
+            return HelperResult(ok: false, message: "diskutil reported success, and the volume does not show ownership on", code: .notVerified)
+        }
+        return HelperResult(ok: true, message: "ownership is on", code: .enabled)
+    }
+
     /// Whether this result is the authorization gate's refusal — read from the result the caller
     /// actually received, so the record and the enforcement cannot come from two evaluations that
     /// disagree. See `unauthorizedMessage`.

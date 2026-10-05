@@ -31,6 +31,10 @@ guard SecRequirementCreateWithString(HelperIdentity.clientRequirement(teamID: te
     FileHandle.standardError.write(Data("xcodevault-helper: the client code-signing requirement does not parse; refusing to serve\n".utf8))
     exit(78)
 }
+// R8 (ADR-0014): the `enableOwnership` right is defined by this root daemon before it accepts anything, so a client's
+// first request meets our rule rather than the database's default, and a definition someone else added is replaced.
+// Not fatal: the verb checks the definition again on every call and refuses while it cannot put it in place.
+HelperStartup.defineAuthorizationRights()
 let delegate = ListenerDelegate(teamID: teamID)
 let listener = NSXPCListener(machServiceName: HelperIdentity.machServiceName)
 listener.delegate = delegate
