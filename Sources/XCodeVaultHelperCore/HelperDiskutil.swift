@@ -7,29 +7,50 @@
 // `/dev/null`; and none of the routes around those rules (a PATH search, an aliased function, an inherited descriptor,
 // a fork, a symbol looked up at run time).
 //
-// **What can be run is a closed enum, and its only argument is a `UUID`.** Since the R8 fix round (L1) the command takes
-// the volume's UUID rather than its device node: a device node is reassigned when a disk is ejected and another
-// attached, a UUID is not. `diskutil(8)` (macOS 26.7.1, DEVICES) accepts "a UUID" as the device argument; that it
-// resolves a *volume* UUID to its volume was measured read-only on 2026-10-05 (`diskutil info <Data volume UUID>` →
-// `disk1s1`). The `UUID` value is the helper's own parse, re-serialized, so no byte of the client's string reaches argv.
+// **What can be run is a closed enum.** `info -plist` takes the volume's UUID — the helper's own parse, re-serialized, so
+// no byte of the client's string reaches argv; `diskutil(8)` (macOS 26.7.1, DEVICES) accepts "a UUID", and a *volume*
+// UUID resolving to its volume was measured read-only on 2026-10-05. `enableOwnership` takes the bare disk identifier
+// (`disk5s1`) of the mount the helper holds open (fix round 2, N2): a UUID names whichever volume carries it at the
+// moment diskutil looks, and two mounted volumes can carry the same one, while the identifier comes from `fstatfs` on
+// the very descriptor that was checked, re-verified immediately before the spawn. `DiskIdentifier` can only be built
+// from a string that matches `disk<N>s<M>`, anchored, on bytes.
 
 import Foundation
 import XCodeVaultHelperProtocol
+
+/// A volume's bare disk identifier, `disk<N>s<M>`. Built only through `init?`, which validates it; nothing else in the
+/// helper can make one.
+struct DiskIdentifier: Equatable, Sendable {
+    let value: String
+
+    /// Nil unless `raw` is exactly `disk`, one to four ASCII digits, `s`, one to four ASCII digits — on bytes, so a
+    /// combining mark, a non-ASCII digit, a space or an option cannot pass. No whole disk, no snapshot, no raw node.
+    init?(_ raw: String) {
+        let b = Array(raw.utf8)
+        let prefix = Array("disk".utf8)
+        guard b.count > prefix.count, b.count <= 16, Array(b.prefix(prefix.count)) == prefix else { return nil }
+        let parts = b.dropFirst(prefix.count).split(separator: UInt8(ascii: "s"), omittingEmptySubsequences: false)
+        guard parts.count == 2, parts.allSatisfy({ p in !p.isEmpty && p.count <= 4 && p.allSatisfy { $0 >= 0x30 && $0 <= 0x39 } }) else {
+            return nil
+        }
+        value = raw
+    }
+}
 
 /// A `diskutil` command the helper may run. The executable is fixed; the arguments are built here, never passed in.
 enum DiskutilInvocation: Equatable, Sendable {
     /// `diskutil info -plist <UUID>`: the volume's facts, read by the helper itself.
     case infoPlist(volumeUUID: UUID)
-    /// `diskutil enableOwnership <UUID>`: the one state change. Turns ownership on; erases nothing.
-    case enableOwnership(volumeUUID: UUID)
+    /// `diskutil enableOwnership <disk identifier>`: the one state change. Turns ownership on; erases nothing.
+    case enableOwnership(disk: DiskIdentifier)
 
     static let executable = "/usr/sbin/diskutil"
 
-    /// The argv after the executable: a verb this enum names and a canonical UUID, nothing else.
+    /// The argv after the executable: a verb this enum names and a canonical UUID or a validated disk identifier.
     var arguments: [String] {
         switch self {
         case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]
-        case .enableOwnership(let uuid): return ["enableOwnership", uuid.uuidString]
+        case .enableOwnership(let disk): return ["enableOwnership", disk.value]
         }
     }
 }

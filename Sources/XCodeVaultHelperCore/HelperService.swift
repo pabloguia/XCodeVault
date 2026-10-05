@@ -220,7 +220,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     ///      nothing about this Mac's volumes;
     ///   4. the volume, resolved by the helper from the UUID, and refused unless eligible (`HelperOwnership.refusal`);
     ///   5. nothing run when ownership is already on;
-    ///   6. the pinned mount checked once more, then `diskutil enableOwnership <UUID>`, then the volume read again
+    ///   6. the pinned mount checked once more, then `diskutil enableOwnership <its disk identifier>`, then the volume read again
     ///      through the pin: the same device node, and ownership on. A `diskutil` that reports success without that is
     ///      `notVerified`.
     ///
@@ -265,13 +265,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
         // The last question before the command: is the pinned mount still the same device and file system?
         guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }
-        let run = diskutil.run(.enableOwnership(volumeUUID: uuid))
+        let run = diskutil.run(.enableOwnership(disk: pin.disk))
         guard run.succeeded else {
             let detail = run.exitStatus.map { "exit \($0)" } ?? run.failure ?? "no exit status"
             return HelperResult(ok: false, message: "diskutil enableOwnership failed (\(detail))", code: .commandFailed)
         }
-        // The device-node agreement stays as a cross-check: the command named the UUID, and the volume read back must be
-        // the one pinned.
+        // The command named the pinned mount's own disk identifier; the volume read back must be that one, with ownership.
         guard case .found(let after) = reader.lookup(volumeUUID: uuid, pin: pin), after.deviceNode == facts.deviceNode, after.ownersEnabled else {
             return HelperResult(ok: false, message: "diskutil reported success, and the volume does not show ownership on", code: .notVerified)
         }

@@ -35,7 +35,8 @@ import Foundation
     /// no device node, no command text. The helper re-checks the right from that form without any dialog of its own,
     /// resolves the UUID to a volume itself, refuses anything that is not a mounted, local, writable, external APFS or
     /// HFS+ volume — never the boot volume, its container, a disk image or a Time Machine backup — then runs
-    /// `/usr/sbin/diskutil enableOwnership <its own device node>` and verifies by reading the volume again.
+    /// `/usr/sbin/diskutil enableOwnership <the bare disk identifier of the mount it holds open>` and verifies by reading
+    /// the volume again.
     func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void)
 }
 

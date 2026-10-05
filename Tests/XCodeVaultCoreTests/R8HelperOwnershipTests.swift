@@ -48,7 +48,7 @@ final class R8HelperOwnershipTests: XCTestCase {
             lock.withLock {
                 guard answers.first != .notMounted else { return nil }
                 pins += 1
-                return MountPin(descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2])
+                return MountPin(descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2], disk: DiskIdentifier("disk5s1")!)
             }
         }
         func lookup(volumeUUID: UUID, pin: MountPin) -> OwnershipVolumeLookup {
@@ -94,7 +94,7 @@ final class R8HelperOwnershipTests: XCTestCase {
         let r = service().doEnableOwnership(volumeUUID: Self.uuid, authorization: Self.form, rights: rights, volumes: volumes, diskutil: du)
         XCTAssertTrue(r.ok, r.message)
         XCTAssertEqual(r.code, .enabled)
-        XCTAssertEqual(du.runs, [.enableOwnership(volumeUUID: UUID(uuidString: Self.uuid)!)], "the command names the UUID (L1)")
+        XCTAssertEqual(du.runs, [.enableOwnership(disk: DiskIdentifier("disk5s1")!)], "the command names the pinned mount's disk identifier (N2)")
         XCTAssertEqual(volumes.pins, 1)
         XCTAssertEqual(volumes.releases, 1, "the pinned descriptor is released")
         XCTAssertEqual(rights.checked, [Self.form], "the right is checked from the client's form, once")
@@ -225,7 +225,7 @@ final class R8HelperOwnershipTests: XCTestCase {
 
     func testTheArgvIsAVerbAndACanonicalUUID() {
         let uuid = UUID(uuidString: Self.uuid.lowercased())!
-        XCTAssertEqual(DiskutilInvocation.enableOwnership(volumeUUID: uuid).arguments, ["enableOwnership", Self.uuid])
+        XCTAssertEqual(DiskutilInvocation.enableOwnership(disk: DiskIdentifier("disk5s1")!).arguments, ["enableOwnership", "disk5s1"])
         XCTAssertEqual(DiskutilInvocation.infoPlist(volumeUUID: uuid).arguments, ["info", "-plist", Self.uuid])
         XCTAssertEqual(DiskutilInvocation.executable, "/usr/sbin/diskutil")
     }
@@ -238,6 +238,28 @@ final class R8HelperOwnershipTests: XCTestCase {
         ] {
             XCTAssertFalse(HelperOwnership.isVolumeDeviceNode(bad), bad)
         }
+    }
+
+    func testOnlyABareVolumeIdentifierIsADiskIdentifier() {
+        XCTAssertEqual(DiskIdentifier("disk12s3")?.value, "disk12s3")
+        for bad in ["disk5", "disk3s1s1", "rdisk5s1", "/dev/disk5s1", "disk5s1 ", "disk5s1;x", "disk5s", "disks1", "disk5s1\u{0301}", "disk٥s1", "-x", ""] {
+            XCTAssertNil(DiskIdentifier(bad), bad)
+        }
+        XCTAssertEqual(HelperOwnership.diskIdentifier(ofDeviceNode: "/dev/disk5s1"), DiskIdentifier("disk5s1"))
+        XCTAssertNil(HelperOwnership.diskIdentifier(ofDeviceNode: "disk5s1"), "a device node, or nothing")
+    }
+
+    /// N2 / data F3: two mounted volumes with one UUID leave "the volume" undefined; nothing is pinned and nothing runs.
+    func testTwoMountsWithTheSameUUIDAreRefused() {
+        XCTAssertNil(HelperOwnership.soleMountPoint(["/Volumes/A", "/Volumes/A 1"]))
+        XCTAssertNil(HelperOwnership.soleMountPoint([]))
+        XCTAssertEqual(HelperOwnership.soleMountPoint(["/Volumes/A"]), "/Volumes/A")
+        // A reader that sees two mounts pins nothing (the live reader's `soleMountPoint`), so the verb refuses.
+        let du = FakeDiskutil()
+        let r = service().doEnableOwnership(
+            volumeUUID: Self.uuid, authorization: Self.form, rights: FakeRights(), volumes: FakeVolumes(.notMounted), diskutil: du)
+        XCTAssertEqual(r.code, .volumeNotFound)
+        XCTAssertTrue(du.runs.isEmpty)
     }
 
     func testAVolumeThatChangedBeforeTheCommandIsRefused() {
@@ -338,6 +360,8 @@ final class R8HelperOwnershipTests: XCTestCase {
         let image = HelperOwnership.parseInfo(Self.infoPlist { $0["DiskImageURL"] = "file:///x.dmg" })
         XCTAssertEqual(image?.isDiskImageOrVirtual, true)
         XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["VirtualOrPhysical"] = "Virtual" })?.isDiskImageOrVirtual, true)
+        XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["Virtual"] = true })?.isDiskImageOrVirtual, true, "Virtual as a Bool (N3)")
+        XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["Virtual"] = false })?.isDiskImageOrVirtual, false)
         XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["VirtualOrPhysical"] = "Physical" })?.isDiskImageOrVirtual, false)
         XCTAssertNotNil(HelperOwnership.refusal(Self.facts { $0.isDiskImageOrVirtual = true }))
     }
