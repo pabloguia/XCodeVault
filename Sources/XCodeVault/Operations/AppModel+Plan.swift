@@ -8,7 +8,7 @@ extension AppModel {
     var plan: Plan? {
         guard let report else { return nil }
         return PlanBuilder.plan(
-            report: report, drives: driveAssessments, vaults: vaultChecks, locations: xcodeLocations, history: historyRows, findings: findings)
+            report: report, drives: driveAssessments, vaults: vaultChecks, locations: xcodeLocations, parked: parkedRuntimes, findings: findings)
     }
 
     /// Where a plan action leads: the whole step→sheet mapping, as a value so it is tested case by case.
@@ -30,8 +30,11 @@ extension AppModel {
         case .showDrives:
             return .section(.drives)
         case .prepareDrive(let diskID, let option):
-            // Never an erase from the Plan (ADR-0013): Core proposes none, and this refuses one if it ever did.
-            guard !option.erases, let drive = driveAssessments.first(where: { $0.disk.id == diskID }), drive.options.contains(option) else {
+            // Only the drive's recommended option, which erases nothing (ADR-0013, F5): Core proposes no other, and this
+            // refuses one if it were ever passed — an erase, or the ownership setting.
+            guard !option.erases, let drive = driveAssessments.first(where: { $0.disk.id == diskID }), drive.options.contains(option),
+                drive.isRecommended(option)
+            else {
                 return .section(.drives)
             }
             return .preparation(drive, option)
@@ -55,7 +58,8 @@ extension AppModel {
     func performPlanAction(_ action: PlanAction) {
         switch planTarget(action, vault: plan?.vaultUUID) {
         case .section(let s): section = s
-        case .preparation(let drive, let option): openPreparation(drive, option: option)
+        // The sheet offers no erasing option either (F6): erasing stays on the Drives screen.
+        case .preparation(let drive, let option): openPreparation(drive, option: option, nonErasingOnly: true)
         case .useDrive(let drive, let volume): openUseDrive(drive, volume: volume)
         case .run(let row, let vault): openRun(row, vault: vault)
         }

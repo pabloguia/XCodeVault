@@ -138,6 +138,10 @@ final class AppModel {
     /// Xcode's DerivedData and Archives locations as last read with the scan (R7-C): the Plan shows a "runs from the drive"
     /// item done when Xcode's location is on the vault. Nil when they could not be read.
     var xcodeLocations: XcodeLocations?
+    /// The runtimes parked on a drive now, from the WHOLE journal the scan read — not History's newest rows (R7-C, F3).
+    var parkedRuntimes: [ParkedRuntime] = []
+    /// Whether the first scan chose the screen the app opens on (`launchSection`); once, and never after the user moved.
+    private var choseLaunchSection = false
     /// Every scan starts through this: never two at once, and one more after the running one when a scan was
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
@@ -266,6 +270,7 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             self.xcodeLocations = locations
+            self.parkedRuntimes = ParkedRuntimes.current(journal, installed: report.runtimes)
             // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
             // records themselves are not kept: the interrupted banner (R3) takes what it needs from them here. An operation
             // the Run sheet is running is in progress, not interrupted.
@@ -281,6 +286,23 @@ final class AppModel {
             revalidateOperationAfterScan()
         } while scanGate.scanEnded()
         await refreshDrives()
+        chooseLaunchSection()
+    }
+
+    /// The screen the app opens on (R7-C fix round): the Plan while any step is next or partly available, the Overview
+    /// otherwise. Nil before the first scan.
+    static func launchSection(_ plan: Plan?) -> SidebarSection? {
+        guard let plan else { return nil }
+        return plan.hasSomethingToDo ? .plan : .overview
+    }
+
+    /// Applied once, after the first scan and drive read, and only while the user has not moved: it never takes the user
+    /// away from a screen they chose, and it leaves no Back entry.
+    private func chooseLaunchSection() {
+        guard !choseLaunchSection, let target = Self.launchSection(plan) else { return }
+        choseLaunchSection = true
+        guard currentSection == .overview, !history.canGoBack else { return }
+        currentSection = target
     }
 
     // MARK: - Run… (R3; the methods are in AppModel+Operations.swift)

@@ -273,6 +273,8 @@ struct OperationSheetState: Sendable {
     var previewedPlan: DiskPreparationPlan?
     /// R6 (H1): the disk changed under the open sheet. Sticky: "Close this and preview again."
     var diskChanged = false
+    /// R7-C (F6): opened from the Plan — the preparation choices erase nothing; erasing is offered on the Drives screen only.
+    var nonErasingOnly = false
 
     /// The experimental badge in the title (rule 10): the plan row's strategy, or any drive preparation.
     var showsExperimentalBadge: Bool { row?.option.isExperimental == true || kind.isExperimental }

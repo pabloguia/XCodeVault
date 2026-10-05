@@ -324,8 +324,9 @@ struct DesignSystemGallery: View {
             }
             .fixedSize()
             HStack(spacing: Spacing.s) {
-                Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) {}.actionButton()
-                Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) {}.actionButton().disabled(true)
+                // The real helper (A+B review M3, R7-C review M-f): its danger symbol shows in the gallery.
+                DestructiveButton(L10n.tr("app.clean.deleteSelected"), symbol: DestructiveSymbol.delete) {}
+                DestructiveButton(L10n.tr("app.clean.deleteSelected"), symbol: DestructiveSymbol.delete) {}.disabled(true)
                 Button(L10n.tr("app.overview.showInHealth")) {}.buttonStyle(.link)
                 CopyCommandButton {}
             }

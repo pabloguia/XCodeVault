@@ -54,14 +54,18 @@ extension AppModel {
     /// **Prepare…** / an option's button: the preparation sheet for `assessment`, on `option` when given, else on the
     /// first option that runs a command (least destructive first). From the Run sheet's review, that sheet is put aside
     /// and comes back when this one closes.
-    func openPreparation(_ assessment: DriveAssessment, option: PreparationOption? = nil) {
+    /// `nonErasingOnly` (the Plan, R7-C F6): the sheet offers only the options that erase nothing, and refuses to switch to
+    /// one that does; erasing stays on the Drives screen.
+    func openPreparation(_ assessment: DriveAssessment, option: PreparationOption? = nil, nonErasingOnly: Bool = false) {
         guard !isOperationRunning else { return }
         guard let chosen = option ?? assessment.recommendedOption ?? assessment.commandOptions.first, let kind = OperationKind.forOption(chosen)
         else { return }
+        if nonErasingOnly && chosen.erases { return }
         var inputs = OperationInputs()
         inputs.diskID = assessment.disk.id
         inputs.driveOption = chosen
         open(kind, inputs: inputs, drive: assessment)
+        operationSheet?.nonErasingOnly = nonErasingOnly
     }
 
     /// **Use This Drive**: register the drive's qualifying volume — or `volume`, the one a preparation just made (R7-A) —
@@ -110,6 +114,8 @@ extension AppModel {
     /// cleared: it confirmed the previous plan, not this one.
     func choosePreparationOption(_ option: PreparationOption) {
         guard var s = operationSheet, s.phase == .review, let kind = OperationKind.forOption(option) else { return }
+        // Opened from the Plan: no erasing option, whatever asks for one (F6).
+        if s.nonErasingOnly && option.erases { return }
         s.kind = kind
         s.inputs.driveOption = option
         if kind != .addVolume { s.inputs.volume.quotaGigabytes = nil }
@@ -122,7 +128,10 @@ extension AppModel {
     }
 
     /// The options the preparation sheet offers: the drive's options that run a command.
-    var preparationChoices: [PreparationOption] { operationSheet?.drive?.commandOptions ?? [] }
+    var preparationChoices: [PreparationOption] {
+        let all = operationSheet?.drive?.commandOptions ?? []
+        return operationSheet?.nonErasingOnly == true ? all.filter { !$0.erases } : all
+    }
 
     /// What the user types to confirm an erase. Never re-plans.
     func updateConfirmationText(_ text: String) {
