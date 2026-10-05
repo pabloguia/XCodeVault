@@ -220,8 +220,9 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     ///      nothing about this Mac's volumes;
     ///   4. the volume, resolved by the helper from the UUID, and refused unless eligible (`HelperOwnership.refusal`);
     ///   5. nothing run when ownership is already on;
-    ///   6. `diskutil enableOwnership` on the helper's own reading of the device node, then the volume read again: the
-    ///      same device node, and ownership on. A `diskutil` that reports success without that is `notVerified`.
+    ///   6. the pinned mount checked once more, then `diskutil enableOwnership <UUID>`, then the volume read again
+    ///      through the pin: the same device node, and ownership on. A `diskutil` that reports success without that is
+    ///      `notVerified`.
     ///
     /// `rights`, `volumes` and `diskutil` are test seams, functions of nothing on the XPC wire; the dispatch above
     /// passes none of them.
@@ -249,8 +250,12 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         }
 
         let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)
+        // Pinned before anything is read, held until the reply: every reading and the last check before the command
+        // go through this one descriptor (fix round 1, L1).
+        guard let pin = reader.pin(volumeUUID: uuid) else { return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound) }
+        defer { reader.release(pin) }
         let facts: OwnershipVolumeFacts
-        switch reader.lookup(volumeUUID: uuid) {
+        switch reader.lookup(volumeUUID: uuid, pin: pin) {
         case .found(let f): facts = f
         case .notMounted: return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound)
         case .unreadable(let why): return HelperResult(ok: false, message: "the volume could not be read: \(why)", code: .volumeNotFound)
@@ -258,12 +263,16 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         if let why = HelperOwnership.refusal(facts) { return HelperResult(ok: false, message: why, code: .volumeIneligible) }
         if facts.ownersEnabled { return HelperResult(ok: true, message: "ownership is already on", code: .alreadyEnabled) }
 
-        let run = diskutil.run(.enableOwnership(deviceNode: facts.deviceNode))
+        // The last question before the command: is the pinned mount still the same device and file system?
+        guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }
+        let run = diskutil.run(.enableOwnership(volumeUUID: uuid))
         guard run.succeeded else {
             let detail = run.exitStatus.map { "exit \($0)" } ?? run.failure ?? "no exit status"
             return HelperResult(ok: false, message: "diskutil enableOwnership failed (\(detail))", code: .commandFailed)
         }
-        guard case .found(let after) = reader.lookup(volumeUUID: uuid), after.deviceNode == facts.deviceNode, after.ownersEnabled else {
+        // The device-node agreement stays as a cross-check: the command named the UUID, and the volume read back must be
+        // the one pinned.
+        guard case .found(let after) = reader.lookup(volumeUUID: uuid, pin: pin), after.deviceNode == facts.deviceNode, after.ownersEnabled else {
             return HelperResult(ok: false, message: "diskutil reported success, and the volume does not show ownership on", code: .notVerified)
         }
         return HelperResult(ok: true, message: "ownership is on", code: .enabled)

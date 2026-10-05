@@ -1,15 +1,18 @@
 // `enableOwnership`'s volume side (R8, ADR-0014): how the helper turns a client's UUID into a volume it may touch.
 //
 // The client sends a UUID and nothing else. The helper resolves it itself — the mount table and `getattrlist` (the
-// same reentrant lookup `createVaultDirectory` uses), then `statfs` on that mount point, then `diskutil info -plist
-// <UUID>` — and refuses unless all three agree on the volume's identity: the plist's UUID is the one asked for, its
-// mount point is the one the mount table gave, and its device node is the one `statfs` gave. The device node the
-// command later runs on is the helper's own reading, never anything that crossed the wire.
+// same reentrant lookup `createVaultDirectory` uses) — and **pins** that mount: it opens the mount point
+// `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` and records what `fstatfs` says of the descriptor (device node and `f_fsid`).
+// Every later reading goes through the descriptor, and immediately before the command runs the helper asks the
+// descriptor again: a different device or file-system id is a different volume, and refuses (fix round 1, L1).
+// `diskutil info -plist <UUID>` must agree with the pin on UUID, mount point and device node.
 //
 // **Why this duplicates Core rather than reusing it.** `VolumeQualification` and `DiskSafety` live in `XCodeVaultCore`,
 // which the helper targets may not link (`Package.swift`; `scripts/helper-invariants.sh` checks the closure). The
 // questions are the same and are answered from the same `diskutil info -plist` keys Core's `VolumeDiscovery.parse`
-// reads; `HelperOwnershipTests` holds the two to the same refusals over the same fixtures.
+// reads; `R8HelperOwnershipTests` holds the two to the same refusals over the same facts. Unlike Core, the helper
+// fails closed on a missing key (fix round 1, M2): a plist without `Internal`, `BusProtocol` or `WritableVolume` is not
+// one it can judge.
 
 import Foundation
 import XCodeVaultHelperProtocol
@@ -18,13 +21,13 @@ import XCodeVaultHelperProtocol
 struct OwnershipVolumeFacts: Equatable, Sendable {
     var deviceNode: String
     var mountPoint: String
-    /// `statfs`'s `f_fstypename`: `apfs`, `hfs`, `smbfs`, …
+    /// `fstatfs`'s `f_fstypename`: `apfs`, `hfs`, `smbfs`, …
     var filesystemType: String
     /// `diskutil`'s `Internal`.
     var isInternal: Bool
     /// `diskutil`'s `BusProtocol`: `USB`, `Thunderbolt`, `Disk Image`, …
     var busProtocol: String
-    /// `statfs`'s `MNT_LOCAL`.
+    /// `fstatfs`'s `MNT_LOCAL`.
     var isLocal: Bool
     /// Not `MNT_RDONLY`, and `diskutil`'s `WritableVolume`.
     var isWritable: Bool
@@ -32,10 +35,12 @@ struct OwnershipVolumeFacts: Equatable, Sendable {
     var ownersEnabled: Bool
     /// `diskutil`'s `APFSVolumeRoles`; `Backup` is Time Machine, `System`/`Data` the running OS's own.
     var roles: [String]
-    /// A `Backups.backupdb` or `.timemachine` at the volume's root: an HFS+ backup disk has no role to read.
+    /// A `Backups.backupdb` or `.timemachine` at the volume's root — or a root that could not be looked at.
     var hasTimeMachineMarker: Bool
     /// The volume is the running system's, or lives in the same container / on the same disk as it.
     var sharesTheBootContainer: Bool
+    /// A disk image, or virtual: a key naming a disk image, or `VirtualOrPhysical` = `Virtual`.
+    var isDiskImageOrVirtual: Bool = false
 }
 
 enum OwnershipVolumeLookup: Equatable, Sendable {
@@ -46,9 +51,23 @@ enum OwnershipVolumeLookup: Equatable, Sendable {
     case unreadable(String)
 }
 
+/// A mount held open across the verb: the descriptor of its mount point and what `fstatfs` said of it when opened.
+struct MountPin: Equatable, Sendable {
+    var descriptor: Int32
+    var mountPoint: String
+    var deviceNode: String
+    var fsid: [Int32]
+}
+
 /// The seam the verb reads volumes through. Tests inject a fake; production uses `OwnershipVolumeReader`.
 protocol OwnershipVolumeReading: Sendable {
-    func lookup(volumeUUID: UUID) -> OwnershipVolumeLookup
+    /// Opens the mount point of the volume with that UUID, or nil when none is mounted (or it cannot be opened).
+    func pin(volumeUUID: UUID) -> MountPin?
+    /// The volume's facts, read through the pin.
+    func lookup(volumeUUID: UUID, pin: MountPin) -> OwnershipVolumeLookup
+    /// Whether the pinned descriptor still names the same device and file system.
+    func isUnchanged(_ pin: MountPin) -> Bool
+    func release(_ pin: MountPin)
 }
 
 enum HelperOwnership {
@@ -58,7 +77,7 @@ enum HelperOwnership {
     /// Why the verb must not touch this volume, in fixed words, or nil when it may. Pure, so every refusal is tested.
     /// The messages go to the audit `.public`, so none quotes a name, a path or a device node.
     static func refusal(_ f: OwnershipVolumeFacts) -> String? {
-        if !DiskutilInvocation.isVolumeDeviceNode(f.deviceNode) { return "not a volume device node" }
+        if !isVolumeDeviceNode(f.deviceNode) { return "not a volume device node" }
         if f.mountPoint == "/" || f.mountPoint.hasPrefix("/System/Volumes") || f.roles.contains("System") || f.roles.contains("Data") && f.isInternal {
             return "this is the running system's volume"
         }
@@ -66,10 +85,22 @@ enum HelperOwnership {
         if f.isInternal { return "only an external volume is eligible" }
         if networkFileSystems.contains(f.filesystemType.lowercased()) || !f.isLocal { return "a network volume is not eligible" }
         if !fileSystemsAllowed.contains(f.filesystemType.lowercased()) { return "only APFS and HFS+ volumes are eligible" }
-        if f.busProtocol == "Disk Image" { return "a disk image is not eligible" }
+        if f.busProtocol == "Disk Image" || f.isDiskImageOrVirtual { return "a disk image is not eligible" }
         if f.roles.contains("Backup") || f.hasTimeMachineMarker { return "a Time Machine backup is not eligible" }
         if !f.isWritable { return "the volume is read-only" }
         return nil
+    }
+
+    /// `/dev/disk<N>s<M>`, ASCII digits only, nothing else: the shape of a volume's device node. Checked on bytes — a
+    /// grapheme-level check can be fooled by a combining mark, the kernel cannot. No whole disk (`/dev/disk4`), no
+    /// snapshot (`/dev/disk3s1s1`), no raw node. Since L1 it is a cross-check only: the command takes the UUID.
+    static func isVolumeDeviceNode(_ node: String) -> Bool {
+        let prefix = Array("/dev/disk".utf8)
+        let b = Array(node.utf8)
+        guard b.count > prefix.count, b.count <= 32, Array(b.prefix(prefix.count)) == prefix else { return false }
+        let parts = b.dropFirst(prefix.count).split(separator: UInt8(ascii: "s"), omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        return parts.allSatisfy { p in !p.isEmpty && p.count <= 4 && p.allSatisfy { $0 >= UInt8(ascii: "0") && $0 <= UInt8(ascii: "9") } }
     }
 
     /// The fields of `diskutil info -plist` this verb reads, or nil when it is not that plist.
@@ -83,16 +114,22 @@ enum HelperOwnership {
         var ownersEnabled: Bool
         var roles: [String]
         var containerReference: String?
+        var isDiskImageOrVirtual: Bool = false
     }
 
+    /// Nil — which refuses — unless the identity keys and the three keys eligibility rests on (`Internal`, `BusProtocol`,
+    /// `WritableVolume`) are present with their types (fix round 1, M2): a missing `Internal` must not read as "external".
     static func parseInfo(_ data: Data) -> InfoPlist? {
         guard let d = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
-        guard let uuid = d["VolumeUUID"] as? String, let node = d["DeviceNode"] as? String, let mp = d["MountPoint"] as? String else { return nil }
-        func b(_ k: String) -> Bool { d[k] as? Bool ?? false }
+        guard let uuid = d["VolumeUUID"] as? String, let node = d["DeviceNode"] as? String, let mp = d["MountPoint"] as? String,
+            let isInternal = d["Internal"] as? Bool, let bus = d["BusProtocol"] as? String, let writable = d["WritableVolume"] as? Bool
+        else { return nil }
+        let imageKey = d.keys.contains { $0.range(of: "DiskImage", options: .caseInsensitive) != nil }
+        let virtual = (d["VirtualOrPhysical"] as? String)?.caseInsensitiveCompare("Virtual") == .orderedSame || d["Virtual"] as? Bool == true
         return InfoPlist(
-            volumeUUID: uuid, deviceNode: node, mountPoint: mp, isInternal: b("Internal"), busProtocol: d["BusProtocol"] as? String ?? "",
-            isWritable: b("WritableVolume"), ownersEnabled: b("GlobalPermissionsEnabled"), roles: d["APFSVolumeRoles"] as? [String] ?? [],
-            containerReference: d["APFSContainerReference"] as? String)
+            volumeUUID: uuid, deviceNode: node, mountPoint: mp, isInternal: isInternal, busProtocol: bus, isWritable: writable,
+            ownersEnabled: d["GlobalPermissionsEnabled"] as? Bool ?? false, roles: d["APFSVolumeRoles"] as? [String] ?? [],
+            containerReference: d["APFSContainerReference"] as? String, isDiskImageOrVirtual: imageKey || virtual)
     }
 
     /// `/dev/disk3s1` → `disk3`, the container (APFS) or whole disk (a partition) the node lives on.
@@ -113,7 +150,7 @@ enum HelperOwnership {
         return false
     }
 
-    /// Facts from the three readings, refusing when they do not describe the same volume.
+    /// Facts from the pinned mount's `fstatfs` and the plist, refusing when they do not describe the same volume.
     static func facts(
         wanted: UUID, mountPoint: String, statfsNode: String, statfsType: String, statfsFlags: UInt32, info: InfoPlist,
         bootNodes: [String], hasTimeMachineMarker: Bool
@@ -128,36 +165,63 @@ enum HelperOwnership {
                 deviceNode: info.deviceNode, mountPoint: mountPoint, filesystemType: statfsType, isInternal: info.isInternal,
                 busProtocol: info.busProtocol, isLocal: statfsFlags & UInt32(MNT_LOCAL) != 0, isWritable: !readOnly && info.isWritable,
                 ownersEnabled: info.ownersEnabled && !ignoresOwnership, roles: info.roles, hasTimeMachineMarker: hasTimeMachineMarker,
-                sharesTheBootContainer: sharesBoot(node: info.deviceNode, container: info.containerReference, bootNodes: bootNodes)))
+                sharesTheBootContainer: sharesBoot(node: info.deviceNode, container: info.containerReference, bootNodes: bootNodes),
+                isDiskImageOrVirtual: info.isDiskImageOrVirtual))
     }
 }
 
-/// The live reader: the mount table, `statfs`, and `diskutil info -plist` through `runner`. Never run by a test with
-/// the live runner: it reads this Mac's volumes.
+/// The live reader: the mount table, the pinned descriptor's `fstatfs`, and `diskutil info -plist` through `runner`.
+/// Never run by a test with the live runner: it reads this Mac's volumes.
 struct OwnershipVolumeReader: OwnershipVolumeReading {
     let runner: any DiskutilRunning
 
-    func lookup(volumeUUID wanted: UUID) -> OwnershipVolumeLookup {
-        guard let mp = HelperService.mountPoint(forVolumeUUID: wanted.uuidString) else { return .notMounted }
-        guard let fs = Self.statfsOf(mp) else { return .unreadable("statfs failed") }
+    func pin(volumeUUID wanted: UUID) -> MountPin? {
+        guard let mp = HelperService.mountPoint(forVolumeUUID: wanted.uuidString) else { return nil }
+        let fd = open(mp, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard fd >= 0 else { return nil }
+        // The descriptor must be the root of a mount at exactly that point: a symlink or a plain directory is not.
+        guard let fs = Self.fstatfsOf(fd), fs.mountedOn == mp else {
+            close(fd)
+            return nil
+        }
+        return MountPin(descriptor: fd, mountPoint: mp, deviceNode: fs.node, fsid: fs.fsid)
+    }
+
+    func lookup(volumeUUID wanted: UUID, pin: MountPin) -> OwnershipVolumeLookup {
+        guard let fs = Self.fstatfsOf(pin.descriptor), fs.node == pin.deviceNode, fs.fsid == pin.fsid else { return .unreadable("the volume changed") }
         let output = runner.run(.infoPlist(volumeUUID: wanted))
         guard output.succeeded, let info = HelperOwnership.parseInfo(output.stdout) else { return .unreadable("diskutil info failed") }
-        let bootNodes = ["/", "/System/Volumes/Data"].compactMap { Self.statfsOf($0)?.node }
+        let bootNodes = ["/", "/System/Volumes/Data"].compactMap { Self.statfsNode($0) }
         let marker = ["Backups.backupdb", ".timemachine"].contains { name in
             // Present, or not known to be absent: a root that cannot be looked at may hold a backup, and refuses.
             var st = stat()
-            return lstat(mp + "/" + name, &st) == 0 || errno != ENOENT
+            return fstatat(pin.descriptor, name, &st, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT
         }
         return HelperOwnership.facts(
-            wanted: wanted, mountPoint: mp, statfsNode: fs.node, statfsType: fs.type, statfsFlags: fs.flags, info: info, bootNodes: bootNodes,
-            hasTimeMachineMarker: marker)
+            wanted: wanted, mountPoint: pin.mountPoint, statfsNode: fs.node, statfsType: fs.type, statfsFlags: fs.flags, info: info,
+            bootNodes: bootNodes, hasTimeMachineMarker: marker)
     }
 
-    static func statfsOf(_ path: String) -> (node: String, type: String, flags: UInt32)? {
+    func isUnchanged(_ pin: MountPin) -> Bool {
+        guard let fs = Self.fstatfsOf(pin.descriptor) else { return false }
+        return fs.node == pin.deviceNode && fs.fsid == pin.fsid && fs.mountedOn == pin.mountPoint
+    }
+
+    func release(_ pin: MountPin) { close(pin.descriptor) }
+
+    static func fstatfsOf(_ fd: Int32) -> (node: String, mountedOn: String, type: String, flags: UInt32, fsid: [Int32])? {
+        var s = statfs()
+        guard fstatfs(fd, &s) == 0 else { return nil }
+        return (cString(&s.f_mntfromname), cString(&s.f_mntonname), cString(&s.f_fstypename), s.f_flags, [s.f_fsid.val.0, s.f_fsid.val.1])
+    }
+
+    static func statfsNode(_ path: String) -> String? {
         var s = statfs()
         guard statfs(path, &s) == 0 else { return nil }
-        let node = withUnsafePointer(to: &s.f_mntfromname) { $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) } }
-        let type = withUnsafePointer(to: &s.f_fstypename) { $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) } }
-        return (node, type, s.f_flags)
+        return cString(&s.f_mntfromname)
+    }
+
+    private static func cString<T>(_ field: inout T) -> String {
+        withUnsafePointer(to: &field) { $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout<T>.size) { String(cString: $0) } }
     }
 }

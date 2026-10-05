@@ -34,18 +34,31 @@ final class R8HelperOwnershipTests: XCTestCase {
         }
     }
 
-    /// Answers each lookup from a queue (the last answer repeats), and counts them.
+    /// Answers each lookup from a queue (the last answer repeats), and counts them. `.notMounted` as the first answer
+    /// means nothing could be pinned. `unchanged` is what the pin check before the command answers.
     final class FakeVolumes: OwnershipVolumeReading, @unchecked Sendable {
         let lock = NSLock()
         var answers: [OwnershipVolumeLookup]
+        var unchanged = true
         private(set) var lookups: [UUID] = []
+        private(set) var pins = 0
+        private(set) var releases = 0
         init(_ answers: OwnershipVolumeLookup...) { self.answers = answers }
-        func lookup(volumeUUID: UUID) -> OwnershipVolumeLookup {
+        func pin(volumeUUID: UUID) -> MountPin? {
+            lock.withLock {
+                guard answers.first != .notMounted else { return nil }
+                pins += 1
+                return MountPin(descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2])
+            }
+        }
+        func lookup(volumeUUID: UUID, pin: MountPin) -> OwnershipVolumeLookup {
             lock.withLock {
                 lookups.append(volumeUUID)
                 return answers.count > 1 ? answers.removeFirst() : answers[0]
             }
         }
+        func isUnchanged(_ pin: MountPin) -> Bool { lock.withLock { unchanged } }
+        func release(_ pin: MountPin) { lock.withLock { releases += 1 } }
     }
 
     final class FakeDiskutil: DiskutilRunning, @unchecked Sendable {
@@ -81,7 +94,9 @@ final class R8HelperOwnershipTests: XCTestCase {
         let r = service().doEnableOwnership(volumeUUID: Self.uuid, authorization: Self.form, rights: rights, volumes: volumes, diskutil: du)
         XCTAssertTrue(r.ok, r.message)
         XCTAssertEqual(r.code, .enabled)
-        XCTAssertEqual(du.runs, [.enableOwnership(deviceNode: "/dev/disk5s1")])
+        XCTAssertEqual(du.runs, [.enableOwnership(volumeUUID: UUID(uuidString: Self.uuid)!)], "the command names the UUID (L1)")
+        XCTAssertEqual(volumes.pins, 1)
+        XCTAssertEqual(volumes.releases, 1, "the pinned descriptor is released")
         XCTAssertEqual(rights.checked, [Self.form], "the right is checked from the client's form, once")
         XCTAssertEqual(rights.ensured, 1)
         XCTAssertEqual(volumes.lookups.count, 2, "read before, and again to verify")
@@ -208,17 +223,42 @@ final class R8HelperOwnershipTests: XCTestCase {
 
     // MARK: - The pure parts of the live types
 
-    func testOnlyAVolumeDeviceNodeIsEverAnArgument() {
-        XCTAssertEqual(DiskutilInvocation.enableOwnership(deviceNode: "/dev/disk5s1").arguments, ["enableOwnership", "/dev/disk5s1"])
-        let uuid = UUID(uuidString: Self.uuid)!
+    func testTheArgvIsAVerbAndACanonicalUUID() {
+        let uuid = UUID(uuidString: Self.uuid.lowercased())!
+        XCTAssertEqual(DiskutilInvocation.enableOwnership(volumeUUID: uuid).arguments, ["enableOwnership", Self.uuid])
         XCTAssertEqual(DiskutilInvocation.infoPlist(volumeUUID: uuid).arguments, ["info", "-plist", Self.uuid])
         XCTAssertEqual(DiskutilInvocation.executable, "/usr/sbin/diskutil")
+    }
+
+    func testOnlyAVolumeDeviceNodePassesTheCrossCheck() {
+        XCTAssertTrue(HelperOwnership.isVolumeDeviceNode("/dev/disk5s1"))
         for bad in [
             "/dev/disk5", "/dev/disk3s1s1", "/dev/rdisk5s1", "disk5s1", "/dev/disk5s1 ", "/dev/disk5s1;reboot", "/dev/disk5s", "/dev/disks1",
             "/dev/disk5s1\u{0301}", "/dev/disk٥s1", "-plist", "/Volumes/XCodeVault", "",
         ] {
-            XCTAssertNil(DiskutilInvocation.enableOwnership(deviceNode: bad).arguments, bad)
+            XCTAssertFalse(HelperOwnership.isVolumeDeviceNode(bad), bad)
         }
+    }
+
+    func testAVolumeThatChangedBeforeTheCommandIsRefused() {
+        let volumes = FakeVolumes(.found(Self.facts()))
+        volumes.unchanged = false
+        let du = FakeDiskutil()
+        let r = service().doEnableOwnership(volumeUUID: Self.uuid, authorization: Self.form, rights: FakeRights(), volumes: volumes, diskutil: du)
+        XCTAssertEqual(r.code, .volumeNotFound)
+        XCTAssertTrue(du.runs.isEmpty, "nothing runs on a mount that is no longer the one read")
+        XCTAssertEqual(volumes.releases, 1)
+    }
+
+    func testHowARunEndedDecidesItsOutcome() {
+        let out = Data("x".utf8)
+        XCTAssertTrue(DiskutilOutput.ended(output: out, reachedEOF: true, timedOut: false, waitStatus: 0).succeeded)
+        XCTAssertEqual(DiskutilOutput.ended(output: out, reachedEOF: true, timedOut: false, waitStatus: 1 << 8).exitStatus, 1)
+        XCTAssertFalse(DiskutilOutput.ended(output: out, reachedEOF: true, timedOut: true, waitStatus: 0).succeeded, "timed out")
+        XCTAssertFalse(DiskutilOutput.ended(output: out, reachedEOF: false, timedOut: false, waitStatus: 0).succeeded, "output cut off")
+        XCTAssertFalse(DiskutilOutput.ended(output: out, reachedEOF: true, timedOut: false, waitStatus: nil).succeeded, "not reaped")
+        XCTAssertFalse(DiskutilOutput.ended(output: out, reachedEOF: true, timedOut: false, waitStatus: 9).succeeded, "a signal")
+        XCTAssertFalse(DiskutilOutput(exitStatus: 0, stdout: out, failure: "x").succeeded, "a failure is never success")
     }
 
     func testAnExternalFormOfTheWrongLengthIsRefusedBeforeTheAuthorizationServiceIsAsked() {
@@ -230,8 +270,15 @@ final class R8HelperOwnershipTests: XCTestCase {
     }
 
     func testOnlyTheAdminRuleCountsAsOurDefinition() {
-        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "version": 1, "created": 1.0]))
-        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": ["authenticate-admin"], "default-prompt": ["": "x"]]))
+        let ours = "com.xcodevault.helper"
+        XCTAssertTrue(
+            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "version": 1, "created": 1.0, "identifier": ours]))
+        XCTAssertTrue(
+            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": ["authenticate-admin"], "default-prompt": ["": "x"], "identifier": ours]))
+        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin"]), "no writer recorded (L4)")
+        XCTAssertFalse(
+            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "identifier": "com.example.squatter"]),
+            "the right definition, written by someone else (L4)")
         XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "allow"]), "a squatter's allow")
         XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "allow"]))
         XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": ["authenticate-admin", "allow"], "k": 1]))
@@ -281,6 +328,18 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertFalse(ro.isWritable)
         XCTAssertNil(HelperOwnership.parseInfo(Data("not a plist".utf8)))
         XCTAssertNil(HelperOwnership.parseInfo(Self.infoPlist { $0["DeviceNode"] = nil }))
+    }
+
+    func testAPlistMissingAKeyEligibilityRestsOnRefuses() {
+        for key in ["Internal", "BusProtocol", "WritableVolume", "VolumeUUID", "DeviceNode", "MountPoint"] {
+            XCTAssertNil(HelperOwnership.parseInfo(Self.infoPlist { $0[key] = nil }), "missing \(key) must not read as eligible (M2)")
+        }
+        XCTAssertNil(HelperOwnership.parseInfo(Self.infoPlist { $0["Internal"] = "No" }), "a wrongly typed Internal")
+        let image = HelperOwnership.parseInfo(Self.infoPlist { $0["DiskImageURL"] = "file:///x.dmg" })
+        XCTAssertEqual(image?.isDiskImageOrVirtual, true)
+        XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["VirtualOrPhysical"] = "Virtual" })?.isDiskImageOrVirtual, true)
+        XCTAssertEqual(HelperOwnership.parseInfo(Self.infoPlist { $0["VirtualOrPhysical"] = "Physical" })?.isDiskImageOrVirtual, false)
+        XCTAssertNotNil(HelperOwnership.refusal(Self.facts { $0.isDiskImageOrVirtual = true }))
     }
 
     func testTheBootContainerIsRecognised() {
