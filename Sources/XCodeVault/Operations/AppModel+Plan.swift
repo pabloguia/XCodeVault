@@ -27,7 +27,7 @@ extension AppModel {
         /// R7-D: `sudo diskutil enableOwnership` on the pasteboard. Nothing runs.
         case copyOwnershipCommand(String)
         /// R8: **Turn On Ownership** for that volume UUID, through the helper.
-        case turnOnOwnership(String)
+        case turnOnOwnership(String, String)
     }
 
     /// The target of `action` against the model's current state. A drive, volume or row that is no longer there falls back
@@ -64,9 +64,8 @@ extension AppModel {
             return .copyOwnershipCommand(path)
         case .turnOnOwnership(let uuid, let mountPoint):
             // The same check: only a volume a drive shows ownership off on now, and that drive's volume of that UUID.
-            guard driveAssessments.contains(where: { a in a.ownershipMountPoints.contains(mountPoint) && a.volumes.contains { $0.volumeUUID == uuid } })
-            else { return .section(.drives) }
-            return .turnOnOwnership(uuid)
+            guard isOwnershipTarget(volumeUUID: uuid, mountPoint: mountPoint) else { return .section(.drives) }
+            return .turnOnOwnership(uuid, mountPoint)
         }
     }
 
@@ -81,7 +80,7 @@ extension AppModel {
         case .run(let row, let vault): openRun(row, vault: vault)
         case .reveal(let path): showVolumeForOwnership(path)
         case .copyOwnershipCommand(let mp): copyOwnershipCommand(mp)
-        case .turnOnOwnership(let uuid): turnOnOwnership(volumeUUID: uuid)
+        case .turnOnOwnership(let uuid, let mountPoint): turnOnOwnership(volumeUUID: uuid, mountPoint: mountPoint)
         }
     }
 }

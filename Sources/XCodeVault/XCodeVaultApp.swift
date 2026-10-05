@@ -361,8 +361,14 @@ final class AppModel {
 
     /// **Turn On Ownership**: the helper's `enableOwnership` through `request`, which installs and waits for the helper
     /// first when it needs to. The system password dialog is the client's, on every call.
-    func turnOnOwnership(volumeUUID: String) {
-        guard ownershipInFlight == nil else { return }
+    func turnOnOwnership(volumeUUID: String, mountPoint: String) {
+        // One check for the Drives row and the Plan (F4): a volume a drive shows with ownership off now, at that mount
+        // point, with that UUID. And nothing else running (F5): no operation, no clean.
+        guard
+            Self.mayTurnOnOwnership(
+                inFlight: ownershipInFlight != nil, operationRunning: isOperationRunning, cleaning: isCleaning,
+                isTarget: isOwnershipTarget(volumeUUID: volumeUUID, mountPoint: mountPoint))
+        else { return }
         guard helperState.actionControl != .notAvailableInThisBuild else {
             ownershipFallback = .unavailableInThisBuild
             return
@@ -370,6 +376,19 @@ final class AppModel {
         ownershipFallback = nil
         ownershipInFlight = volumeUUID
         request(.enableOwnership(volumeUUID: volumeUUID))
+    }
+
+    /// The click's guard, as a function so each condition is tested (F4, F5).
+    static func mayTurnOnOwnership(inFlight: Bool, operationRunning: Bool, cleaning: Bool, isTarget: Bool) -> Bool {
+        !inFlight && !operationRunning && !cleaning && isTarget
+    }
+
+    /// Whether a drive shows ownership off now on the volume mounted at `mountPoint` whose UUID is `volumeUUID` — the same
+    /// volume, UUID and mount point, against the current `driveAssessments` (F4).
+    func isOwnershipTarget(volumeUUID: String, mountPoint: String) -> Bool {
+        driveAssessments.contains { a in
+            a.ownershipMountPoints.contains(mountPoint) && a.volumes.contains { $0.mountPoint == mountPoint && $0.volumeUUID == volumeUUID }
+        }
     }
 
     /// The ownership request ended without reaching the helper (the sheet was closed, the wait stopped or failed).

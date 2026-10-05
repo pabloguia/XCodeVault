@@ -12,6 +12,17 @@ public protocol PrivilegedHelper: Sendable {
     func openApprovalSettings()
     func unregister() async throws
     func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply
+    /// The same, telling `authorized` once the user's authorization is obtained and just before the request is sent (R8
+    /// fix round 2, F2): the runner journals `.started` there, so a crash after the password shows as interrupted.
+    func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply
+}
+
+extension PrivilegedHelper {
+    /// A helper with no authorization step of its own is authorized as soon as it is asked.
+    public func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
+        authorized()
+        return try await perform(action)
+    }
 }
 
 /// The helper's answer in Core's terms: a copy of `HelperResult`, which Core cannot see.
@@ -142,7 +153,14 @@ public struct PrivilegedActionRunner: Sendable {
             return .refused("The journal could not be written, so nothing was done: \(error)")
         }
         do {
-            let reply = try await helper.perform(action)
+            // `.started` once the request is about to leave: for `enableOwnership` that is after the password dialog, so
+            // a cancelled dialog stays a planned-then-skipped record and a crash after it reads as interrupted (F2).
+            let journal = self.journal
+            let reply = try await helper.perform(action) {
+                _ = try? journal.record(
+                    id: id, kind: action.journalKind, state: .started, summary: "helper: \(action.title)", paths: action.journalPaths,
+                    detail: action.journalDetail)
+            }
             // A failed reply can still have deleted something: the cleanup verb removes what it can, counts only
             // what it removed, and fails when anything is left (`HelperService.removeContents`). The journal says
             // what was deleted, not only whether all of it was (migration-safety review of deliverable 4).

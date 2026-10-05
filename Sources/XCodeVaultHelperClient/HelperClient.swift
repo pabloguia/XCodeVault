@@ -311,7 +311,7 @@ public struct HelperClient: Sendable {
     ///      with code `authorizationCanceled` and nothing is sent;
     ///   3. the verb, with the reference's externalized form;
     ///   4. the reference destroyed whatever happened, so the next call asks for the password again.
-    public func enableOwnership(volumeUUID: String) async throws -> HelperResult {
+    public func enableOwnership(volumeUUID: String, authorized: @escaping @Sendable () -> Void = {}) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
         let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
@@ -331,6 +331,7 @@ public struct HelperClient: Sendable {
             return HelperResult(ok: false, message: Failure.authorizationCanceled.description, code: .authorizationCanceled)
         }
         defer { acquired.release() }
+        authorized()
         return try await call(connection) { helper, reply in
             helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
         }

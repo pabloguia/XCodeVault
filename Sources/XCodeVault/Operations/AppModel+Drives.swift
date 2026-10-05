@@ -87,7 +87,7 @@ extension AppModel {
         case .ownership(let mountPoint):
             // R8: the click when this build offers it, Finder otherwise.
             if ownershipRoute == .oneClick, let uuid = ownershipVolumeUUID(assessment, mountPoint: mountPoint) {
-                turnOnOwnership(volumeUUID: uuid)
+                turnOnOwnership(volumeUUID: uuid, mountPoint: mountPoint)
             } else {
                 showVolumeForOwnership(mountPoint)
             }
@@ -243,7 +243,7 @@ extension AppModel {
             showInFinder: { [weak self] in self?.showVolumeForOwnership($0) }, copyOwnershipCommand: { [weak self] in self?.copyOwnershipCommand($0) },
             turnOnOwnership: { [weak self] a, mp in
                 guard let self, let uuid = self.ownershipVolumeUUID(a, mountPoint: mp) else { return }
-                self.turnOnOwnership(volumeUUID: uuid)
+                self.turnOnOwnership(volumeUUID: uuid, mountPoint: mp)
             },
             ownershipRoute: ownershipRoute)
     }

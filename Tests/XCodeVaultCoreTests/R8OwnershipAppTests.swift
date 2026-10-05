@@ -104,8 +104,12 @@ final class R8OwnershipAppTests: XCTestCase {
         func register() throws {}
         func openApprovalSettings() {}
         func unregister() async throws {}
-        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply {
+        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { try await perform(action, authorized: {}) }
+        /// Like the client: a cancelled password dialog throws before `authorized`; anything else is authorized first.
+        func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
             lock.withLock { performed.append(action) }
+            if case .failure(let e) = result, e is PrivilegedActionCancelled { throw e }
+            authorized()
             onPerform()
             return try result.get()
         }
@@ -125,7 +129,7 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertEqual(cancelled, .cancelled)
         let entries = try journal.entries()
         XCTAssertTrue(entries.allSatisfy { $0.kind == .diskPreparation && $0.detail["action"] == "enableOwnership" })
-        XCTAssertEqual(entries.map(\.state), [.planned, .completed, .planned, .skipped])
+        XCTAssertEqual(entries.map(\.state), [.planned, .started, .completed, .planned, .skipped], "started once authorized (F2); a cancel never starts")
         XCTAssertEqual(PrivilegedAction.enableOwnership(volumeUUID: "U").requirement, .helper)
         XCTAssertEqual(PrivilegedAction.enableOwnership(volumeUUID: "U").title, "Turn on ownership")
     }
@@ -206,7 +210,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let m = model(helper, drives: drives, journal: Self.scratch())
         await m.refresh()
         let action = try XCTUnwrap(m.plan?.step(.prepareDrive)?.action)
-        XCTAssertEqual(m.planTarget(action, vault: nil), .turnOnOwnership(R6DriveTests.u(302)))
+        XCTAssertEqual(m.planTarget(action, vault: nil), .turnOnOwnership(R6DriveTests.u(302), "/Volumes/XCodeVault"))
         XCTAssertEqual(GuideText.actionTitle(action), "Turn On Ownership")
         m.performPlanAction(action)
         XCTAssertEqual(m.ownershipRoute, .working)
@@ -225,7 +229,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let refused = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: false, message: "a disk image is not eligible")))
         let m = model(refused, drives: drives, journal: Self.scratch())
         await m.refresh()
-        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
         for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(m.ownershipRoute, .guided(.didNotWork("a disk image is not eligible")))
         XCTAssertNil(m.lastError, "the reason is inline, beside the guided route, not an alert")
@@ -236,7 +240,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let cancel = OwnershipHelper(.enabled, result: .failure(PrivilegedActionCancelled()))
         let c = model(cancel, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
         await c.refresh()
-        c.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        c.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
         for _ in 0..<3000 where c.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(c.ownershipRoute, .oneClick, "a cancelled password offers the click again, quietly")
         XCTAssertNil(c.lastError)
@@ -247,7 +251,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let m = model(helper, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
         await m.refresh()
         XCTAssertEqual(m.ownershipRoute, .guided(.unavailableInThisBuild))
-        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
         XCTAssertTrue(helper.performed.isEmpty)
         XCTAssertEqual(m.plan?.step(.prepareDrive)?.ownershipFallback, .unavailableInThisBuild)
     }
@@ -256,7 +260,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let helper = OwnershipHelper(.awaitingApproval, result: .success(PrivilegedActionReply(ok: true, message: "")))
         let m = model(helper, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
         await m.refresh()
-        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
         XCTAssertTrue(m.showsHelperSheet, "the helper is requested first")
         XCTAssertEqual(m.ownershipRoute, .working)
         m.installHelper(then: m.pendingPrivilegedAction)
@@ -265,7 +269,7 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertTrue(helper.performed.isEmpty)
         // Closing the sheet instead is a quiet cancel.
         m.ownershipFallback = nil
-        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
         m.dismissHelperSheet()
         XCTAssertEqual(m.ownershipRoute, .oneClick)
     }
@@ -275,5 +279,54 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertEqual(AppModel.quitChoice(operation: .stopThenQuit, enablingOwnership: true), .keepRunningOnly(.diskPreparation))
         XCTAssertEqual(AppModel.quitChoice(operation: .keepRunningOnly(.export), enablingOwnership: true), .keepRunningOnly(.export))
         XCTAssertEqual(AppModel.quitChoice(operation: .quitNow, enablingOwnership: false), .quitNow)
+    }
+
+    // MARK: - Fix round 2
+
+    /// F2: once the password is given the record is `.started`, so a crash before the reply reads as interrupted.
+    func testAnOwnershipRequestThatNeverEndedReadsAsInterrupted() async throws {
+        let journal = Journal(url: Self.scratch())
+        final class Hang: PrivilegedHelper, @unchecked Sendable {
+            func state() -> HelperState { .enabled }
+            func register() throws {}
+            func openApprovalSettings() {}
+            func unregister() async throws {}
+            func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { throw CancellationError() }
+            func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
+                authorized()
+                // The app is killed here: nothing after `.started` is ever written.
+                throw CancellationError()
+            }
+        }
+        let id = UUID().uuidString
+        try journal.record(
+            id: id, kind: .diskPreparation, state: .planned, summary: "helper: x", detail: PrivilegedAction.enableOwnership(volumeUUID: "U").journalDetail)
+        _ = try? await Hang().perform(.enableOwnership(volumeUUID: "U")) {
+            _ = try? journal.record(id: id, kind: .diskPreparation, state: .started, summary: "helper: x")
+        }
+        XCTAssertEqual(try journal.interrupted().map(\.id), [id])
+    }
+
+    /// F4: the Drives row and the Plan run one check — same volume, same UUID, same mount point, against the drives now.
+    func testTurnOnOwnershipRefusesAVolumeTheDrivesDoNotShow() async throws {
+        let helper = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: true, message: "")))
+        let m = model(helper, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
+        await m.refresh()
+        XCTAssertTrue(m.isOwnershipTarget(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault"))
+        XCTAssertFalse(m.isOwnershipTarget(volumeUUID: R6DriveTests.u(301), mountPoint: "/Volumes/XCodeVault"), "another UUID")
+        XCTAssertFalse(m.isOwnershipTarget(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/Media"), "another mount point")
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(301), mountPoint: "/Volumes/XCodeVault")
+        XCTAssertNil(m.ownershipInFlight)
+        XCTAssertEqual(m.planTarget(.turnOnOwnership(volumeUUID: R6DriveTests.u(301), mountPoint: "/Volumes/XCodeVault"), vault: nil), .section(.drives))
+        XCTAssertTrue(helper.performed.isEmpty)
+    }
+
+    /// F5: nothing starts while an operation or a clean runs, or while one ownership request is in flight.
+    func testTurnOnOwnershipWaitsForOtherWork() {
+        XCTAssertTrue(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: false, cleaning: false, isTarget: true))
+        XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: true, cleaning: false, isTarget: true))
+        XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: false, cleaning: true, isTarget: true))
+        XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: true, operationRunning: false, cleaning: false, isTarget: true))
+        XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: false, cleaning: false, isTarget: false))
     }
 }
