@@ -246,7 +246,8 @@ public enum PlanBuilder {
         // which names one vault per drive — must be a right one. A second vault on the same disk is judged by its volume.
         let registered = Set(vaults.map { $0.volume.volumeUUID.uppercased() })
         let good = usable.first { v in
-            if let own = volume(of: v, in: drives), !isGoodVolume(own) { return false }
+            // Round 3: a vault whose volume no drive shows cannot be judged, and is not counted good.
+            guard let own = volume(of: v, in: drives), isGoodVolume(own) else { return false }
             return !isFixable(v, drives, registered: registered)
         }
         let fixableVolume = { (v: VaultVolumeCheck) -> Volume? in

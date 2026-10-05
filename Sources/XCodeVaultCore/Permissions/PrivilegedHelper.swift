@@ -12,17 +12,26 @@ public protocol PrivilegedHelper: Sendable {
     func openApprovalSettings()
     func unregister() async throws
     func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply
-    /// The same, telling `authorized` once the user's authorization is obtained and just before the request is sent (R8
-    /// fix round 2, F2): the runner journals `.started` there, so a crash after the password shows as interrupted.
-    func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply
+    /// The same, asking `authorized` once the user's authorization is obtained and just before the request is sent (R8
+    /// fix round 2, F2): the runner journals `.started` there, so a crash after the password shows as interrupted. When
+    /// it answers false — the record could not be written — nothing is sent, and `PrivilegedActionNotStarted` is thrown
+    /// (round 3).
+    func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply
 }
 
 extension PrivilegedHelper {
     /// A helper with no authorization step of its own is authorized as soon as it is asked.
-    public func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
-        authorized()
+    public func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
+        guard authorized() else { throw PrivilegedActionNotStarted() }
         return try await perform(action)
     }
+}
+
+/// The request was not sent because its `.started` record could not be written (R8 fix round 3): a privileged action
+/// whose start the journal cannot show must not run.
+public struct PrivilegedActionNotStarted: Error, Equatable, CustomStringConvertible {
+    public init() {}
+    public var description: String { "The journal could not record the start, so nothing was sent to the helper." }
 }
 
 /// The helper's answer in Core's terms: a copy of `HelperResult`, which Core cannot see.
@@ -155,11 +164,17 @@ public struct PrivilegedActionRunner: Sendable {
         do {
             // `.started` once the request is about to leave: for `enableOwnership` that is after the password dialog, so
             // a cancelled dialog stays a planned-then-skipped record and a crash after it reads as interrupted (F2).
+            // Only `enableOwnership` has a password step between its opening record and the request; every other action
+            // already opens at its own state, so a second record would duplicate it.
             let journal = self.journal
+            let recordsStarted: Bool = { if case .enableOwnership = action { return true } else { return false } }()
             let reply = try await helper.perform(action) {
-                _ = try? journal.record(
-                    id: id, kind: action.journalKind, state: .started, summary: "helper: \(action.title)", paths: action.journalPaths,
-                    detail: action.journalDetail)
+                guard recordsStarted else { return true }
+                // Written, or the request does not leave (round 3).
+                return
+                    (try? journal.record(
+                        id: id, kind: action.journalKind, state: .started, summary: "helper: \(action.title)", paths: action.journalPaths,
+                        detail: action.journalDetail)) != nil
             }
             // A failed reply can still have deleted something: the cleanup verb removes what it can, counts only
             // what it removed, and fails when anything is left (`HelperService.removeContents`). The journal says

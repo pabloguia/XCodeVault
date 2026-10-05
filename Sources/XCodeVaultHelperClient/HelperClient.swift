@@ -37,6 +37,8 @@ public struct HelperClient: Sendable {
         case authorizationCanceled
         /// R8: the right was not obtained (wrong password three times, or the authorization service refused).
         case authorizationDenied(Int32)
+        /// R8 round 3: the caller could not record the start, so the request was not sent.
+        case notStarted
 
         public var description: String {
             switch self {
@@ -65,6 +67,8 @@ public struct HelperClient: Sendable {
                 return "The administrator password was not given."
             case .authorizationDenied(let status):
                 return "Administrator authorization was not granted (\(status))."
+            case .notStarted:
+                return "The start could not be recorded, so nothing was sent to the helper."
             }
         }
     }
@@ -311,7 +315,7 @@ public struct HelperClient: Sendable {
     ///      with code `authorizationCanceled` and nothing is sent;
     ///   3. the verb, with the reference's externalized form;
     ///   4. the reference destroyed whatever happened, so the next call asks for the password again.
-    public func enableOwnership(volumeUUID: String, authorized: @escaping @Sendable () -> Void = {}) async throws -> HelperResult {
+    public func enableOwnership(volumeUUID: String, authorized: @escaping @Sendable () -> Bool = { true }) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
         let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
@@ -331,7 +335,8 @@ public struct HelperClient: Sendable {
             return HelperResult(ok: false, message: Failure.authorizationCanceled.description, code: .authorizationCanceled)
         }
         defer { acquired.release() }
-        authorized()
+        // The caller's go-ahead (the journal's `.started`); without it nothing is sent and the reference is destroyed.
+        guard authorized() else { throw Failure.notStarted }
         return try await call(connection) { helper, reply in
             helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
         }

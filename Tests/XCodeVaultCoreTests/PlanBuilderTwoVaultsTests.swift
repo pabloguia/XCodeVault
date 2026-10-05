@@ -66,7 +66,16 @@ extension PlanBuilderTests {
         let disk2 = try XCTUnwrap(Self.drives(try R7ACoreTests.snapshotWithMadeVolume(owners: true), vaults: vaults).first { $0.disk.id == "disk2" })
         XCTAssertTrue(disk2.hasSuitableKindVolume)
         XCTAssertNil(disk2.recommendedOption)
-        if disk2.verdict != .canBeUsed { XCTAssertEqual(disk2.prepareAction, .nothing) }
-        if case .prepare(let o) = disk2.prepareAction { XCTFail("no command for a drive with a right volume: \(o)") }
+        XCTAssertNotEqual(disk2.verdict, .canBeUsed, "the fixture must reach the branch under test")
+        XCTAssertFalse(disk2.commandOptions.isEmpty, "there is a command option the old code would have fallen through to")
+        XCTAssertEqual(disk2.prepareAction, .nothing)
+    }
+
+    /// Round 3: a usable vault whose volume no drive shows cannot be judged, and is not the vault moves go to.
+    func testAVaultNoDriveShowsIsNotCountedGood() throws {
+        let ghost = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(999), mount: "/Volumes/Ghost")
+        let p = Self.plan(drives: Self.drives(try R7ACoreTests.snapshotWithMadeVolume(owners: true), vaults: [ghost]), vaults: [ghost])
+        XCTAssertNil(p.vaultUUID)
+        XCTAssertNotEqual(p.step(.registerVault)?.state, .done)
     }
 }

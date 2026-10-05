@@ -95,6 +95,8 @@ final class R8OwnershipAppTests: XCTestCase {
         var current: HelperState
         var result: Result<PrivilegedActionReply, any Error>
         var onPerform: @Sendable () -> Void = {}
+        var beforeAuthorized: @Sendable () -> Void = {}
+        private(set) var sent = 0
         private(set) var performed: [PrivilegedAction] = []
         init(_ state: HelperState, result: Result<PrivilegedActionReply, any Error>) {
             self.current = state
@@ -104,12 +106,14 @@ final class R8OwnershipAppTests: XCTestCase {
         func register() throws {}
         func openApprovalSettings() {}
         func unregister() async throws {}
-        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { try await perform(action, authorized: {}) }
+        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { try await perform(action, authorized: { true }) }
         /// Like the client: a cancelled password dialog throws before `authorized`; anything else is authorized first.
-        func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
+        func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
             lock.withLock { performed.append(action) }
             if case .failure(let e) = result, e is PrivilegedActionCancelled { throw e }
-            authorized()
+            beforeAuthorized()
+            guard authorized() else { throw PrivilegedActionNotStarted() }
+            lock.withLock { sent += 1 }
             onPerform()
             return try result.get()
         }
@@ -283,28 +287,79 @@ final class R8OwnershipAppTests: XCTestCase {
 
     // MARK: - Fix round 2
 
-    /// F2: once the password is given the record is `.started`, so a crash before the reply reads as interrupted.
+    /// F2, round 3: through the real runner — once the password is given the record is `.started`, so an app killed
+    /// while the helper works reads as interrupted.
     func testAnOwnershipRequestThatNeverEndedReadsAsInterrupted() async throws {
         let journal = Journal(url: Self.scratch())
-        final class Hang: PrivilegedHelper, @unchecked Sendable {
+        final class Suspends: PrivilegedHelper, @unchecked Sendable {
             func state() -> HelperState { .enabled }
             func register() throws {}
             func openApprovalSettings() {}
             func unregister() async throws {}
-            func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { throw CancellationError() }
-            func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Void) async throws -> PrivilegedActionReply {
-                authorized()
-                // The app is killed here: nothing after `.started` is ever written.
-                throw CancellationError()
+            func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { try await perform(action, authorized: { true }) }
+            func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
+                guard authorized() else { throw PrivilegedActionNotStarted() }
+                try await Task.sleep(for: .seconds(3600))  // the helper is working; the app is killed meanwhile
+                return PrivilegedActionReply(ok: true, message: "")
             }
         }
-        let id = UUID().uuidString
-        try journal.record(
-            id: id, kind: .diskPreparation, state: .planned, summary: "helper: x", detail: PrivilegedAction.enableOwnership(volumeUUID: "U").journalDetail)
-        _ = try? await Hang().perform(.enableOwnership(volumeUUID: "U")) {
-            _ = try? journal.record(id: id, kind: .diskPreparation, state: .started, summary: "helper: x")
+        let runner = PrivilegedActionRunner(helper: Suspends(), journal: journal, isXcodeRunning: { false }, isSimulatorWorkRunning: { false })
+        let task = Task { await runner.run(.enableOwnership(volumeUUID: "U")) }
+        var interrupted: [JournalEntry] = []
+        for _ in 0..<3000 {
+            interrupted = (try? journal.interrupted()) ?? []
+            if !interrupted.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(try journal.interrupted().map(\.id), [id])
+        XCTAssertEqual(interrupted.count, 1)
+        XCTAssertEqual(interrupted.first?.kind, .diskPreparation)
+        XCTAssertEqual(interrupted.first?.detail["action"], "enableOwnership")
+        task.cancel()
+        _ = await task.value
+    }
+
+    /// Round 3: only enableOwnership gains `.started`; the cache clean and the vault folder journal as before.
+    func testOnlyOwnershipGainsAStartedRecord() async throws {
+        for (action, expected) in [
+            (PrivilegedAction.emptyCoreSimulatorDyldCache, [JournalEntry.State.started, .completed]),
+            (.createVaultDirectory(volumeUUID: "U"), [.planned, .completed]),
+            (.enableOwnership(volumeUUID: "U"), [.planned, .started, .completed]),
+        ] {
+            let journal = Journal(url: Self.scratch())
+            let helper = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: true, message: "")))
+            _ = await PrivilegedActionRunner(helper: helper, journal: journal, isXcodeRunning: { false }, isSimulatorWorkRunning: { false }).run(action)
+            XCTAssertEqual(try journal.entries().map(\.state), expected, "\(action)")
+        }
+    }
+
+    /// Round 3: when `.started` cannot be written, the request does not leave.
+    func testAStartThatCannotBeRecordedSendsNothing() async throws {
+        let url = Self.scratch()
+        let journal = Journal(url: url)
+        let helper = OwnershipHelper(.enabled, result: .success(PrivilegedActionReply(ok: true, message: "")))
+        helper.beforeAuthorized = {
+            // The journal becomes unwritable between the opening record and the start.
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        let outcome = await PrivilegedActionRunner(helper: helper, journal: journal, isXcodeRunning: { false }, isSimulatorWorkRunning: { false })
+            .run(.enableOwnership(volumeUUID: "U"))
+        guard case .failed(let why) = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertTrue(why.contains("nothing was sent"), why)
+        XCTAssertEqual(helper.sent, 0, "the request never left")
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func testTheClientSendsNothingWithoutTheGoAhead() async throws {
+        let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: HelperIdentity.version)
+        let log = Acquisitions()
+        let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
+        do {
+            _ = try await client.enableOwnership(volumeUUID: "U-1", authorized: { false })
+            XCTFail("expected notStarted")
+        } catch { XCTAssertEqual(error as? HelperClient.Failure, .notStarted) }
+        XCTAssertEqual(daemon.calls, ["version"], "the verb is never sent")
+        XCTAssertEqual(log.all.last, "release", "the reference is still destroyed")
     }
 
     /// F4: the Drives row and the Plan run one check — same volume, same UUID, same mount point, against the drives now.
