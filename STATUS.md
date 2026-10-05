@@ -20,7 +20,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   the right re-checked in the helper on the client's externalized reference, the volume resolved and qualified by the
   helper, one fixed-argv `posix_spawn` of `/usr/sbin/diskutil`. The maintainer approved the narrow hook exception;
   `helper-invariants.sh` holds its shape (`R8HelperInvariantsTests`). The R7-D guided route stays the fallback, with the
-  reason. Written and tested with fakes only; **H18 pending the user's real-window run** with the signed build. Reviews
+  reason. **H18 measured 2026-10-05:** with the stock admin rule (timeout 0) the helper's re-check failed (-60007) and
+  the fallback worked; fix round 4 gives the right its own rule (timeout 10, unshared, admin, not root) and an update
+  path for the 0.2.0 daemon — **pending a re-test** with the signed build. Reviews
   required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,

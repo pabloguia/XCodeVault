@@ -119,8 +119,11 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
   `.destroyRights` so the form works once. The null-reference
   and self-made-reference forms (CVE-2025-65842) remain forbidden: the daemon is root and would be told yes. The flags
   never allow interaction; `interactionAllowed` is forbidden anywhere in the helper.
-- **Who defines the right.** `com.xcodevault.helper.enable-ownership`, rule `authenticate-admin` (a password every call;
-  the client destroys its reference afterwards). The daemon writes it at startup and checks it on every call, because
+- **Who defines the right.** `com.xcodevault.helper.enable-ownership`, with its own rule since fix round 4: `class
+  user, group admin, timeout 10, shared false, allow-root false`. The stock `authenticate-admin` rule (timeout 0) made
+  the helper's re-check fail with -60007 in the real-window test (H18); ten seconds covers that re-check only, the
+  credential is never shared beyond the client's one reference (destroyed by both sides), and root never satisfies it.
+  A password every call. The daemon writes it at startup and checks it on every call, because
   stock macOS lets any user *add* an undefined right: a definition that is not ours — another rule, an extra key, or
   a writer other than `com.xcodevault.helper` — is rewritten and that call refused.
 - **The client sends the credential only to a validated helper**: `version()` first on the same connection (replies are

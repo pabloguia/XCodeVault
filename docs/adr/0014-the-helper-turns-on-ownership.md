@@ -54,8 +54,15 @@ the second because a root process asking the rights API about a reference it mad
    UUID. A `Virtual` key as a Bool refuses too (N3).
    It returns a `HelperResult` with a closed `HelperResultCode`, which the audit logs `.public` with the caller uid, the
    UUID hashed and the authorization outcome; the authorization form is never logged.
-2. **Per-call admin authorization.** A custom right, `com.xcodevault.helper.enable-ownership`, defined with
-   `kAuthorizationRuleAuthenticateAsAdmin`. The client obtains it on a fresh reference with the system password dialog
+2. **Per-call admin authorization.** A custom right, `com.xcodevault.helper.enable-ownership`, defined first with
+   `kAuthorizationRuleAuthenticateAsAdmin` and, since fix round 4, with **its own rule**: `class user, group admin,
+   timeout 10, shared false, allow-root false`. Measured in a real window (H18, 2026-10-05): the stock admin rule's
+   `timeout` of 0 makes the client's credential unusable for the helper's non-interactive re-check, which failed with
+   -60007. Ten seconds covers that immediate re-check and nothing more; `shared false` keeps the credential in the
+   client's one reference, which the client destroys afterwards and the helper frees with `.destroyRights`, so the next
+   click asks for the password again; `allow-root false` means the helper's being root never satisfies it. The daemon
+   rewrites the old definition at start, the contract moved to 0.2.1-dev, and an app that meets the old daemon removes
+   its registration and installs the new one through the approval flow, once per click. The client obtains it on a fresh reference with the system password dialog
    every time and destroys the reference afterwards. Cancelling the dialog is a quiet cancel.
 3. **The daemon defines the right**, at startup (before the listener resumes) and again on every call. Stock macOS lets
    any local user *add* an undefined right; a squatter could add this name as `allow`. The daemon is root, relies on the

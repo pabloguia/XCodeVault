@@ -1,0 +1,49 @@
+# Experiment: H18 — Turn On Ownership through the privileged helper, in a real window (ADR-0014)
+# Date: 2026-10-05
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Build: signed with the user's Developer ID team (debug configuration, --with-helper), branch feat/r8-helper-ownership
+#        at 5182979 (helper contract 0.2.0-dev)
+# Runner: <user> (uid 501, administrator), by hand in the app's window; reported to the controller, recorded here
+# Redaction: user name and home as <user>; volume and disk UUIDs omitted (the format of common.sh's xcv_redact).
+#            Not captured by a script: the steps are the user's clicks, and the outputs below are what they copied.
+
+## Steps
+1. In the Plan (step 2, "Turn on ownership for XCodeVault"), clicked **Turn On Ownership**.
+2. The helper was not registered: the app registered it; System Settings ▸ Login Items & Extensions showed the item; the
+   user approved it.
+3. The macOS administrator password dialog appeared ("XCodeVault wants to turn on ownership on an external volume.");
+   the user entered the password.
+
+## Result
+The app fell back to the guided route (Show in Finder, Copy Command) with the reason:
+  Turning ownership on through the helper did not work: the authorization was not granted (-60007).
+-60007 is errAuthorizationInteractionNotAllowed.
+
+## After
+$ diskutil info /Volumes/XCodeVault | grep -i owners
+   Owners:                    Disabled
+$ ls /Volumes
+MacOS
+PABLO
+XCodeVault
+(no "XCodeVault 1": nothing was remounted; nothing changed — the fallback behaved as designed)
+
+$ security authorizationdb read com.xcodevault.helper.enable-ownership
+class      = rule
+rule       = [ authenticate-admin ]
+identifier = com.xcodevault.helper        (L4 confirmed: authd records the writing helper's code identifier)
+
+$ security authorizationdb read authenticate-admin
+class      = user
+group      = admin
+shared     = true
+timeout    = 0
+allow-root = false
+
+## Reading
+The right pointed at the stock authenticate-admin rule, whose timeout is 0: a credential obtained under it cannot be
+reused for a later evaluation. The client obtained it with the dialog; the helper's re-check on the same (externalized)
+reference, with extendRights and no interaction allowed, needed a fresh authentication and failed with -60007.
+H18 (a)/(b) with the stock rule: FAIL, for this reason. Fix round 4 gives the right its own definition (class user,
+group admin, timeout 10, shared false, allow-root false); pending a re-test.

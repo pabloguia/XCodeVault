@@ -1206,11 +1206,14 @@ substitution may not be waved through. Issue #29 stays open.
 
 ### H18 — `enableOwnership` through the privileged helper — pending
 
-- Date tested: not yet run.
+- Date tested: 2026-10-05, by the user, signed build (helper 0.2.0-dev), macOS 26.7.1 (25G241) · Intel.
 - Hypothesis reference: H18; ADR-0014.
+- Evidence: `docs/research/evidence/h18-enable-ownership-helper-macos26.7.1-25G241-x86_64.txt`.
+- Result with the stock admin rule: **FAIL** — the helper's re-check returned -60007 (`timeout = 0`); nothing changed,
+  and the guided fallback was shown. Fix round 4 (the right's own rule, contract 0.2.1-dev): **pending** a re-test.
 - Test to perform: in a build signed with the user's Developer ID team and `--with-helper`, approve the helper, press
   **Turn On Ownership** for an external volume with Owners: Disabled, enter the administrator password; once more with
   the dialog cancelled.
-- Result: **pending.** Unit-tested with fakes only; never run against a real daemon, authorization service or disk.
+- Result (round 4 design): **pending.** Unit-tested with fakes.
 - Verdict: **pending.** Experimental (rule 10). The guided route (Show in Finder, Copy Command) stays the fallback and is
   what an unsigned build shows.

@@ -2071,7 +2071,7 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
 
-## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; **PENDING**)*
+## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; **(a)/(b) FAILED with the stock admin rule, 2026-10-05; the right's own rule PENDING a re-test**)*
 
 **Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
 (a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
@@ -2099,5 +2099,20 @@ check `security authorizationdb read com.xcodevault.helper.enable-ownership` sho
 `com.xcodevault.helper` and the `authenticate-admin` rule (L4 follow-up); repeat once cancelling the dialog. Record the outcome here and in
 `COMPATIBILITY_MATRIX.md` ("H18 physical").
 
-**Status: PENDING** — written and tested with fakes only (`R8HelperOwnershipTests`, `R8OwnershipAppTests`,
-`R8HelperInvariantsTests`). Experimental everywhere until verified (rule 10).
+**Measured 2026-10-05 (macOS 26.7.1 25G241 · Intel, signed build, by the user in the app's window; evidence
+`docs/research/evidence/h18-enable-ownership-helper-macos26.7.1-25G241-x86_64.txt`).** (a) The password dialog appeared
+and was answered. (b) **FAILED:** the helper's re-check returned `errAuthorizationInteractionNotAllowed` (-60007), so
+nothing ran; `Owners: Disabled` afterwards, no `/Volumes/XCodeVault 1`, and the app showed the guided route with the
+reason — the fallback worked as designed. Cause: the right pointed at the stock `authenticate-admin` rule, whose
+`timeout` is 0, so the credential the client obtained could not be reused by the helper's non-interactive check. The
+database recorded `identifier = com.xcodevault.helper` (L4 confirmed).
+
+**Fix round 4 (pending a re-test).** The right gets its own definition — `class user`, `group admin`, `timeout 10`,
+`shared false`, `allow-root false` — so the client's credential stays valid for the helper's immediate re-check and
+lives only in the client's one reference (destroyed afterwards by both sides, so every click asks again). The daemon
+rewrites the old definition at start; the helper contract moved to 0.2.1-dev, and an app that meets the old 0.2.0
+daemon removes its registration and installs this build's through the approval flow, once per click. Re-test with the
+same procedure; also confirm `security authorizationdb read com.xcodevault.helper.enable-ownership` shows the new
+dictionary.
+
+**Status: (a)/(b) FAILED with the stock rule; the right's own rule PENDING.** Experimental everywhere (rule 10).
