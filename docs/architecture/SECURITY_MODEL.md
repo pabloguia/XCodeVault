@@ -104,27 +104,36 @@ The XPC surface is four state-changing verbs and `version()`, read by `scripts/h
 were forbidden in the helper; the maintainer approved a narrow exception on 2026-10-05, applied to both editor hooks
 and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`):
 
-- **One process execution.** `posix_spawn` in `HelperCore/HelperDiskutil.swift` only, exactly one call, on the constant
-  `/usr/sbin/diskutil`; no `posix_spawnp`, no shell, no other absolute path. The argv comes from a closed enum
-  (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership <device node>`), the UUID re-serialized by the helper and
-  the device node the helper's own reading, revalidated on bytes. Environment: one PATH entry. stdin/stderr `/dev/null`,
-  every other descriptor closed in the child, output capped, a timeout.
+- **One process execution.** `posix_spawn` in `HelperCore/HelperDiskutil.swift` only, named once, on the constant
+  `/usr/sbin/diskutil`; no `posix_spawnp`, no shell, no other absolute path, none of the routes around those rules
+  (`dlsym`, `fork`, `@_silgen_name`, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, the API bound to a value). The argv comes
+  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership <UUID>`), the UUID the helper's own
+  parse, re-serialized; the lines that build it are pinned by the script. Environment: one PATH entry. stdin/stderr
+  `/dev/null`, every other descriptor closed in the child, an empty signal mask and default dispositions, every setup
+  call checked, output capped, a deadline after which the child is killed and reaped without blocking past it.
 - **One right check, never on the helper's own reference.** `AuthorizationCopyRights` in
   `HelperCore/HelperAuthorizationRight.swift` only, exactly one call, on `clientRef` — the reference the client
-  externalized, imported with `AuthorizationCreateFromExternalForm`, after a 32-byte length check. The null-reference
+  externalized, imported with `AuthorizationCreateFromExternalForm`, after a 32-byte length check, and freed with
+  `.destroyRights` so the form works once. The null-reference
   and self-made-reference forms (CVE-2025-65842) remain forbidden: the daemon is root and would be told yes. The flags
   never allow interaction; `interactionAllowed` is forbidden anywhere in the helper.
 - **Who defines the right.** `com.xcodevault.helper.enable-ownership`, rule `authenticate-admin` (a password every call;
   the client destroys its reference afterwards). The daemon writes it at startup and checks it on every call, because
-  stock macOS lets any user *add* an undefined right: a definition that is not ours is rewritten and that call refused.
+  stock macOS lets any user *add* an undefined right: a definition that is not ours — another rule, an extra key, or
+  a writer other than `com.xcodevault.helper` — is rewritten and that call refused.
 - **The client sends the credential only to a validated helper**: `version()` first on the same connection (replies are
   checked against the helper's requirement), then the password, then the verb.
-- **The volume is the helper's to resolve.** Mount table + `getattrlist`, `statfs`, `diskutil info -plist`, agreeing on
-  UUID, mount point and device node; refused unless mounted, local, writable, external, APFS or HFS+, not the boot volume
-  or its container, not a disk image, not Time Machine. Verified afterwards by reading it again.
+- **The volume is the helper's to resolve.** Mount table + `getattrlist`, then the mount point opened
+  `O_RDONLY|O_DIRECTORY|O_NOFOLLOW` and held; `fstatfs` on that descriptor and `diskutil info -plist` agree on UUID,
+  mount point and device node, and the descriptor must still name the same device and `f_fsid` immediately before the
+  command. Refused unless mounted, local, writable, external, APFS or HFS+, not the boot volume or its container, not a
+  disk image or virtual, not Time Machine — and refused when the plist lacks a key those answers rest on. Verified
+  afterwards by reading it again through the same descriptor.
 
-Unmeasured until the user's signed run (H18): `authenticate-admin`'s behaviour for a root evaluator, the first call
-right after the definition is written, and TCC on the external volume's root for the daemon.
+`authenticate-admin` on this Mac: `allow-root = false`, `shared = true`, `timeout = 0` (read by the reviewer,
+2026-10-05). Unmeasured until the user's signed run (H18): whether the helper's non-interactive check succeeds on the
+client's freshly granted reference, the first call right after the definition is written, and TCC on the external
+volume's root for the daemon.
 
 ## SIP
 

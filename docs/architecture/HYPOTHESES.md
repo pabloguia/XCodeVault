@@ -2080,9 +2080,13 @@ after a cancel or a wrong one; (c) `diskutil enableOwnership <device node>` run 
 for a **mounted** external APFS volume without a remount; (d) the helper's re-read then shows `GlobalPermissionsEnabled`
 and no `MNT_IGNORE_OWNERSHIP`, and the app's Plan advances to Use This Drive.
 
-**Open questions the run answers.** Whether the stock `authenticate-admin` rule lets a root evaluator pass without the
-client's credential (its `allow-root`) — if it does, (b)'s failure half fails and the right needs an explicit definition;
-whether the very first call — the right defined at the daemon's startup, moments before — passes; whether TCC lets the
+**Read from this Mac (helper-security review, 2026-10-05):** `authenticate-admin` is `allow-root = false`,
+`shared = true`, `timeout = 0` — root is not let through by the rule itself.
+
+**Open questions the run answers.** Whether the helper's non-interactive `extendRights` check succeeds on a client
+reference just granted with interaction: with `timeout = 0` the credential may not be reusable for that second
+evaluation, and EvenBetterAuthorizationSample-style designs rely on it succeeding — the real-window run decides, and if
+it fails the guided fallback is shown and nothing else changes; whether the very first call — the right defined at the daemon's startup, moments before — passes; whether TCC lets the
 root daemon read the volume's root for the Time Machine marker (an unreadable root is refused, which would show here).
 
 **How it is proven.** ADR-0014; the user's real-window run with the signed build (`scripts/bundle-app.sh --release

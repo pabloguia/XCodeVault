@@ -31,8 +31,20 @@ the second because a root process asking the rights API about a reference it mad
       agreeing on UUID, mount point and device node) and refuses unless it is mounted, local, writable, external, APFS or
       HFS+, not the boot volume or its container, not a disk image, not Time Machine (role or marker);
    5. runs nothing if ownership is already on;
-   6. runs `/usr/sbin/diskutil enableOwnership <its own device node>` — fixed argv, absolute path, no shell, an
-      environment of one PATH entry, a timeout — and verifies by reading the volume again.
+   6. runs `/usr/sbin/diskutil enableOwnership <UUID>` — fixed argv, absolute path, no shell, an environment of one
+      PATH entry, an empty signal mask and default dispositions, every setup call checked, a deadline after which the
+      child is killed and reaped — and verifies by reading the volume again.
+
+   *Fix round 1 (helper-security review, 2026-10-05):* the command names the **UUID**, not the device node (L1) —
+   `diskutil(8)` on macOS 26.7.1 accepts "a UUID" as the device (DEVICES), and that it resolves a *volume* UUID was
+   measured read-only (`diskutil info <Data volume UUID>` → `disk1s1`). A device node is reassigned when disks come and
+   go; the device-node agreement stays as a cross-check. The mount point is opened `O_RDONLY|O_DIRECTORY|O_NOFOLLOW`
+   before anything is read and held across the command; immediately before it, `fstatfs` on that descriptor must still
+   give the same device and `f_fsid`. The plist must carry `Internal`, `BusProtocol` and `WritableVolume`, or the volume
+   is refused (M2); a disk-image key or `Virtual` refuses too. The helper frees the client's reference with
+   `.destroyRights`, so an externalized form works once (L3), and a right definition counts as ours only when the
+   database records `com.xcodevault.helper` as its writer (L4). The contract version moved to `0.2.0-dev` with the
+   product's (L5).
    It returns a `HelperResult` with a closed `HelperResultCode`, which the audit logs `.public` with the caller uid, the
    UUID hashed and the authorization outcome; the authorization form is never logged.
 2. **Per-call admin authorization.** A custom right, `com.xcodevault.helper.enable-ownership`, defined with
@@ -48,12 +60,16 @@ the second because a root process asking the rights API about a reference it mad
 5. **The maintainer approved a narrow exception to the helper's prohibitions (2026-10-05)**, applied by the controller
    to both editor hooks (`.claude/hooks/helper-guard.sh`, `.codex/hooks/helper-guard.sh`) and enforced in
    `scripts/helper-invariants.sh`:
-   - `posix_spawn` only in `Sources/XCodeVaultHelperCore/HelperDiskutil.swift`: exactly one call, on
-     `DiskutilInvocation.executable` = `/usr/sbin/diskutil`; `posix_spawnp` forbidden; no absolute path literal but
-     diskutil, `/dev/null` and the `/dev/disk` prefix;
-   - `AuthorizationCopyRights` only in `Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift`: exactly one call,
-     whose first argument is `clientRef`, written only by `AuthorizationCreateFromExternalForm`;
-   - `interactionAllowed` forbidden anywhere in the helper.
+   - `posix_spawn` only in `Sources/XCodeVaultHelperCore/HelperDiskutil.swift`: the token exactly once in its code, on
+     `DiskutilInvocation.executable` = `/usr/sbin/diskutil`, the spawn line, the argv line and both argument returns
+     pinned (a verb and a canonical UUID); `posix_spawnp` forbidden; no absolute path literal but diskutil and
+     `/dev/null`;
+   - `AuthorizationCopyRights` only in `Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift`: the token exactly
+     once in its code, called on `clientRef`, written only by `AuthorizationCreateFromExternalForm`;
+   - `interactionAllowed` forbidden anywhere in the helper, and so are the routes around the rules the review found
+     (fix round 1, M1): `dlsym`, `fork`/`vfork`, `@_silgen_name`, `AuthorizationCopyRightsAsync`, flags from a raw
+     value, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, and either API bound to a value. The hooks match the two files by
+     exact path (proposed in `.superpowers/sdd/r8/hook-change-2.patch`, applied by the maintainer).
    `R8HelperInvariantsTests` mutates a copy of the tree for each of these and requires the script to fail.
 6. **The fallback stays.** The app shows R7-D's guided route (Show in Finder + Copy Command) with the reason whenever
    the click is not offered or did not work: the build is not signed by a usable team with the daemon; the helper was
@@ -77,10 +93,14 @@ it cannot be held by `helper-invariants.sh`; and its argument would be a path or
 - `HelperResult` gains `code`; an older daemon sends none (decoded `none`). The XPC contract has no separate version —
   `HelperIdentity.version` is pinned to the product version — so a daemon too old to have the verb fails the connection
   and the app falls back.
-- **Unmeasured, pending the user's real-window check** (H18): whether the stock `authenticate-admin` rule lets a root
-  evaluator pass without the client's credential (its `allow-root`); whether the first call, which defines the right,
-  passes the helper's check; whether `diskutil enableOwnership` takes effect on a mounted volume without a remount.
-  Until then the verb is EXPERIMENTAL everywhere.
+- **Read from this Mac by the reviewer (2026-10-05):** `authenticate-admin` has `allow-root = false`, `shared = true`,
+  `timeout = 0`. So a root evaluator does not pass on being root.
+- **Unmeasured, pending the user's real-window check** (H18): whether the helper's non-interactive `extendRights` check
+  succeeds on a client reference that was just granted with interaction — with `timeout = 0` the credential may not be
+  reusable for a second evaluation; designs in the EvenBetterAuthorizationSample style rely on it succeeding. If it
+  fails, the guided fallback is shown and nothing else changes. Also open: whether the first call, which defines the
+  right, passes, and whether `diskutil enableOwnership` takes effect on a mounted volume without a remount. Until then
+  the verb is EXPERIMENTAL everywhere.
 - Use This Drive after ownership: the volume root keeps its real owner, so the user creates `XCodeVault/` without root;
   a root-owned root is offered the existing `createVaultDirectory` verb in Use This Drive's review.
 
