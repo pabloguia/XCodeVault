@@ -1113,12 +1113,23 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     /// unsupported attribute is simply not packed — which is why the flag check has to come first
     /// and why reading offset 24 unconditionally would be reading whatever happened to be there.
     static func volumeUUID(ofMountPoint mp: String) -> UUID? {
+        volumeUUID { attrList, raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
+    }
+
+    /// The same, asked of an open descriptor (R8 fix round 3): the volume the descriptor is on, whatever the name now
+    /// resolves to.
+    static func volumeUUID(ofDescriptor fd: Int32) -> UUID? {
+        volumeUUID { attrList, raw in getattrlistat(fd, ".", &attrList, raw.baseAddress, raw.count, UInt(FSOPT_NOFOLLOW)) }
+    }
+
+    /// The request and the reply's parsing, shared by both forms; `call` makes the one system call.
+    private static func volumeUUID(_ call: (inout attrlist, UnsafeMutableRawBufferPointer) -> Int32) -> UUID? {
         var attrList = attrlist()
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
         attrList.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_UUID)
         var buffer = [UInt8](repeating: 0, count: 64)
-        let rc = buffer.withUnsafeMutableBytes { raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
+        let rc = buffer.withUnsafeMutableBytes { raw in call(&attrList, raw) }
         guard rc == 0 else { return nil }
 
         // The reply must be long enough to hold the returned-attribute set at all, and must not

@@ -457,6 +457,18 @@ service_code=$(code_of Sources/XCodeVaultHelperCore/HelperService.swift)
 grep -qxF \
     '        guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }' <<<"$service_code" \
     || violation "Sources/XCodeVaultHelperCore/HelperService.swift — the pinned-mount check before the command is gone" "the volume must be the one read, right before diskutil runs"
+# Round 3 (L1): the command runs on the pin's own identifier, on one pinned line, and nowhere else outside the spawn
+# file; the pin is never rebound or written to, and its fields are `let`.
+grep -qxF '        let run = diskutil.run(.enableOwnership(disk: pin.disk))' <<<"$service_code" \
+    || violation "Sources/XCodeVaultHelperCore/HelperService.swift — the command no longer runs on pin.disk" "diskutil gets the held mount's identifier, exactly"
+enable_sites=$(for f in $helper_files; do [ "$f" = "$SPAWN_SITE" ] || code_of "$f"; done | grep -oE '\.enableOwnership\(disk:' | grep -c .)
+[ "$enable_sites" -eq 1 ] || violation "helper targets — .enableOwnership(disk: named $enable_sites times outside $SPAWN_SITE" "one command site, the pinned one"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '[[:<:]]var[[:space:]]+pin[[:>:]]|[[:<:]]pin\.[a-zA-Z]+[[:space:]]*=[^=]' | head -3)
+[ -z "$hit" ] || violation "helper targets — the mount pin is rebound or written to" "$hit"
+pin_vars=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+var[[:space:]]')
+pin_lets=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+let[[:space:]]')
+[ "$pin_vars" -eq 0 ] && [ "$pin_lets" -ge 6 ] \
+    || violation "Sources/XCodeVaultHelperCore/HelperOwnership.swift — MountPin's fields are not all let" "a pin cannot change after it was taken"
 if [ -f "$AUTHZ_SITE" ]; then
     copy_calls=$(code_of "$AUTHZ_SITE" | grep -oE '[[:<:]]AuthorizationCopyRights[[:>:]]' | grep -c .)
     [ "$copy_calls" -eq 1 ] \

@@ -48,7 +48,9 @@ final class R8HelperOwnershipTests: XCTestCase {
             lock.withLock {
                 guard answers.first != .notMounted else { return nil }
                 pins += 1
-                return MountPin(descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2], disk: DiskIdentifier("disk5s1")!)
+                return MountPin(
+                    descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2], disk: DiskIdentifier("disk5s1")!,
+                    uuid: volumeUUID)
             }
         }
         func lookup(volumeUUID: UUID, pin: MountPin) -> OwnershipVolumeLookup {

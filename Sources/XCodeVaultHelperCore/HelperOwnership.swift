@@ -53,12 +53,14 @@ enum OwnershipVolumeLookup: Equatable, Sendable {
 
 /// A mount held open across the verb: the descriptor of its mount point and what `fstatfs` said of it when opened.
 struct MountPin: Equatable, Sendable {
-    var descriptor: Int32
-    var mountPoint: String
-    var deviceNode: String
-    var fsid: [Int32]
+    let descriptor: Int32
+    let mountPoint: String
+    let deviceNode: String
+    let fsid: [Int32]
     /// The bare identifier of `deviceNode`: what `diskutil enableOwnership` is given (fix round 2, N2).
-    var disk: DiskIdentifier
+    let disk: DiskIdentifier
+    /// The volume UUID the pin was made for, compared with the descriptor's own volume before the command (round 3).
+    let uuid: UUID
 }
 
 /// The seam the verb reads volumes through. Tests inject a fake; production uses `OwnershipVolumeReader`.
@@ -96,7 +98,8 @@ enum HelperOwnership {
 
     /// `/dev/disk<N>s<M>`, ASCII digits only, nothing else: the shape of a volume's device node. Checked on bytes — a
     /// grapheme-level check can be fooled by a combining mark, the kernel cannot. No whole disk (`/dev/disk4`), no
-    /// snapshot (`/dev/disk3s1s1`), no raw node. Since L1 it is a cross-check only: the command takes the UUID.
+    /// snapshot (`/dev/disk3s1s1`), no raw node. The command takes the pinned mount's disk identifier (`DiskIdentifier`,
+    /// fix round 2, N2); this is the same shape asked of a device node, for the eligibility refusal.
     static func isVolumeDeviceNode(_ node: String) -> Bool { diskIdentifier(ofDeviceNode: node) != nil }
 
     /// `/dev/disk5s1` → `disk5s1`, validated; nil for anything else.
@@ -206,7 +209,7 @@ struct OwnershipVolumeReader: OwnershipVolumeReading {
             close(fd)
             return nil
         }
-        return MountPin(descriptor: fd, mountPoint: mp, deviceNode: fs.node, fsid: fs.fsid, disk: disk)
+        return MountPin(descriptor: fd, mountPoint: mp, deviceNode: fs.node, fsid: fs.fsid, disk: disk, uuid: wanted)
     }
 
     func lookup(volumeUUID wanted: UUID, pin: MountPin) -> OwnershipVolumeLookup {
@@ -228,9 +231,10 @@ struct OwnershipVolumeReader: OwnershipVolumeReading {
         guard let fs = Self.fstatfsOf(pin.descriptor), fs.node == pin.deviceNode, fs.fsid == pin.fsid, fs.mountedOn == pin.mountPoint,
             HelperOwnership.diskIdentifier(ofDeviceNode: fs.node) == pin.disk
         else { return false }
-        // Still the only mounted volume with that UUID — read from the descriptor, not from the client.
-        guard let uuid = HelperService.volumeUUID(ofMountPoint: pin.mountPoint) else { return false }
-        return HelperOwnership.soleMountPoint(HelperOwnership.mountPoints(forVolumeUUID: uuid)) == pin.mountPoint
+        // The descriptor's own volume still has the pinned UUID, read through the descriptor (getattrlistat on "."),
+        // and it is still the only mounted volume with it.
+        guard HelperService.volumeUUID(ofDescriptor: pin.descriptor) == pin.uuid else { return false }
+        return HelperOwnership.soleMountPoint(HelperOwnership.mountPoints(forVolumeUUID: pin.uuid)) == pin.mountPoint
     }
 
     func release(_ pin: MountPin) { close(pin.descriptor) }

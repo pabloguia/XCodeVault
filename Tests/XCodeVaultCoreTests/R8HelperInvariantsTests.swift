@@ -116,6 +116,13 @@ final class R8HelperInvariantsTests: XCTestCase {
         Mutation(
             name: "the writer check removed", file: authz,
             old: "        guard d[\"identifier\"] as? String == HelperIdentity.bundleIdentifier else { return false }\n", new: ""),
+        // Fix round 3 (L1): mut3.py B and O.
+        Mutation(
+            name: "the command site takes the client's string", file: service, old: "diskutil.run(.enableOwnership(disk: pin.disk))",
+            new: "diskutil.run(.enableOwnership(disk: DiskIdentifier(volumeUUID) ?? pin.disk))"),
+        Mutation(
+            name: "the pin rebound and written to", file: service, old: "        guard reader.isUnchanged(pin) else",
+            new: "        var pin = pin; pin.disk = DiskIdentifier(\"disk0s1\")!\n        guard reader.isUnchanged(pin) else"),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),
@@ -182,7 +189,7 @@ final class R8HelperInvariantsTests: XCTestCase {
             let m = Self.mutations[i]
             if let why = Self.outcome(m) { lock.withLock { misses.append("\(m.name): \(why)") } }
         }
-        XCTAssertGreaterThanOrEqual(Self.mutations.count, 41)
+        XCTAssertGreaterThanOrEqual(Self.mutations.count, 43)
         XCTAssertEqual(misses, [], misses.joined(separator: "\n\n"))
     }
 }
