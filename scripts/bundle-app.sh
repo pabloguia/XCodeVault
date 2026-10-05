@@ -12,6 +12,12 @@
 # namespace at all, which stays the default until the helper has run live in a signed build and the
 # list below is empty or accepted in review. The cask once told people to enable it; it must not again.
 #
+# **`--with-helper` needs a Developer ID Application identity** (R8 fix round 5, N2). The helper accepts its
+# authorization right's definition only when the writer's code requirement names the team as
+# `certificate leaf[subject.OU]` (ADR-0014). An "Apple Development" identity's designated requirement keys on the
+# leaf's `subject.CN` instead, so every read-back would fail and every Turn On Ownership would be refused — fail
+# closed, but a build that cannot work. Refused here rather than shipped broken.
+#
 # **Gate on this flag, not a backlog.** Re-verified against Sources/XCodeVaultHelperCore on 2026-09-28
 # (the list here had gone stale; helper-security review of deliverable 3) and completed by the review of
 # deliverable 4. Still true, and live the moment this flag is used in a release:
@@ -41,6 +47,10 @@ CONFIG=debug; SIGN=""; TEAM=""; WITH_HELPER=0
 while [ $# -gt 0 ]; do case "$1" in
   --release) CONFIG=release;; --sign) SIGN="$2"; shift;; --team) TEAM="$2"; shift;;
   --with-helper) WITH_HELPER=1;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
+if [ "$WITH_HELPER" = 1 ] && ! [[ "$SIGN" =~ ^Developer\ ID\ Application:\ .+\ \([A-Z0-9]{10}\)$ ]]; then
+  echo "refusing: --with-helper needs --sign 'Developer ID Application: Name (TEAMID)'; the helper's right is keyed on the team OU (ADR-0014)" >&2
+  exit 2
+fi
 if [ -n "$SIGN" ] && [ -z "$TEAM" ]; then TEAM=$(echo "$SIGN" | sed -E 's/.*\(([A-Z0-9]{10})\).*/\1/'); fi
 
 cd "$ROOT"

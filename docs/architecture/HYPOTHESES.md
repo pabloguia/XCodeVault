@@ -2128,4 +2128,11 @@ the reference is destroyed by both sides after each call), and replaying a captu
 `system.privilege.admin`, 300 s, not shared) could accept until it is destroyed; `.destroyRights` on both sides is
 what bounds it.
 
+**Info step for the re-test (fix round 5, N3; documentation only).** Before installing the new daemon, have a foreign
+writer pre-create the right — e.g. `security authorizationdb write com.xcodevault.helper.enable-ownership allow` from
+Terminal as the user, which `config.add.` permits — then start the new daemon, which must rewrite it, and read
+`security authorizationdb read com.xcodevault.helper.enable-ownership`. Record `identifier` and `requirement`: if authd
+keeps the **original creator's** requirement on a rewrite, the read-back can never be ours and every call is refused;
+the code fix is then `AuthorizationRightRemove` before `AuthorizationRightSet` in `ensureDefinition`.
+
 **Status: (a)/(b) FAILED with the stock rule; the right's own rule PENDING.** Experimental everywhere (rule 10).

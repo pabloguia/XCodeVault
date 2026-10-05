@@ -150,6 +150,15 @@ final class R8HelperInvariantsTests: XCTestCase {
         Mutation(
             name: "the placeholder team accepted", file: authz,
             old: "        guard HelperIdentity.isUsableTeamID(teamID) else { return false }\n", new: ""),
+        // Fix round 5 (N1): ensureDefinition keeps a definition only after asking isOurDefinition, and reads back after a write.
+        Mutation(
+            name: "N1: any existing definition kept", file: authz,
+            old: "        if existed, let dict = current as? [String: Any], Self.isOurDefinition(dict, teamID: teamID) { return .unchanged }",
+            new: "        if existed { return .unchanged }"),
+        Mutation(
+            name: "N1: the read-back no longer asks isOurDefinition", file: authz,
+            old: "let back = written as? [String: Any],\n            Self.isOurDefinition(back, teamID: teamID)\n",
+            new: "let back = written as? [String: Any], !back.isEmpty\n"),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),

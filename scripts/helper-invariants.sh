@@ -552,6 +552,33 @@ TEAM_BODY
 )
     [ "$(body_of "$AUTHZ_SITE" namesTeam)" = "$expected_team" ] \
         || violation "$AUTHZ_SITE — namesTeam changed" "the writer's team check is pinned whole (fix round 5, F3/F4)"
+    # Fix round 5 (N1): the decision that keeps a definition (`.unchanged`) and the read-back after a write are pinned
+    # whole too: a pin on isOurDefinition is worth nothing if `ensureDefinition` stops asking it. Blank lines (where
+    # comments were) are dropped on both sides, so a comment edit is not a violation.
+    expected_ensure=$(cat <<'ENSURE_BODY'
+    func ensureDefinition() -> RightDefinition {
+        var current: CFDictionary?
+        let got = AuthorizationRightGet(rightName, &current)
+        let existed = got == errAuthorizationSuccess
+        if existed, let dict = current as? [String: Any], Self.isOurDefinition(dict, teamID: teamID) { return .unchanged }
+        var writer: AuthorizationRef?
+        let created = AuthorizationCreate(nil, nil, [], &writer)
+        guard created == errAuthorizationSuccess, let writer else { return .failed(created) }
+        defer { AuthorizationFree(writer, []) }
+        let prompt = OwnershipRightRule.prompt as CFString
+        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)
+        guard set == errAuthorizationSuccess else { return .failed(set) }
+        var written: CFDictionary?
+        guard AuthorizationRightGet(rightName, &written) == errAuthorizationSuccess, let back = written as? [String: Any],
+            Self.isOurDefinition(back, teamID: teamID)
+        else { return .failed(errAuthorizationInternal) }
+        return existed ? .redefined : .defined
+    }
+ENSURE_BODY
+)
+    actual_ensure=$(code_of "$AUTHZ_SITE" | sed -n '/^    func ensureDefinition() -> RightDefinition {$/,/^    }$/p' | grep -v '^[[:space:]]*$')
+    [ "$actual_ensure" = "$expected_ensure" ] \
+        || violation "$AUTHZ_SITE — ensureDefinition changed" "keeping a definition and the read-back after a write are pinned whole (fix round 5, N1)"
     trues=$(body_of "$AUTHZ_SITE" isOurDefinition | grep -oE '[[:<:]]return[[:space:]]+true[[:>:]]' | grep -c .)
     [ "$trues" -eq 1 ] || violation "$AUTHZ_SITE — isOurDefinition returns true $trues times" "one way to be ours: the last line (B4)"
     # Belt and braces for the one number: whatever the pins say, a credential longer than 30 s is not a re-check window.

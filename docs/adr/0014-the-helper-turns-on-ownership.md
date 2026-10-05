@@ -82,7 +82,10 @@ the second because a root process asking the rights API about a reference it mad
    and its code requirement names this build's team (`subject.OU] = "<team>"`, the team `scripts/bundle-app.sh`
    substitutes); `default-prompt` is absent or every text in it is ours (a squatter's wording is never shown under our
    name); and `tries`, which authd adds to every user-class rule (10000 on this Mac), is a whole number of at least 1.
-   `scripts/helper-invariants.sh` pins the read-back check whole, line for line.
+   `scripts/helper-invariants.sh` pins the read-back check whole, line for line, and `ensureDefinition` with it (N1).
+   Because the team check reads `certificate leaf[subject.OU]`, a helper build must be signed with a **Developer ID
+   Application** identity: an Apple Development designated requirement keys on `subject.CN`, every read-back would
+   fail closed and the verb would always be refused. `scripts/bundle-app.sh` refuses `--with-helper` without one (N2).
 4. **The client validates the helper before sending the credential**: one connection, `version()` first (replies are
    checked against the helper's code-signing requirement), the password second, the verb third. Without it the
    externalized authorization would go to whoever holds the Mach name — the requirement checks replies, not requests.
