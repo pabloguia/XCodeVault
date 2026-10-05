@@ -232,6 +232,14 @@ for f in $helper_files; do
         "hand-rolled or PID-based peer validation; the connection code-signing requirement is the only accepted form"
     forbid "$f" 'interactionAllowed|kAuthorizationFlagInteractionAllowed' \
         "an authorization dialog in the privileged helper; interaction is the client's (ADR-0014)"
+    # The routes around the two rules above, each measured by the helper-security review of R8 (fix round 1, M1): a
+    # symbol looked up at run time, a fork, a symbol bound by name, the asynchronous rights call, flags built from a raw
+    # value (which can carry the interaction bit), an inherited descriptor, a spawn that replaces the daemon itself, and
+    # either API bound to a value and called through it.
+    forbid "$f" 'dlsym|[[:<:]]v?fork[[:space:]]*\(|@_silgen_name|AuthorizationCopyRightsAsync|AuthorizationFlags[[:space:]]*\([[:space:]]*rawValue|addinherit_np|POSIX_SPAWN_SETEXEC' \
+        "a route around the helper's process and authorization rules (ADR-0014)"
+    forbid "$f" '=[[:space:]]*(posix_spawn|AuthorizationCopyRights)[[:>:]][[:space:]]*($|[^([:space:]])' \
+        "the spawn or rights API bound to a value; call it by name, where the rules can see it"
     forbid "$f" 'dlopen|Bundle\(path:|Bundle\(url:|NSBundle' \
         "dynamic code loading in the privileged helper"
     # `fchown`/`fchmod` are deliberately NOT matched: a descriptor already opened O_NOFOLLOW is the
@@ -393,24 +401,36 @@ done
 # The loop above lets one token into each of two files. These say what each may do with it. A missing file is a
 # violation, not a pass: the rules would otherwise check nothing.
 if [ -f "$SPAWN_SITE" ]; then
-    spawn_calls=$(code_of "$SPAWN_SITE" | grep -cE '(^|[^_[:alnum:]])posix_spawn\(')
-    [ "$spawn_calls" -eq 1 ] \
-        || violation "$SPAWN_SITE — $spawn_calls posix_spawn calls" "exactly one process execution is allowed in the helper"
-    code_of "$SPAWN_SITE" | grep -E '(^|[^_[:alnum:]])posix_spawn\(' | grep -qE 'posix_spawn\(&pid, DiskutilInvocation\.executable,' \
-        || violation "$SPAWN_SITE — posix_spawn does not run DiskutilInvocation.executable" "the executable is the fixed constant, never a variable"
+    # Bare tokens, not `name(`: `posix_spawn (` with a space, or the function bound to a value, is still a use (M1).
+    spawn_uses=$(code_of "$SPAWN_SITE" | grep -oE '[[:<:]]posix_spawn[[:>:]]' | grep -c .)
+    [ "$spawn_uses" -eq 1 ] \
+        || violation "$SPAWN_SITE — posix_spawn named $spawn_uses times" "exactly one process execution is allowed in the helper"
+    code_of "$SPAWN_SITE" | grep -qE '^        let rc = posix_spawn\(&pid, DiskutilInvocation\.executable, &actions, &attributes, argv, envp\)$' \
+        || violation "$SPAWN_SITE — the spawn line changed" "posix_spawn runs DiskutilInvocation.executable with the pinned argv"
     code_of "$SPAWN_SITE" | grep -qE '^    static let executable = "/usr/sbin/diskutil"$' \
         || violation "$SPAWN_SITE — DiskutilInvocation.executable is not /usr/sbin/diskutil" "the one program the helper may run"
-    # Every absolute path literal in the file is one of these. `/dev/disk` is the device-node prefix the argument
-    # check compares against; `/dev/null` is stdin and stderr.
-    bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"|"/dev/disk"' | sort -u | tr '\n' ' ')
+    # The argv: built on one line from `arguments`, whose only two returns are a fixed verb and a canonical UUID (L1).
+    code_of "$SPAWN_SITE" | grep -qxF '        let argv: [UnsafeMutablePointer<CChar>?] = ([DiskutilInvocation.executable] + invocation.arguments).map { strdup($0) } + [nil]' \
+        || violation "$SPAWN_SITE — the argv line changed" "argv is the executable and DiskutilInvocation.arguments, nothing else"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]' \
+        || violation "$SPAWN_SITE — the info argv changed" "info -plist <canonical UUID>"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let uuid): return ["enableOwnership", uuid.uuidString]' \
+        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership <canonical UUID>"
+    returns=$(code_of "$SPAWN_SITE" | grep -cE 'return \[')
+    [ "$returns" -eq 2 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly two, both pinned"
+    [ "$(code_of "$SPAWN_SITE" | grep -cxE '    case (infoPlist|enableOwnership)\(volumeUUID: UUID\)')" -eq 2 ] \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 2 ] \
+        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "two cases, each carrying a parsed UUID and nothing else"
+    # Every absolute path literal in the file is one of these; `/dev/null` is stdin and stderr.
+    bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
     [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
 else
     violation "$SPAWN_SITE — missing" "the R8 spawn rules check nothing; move them with the file"
 fi
 if [ -f "$AUTHZ_SITE" ]; then
-    copy_calls=$(code_of "$AUTHZ_SITE" | grep -cE 'AuthorizationCopyRights\(')
+    copy_calls=$(code_of "$AUTHZ_SITE" | grep -oE '[[:<:]]AuthorizationCopyRights[[:>:]]' | grep -c .)
     [ "$copy_calls" -eq 1 ] \
-        || violation "$AUTHZ_SITE — $copy_calls AuthorizationCopyRights calls" "exactly one right check is allowed in the helper"
+        || violation "$AUTHZ_SITE — AuthorizationCopyRights named $copy_calls times" "exactly one right check is allowed in the helper"
     code_of "$AUTHZ_SITE" | grep -E 'AuthorizationCopyRights\(' | grep -qE 'AuthorizationCopyRights\(clientRef, ' \
         || violation "$AUTHZ_SITE — AuthorizationCopyRights is not called on clientRef" "only the client's externalized reference may be checked"
     # `clientRef` is written only by `AuthorizationCreateFromExternalForm`: no `&clientRef` elsewhere, no assignment.

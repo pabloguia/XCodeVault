@@ -64,8 +64,8 @@ final class R8HelperInvariantsTests: XCTestCase {
 
     func testASecondSpawnIsCaught() throws {
         try mutate(
-            Self.spawn, "close(writeEnd)\n",
-            "close(writeEnd)\n        _ = posix_spawn(&pid, DiskutilInvocation.executable, &actions, &attributes, argv, envp)\n")
+            Self.spawn, "        var pid: pid_t = 0\n",
+            "        var pid: pid_t = 0\n        _ = posix_spawn(&pid, DiskutilInvocation.executable, &actions, &attributes, argv, envp)\n")
         try assertCaught("a second posix_spawn")
     }
 
@@ -95,7 +95,7 @@ final class R8HelperInvariantsTests: XCTestCase {
     }
 
     func testReassigningTheClientsReferenceIsCaught() throws {
-        try mutate(Self.authz, "defer { AuthorizationFree(clientRef, []) }", "clientRef = writer\n        defer { AuthorizationFree(clientRef, []) }")
+        try mutate(Self.authz, "        // `.destroyRights`:", "        clientRef = writer\n        // `.destroyRights`:")
         try assertCaught("clientRef reassigned")
     }
 
@@ -117,5 +117,88 @@ final class R8HelperInvariantsTests: XCTestCase {
     func testTheAppCallingTheVerbOutsideLiveHelperIsCaught() throws {
         try mutate("Sources/XCodeVault/Operations/AppModel+Drives.swift", "self.turnOnOwnership(volumeUUID: uuid)", "client.enableOwnership(volumeUUID: uuid)")
         try assertCaught("the verb called outside LiveHelper")
+    }
+
+    // MARK: - Fix round 1 (M1): the routes the helper-security review found passing, each now caught
+
+    func testAnAliasedSpawnIsCaught() throws {
+        try mutate(
+            Self.spawn, "        var pid: pid_t = 0\n",
+            "        var pid: pid_t = 0\n        let sp = posix_spawn\n        var p2: pid_t = 0\n        _ = sp(&p2, argv[0], &actions, &attributes, argv, envp)\n"
+        )
+        try assertCaught("posix_spawn bound to a value")
+    }
+
+    func testASecondSpawnWrittenWithASpaceIsCaught() throws {
+        try mutate(
+            Self.spawn, "        var pid: pid_t = 0\n",
+            "        var pid: pid_t = 0\n        var p2: pid_t = 0\n        _ = posix_spawn (&p2, argv[0], &actions, &attributes, argv, envp)\n")
+        try assertCaught("posix_spawn with a space before the paren")
+    }
+
+    func testASymbolLookedUpAtRunTimeIsCaught() throws {
+        try mutate(Self.service, "let privilegedWork", "let ex = dlsym(UnsafeMutableRawPointer(bitPattern: -2), \"execve\")\nlet privilegedWork")
+        try assertCaught("dlsym")
+    }
+
+    func testAForkIsCaught() throws {
+        try mutate(Self.service, "let privilegedWork", "let child = vfork()\nlet privilegedWork")
+        try assertCaught("vfork")
+    }
+
+    func testASymbolBoundByNameIsCaught() throws {
+        try mutate(
+            Self.service, "let privilegedWork",
+            "@_silgen_name(\"execv\") func run(_ p: UnsafePointer<CChar>, _ a: UnsafePointer<UnsafePointer<CChar>?>) -> Int32\nlet privilegedWork")
+        try assertCaught("@_silgen_name")
+    }
+
+    func testAnAliasedRightsCallIsCaught() throws {
+        try mutate(
+            Self.authz, "        defer { AuthorizationFree(writer, []) }\n",
+            "        defer { AuthorizationFree(writer, []) }\n        let cr = AuthorizationCopyRights\n        _ = cr(writer, nil, nil, [.extendRights], nil)\n"
+        )
+        try assertCaught("AuthorizationCopyRights bound to a value")
+    }
+
+    func testTheAsynchronousRightsCallIsCaught() throws {
+        try mutate(
+            Self.authz, "        defer { AuthorizationFree(writer, []) }\n",
+            "        defer { AuthorizationFree(writer, []) }\n        AuthorizationCopyRightsAsync(writer, nil, nil, [], { _, _ in })\n")
+        try assertCaught("AuthorizationCopyRightsAsync")
+    }
+
+    func testInteractionThroughARawValueIsCaught() throws {
+        try mutate(Self.authz, "[.extendRights], nil)", "AuthorizationFlags(rawValue: 3), nil)")
+        try assertCaught("flags from a raw value")
+    }
+
+    func testAnInheritedDescriptorIsCaught() throws {
+        try mutate(
+            Self.spawn, "            posix_spawn_file_actions_adddup2(&actions, writeEnd, 1),\n",
+            "            posix_spawn_file_actions_adddup2(&actions, writeEnd, 1),\n            posix_spawn_file_actions_addinherit_np(&actions, 5),\n")
+        try assertCaught("addinherit_np")
+    }
+
+    func testASpawnThatReplacesTheDaemonIsCaught() throws {
+        try mutate(Self.spawn, "POSIX_SPAWN_CLOEXEC_DEFAULT |", "POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETEXEC |")
+        try assertCaught("POSIX_SPAWN_SETEXEC")
+    }
+
+    func testAnExtraArgumentIsCaught() throws {
+        try mutate(
+            Self.spawn, "case .enableOwnership(let uuid): return [\"enableOwnership\", uuid.uuidString]",
+            "case .enableOwnership(let uuid): return [\"enableOwnership\", \"-force\", uuid.uuidString]")
+        try assertCaught("an extra argv element")
+    }
+
+    func testAStringCaseIsCaught() throws {
+        try mutate(Self.spawn, "    case enableOwnership(volumeUUID: UUID)", "    case enableOwnership(volumeUUID: String)")
+        try assertCaught("a case carrying a String")
+    }
+
+    func testAPathBuiltByConcatenationIsCaught() throws {
+        try mutate(Self.spawn, "\"/dev/null\", O_RDONLY", "\"/dev/\" + \"null\", O_RDONLY")
+        try assertCaught("a path built by concatenation")
     }
 }
