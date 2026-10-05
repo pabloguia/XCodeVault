@@ -44,12 +44,16 @@ case "$path" in
     #   - HelperCore/HelperAuthorizationRight.swift may call `AuthorizationCopyRights`, on the client's
     #     externalized reference only.
     # scripts/helper-invariants.sh enforces the rest: one call each, no shell, no other path, and `clientRef` first.
+    # Fix rounds 1–2 (M1): the exemption is the exact file under this repository, not any path that ends like it — a
+    # suffix match also exempted `…/OtherSources/XCodeVaultHelperCore/HelperDiskutil.swift`.
+    root=${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}
     spawn_ok=0; authz_ok=0
     case "$path" in
-      *Sources/XCodeVaultHelperCore/HelperDiskutil.swift) spawn_ok=1 ;;
-      *Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift) authz_ok=1 ;;
+      "$root/Sources/XCodeVaultHelperCore/HelperDiskutil.swift") spawn_ok=1 ;;
+      "$root/Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift") authz_ok=1 ;;
     esac
-    exec_pat='/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawnp|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun|"-c"'
+    # Whitespace before `(` is still a call; `Process.` reaches its class methods (fix round 2, N1).
+    exec_pat='/bin/(ba|z)?sh|\bsystem *\(|\bpopen *\(|posix_spawnp|\bexec(v|ve|vp|l|lp|le|vP) *\(|execvP|NSTask|\bProcess *(\(|\.)|executableURL|launchPath|/usr/bin/env|xcrun|"-c"'
     [ "$spawn_ok" = 1 ] || exec_pat="$exec_pat|posix_spawn"
     has "$exec_pat" && deny "process/shell execution in the privileged helper ($path)"
     # `.run()` on anything except the main RunLoop (Process.run() is the exec API).
@@ -59,6 +63,17 @@ case "$path" in
     has "$peer_pat" && deny "forbidden peer-validation pattern (PID / hand-rolled validation / AuthorizationCopyRights) in helper ($path)"
     # The helper never shows an authorization dialog of its own: interaction belongs to the client.
     has 'interactionAllowed' && deny "authorization interaction in the privileged helper ($path)"
+    # The routes around the two exemptions, mirrored from scripts/helper-invariants.sh (fix rounds 1–2, M1 / N1). The hook
+    # sees the proposed text only, so the counts and the pinned lines stay the script's; these are the tokens it can match.
+    has 'dlsym|\bv?fork *\(|@_silgen_name|AuthorizationCopyRightsAsync|addinherit_np|POSIX_SPAWN_SETEXEC' \
+      && deny "a route around the helper's process and authorization rules ($path)"
+    has '= *(posix_spawn|AuthorizationCopyRights)\b *($|[^( ])' && deny "the spawn or rights API bound to a value ($path)"
+    has 'NSAppleScript|OSAScript|NSUserUnixTask|NSUserScriptTask|NSClassFromString|NSSelectorFromString|objc_getClass|objc_msgSend' \
+      && deny "scripting or dynamic dispatch in the privileged helper ($path)"
+    has '\bAuthorizationFlags\b|\.init *\( *rawValue|\bSelf *\( *rawValue' \
+      && deny "authorization flags, or a value built from a raw value, in the privileged helper ($path)"
+    # Round 3 (L1): the mount pin is never rebound or written to; the command runs on its own identifier.
+    has '\bvar +pin\b|\bpin\.[a-zA-Z]+ *= *[^=]' && deny "the mount pin rebound or written to ($path)"
     if has 'shouldAcceptNewConnection' && ! has 'setCodeSigningRequirement'; then deny "connection acceptance without setCodeSigningRequirement ($path)"; fi
     has 'dlopen|Bundle\(path:|Bundle\(url:|\.load\(\)|NSBundle' && deny "dynamic code loading in the privileged helper ($path)"
     # `atPath:` was missing, which is the form main.swift actually uses — the rule named the one
