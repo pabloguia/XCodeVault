@@ -21,6 +21,10 @@ extension AppModel {
         case useDrive(DriveAssessment, Volume)
         /// **Run…** (R3) for that plan row, on the plan's vault.
         case run(SavingsPlanRow, vault: String?)
+        /// R7-D: a volume in Finder, for Get Info's ownership setting. Nothing runs.
+        case reveal(String)
+        /// R7-D: `sudo diskutil enableOwnership` on the pasteboard. Nothing runs.
+        case copyOwnershipCommand(String)
     }
 
     /// The target of `action` against the model's current state. A drive, volume or row that is no longer there falls back
@@ -50,6 +54,11 @@ extension AppModel {
             return .section(SidebarSection(reviewing: bucket) ?? .overview)
         case .showHealth:
             return .section(.health)
+        case .showInFinder(let path), .copyOwnershipCommand(let path):
+            // Only a volume a drive shows ownership off on now; anything else is Drives' to show.
+            guard driveAssessments.contains(where: { $0.ownershipMountPoints.contains(path) }) else { return .section(.drives) }
+            if case .showInFinder = action { return .reveal(path) }
+            return .copyOwnershipCommand(path)
         }
     }
 
@@ -62,6 +71,8 @@ extension AppModel {
         case .preparation(let drive, let option): openPreparation(drive, option: option, nonErasingOnly: true)
         case .useDrive(let drive, let volume): openUseDrive(drive, volume: volume)
         case .run(let row, let vault): openRun(row, vault: vault)
+        case .reveal(let path): showVolumeForOwnership(path)
+        case .copyOwnershipCommand(let mp): copyOwnershipCommand(mp)
         }
     }
 }

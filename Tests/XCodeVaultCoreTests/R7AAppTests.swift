@@ -43,7 +43,8 @@ final class R7AAppTests: XCTestCase {
             .filled(
                 command: "xcodevaultctl locations set-derived-data /Volumes/Vault/XCodeVault/DerivedData", folder: "/Volumes/Vault/XCodeVault/DerivedData"))
         m.copyCommand(dd)
-        XCTAssertEqual(copied.strings, ["xcodevaultctl locations set-derived-data /Volumes/Vault/XCodeVault/DerivedData"])
+        // R7-D: the template, commented, then the filled line.
+        XCTAssertEqual(copied.strings, ["# " + dd.command + "\nxcodevaultctl locations set-derived-data /Volumes/Vault/XCodeVault/DerivedData"])
         for row in rows where row.command.contains("<dir>") {
             guard case .filled(let command, _) = m.commandSuggestion(row) else { return XCTFail(row.categoryID) }
             XCTAssertFalse(command.contains("<dir>"), row.categoryID)

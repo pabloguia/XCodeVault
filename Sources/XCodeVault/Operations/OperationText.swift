@@ -193,7 +193,10 @@ enum DriveText {
         let options = a.commandOptions
         guard !options.isEmpty else { return nil }
         var parts: [String] = []
-        if let recommended = a.recommendedOption {
+        if case .enableOwnership(let mp)? = a.recommendedOption {
+            // R7-D: fixing the existing volume is the recommendation; the buttons here are the plain alternatives.
+            parts.append(L10n.tr("app.drives.options.recommendedOwnership", (mp as NSString).lastPathComponent))
+        } else if let recommended = a.recommendedOption {
             parts.append(L10n.tr("app.drives.options.recommended", optionButton(recommended)))
         } else if options.contains(where: { !$0.erases }) {
             parts.append(L10n.tr("app.drives.options.addErasesNothing"))
@@ -211,6 +214,7 @@ enum DriveText {
         case .prepare(.addPartition): L10n.tr("app.drives.fix.addPartition")
         case .prepare(.eraseVolume(let id, let name)): L10n.tr("app.drives.fix.eraseVolume", name.isEmpty ? id : name)
         case .prepare(.eraseDisk): L10n.tr("app.drives.fix.eraseDisk")
+        case .ownership(let mp): L10n.tr("app.drives.fix.ownership", (mp as NSString).lastPathComponent)
         case .prepare(.enableOwnership), .nothing: nil
         }
     }

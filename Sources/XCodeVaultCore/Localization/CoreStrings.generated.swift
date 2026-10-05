@@ -592,6 +592,13 @@ extension L10nCatalog {
                 "ja": "「%@」を消去…",
                 "zh-Hans": "抹掉“%@”…",
             ],
+            "app.drives.fix.ownership": [
+                "en": "Turn On Ownership for %@…",
+                "pt-BR": "Ativar Titularidade em %@…",
+                "es": "Activar Propiedad en %@…",
+                "ja": "%@ の所有権をオンにする…",
+                "zh-Hans": "为 %@ 打开所有权…",
+            ],
             "app.drives.none": [
                 "en": "No external drives are connected.",
                 "pt-BR": "Nenhum disco externo conectado.",
@@ -619,6 +626,13 @@ extension L10nCatalog {
                 "es": "Se recomienda «%@»: no borra nada.",
                 "ja": "「%@」がおすすめです。何も消去しません。",
                 "zh-Hans": "推荐“%@”：它不抹掉任何内容。",
+            ],
+            "app.drives.options.recommendedOwnership": [
+                "en": "Turning on ownership for “%@” is recommended: it erases nothing, and no new volume is needed.",
+                "pt-BR": "Ativar a titularidade em “%@” é o recomendado: nada é apagado e nenhum volume novo é necessário.",
+                "es": "Se recomienda activar la propiedad en “%@”: no borra nada y no hace falta un volumen nuevo.",
+                "ja": "「%@」の所有権をオンにすることをおすすめします。何も消去されず、新しいボリュームも不要です。",
+                "zh-Hans": "建议为“%@”打开所有权：不会抹掉任何内容，也无需新宗卷。",
             ],
             "app.drives.ownership.detail": [
                 "en": "Ownership is ignored on “%@”. In Finder, choose File ▸ Get Info and turn off “Ignore ownership on this volume” (Finder asks for your password), or copy the command for Terminal.",
@@ -851,6 +865,13 @@ extension L10nCatalog {
                 "ja": "接続中のドライブはどれも保管庫にできません。理由は「ドライブ」に表示されます。",
                 "zh-Hans": "已连接的驱动器都无法用作保管库。“磁盘”中有原因说明。",
             ],
+            "app.guide.block.ownershipFirst": [
+                "en": "Turn on ownership for %@ first (step 2).",
+                "pt-BR": "Ative primeiro a titularidade em %@ (passo 2).",
+                "es": "Activa primero la propiedad en %@ (paso 2).",
+                "ja": "先に %@ の所有権をオンにしてください（ステップ 2）。",
+                "zh-Hans": "请先为 %@ 打开所有权（第 2 步）。",
+            ],
             "app.guide.block.vaultOffline": [
                 "en": "Your vault %@ is not connected. Connect it to continue.",
                 "pt-BR": "Seu disco-cofre %@ não está conectado. Conecte-o para continuar.",
@@ -907,12 +928,47 @@ extension L10nCatalog {
                 "ja": "保管庫 %@ のマウント先にシャドウデータがあります。対処方法は「診断」にあります。",
                 "zh-Hans": "保管库 %@ 的挂载位置有影子数据。“健康状况”中有处理方法。",
             ],
-            "app.guide.chooseDrive.vaultNeedsVolume": [
-                "en": "%@ holds your vault, but its volume is case-sensitive or ignores ownership; the next step adds a suitable volume.",
-                "pt-BR": "%@ contém seu disco-cofre, mas o volume diferencia maiúsculas ou ignora a titularidade; o próximo passo adiciona um volume adequado.",
-                "es": "%@ contiene tu bóveda, pero su volumen distingue mayúsculas o ignora la propiedad; el siguiente paso añade un volumen adecuado.",
-                "ja": "%@ に保管庫がありますが、そのボリュームは大文字小文字を区別するか所有権を無視します。次のステップで適切なボリュームを追加します。",
-                "zh-Hans": "%@ 上有你的保管库，但其宗卷区分大小写或忽略所有权；下一步会添加合适的宗卷。",
+            "app.guide.chooseDrive.wrongKind.both": [
+                "en": "%@ holds your vault on a case-sensitive volume that ignores ownership; the next step adds a suitable volume.",
+                "pt-BR": "%@ contém seu disco-cofre em um volume que diferencia maiúsculas e ignora a titularidade; o próximo passo adiciona um volume adequado.",
+                "es": "%@ contiene tu bóveda en un volumen que distingue mayúsculas e ignora la propiedad; el siguiente paso añade un volumen adecuado.",
+                "ja": "%@ の保管庫は大文字小文字を区別し所有権を無視するボリュームにあります。次のステップで適切なボリュームを追加します。",
+                "zh-Hans": "%@ 上的保管库位于区分大小写且忽略所有权的宗卷上；下一步会添加合适的宗卷。",
+            ],
+            "app.guide.chooseDrive.wrongKind.both.ownership": [
+                "en": "%1$@ holds your vault on a case-sensitive volume that ignores ownership; %2$@ on the same drive needs ownership turned on.",
+                "pt-BR": "%1$@ contém seu disco-cofre em um volume que diferencia maiúsculas e ignora a titularidade; %2$@, no mesmo disco, precisa da titularidade ativada.",
+                "es": "%1$@ contiene tu bóveda en un volumen que distingue mayúsculas e ignora la propiedad; %2$@, en el mismo disco, necesita activar la propiedad.",
+                "ja": "%1$@ の保管庫は大文字小文字を区別し所有権を無視するボリュームにあります。同じドライブの %2$@ は所有権をオンにする必要があります。",
+                "zh-Hans": "%1$@ 上的保管库位于区分大小写且忽略所有权的宗卷上；同一驱动器上的 %2$@ 需要打开所有权。",
+            ],
+            "app.guide.chooseDrive.wrongKind.caseSensitive": [
+                "en": "%@ holds your vault on a case-sensitive volume; the next step adds a suitable volume.",
+                "pt-BR": "%@ contém seu disco-cofre em um volume que diferencia maiúsculas; o próximo passo adiciona um volume adequado.",
+                "es": "%@ contiene tu bóveda en un volumen que distingue mayúsculas; el siguiente paso añade un volumen adecuado.",
+                "ja": "%@ の保管庫は大文字小文字を区別するボリュームにあります。次のステップで適切なボリュームを追加します。",
+                "zh-Hans": "%@ 上的保管库位于区分大小写的宗卷上；下一步会添加合适的宗卷。",
+            ],
+            "app.guide.chooseDrive.wrongKind.caseSensitive.ownership": [
+                "en": "%1$@ holds your vault on a case-sensitive volume; %2$@ on the same drive needs ownership turned on.",
+                "pt-BR": "%1$@ contém seu disco-cofre em um volume que diferencia maiúsculas; %2$@, no mesmo disco, precisa da titularidade ativada.",
+                "es": "%1$@ contiene tu bóveda en un volumen que distingue mayúsculas; %2$@, en el mismo disco, necesita activar la propiedad.",
+                "ja": "%1$@ の保管庫は大文字小文字を区別するボリュームにあります。同じドライブの %2$@ は所有権をオンにする必要があります。",
+                "zh-Hans": "%1$@ 上的保管库位于区分大小写的宗卷上；同一驱动器上的 %2$@ 需要打开所有权。",
+            ],
+            "app.guide.chooseDrive.wrongKind.ownershipOff": [
+                "en": "%@ holds your vault on a volume that ignores ownership; the next step adds a suitable volume.",
+                "pt-BR": "%@ contém seu disco-cofre em um volume que ignora a titularidade; o próximo passo adiciona um volume adequado.",
+                "es": "%@ contiene tu bóveda en un volumen que ignora la propiedad; el siguiente paso añade un volumen adecuado.",
+                "ja": "%@ の保管庫は所有権を無視するボリュームにあります。次のステップで適切なボリュームを追加します。",
+                "zh-Hans": "%@ 上的保管库位于忽略所有权的宗卷上；下一步会添加合适的宗卷。",
+            ],
+            "app.guide.chooseDrive.wrongKind.ownershipOff.ownership": [
+                "en": "%1$@ holds your vault on a volume that ignores ownership; %2$@ on the same drive needs ownership turned on.",
+                "pt-BR": "%1$@ contém seu disco-cofre em um volume que ignora a titularidade; %2$@, no mesmo disco, precisa da titularidade ativada.",
+                "es": "%1$@ contiene tu bóveda en un volumen que ignora la propiedad; %2$@, en el mismo disco, necesita activar la propiedad.",
+                "ja": "%1$@ の保管庫は所有権を無視するボリュームにあります。同じドライブの %2$@ は所有権をオンにする必要があります。",
+                "zh-Hans": "%1$@ 上的保管库位于忽略所有权的宗卷上；同一驱动器上的 %2$@ 需要打开所有权。",
             ],
             "app.guide.footer": [
                 "en": "The plan is worked out from the last scan, the drives and the vault, every time; nothing is saved. Each button opens its own sheet, with its review and confirmation. Nothing runs until you confirm it there.",
@@ -1292,6 +1348,13 @@ extension L10nCatalog {
                 "ja": "%@ はそのまま使えます。",
                 "zh-Hans": "%@ 可直接使用。",
             ],
+            "app.guide.prepareDrive.ownership": [
+                "en": "Turn on ownership for %@: in Finder, choose File ▸ Get Info and turn off “Ignore ownership on this volume” (Finder asks for your password), or copy the command for Terminal. It erases nothing.",
+                "pt-BR": "Ative a titularidade em %@: no Finder, escolha Arquivo ▸ Obter Informações e desative “Ignorar titularidade neste volume” (o Finder pede sua senha), ou copie o comando para o Terminal. Nada é apagado.",
+                "es": "Activa la propiedad en %@: en el Finder, elige Archivo ▸ Obtener información y desactiva “Ignorar propiedad en este volumen” (el Finder te pide la contraseña), o copia el comando para Terminal. No borra nada.",
+                "ja": "%@ の所有権をオンにします。Finder で「ファイル」▸「情報を見る」を選び、「このボリューム上の所有権を無視」をオフにします（Finder がパスワードを求めます）。または Terminal 用のコマンドをコピーします。何も消去されません。",
+                "zh-Hans": "为 %@ 打开所有权：在“访达”中选择“文件”▸“显示简介”，关闭“忽略此宗卷上的所有权”（访达会要求输入密码），或拷贝用于“终端”的命令。不会抹掉任何内容。",
+            ],
             "app.guide.prepareDrive.suitableVolume": [
                 "en": "%1$@ has a suitable volume: %2$@.",
                 "pt-BR": "%1$@ tem um volume adequado: %2$@.",
@@ -1312,6 +1375,13 @@ extension L10nCatalog {
                 "es": "Registra %@ como tu bóveda y crea sus carpetas estándar.",
                 "ja": "%@ を保管庫として登録し、標準フォルダを作成します。",
                 "zh-Hans": "将 %@ 注册为保管库并创建其标准文件夹。",
+            ],
+            "app.guide.registerVault.second": [
+                "en": "Register %1$@ as a second vault and create its standard folders. Your vault on %2$@ stays registered, and nothing on it moves.",
+                "pt-BR": "Registre %1$@ como um segundo disco-cofre e crie suas pastas padrão. Seu disco-cofre em %2$@ continua registrado e nada nele é movido.",
+                "es": "Registra %1$@ como segunda bóveda y crea sus carpetas estándar. Tu bóveda en %2$@ sigue registrada y nada en ella se mueve.",
+                "ja": "%1$@ を 2 つ目の保管庫として登録し、標準フォルダを作成します。%2$@ の保管庫は登録されたままで、中身は移動しません。",
+                "zh-Hans": "将 %1$@ 注册为第二个保管库并创建其标准文件夹。%2$@ 上的保管库仍保持注册，其中内容不会移动。",
             ],
             "app.guide.state.blocked": [
                 "en": "Blocked",

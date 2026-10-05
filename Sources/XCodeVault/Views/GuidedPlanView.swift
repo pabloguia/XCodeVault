@@ -59,7 +59,7 @@ enum GuideText {
         switch (step.kind, step.state) {
         case (.chooseDrive, _):
             switch step.note {
-            case .vaultNeedsVolume(let drive)?: return L10n.tr("app.guide.chooseDrive.vaultNeedsVolume", drive)
+            case .vaultWrongKind(let drive, let issue, let volume)?: return wrongKind(drive: drive, issue: issue, ownershipVolume: volume)
             case .otherVaultShadowed(let name, let bytes?)?:
                 return L10n.tr("app.guide.chooseDrive.done", subject) + " "
                     + L10n.tr("app.guide.chooseDrive.otherShadowed", name, ByteCount.format(bytes))
@@ -71,14 +71,30 @@ enum GuideText {
         case (.prepareDrive, .done):
             if case .suitableVolume(let drive, let volume)? = step.note { return L10n.tr("app.guide.prepareDrive.suitableVolume", drive, volume) }
             return L10n.tr("app.guide.prepareDrive.notNeeded", subject)
-        case (.prepareDrive, _): return L10n.tr("app.guide.prepareDrive.next", subject)
+        case (.prepareDrive, _):
+            if case .turnOnOwnership(let volume)? = step.note { return L10n.tr("app.guide.prepareDrive.ownership", volume) }
+            return L10n.tr("app.guide.prepareDrive.next", subject)
         case (.registerVault, .done): return L10n.tr("app.guide.registerVault.done", subject)
-        case (.registerVault, _): return L10n.tr("app.guide.registerVault.next", subject)
+        case (.registerVault, _):
+            if case .secondVault(let existing)? = step.note { return L10n.tr("app.guide.registerVault.second", subject, existing) }
+            return L10n.tr("app.guide.registerVault.next", subject)
         case (.moveItems, .done): return L10n.tr("app.guide.move.done")
         case (.moveItems, .partly): return L10n.tr("app.guide.move.waitsForVault")
         case (.moveItems, _): return L10n.tr("app.guide.move.next")
         case (.checkHealth, .done): return L10n.tr("app.guide.health.done")
         case (.checkHealth, _): return L10n.tr("app.guide.health.next", step.findingCount)
+        }
+    }
+
+    /// Step 1 on a vault of the wrong kind: exactly what is wrong, and what the next step does (R7-D).
+    static func wrongKind(drive: String, issue: VolumeIssue, ownershipVolume: String?) -> String {
+        switch (issue, ownershipVolume) {
+        case (.caseSensitive, nil): L10n.tr("app.guide.chooseDrive.wrongKind.caseSensitive", drive)
+        case (.ownershipOff, nil): L10n.tr("app.guide.chooseDrive.wrongKind.ownershipOff", drive)
+        case (.both, nil): L10n.tr("app.guide.chooseDrive.wrongKind.both", drive)
+        case (.caseSensitive, let v?): L10n.tr("app.guide.chooseDrive.wrongKind.caseSensitive.ownership", drive, v)
+        case (.ownershipOff, let v?): L10n.tr("app.guide.chooseDrive.wrongKind.ownershipOff.ownership", drive, v)
+        case (.both, let v?): L10n.tr("app.guide.chooseDrive.wrongKind.both.ownership", drive, v)
         }
     }
 
@@ -92,6 +108,7 @@ enum GuideText {
         case .vaultReplaced(let name): L10n.tr("app.guide.block.vaultReplaced", name)
         case .chooseInDrives: L10n.tr("app.guide.block.chooseInDrives", subject)
         case .addVolumeFirst: L10n.tr("app.guide.block.addVolumeFirst")
+        case .ownershipFirst(let volume): L10n.tr("app.guide.block.ownershipFirst", volume)
         case .needsEarlierStep: L10n.tr("app.guide.block.needsEarlierStep")
         }
     }
@@ -110,6 +127,8 @@ enum GuideText {
         case .run: L10n.tr("app.plan.run")
         case .showBucket: L10n.tr("app.overview.card.review")
         case .showHealth: L10n.tr("app.guide.action.showHealth")
+        case .showInFinder: L10n.tr("app.drives.ownership.show")
+        case .copyOwnershipCommand: L10n.tr("app.plan.copyCommand")
         }
     }
 
@@ -274,7 +293,16 @@ private struct StepView: View {
                 }
             }
             if let action = step.action, step.state != .done {
-                Button(GuideText.actionTitle(action)) { act(action) }.actionButton(prominent: primary == .step(step.kind))
+                HStack(spacing: Spacing.s) {
+                    Button(GuideText.actionTitle(action)) { act(action) }.actionButton(prominent: primary == .step(step.kind))
+                    if let secondary = step.secondaryAction {
+                        if case .copyOwnershipCommand = secondary {
+                            CopyCommandButton { act(secondary) }
+                        } else {
+                            Button(GuideText.actionTitle(secondary)) { act(secondary) }.actionButton()
+                        }
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

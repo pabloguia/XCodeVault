@@ -188,7 +188,9 @@ struct ExternalDriveRowView: View {
                     Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack {
-                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }.actionButton().controlSize(.small)
+                        // R7-D: when turning ownership on is the drive's recommended fix, this is the row's one primary.
+                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
+                            .actionButton(prominent: a.primaryAction == .option(.enableOwnership(mountPoint: mp))).controlSize(.small)
                         CopyCommandButton { actions.copyOwnershipCommand(mp) }
                     }
                 }

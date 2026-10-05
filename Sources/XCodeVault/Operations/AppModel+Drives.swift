@@ -84,6 +84,7 @@ extension AppModel {
         switch assessment.prepareAction {
         case .useDrive: openUseDrive(assessment)
         case .prepare(let option): openPreparation(assessment, option: option)
+        case .ownership(let mountPoint): showVolumeForOwnership(mountPoint)
         case .nothing: break
         }
     }

@@ -34,9 +34,14 @@ extension AppModel {
         return .filled(command: command, folder: folder)
     }
 
-    /// **Copy Command** on a plan row: the command filled with the vault's folder when there is one, else as listed.
-    func copyCommand(_ row: SavingsPlanRow) {
-        if case .filled(let command, _) = commandSuggestion(row) { environment.copy(command) } else { environment.copy(row.command) }
+    /// **Copy Command** on a plan row (R7-D): with a vault, two lines — the template commented with `# `, then the command
+    /// filled with the vault's folder; without one, the template as listed.
+    func copyCommand(_ row: SavingsPlanRow) { environment.copy(copiedCommand(row)) }
+
+    /// What **Copy Command** puts on the pasteboard (tested).
+    func copiedCommand(_ row: SavingsPlanRow) -> String {
+        if case .filled(let command, _) = commandSuggestion(row) { return "# " + row.command + "\n" + command }
+        return row.command
     }
 
     /// The runtimes the picker offers, largest first. No default: a runtime to delete is always chosen.

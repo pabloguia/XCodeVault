@@ -54,8 +54,17 @@ enum R7CPlans {
         return T.plan(T.report(extra), drives: T.drives(s, vaults: []), parked: parked, findings: [])
     }
 
+    /// R7-D, the user's disk after Add Volume: XCodeVault is there with ownership off; turning it on is next.
+    static func ownership() throws -> Plan {
+        let vaults = [T.mediaVault()]
+        return T.plan(drives: T.drives(try R7ACoreTests.snapshotWithMadeVolume(owners: false), vaults: vaults), vaults: vaults)
+    }
+
     static func all() throws -> [(name: String, plan: Plan)] {
-        [("nodrive", noDrive()), ("pablo", try pablo()), ("done", try done()), ("devices", try devices()), ("crowded", try crowded())]
+        [
+            ("nodrive", noDrive()), ("pablo", try pablo()), ("done", try done()), ("devices", try devices()), ("crowded", try crowded()),
+            ("ownership", try ownership()),
+        ]
     }
 }
 
@@ -377,7 +386,7 @@ final class R7CAppTests: XCTestCase {
         XCTAssertTrue(GuideText.explanation(prepare).contains("Media"))
         XCTAssertEqual(
             GuideText.explanation(try XCTUnwrap(plan.step(.chooseDrive))),
-            "Media holds your vault, but its volume is case-sensitive or ignores ownership; the next step adds a suitable volume.")
+            "Media holds your vault on a case-sensitive volume; the next step adds a suitable volume.")
         XCTAssertEqual(GuideText.explanation(try XCTUnwrap(plan.step(.registerVault))), "Add the volume first (step 2).")
         XCTAssertEqual(
             GuideText.blockText(.vaultShadowed(name: "V", bytes: 3_000_000_000), subject: ""),
