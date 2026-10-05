@@ -73,7 +73,9 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
         var clientRef: AuthorizationRef?
         let imported = AuthorizationCreateFromExternalForm(&form, &clientRef)
         guard imported == errAuthorizationSuccess, let clientRef else { return .malformed }
-        defer { AuthorizationFree(clientRef, []) }
+        // `.destroyRights`: the credential the client obtained is spent by this one check, so the externalized form
+        // works once (fix round 1, L3) — a captured form cannot be replayed against a second call.
+        defer { AuthorizationFree(clientRef, [.destroyRights]) }
         let status = rightName.withCString { name -> OSStatus in
             var item = AuthorizationItem(name: name, valueLength: 0, value: nil, flags: 0)
             return withUnsafeMutablePointer(to: &item) { itemPointer in
@@ -96,11 +98,14 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
     }
 
     /// Whether a definition read back from the database is the one this helper writes: a rule-class right whose rule is
-    /// `authenticate-admin`, and nothing that could widen it. The metadata keys the database adds itself are allowed;
-    /// any other key — `k`, `allow-root`, `group`, a `mechanisms` list — makes it not ours, and it is rewritten.
+    /// `authenticate-admin`, nothing that could widen it, and **written by this helper** — the database records the
+    /// writer's code identifier, and anything but `com.xcodevault.helper` is someone else's definition, rewritten (fix
+    /// round 1, L4). The metadata keys the database adds itself are allowed; any other key — `k`, `allow-root`, `group`,
+    /// a `mechanisms` list — makes it not ours, and it is rewritten.
     static func isOurDefinition(_ d: [String: Any]) -> Bool {
         let metadata: Set<String> = ["class", "rule", "version", "created", "modified", "comment", "default-prompt", "identifier", "requirement"]
         guard Set(d.keys).isSubset(of: metadata), d["class"] as? String == "rule" else { return false }
+        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }
         let admin = kAuthorizationRuleAuthenticateAsAdmin
         if let rule = d["rule"] as? String { return rule == admin }
         if let rules = d["rule"] as? [String] { return rules == [admin] }
