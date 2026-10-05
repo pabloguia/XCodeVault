@@ -184,10 +184,11 @@ final class R7CAppTests: XCTestCase {
     func testTheWords() throws {
         L10n.configure(override: "en", environment: [:], preferred: [])
         let plan = try R7CPlans.pablo()
-        XCTAssertEqual(GuideText.summary(PlanSummary(upTo: 64_000_000_000, done: 18_000_000_000, byOutcome: [:])), "Up to 64 GB can be freed on this Mac; 18 GB is already done.")
-        XCTAssertEqual(GuideText.summary(PlanSummary(upTo: 64_000_000_000, done: 0, byOutcome: [:])), "Up to 64 GB can be freed on this Mac.")
-        XCTAssertEqual(GuideText.summary(PlanSummary(upTo: 0, done: 18_000_000_000, byOutcome: [:])), "Nothing is left to free on this Mac; 18 GB is already done.")
-        XCTAssertFalse(GuideText.summary(PlanSummary(upTo: 0, done: 0, byOutcome: [:])).isEmpty)
+        func summary(_ upTo: UInt64, _ done: UInt64) -> String { GuideText.summary(PlanSummary(upTo: upTo, done: done, byOutcome: [:])) }
+        XCTAssertEqual(summary(64_000_000_000, 18_000_000_000), "Up to 64 GB can be freed on this Mac; 18 GB is already done.")
+        XCTAssertEqual(summary(64_000_000_000, 0), "Up to 64 GB can be freed on this Mac.")
+        XCTAssertEqual(summary(0, 18_000_000_000), "Nothing is left to free on this Mac; 18 GB is already done.")
+        XCTAssertFalse(summary(0, 0).isEmpty)
         XCTAssertEqual(Set(PlanStep.Kind.allCases.map(GuideText.title)).count, PlanStep.Kind.allCases.count)
         XCTAssertEqual(Set(PlanOutcome.allCases.map(GuideText.outcome)).count, 4, "four outcome labels")
         XCTAssertEqual(GuideText.outcome(.leavesAndComesBack), "Leaves this Mac, comes back when needed")
@@ -215,7 +216,8 @@ final class R7CAppTests: XCTestCase {
         let pablo = try R7CPlans.pablo()
         XCTAssertTrue(try XCTUnwrap(pablo.step(.prepareDrive)).isExperimental)
         for item in pablo.steps.flatMap(\.items) {
-            let option = StorageCatalog.category(item.categoryID)?.savingsOptionDetails.first { $0.bucket.rawValue == item.id.split(separator: ":").first.map(String.init) }
+            let bucket = item.id.split(separator: ":").first.map(String.init)
+            let option = StorageCatalog.category(item.categoryID)?.savingsOptionDetails.first { $0.bucket.rawValue == bucket }
             if let option { XCTAssertEqual(item.isExperimental, option.isExperimental, item.id) }
         }
     }
@@ -223,7 +225,7 @@ final class R7CAppTests: XCTestCase {
     // MARK: - Snapshots (XCV_SNAPSHOTS=1)
 
     func testSnapshots() throws {
-        guard ProcessInfo.processInfo.environment["XCV_SNAPSHOTS"] == "1" else { throw XCTSkip("XCV_SNAPSHOTS=1 writes the snapshots") }
+        guard SnapshotWriter.isEnabled else { return }
         for language in ["en", "ja"] {
             L10n.configure(override: language, environment: [:], preferred: [])
             for (name, plan) in try R7CPlans.all() {
