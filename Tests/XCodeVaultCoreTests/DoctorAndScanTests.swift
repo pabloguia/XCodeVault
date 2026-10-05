@@ -1031,8 +1031,10 @@ final class OrphanedDyldCacheTests: XCTestCase {
             r.contains("never been observed to survive"),
             "falsified 2026-09-16 — this orphan has now outlived two restarts: \(r)")
         // Not a style rule about the wording: naming the experiment is what forces the next person
-        // rewriting this sentence to go and read the result before re-promising the fix.
-        XCTAssertTrue(r.contains("E13"), "cite the experiment that settled it: \(r)")
+        // rewriting this sentence to go and read the result before re-promising the fix. Since the R7
+        // A+B fix round (M9) the remediation says it in plain words and the ID is in `evidence`.
+        XCTAssertTrue(r.contains("byte-identical across"), "state the measurement: \(r)")
+        XCTAssertTrue(f.first?.evidence?.contains("E13") == true, "cite the experiment that settled it: \(f.first?.evidence ?? "nil")")
         XCTAssertFalse(r.contains("rm -rf"), "rmdir refuses on surprises; rm -rf takes them with it: \(r)")
         XCTAssertTrue(r.contains("rmdir"))
     }

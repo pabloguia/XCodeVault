@@ -52,10 +52,12 @@ final class CleanTests: XCTestCase {
         XCTAssertTrue(only?.contains("rebuilt within an hour after a macOS update") == true, "the reason must be stated, not just the caveat: \(w)")
         XCTAssertFalse(only?.contains("next boot") == true, "a boot-triggered rebuild is not recorded (H14 2026-09-26): \(w)")
         // This asserted `contains("untested")` until 2026-09-16, when E13 tested it: the orphaned
-        // part of the tree came back byte-identical across a reboot. The warning must now state the
-        // measurement rather than the gap, and must cite the experiment so the claim stays checkable.
+        // part of the tree came back byte-identical across a reboot. The warning must state the
+        // measurement rather than the gap. It cited E13 by ID until the R7 A+B fix round (M9: no
+        // experiment IDs in user-facing prose); the citation is CleanPlanner's comment and FINDINGS.
         XCTAssertTrue(only?.contains("restart does not reclaim") == true, "\(w)")
-        XCTAssertTrue(only?.contains("E13") == true, "the durability claim must cite its evidence: \(w)")
+        XCTAssertTrue(only?.contains("measured byte-identical across a reboot") == true, "the durability claim must state its measurement: \(w)")
+        XCTAssertFalse(only?.contains("E13") == true, "plain words in user-facing prose (M9): \(w)")
     }
 
     func testPlanIsGranularForDerivedDataAndSkipsSymlinksAndArchives() throws {
@@ -836,7 +838,9 @@ final class XcodeLocationsTests: XCTestCase {
             busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: false, totalBytes: 1, freeBytes: 1, isBootVolume: false)
         XCTAssertThrowsError(try XcodeLocations.preflightDerivedData(path: ext, volumes: [vol], xcodeRunning: false, acknowledgeExternalTests: false))
         let w = try XcodeLocations.preflightDerivedData(path: ext, volumes: [vol], xcodeRunning: false, acknowledgeExternalTests: true)
-        XCTAssertTrue(w.contains { $0.contains("E2") }); XCTAssertTrue(w.contains { $0.contains("Ownership") })
+        // The tests caveat in plain words (M9: it named E2 until the R7 A+B fix round).
+        XCTAssertTrue(w.contains { $0.contains("fails to load test bundles") }); XCTAssertTrue(w.contains { $0.contains("Ownership") })
+        XCTAssertFalse(w.contains { $0.contains("E2") }, "no experiment IDs in user-facing prose (M9)")
         XCTAssertThrowsError(try XcodeLocations.preflightDerivedData(path: ext, volumes: [], xcodeRunning: true, acknowledgeExternalTests: true))
         XCTAssertThrowsError(try XcodeLocations.preflightDerivedData(path: "relative/x", volumes: [], xcodeRunning: false, acknowledgeExternalTests: true))
         XCTAssertEqual(try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: false, acknowledgeExternalTests: false), [])

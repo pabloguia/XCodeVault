@@ -260,7 +260,7 @@ extension Doctor {
                         + "Full Disk Access first — it was the whole of the refusal H15 measured here: System Settings ▸ Privacy & Security ▸ "
                         + "Full Disk Access; `xcodevaultctl permissions`, run in that terminal, reports it (the same check E6c's harness "
                         + "recorded from the granted terminal).",
-                    evidence: "docs/research/FINDINGS-2026-09-05.md §F10"))
+                    evidence: "docs/research/FINDINGS-2026-09-05.md §F10; E13 (the reboot, 2026-09-16)"))
         }
 
         // A build directory is only judged stale when its name is build-version shaped AND some
