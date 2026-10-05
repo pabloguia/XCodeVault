@@ -102,6 +102,9 @@ public enum HelperResultCode: String, Sendable, CaseIterable {
     /// The user cancelled the system password dialog. Produced by the client only, before anything is sent: the
     /// helper never replies with it.
     case authorizationCanceled
+    /// The helper that answered is another version than this build's (R8 fix round 4): produced by the client only,
+    /// before any password is asked; the app reinstalls the helper through the approval flow and tries once more.
+    case helperOutdated
 }
 
 /// Result envelope; `NSSecureCoding` so it can cross XPC.
@@ -133,7 +136,8 @@ public enum HelperIdentity {
     public static let plistName = "com.xcodevault.helper.plist"
     public static let bundleIdentifier = "com.xcodevault.helper"
     /// The authorization right `enableOwnership` requires (R8, ADR-0014). The daemon defines it — root, at startup and
-    /// again on every call — with the `authenticate-admin` rule; the client obtains it with the system password dialog
+    /// again on every call — with its own rule: admin group, a 10-second unshared credential, never root (fix round 4);
+    /// the client obtains it with the system password dialog
     /// and sends its externalized form; the daemon re-checks it from that form, never on a reference of its own.
     public static let enableOwnershipRight = "com.xcodevault.helper.enable-ownership"
     /// Code-signing requirement the daemon enforces on every client: Apple-anchored Developer ID
@@ -232,5 +236,5 @@ public enum HelperIdentity {
         teamID.count == 10 && teamID.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
     }
 
-    public static let version = "0.2.0-dev"
+    public static let version = "0.2.1-dev"
 }

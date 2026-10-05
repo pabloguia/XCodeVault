@@ -88,5 +88,5 @@ public struct ScanReport: Sendable, Codable, Equatable {
 }
 
 public enum XCodeVaultVersion {
-    public static let current = "0.2.0-dev"
+    public static let current = "0.2.1-dev"
 }

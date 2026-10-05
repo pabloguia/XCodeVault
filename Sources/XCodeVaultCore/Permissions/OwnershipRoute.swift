@@ -25,7 +25,7 @@ public enum OwnershipRoute: Sendable, Equatable {
     public static func fallback(after outcome: PrivilegedActionOutcome) -> OwnershipFallback? {
         switch outcome {
         case .done, .cancelled: return nil
-        case .refused(let why), .failed(let why): return .didNotWork(why)
+        case .refused(let why), .failed(let why), .helperOutdated(let why): return .didNotWork(why)
         }
     }
 

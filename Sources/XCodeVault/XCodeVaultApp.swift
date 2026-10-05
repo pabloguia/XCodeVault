@@ -353,6 +353,8 @@ final class AppModel {
     var ownershipInFlight: String?
     /// Why the last click fell back to the guided route; cleared by the next click.
     var ownershipFallback: OwnershipFallback?
+    /// R8 fix round 4: this click already reinstalled an out-of-date helper; a second mismatch falls back.
+    private var ownershipHelperReinstalled = false
 
     /// One click, progress, or the guided route with its reason: `OwnershipRoute.decide`, never the views.
     var ownershipRoute: OwnershipRoute {
@@ -374,6 +376,7 @@ final class AppModel {
             return
         }
         ownershipFallback = nil
+        ownershipHelperReinstalled = false
         ownershipInFlight = volumeUUID
         request(.enableOwnership(volumeUUID: volumeUUID))
     }
@@ -482,6 +485,16 @@ final class AppModel {
     func perform(_ action: PrivilegedAction) async {
         feedback = nil
         let outcome = await environment.runner(environment.helper).run(action)
+        if case .enableOwnership = action, case .helperOutdated = outcome, !ownershipHelperReinstalled {
+            // R8 fix round 4: the daemon still running is the previous build's (it keeps the old right definition and
+            // a contract this client no longer speaks). Remove its registration — launchd stops it — and install this
+            // build's through the approval flow, then try once more. Nothing was sent to the old one.
+            ownershipHelperReinstalled = true
+            try? await environment.helper.unregister()
+            refreshPermissions()
+            installHelper(then: action)
+            return
+        }
         if case .enableOwnership = action {
             // R8: success re-reads the drives (`refresh`) and the Plan moves on by itself; anything else but a cancelled
             // password dialog brings the guided route back with the reason, inline.
@@ -503,7 +516,7 @@ final class AppModel {
             let next = action.afterSuccess(in: L10n.locale)
             feedback = AppFeedback(
                 kind: next == nil ? .success : .notice, title: AppText.privilegedDone(action), detail: [reply.message, next].compactMap { $0 })
-        case .refused(let why), .failed(let why):
+        case .refused(let why), .failed(let why), .helperOutdated(let why):
             lastError = AppError(title: AppText.privilegedFailed(action), message: why)
         }
         await refresh()

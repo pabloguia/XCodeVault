@@ -319,7 +319,11 @@ public struct HelperClient: Sendable {
         let connection = try connect()
         defer { connection.invalidate() }
         let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
-        guard version == HelperIdentity.version else { throw Failure.versionMismatch(version) }
+        // A result, not a throw, so the app can tell an outdated helper without naming this type (helper-invariants), and
+        // reinstall it (R8 fix round 4: the 0.2.0 daemon still running after an update).
+        guard version == HelperIdentity.version else {
+            return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
+        }
         let right = HelperIdentity.enableOwnershipRight
         let authorizer = self.authorizer
         let acquired: AcquiredAuthorization

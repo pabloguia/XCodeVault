@@ -108,6 +108,15 @@ public enum PrivilegedActionOutcome: Sendable, Equatable {
     case failed(String)
     /// R8: the user cancelled the system password dialog. Not an error, and nothing reached the helper.
     case cancelled
+    /// R8 fix round 4: the helper that answered is another version than this build's; nothing was sent to it. The app
+    /// reinstalls the helper through the approval flow and tries once more.
+    case helperOutdated(String)
+}
+
+/// What a `PrivilegedHelper` throws when the helper that answered is another version than this build's (R8 fix round 4).
+public struct PrivilegedHelperOutdated: Error, Equatable {
+    public let detail: String
+    public init(detail: String) { self.detail = detail }
 }
 
 /// What a `PrivilegedHelper` throws when the user cancelled the system password dialog (R8): the runner reports
@@ -185,6 +194,11 @@ public struct PrivilegedActionRunner: Sendable {
                 id: id, kind: action.journalKind, state: reply.ok ? .completed : .failed, summary: "helper: \(action.title): \(reply.message)",
                 paths: action.journalPaths, bytes: bytes, detail: action.journalDetail)
             return reply.ok ? .done(reply) : .failed(reply.message)
+        } catch let outdated as PrivilegedHelperOutdated {
+            _ = try? journal.record(
+                id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): the helper is out of date; nothing was sent",
+                paths: action.journalPaths, detail: action.journalDetail)
+            return .helperOutdated(outdated.detail)
         } catch is PrivilegedActionCancelled {
             _ = try? journal.record(
                 id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): cancelled at the password dialog",

@@ -49,12 +49,9 @@ final class R8OwnershipAppTests: XCTestCase {
         let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: "0.0.9")
         let log = Acquisitions()
         let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
-        do {
-            _ = try await client.enableOwnership(volumeUUID: "U-1")
-            XCTFail("a version mismatch must throw")
-        } catch {
-            XCTAssertEqual(error as? HelperClient.Failure, .versionMismatch("0.0.9"))
-        }
+        let result = try? await client.enableOwnership(volumeUUID: "U-1")
+        XCTAssertEqual(result?.code, .helperOutdated, "a result the app reads to reinstall the helper (round 4)")
+        XCTAssertEqual(result?.ok, false)
         XCTAssertEqual(daemon.calls, ["version"])
         XCTAssertEqual(log.all, [], "no password is asked for a helper that is not this build's")
     }
@@ -194,7 +191,7 @@ final class R8OwnershipAppTests: XCTestCase {
 
     // MARK: - The app
 
-    private func model(_ helper: OwnershipHelper, drives: ScriptedDrives, journal url: URL) -> AppModel {
+    private func model(_ helper: any PrivilegedHelper, drives: ScriptedDrives, journal url: URL) -> AppModel {
         let survey = bucketSampleSurvey(checks: [PlanBuilderTests.mediaVault()])
         var env = AppEnvironment(
             survey: { survey }, fullDiskAccess: { .granted }, helper: helper,
@@ -383,5 +380,64 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: false, cleaning: true, isTarget: true))
         XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: true, operationRunning: false, cleaning: false, isTarget: true))
         XCTAssertFalse(AppModel.mayTurnOnOwnership(inFlight: false, operationRunning: false, cleaning: false, isTarget: false))
+    }
+
+    // MARK: - Fix round 4: an out-of-date helper is reinstalled through the approval flow, once
+
+    final class UpdatingHelper: PrivilegedHelper, @unchecked Sendable {
+        let lock = NSLock()
+        private var current: HelperState = .enabled
+        private var outdatedLeft: Int
+        private(set) var events: [String] = []
+        init(outdatedTimes: Int) { outdatedLeft = outdatedTimes }
+        func state() -> HelperState { lock.withLock { current } }
+        func register() throws {
+            lock.withLock {
+                events.append("register"); current = .enabled
+            }
+        }
+        func openApprovalSettings() {}
+        func unregister() async throws {
+            lock.withLock {
+                events.append("unregister"); current = .notInstalled
+            }
+        }
+        func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply { try await perform(action, authorized: { true }) }
+        func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
+            let outdated: Bool = lock.withLock {
+                events.append("perform")
+                if outdatedLeft > 0 {
+                    outdatedLeft -= 1
+                    return true
+                }
+                return false
+            }
+            if outdated { throw PrivilegedHelperOutdated(detail: "The privileged helper that answered is version 0.2.0-dev.") }
+            guard authorized() else { throw PrivilegedActionNotStarted() }
+            return PrivilegedActionReply(ok: true, message: "ownership is on")
+        }
+    }
+
+    func testAnOutOfDateHelperIsReinstalledAndTheClickTriedOnceMore() async throws {
+        let drives = ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false))
+        let helper = UpdatingHelper(outdatedTimes: 1)
+        let m = model(helper, drives: drives, journal: Self.scratch())
+        await m.refresh()
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
+        for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(helper.events, ["perform", "unregister", "register", "perform"], "the old daemon removed, this build's installed, tried again")
+        XCTAssertNil(m.ownershipFallback)
+    }
+
+    func testASecondMismatchFallsBackInsteadOfLooping() async throws {
+        let drives = ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false))
+        let helper = UpdatingHelper(outdatedTimes: 5)
+        let m = model(helper, drives: drives, journal: Self.scratch())
+        await m.refresh()
+        m.turnOnOwnership(volumeUUID: R6DriveTests.u(302), mountPoint: "/Volumes/XCodeVault")
+        for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(helper.events.filter { $0 == "unregister" }.count, 1, "reinstalled once per click")
+        guard case .guided(.didNotWork(let why)) = m.ownershipRoute else { return XCTFail("\(m.ownershipRoute)") }
+        XCTAssertTrue(why.contains("0.2.0-dev"), why)
     }
 }
