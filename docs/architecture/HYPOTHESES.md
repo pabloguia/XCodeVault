@@ -2070,3 +2070,26 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 `addPartition`, `eraseVolume` and `eraseDisk` PENDING — disk-image evidence only.** Manual procedure for the remaining physical cases: in the app, on a spare external disk whose data you do not
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
+
+## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; **PENDING**)*
+
+**Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
+(a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
+externalized right (`AuthorizationCopyRights` on `clientRef`, no interaction) succeeds after a correct password and fails
+after a cancel or a wrong one; (c) `diskutil enableOwnership <device node>` run as root by the daemon turns ownership on
+for a **mounted** external APFS volume without a remount; (d) the helper's re-read then shows `GlobalPermissionsEnabled`
+and no `MNT_IGNORE_OWNERSHIP`, and the app's Plan advances to Use This Drive.
+
+**Open questions the run answers.** Whether the stock `authenticate-admin` rule lets a root evaluator pass without the
+client's credential (its `allow-root`) — if it does, (b)'s failure half fails and the right needs an explicit definition;
+whether the very first call — the right defined at the daemon's startup, moments before — passes; whether TCC lets the
+root daemon read the volume's root for the Time Machine marker (an unreadable root is refused, which would show here).
+
+**How it is proven.** ADR-0014; the user's real-window run with the signed build (`scripts/bundle-app.sh --release
+--sign … --with-helper`): register and approve the helper, press **Turn On Ownership** on the `XCodeVault` volume, enter
+the password, then check `diskutil info /Volumes/XCodeVault | grep Owners` and `log show --predicate 'subsystem ==
+"com.xcodevault.helper"' --last 10m`; repeat once cancelling the dialog. Record the outcome here and in
+`COMPATIBILITY_MATRIX.md` ("H18 physical").
+
+**Status: PENDING** — written and tested with fakes only (`R8HelperOwnershipTests`, `R8OwnershipAppTests`,
+`R8HelperInvariantsTests`). Experimental everywhere until verified (rule 10).

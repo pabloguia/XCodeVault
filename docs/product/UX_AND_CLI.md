@@ -129,7 +129,9 @@ The app is a projection of Core: every number and every decision a screen shows 
   `migration status` / `resume` / `abort` on Park, Run externally and History; resume and abort stay CLI-only.
 - **Drives (R6, ADR-0012, experimental).** External physical disks from `DiskTopology` + `DriveEvaluation`: one verdict
   each (Ready / Can be used / Needs preparation / Can't be used), the options least destructive first (add APFS volume,
-  add APFS partition in free space, erase one volume, erase the disk; ownership as Show in Finder + Copy Command), and
+  add APFS partition in free space, erase one volume, erase the disk; ownership as **Turn On Ownership** — the helper's
+  `enableOwnership`, the system password dialog every call, EXPERIMENTAL, ADR-0014 — with Show in Finder + Copy Command
+  and the reason as the fallback, decided by `OwnershipRoute`; Keep Running only on quit while it runs), and
   **Use This Drive…** (`DriveRegistration`: register + `VaultLayout` folders). `DiskSafety` refuses every change on
   internal, boot, disk-image, Time Machine and read-only disks, and every erase on a disk holding a registered vault.
   Preparation runs in the Run sheet: typed name for an erase, Core re-reads and re-checks identity before its one

@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-04. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-05. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -14,6 +14,14 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **R8 — Turn On Ownership through the privileged helper (2026-10-05, branch `feat/r8-helper-ownership`, ADR-0014,
+  EXPERIMENTAL).** One new allowlisted verb, `enableOwnership(volumeUUID:authorization:)`: the system password dialog
+  every call (custom right `com.xcodevault.helper.enable-ownership`, `authenticate-admin`, defined by the root daemon),
+  the right re-checked in the helper on the client's externalized reference, the volume resolved and qualified by the
+  helper, one fixed-argv `posix_spawn` of `/usr/sbin/diskutil`. The maintainer approved the narrow hook exception;
+  `helper-invariants.sh` holds its shape (`R8HelperInvariantsTests`). The R7-D guided route stays the fallback, with the
+  reason. Written and tested with fakes only; **H18 pending the user's real-window run** with the signed build. Reviews
+  required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
   one commit each. **4 of 4 done (2026-09-28):** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
@@ -177,6 +185,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   passphrase). Left here rather than deleted because the line above it is the reason it was blocked.
 
 ## Next three actions
+
+**R8 first (2026-10-05):** the two mandatory reviews of the R8 branch, then the user's real-window run of **Turn On
+Ownership** with the signed build (H18; procedure in HYPOTHESES), which is also the helper's first live run (#30).
 
 **As of 2026-09-28** (the same list, with its reasons, is in `docs/process/SESSION-HANDOFF.md`
 "What to do, in priority order"):
@@ -3446,3 +3457,15 @@ Two reviews of R5: quality (`.superpowers/sdd/hig/r5-review.md`, Changes request
   `closeAccessGuide`) opens with the pane: the hint, the app's icon as a drag source (its bundle as a file URL), and
   **Done**; it closes on Done or once the grant is seen (`AppModel.closeAccessGuide`, tested). No Accessibility API or
   UI scripting. **Needs a real window:** whether System Settings accepts the dragged icon, and the panel's placement.
+
+## 2026-10-05 — R8: Turn On Ownership through the privileged helper
+
+The user approved one click with the admin password ("pedir a senha e executar o que for necessário"), keeping the
+instructions for when something goes wrong, and will sign the app with their own team. ADR-0014 records the decision,
+the maintainer's approval of the narrow exception (one `posix_spawn` in `HelperDiskutil.swift`, one
+`AuthorizationCopyRights` on `clientRef` in `HelperAuthorizationRight.swift`, `interactionAllowed` banned in the helper),
+and why not AppleScript "with administrator privileges". The verb, the client handshake (`version()` before the
+credential), the app's route (`OwnershipRoute`), the Plan's step 2, the Drives row, the quit guard (Keep Running only),
+journaling (`diskPreparation`, action `enableOwnership`; a cancelled dialog is `skipped`) and Use This Drive's
+`createVaultDirectory` step are tested with fakes. Nothing has run against a real daemon, authorization service or disk:
+H18 is pending.

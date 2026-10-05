@@ -1203,3 +1203,14 @@ substitution may not be waved through. Issue #29 stays open.
   remain **disk-image only**; every preparation stays Experimental (rule 10).
 - Notes: a new external volume ignores ownership; the app now recommends turning ownership on (Finder Get Info, or the
   copyable `sudo diskutil enableOwnership`) instead of another volume.
+
+### H18 — `enableOwnership` through the privileged helper — pending
+
+- Date tested: not yet run.
+- Hypothesis reference: H18; ADR-0014.
+- Test to perform: in a build signed with the user's Developer ID team and `--with-helper`, approve the helper, press
+  **Turn On Ownership** for an external volume with Owners: Disabled, enter the administrator password; once more with
+  the dialog cancelled.
+- Result: **pending.** Unit-tested with fakes only; never run against a real daemon, authorization service or disk.
+- Verdict: **pending.** Experimental (rule 10). The guided route (Show in Finder, Copy Command) stays the fallback and is
+  what an unsigned build shows.
