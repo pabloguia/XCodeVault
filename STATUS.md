@@ -133,6 +133,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Blocked / pending — manual (ask the user)
 
+- **Follow-up: the release build hangs on this Intel Mac (2026-10-05, R8).** `scripts/bundle-app.sh --release …` spun
+  at 100% CPU for about 2 hours in the whole-module compile of `XCodeVaultCore` and never finished (twice; stopped by
+  hand). R8's signed build was made without `--release`. Not investigated yet: a release DMG cannot be cut on this
+  machine until it is. Candidates to measure first: the generated `L10nCatalog.core` table (S4 follow-up 4 above) and
+  the type checker on `PlanBuilder`.
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
   off-screen snapshots cannot draw `NSTableView` rows: the Delete table's grouped rows, Storage's rows (the Bucket
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
