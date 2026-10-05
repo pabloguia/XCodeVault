@@ -161,7 +161,7 @@ final class PlanBuilderTests: XCTestCase {
     func testARegisteredCaseSensitiveVaultStillGetsItsFixFirst() throws {
         let vaults = [Self.mediaVault()]
         let p = Self.plan(drives: Self.drives(try Self.pabloSnapshot(), vaults: vaults), vaults: vaults)
-        XCTAssertEqual(p.step(.chooseDrive)?.note, .vaultNeedsVolume(drive: "Media"))
+        XCTAssertEqual(p.step(.chooseDrive)?.note, .vaultWrongKind(drive: "Media", issue: .caseSensitive, ownershipVolume: nil))
         XCTAssertEqual(p.step(.prepareDrive)?.action, .prepareDrive(diskID: "disk2", option: .addVolume(container: "disk3")))
         XCTAssertEqual(p.step(.registerVault)?.state, .blocked(.addVolumeFirst))
         XCTAssertNil(p.vaultUUID, "moves wait for the case-insensitive vault")
@@ -177,6 +177,69 @@ final class PlanBuilderTests: XCTestCase {
         XCTAssertEqual(p.step(.registerVault)?.state, .next)
         XCTAssertEqual(p.step(.registerVault)?.action, .useDrive(diskID: "disk2", volumeUUID: R6DriveTests.u(302)))
         XCTAssertEqual(p.step(.registerVault)?.subject, "XCodeVault")
+        XCTAssertEqual(p.step(.registerVault)?.note, .secondVault(existing: "Vault"), "a second vault; the registered one stays")
+        XCTAssertEqual(p.primary, .step(.registerVault))
+    }
+
+    // MARK: - R7-D: the volume just added ignores ownership (the user's real disk)
+
+    /// PABLO-shaped: the registered vault on a case-sensitive volume, plus XCodeVault (case-insensitive, Owners: Disabled)
+    /// on the same drive. The remaining step is ownership on XCodeVault, never another new volume.
+    func testAnAddedVolumeWithOwnershipOffGetsOwnershipNotAnotherVolume() throws {
+        let vaults = [Self.mediaVault()]
+        let drives = Self.drives(try R7ACoreTests.snapshotWithMadeVolume(owners: false), vaults: vaults)
+        let disk2 = try XCTUnwrap(drives.first { $0.disk.id == "disk2" })
+        XCTAssertEqual(disk2.ownershipFixVolume?.volumeName, "XCodeVault")
+        XCTAssertEqual(disk2.recommendedOption, .enableOwnership(mountPoint: "/Volumes/XCodeVault"))
+        XCTAssertFalse(disk2.isRecommended(.addVolume(container: "disk3")), "adding another volume would fix nothing")
+        XCTAssertTrue(disk2.options.contains(.addVolume(container: "disk3")), "still offered, plainly")
+        XCTAssertEqual(disk2.primaryAction, .option(.enableOwnership(mountPoint: "/Volumes/XCodeVault")))
+        XCTAssertEqual(disk2.prepareAction, .ownership(mountPoint: "/Volumes/XCodeVault"))
+        let p = Self.plan(drives: drives, vaults: vaults)
+        XCTAssertEqual(p.step(.chooseDrive)?.note, .vaultWrongKind(drive: "Media", issue: .caseSensitive, ownershipVolume: "XCodeVault"))
+        let prepare = try XCTUnwrap(p.step(.prepareDrive))
+        XCTAssertEqual(prepare.state, .next)
+        XCTAssertEqual(prepare.subject, "XCodeVault")
+        XCTAssertEqual(prepare.note, .turnOnOwnership(volume: "XCodeVault"))
+        XCTAssertEqual(prepare.action, .showInFinder(path: "/Volumes/XCodeVault"))
+        XCTAssertEqual(prepare.secondaryAction, .copyOwnershipCommand(mountPoint: "/Volumes/XCodeVault"))
+        XCTAssertEqual(p.step(.registerVault)?.state, .blocked(.ownershipFirst("XCodeVault")))
+        XCTAssertEqual(p.primary, .step(.prepareDrive))
+        XCTAssertNil(p.vaultUUID, "nothing moves until XCodeVault is registered")
+    }
+
+    /// The same drive once ownership is on: step 2 done, step 3 Use This Drive for XCodeVault, as a second vault.
+    func testOnceOwnershipIsOnXCodeVaultIsRegisteredNext() throws {
+        let vaults = [Self.mediaVault()]
+        let drives = Self.drives(try R7ACoreTests.snapshotWithMadeVolume(owners: true), vaults: vaults)
+        let disk2 = try XCTUnwrap(drives.first { $0.disk.id == "disk2" })
+        XCTAssertNil(disk2.recommendedOption, "a volume of the right kind is there: no new volume, no ownership")
+        let p = Self.plan(drives: drives, vaults: vaults)
+        XCTAssertEqual(p.step(.chooseDrive)?.note, .vaultWrongKind(drive: "Media", issue: .caseSensitive, ownershipVolume: nil))
+        XCTAssertEqual(p.step(.prepareDrive)?.state, .done)
+        XCTAssertEqual(p.step(.registerVault)?.state, .next)
+        XCTAssertEqual(p.step(.registerVault)?.action, .useDrive(diskID: "disk2", volumeUUID: R6DriveTests.u(302)))
+        XCTAssertNil(p.vaultUUID, "the case-sensitive vault is not the target while XCodeVault can be registered")
+    }
+
+    /// The general rule: a lone case-insensitive volume that only ignores ownership is fixed, not supplemented.
+    func testAnOwnershipOnlyVolumeIsFixedNotSupplemented() throws {
+        var s = try Self.pabloSnapshot()
+        s.volumes = s.volumes.map {
+            var v = $0
+            if v.volumeName == "Media" {
+                v.filesystemPersonality = "APFS"
+                v.ownersEnabled = false
+            }
+            return v
+        }
+        let disk2 = try XCTUnwrap(Self.drives(s, vaults: []).first { $0.disk.id == "disk2" })
+        XCTAssertEqual(disk2.verdict, .needsPreparation)
+        XCTAssertEqual(disk2.recommendedOption, .enableOwnership(mountPoint: "/Volumes/Media"))
+        XCTAssertFalse(disk2.isRecommended(.addVolume(container: "disk3")))
+        let p = Self.plan(drives: [disk2])
+        XCTAssertEqual(p.step(.prepareDrive)?.action, .showInFinder(path: "/Volumes/Media"))
+        XCTAssertFalse(p.step(.prepareDrive)?.isExperimental ?? true, "the app runs nothing: an Apple setting, not an app preparation")
     }
 
     /// A drive that needs no fix is "not needed", never "done": the step claims no work that was not done.

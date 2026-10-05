@@ -80,12 +80,14 @@ final class R7ACoreTests: XCTestCase {
 
     // MARK: 6. The volume a preparation made
 
-    static func snapshotWithMadeVolume(name: String = "XCodeVault", uuid: String = R6DriveTests.u(302)) throws -> DriveSnapshot {
+    /// `owners: false` is what the user's real disk showed (R7-D): a volume `addVolume` makes on an external disk ignores
+    /// ownership until it is turned on.
+    static func snapshotWithMadeVolume(name: String = "XCodeVault", uuid: String = R6DriveTests.u(302), owners: Bool = true) throws -> DriveSnapshot {
         var snap = try R6DriveTests.snapshot()
         let i = try XCTUnwrap(snap.disks.firstIndex { $0.id == "disk2" })
         let j = try XCTUnwrap(snap.disks[i].containers.firstIndex { $0.reference == "disk3" })
         snap.disks[i].containers[j].volumes.append(APFSVolumeInfo(id: "disk3s2", name: name, uuid: uuid))
-        snap.volumes.append(R6DriveTests.volume("disk3s2", name, uuid: uuid, mount: "/Volumes/" + name))
+        snap.volumes.append(R6DriveTests.volume("disk3s2", name, uuid: uuid, mount: "/Volumes/" + name, owners: owners))
         return snap
     }
 

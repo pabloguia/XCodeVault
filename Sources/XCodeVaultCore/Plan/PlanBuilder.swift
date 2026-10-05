@@ -31,6 +31,10 @@ public enum PlanAction: Sendable, Equatable {
     case showBucket(SavingsBucket)
     /// The Health screen.
     case showHealth
+    /// R7-D: shows a volume in Finder, where File ▸ Get Info has "Ignore ownership on this volume". Nothing runs.
+    case showInFinder(path: String)
+    /// R7-D: copies `sudo diskutil enableOwnership <mountPoint>` for Terminal. The app never asks for a password or runs it.
+    case copyOwnershipCommand(mountPoint: String)
 }
 
 /// Why a step cannot be done yet.
@@ -52,15 +56,36 @@ public enum PlanBlock: Sendable, Equatable {
     case chooseInDrives
     /// The suitable volume has to be added first (step 2).
     case addVolumeFirst
+    /// Ownership has to be turned on for the volume first (step 2): its name.
+    case ownershipFirst(String)
     /// A step above has to be done first.
     case needsEarlierStep
 }
 
 /// What a step adds to its explanation beyond its state.
+/// What is wrong with a vault's volume, exactly (R7-D: no "case-sensitive or ignores ownership").
+public enum VolumeIssue: Sendable, Equatable {
+    case caseSensitive, ownershipOff, both
+
+    static func of(_ v: Volume) -> VolumeIssue? {
+        let cs = v.filesystemPersonality.lowercased().contains("case-sensitive")
+        switch (cs, !v.ownersEnabled) {
+        case (true, true): return .both
+        case (true, false): return .caseSensitive
+        case (false, true): return .ownershipOff
+        case (false, false): return nil
+        }
+    }
+}
+
 public enum PlanNote: Sendable, Equatable {
-    /// Step 1: the drive holds the vault, but the vault's volume is case-sensitive or ignores ownership; step 2 adds a
-    /// suitable volume. The drive's name.
-    case vaultNeedsVolume(drive: String)
+    /// Step 1: the drive holds the vault, but the vault's volume is the wrong kind (`issue`). `ownershipVolume` names the
+    /// volume on the same drive that only needs ownership turned on (R7-D); nil when step 2 adds a new volume.
+    case vaultWrongKind(drive: String, issue: VolumeIssue, ownershipVolume: String?)
+    /// Step 2: ownership is off on this volume, its only blocker: turn it on in Finder (R7-D). The volume's name.
+    case turnOnOwnership(volume: String)
+    /// Step 3: the new vault is a second one; the registered vault on `existing` stays registered and nothing on it moves.
+    case secondVault(existing: String)
     /// Step 2: the drive has a suitable volume. Says what is there, not who made it.
     case suitableVolume(drive: String, volume: String)
     /// Step 1, done with a good vault, while ANOTHER registered vault has shadow data at its mount point (`ambiguous`):
@@ -143,6 +168,8 @@ public struct PlanStep: Sendable, Equatable, Identifiable {
     public var bytes: UInt64?
     public var isExperimental: Bool
     public var action: PlanAction?
+    /// A second button beside `action` (R7-D: Copy Command next to Show in Finder); never prominent.
+    public var secondaryAction: PlanAction? = nil
     /// The move step's items; empty for the others.
     public var items: [PlanItem]
     /// The preparation the step proposes (prepare step only).
@@ -209,6 +236,9 @@ public enum PlanBuilder {
         // A good vault: usable, and not on a volume whose case-sensitivity or ignored ownership the drive's own fix is for
         // (PABLO's case: the plan's path goes through the recommended new volume first).
         let good = usable.first { v in !isFixable(v, drives) }
+        let fixableVolume = { (v: VaultVolumeCheck) -> Volume? in
+            drives.lazy.compactMap { d in d.volumes.first { $0.volumeUUID?.uppercased() == v.volume.volumeUUID.uppercased() } }.first
+        }
         let fixable = good == nil ? usable.first { v in isFixable(v, drives) } : nil
         let chosen = chosenDrive(good: good, fixable: fixable, drives: drives)
         let candidate = chosen.flatMap(registrationCandidate)
@@ -227,7 +257,9 @@ public enum PlanBuilder {
         } else if let chosen {
             choose.state = .done
             choose.subject = chosen.displayName
-            if fixable != nil { choose.note = .vaultNeedsVolume(drive: chosen.displayName) }
+            if let fixable, let volume = fixableVolume(fixable), let issue = VolumeIssue.of(volume) {
+                choose.note = .vaultWrongKind(drive: chosen.displayName, issue: issue, ownershipVolume: chosen.ownershipFixVolume?.volumeName)
+            }
         } else {
             choose.action = .showDrives
             if let replaced = vaults.first(where: { $0.state == .foreign || $0.state == .sentinelMissing }) {
@@ -248,7 +280,7 @@ public enum PlanBuilder {
         } else if let good {
             // The vault is suitable: done when its drive also has the unsuitable volume the fix was for, else not needed.
             let drive = drives.first { $0.vault?.volume.volumeUUID == good.volume.volumeUUID }
-            if let drive, drive.recommendedOption != nil {
+            if let drive, DriveEvaluation.wantsANewVolume(drive.volumes) {
                 prepare.state = .done
                 prepare.note = .suitableVolume(drive: drive.displayName, volume: good.volume.volumeName)
             } else {
@@ -256,15 +288,23 @@ public enum PlanBuilder {
             }
         } else if let chosen, let candidate {
             // A suitable volume is there: the fix is in place (or was never needed). Says what is there, not who made it.
-            if chosen.recommendedOption != nil {
+            if DriveEvaluation.wantsANewVolume(chosen.volumes) {
                 prepare.state = .done
                 prepare.note = .suitableVolume(drive: chosen.displayName, volume: candidate.volumeName)
             } else {
                 prepare.state = .notNeeded
             }
         } else if let chosen {
-            // Only the recommended option, which erases nothing (`DriveAssessment.isRecommended`): never an erase.
-            if let option = chosen.recommendedOption {
+            // Only the recommended option, which erases nothing (`DriveAssessment.isRecommended`): never an erase. Fixing an
+            // existing volume comes first (R7-D): ownership off on a volume that is otherwise right.
+            if case .enableOwnership(let mp)? = chosen.recommendedOption, let volume = chosen.ownershipFixVolume {
+                prepare.state = .next
+                prepare.option = chosen.recommendedOption
+                prepare.subject = volume.volumeName
+                prepare.note = .turnOnOwnership(volume: volume.volumeName)
+                prepare.action = .showInFinder(path: mp)
+                prepare.secondaryAction = .copyOwnershipCommand(mountPoint: mp)
+            } else if let option = chosen.recommendedOption {
                 prepare.state = .next
                 prepare.option = option
                 prepare.isExperimental = true
@@ -286,6 +326,9 @@ public enum PlanBuilder {
             register.state = .next
             register.subject = candidate.volumeName
             register.action = .useDrive(diskID: chosen.disk.id, volumeUUID: uuid)
+            if let fixable { register.note = .secondVault(existing: fixable.volume.volumeName) }
+        } else if prepare.state == .next, case .turnOnOwnership(let volume)? = prepare.note {
+            register.state = .blocked(.ownershipFirst(volume))
         } else if prepare.state == .next {
             register.state = .blocked(.addVolumeFirst)
         } else {
@@ -334,11 +377,13 @@ public enum PlanBuilder {
 
     // MARK: - The drive
 
-    /// A usable vault whose drive recommends a fix for its own volume — case-sensitive, or ownership ignored.
+    /// A usable vault on a volume of the wrong kind — case-sensitive, or ownership ignored — whose drive has a way to a
+    /// right one: a recommended fix (a new volume, or ownership on an existing one), or a right volume already there to
+    /// register (R7-D: after ownership is turned on, the path still goes through that volume, not the old vault).
     static func isFixable(_ vault: VaultVolumeCheck, _ drives: [DriveAssessment]) -> Bool {
         guard let drive = drives.first(where: { $0.vault?.volume.volumeUUID == vault.volume.volumeUUID }) else { return false }
         guard let volume = drive.volumes.first(where: { $0.volumeUUID?.uppercased() == vault.volume.volumeUUID.uppercased() }) else { return false }
-        return drive.recommendedOption != nil && !isGoodVolume(volume)
+        return !isGoodVolume(volume) && (drive.recommendedOption != nil || registrationCandidate(drive) != nil)
     }
 
     /// The drive the path goes through: the good vault's; else the drive holding a vault that needs its fix (PABLO); else

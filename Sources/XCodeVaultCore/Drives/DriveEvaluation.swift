@@ -170,11 +170,32 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
         volumes.first(where: { !$0.volumeName.isEmpty })?.volumeName ?? (disk.mediaName.isEmpty ? disk.id : disk.mediaName)
     }
 
-    /// Whether an option is recommended: adding a volume when the disk's APFS volumes are case-sensitive or ignore
-    /// ownership — the fix that erases nothing — or when nothing on the disk qualifies.
+    /// A mounted, case-insensitive APFS volume whose only blocker is ownership off — the volume `addVolume` just made
+    /// (new external volumes ignore ownership; R7-D, the user's PABLO), or any like it. The one with the most free space.
+    public var ownershipFixVolume: Volume? {
+        volumes.filter(DriveEvaluation.onlyOwnershipBlocks).max { $0.freeBytes < $1.freeBytes }
+    }
+
+    /// A mounted volume that is already the right kind — APFS, case-insensitive, ownership on, not unsuitable —
+    /// registered or not. With one, a new volume fixes nothing.
+    public var hasSuitableKindVolume: Bool {
+        volumes.contains { DriveEvaluation.isSuitableKind($0) && qualifications[$0.deviceNode]?.verdict != .unsuitable }
+    }
+
+    /// Whether an option is recommended. Fixing an existing volume comes before making a new one (R7-D): turning ownership
+    /// on for a volume whose only blocker is ownership; otherwise adding a volume when the disk's APFS volumes are
+    /// case-sensitive or ignore ownership — the fix that erases nothing — or when nothing on the disk qualifies, unless a
+    /// volume of the right kind is already there.
     public func isRecommended(_ option: PreparationOption) -> Bool {
-        guard case .addVolume = option else { return false }
-        return DriveEvaluation.wantsANewVolume(volumes) || verdict == .needsPreparation
+        switch option {
+        case .enableOwnership(let mountPoint):
+            return ownershipFixVolume?.mountPoint == mountPoint
+        case .addVolume:
+            guard ownershipFixVolume == nil, !hasSuitableKindVolume else { return false }
+            return DriveEvaluation.wantsANewVolume(volumes) || verdict == .needsPreparation
+        default:
+            return false
+        }
     }
 
     /// The option **Prepare…** opens on: the recommended one, else the first that runs a command (least destructive).
@@ -185,10 +206,13 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
     public enum PrepareAction: Equatable, Sendable {
         case useDrive
         case prepare(PreparationOption)
+        /// Ownership is the fix (R7-D): the app shows the volume in Finder, where Get Info turns it on. Nothing runs.
+        case ownership(mountPoint: String)
         case nothing
     }
 
     public var prepareAction: PrepareAction {
+        if case .enableOwnership(let mp)? = recommendedOption { return .ownership(mountPoint: mp) }
         if let recommended = recommendedOption { return .prepare(recommended) }
         if verdict == .canBeUsed { return .useDrive }
         if let first = commandOptions.first { return .prepare(first) }
@@ -338,8 +362,21 @@ public enum DriveEvaluation {
         return out
     }
 
-    /// A mounted APFS volume is case-sensitive or ignores ownership: a new case-insensitive volume is the fix.
-    static func wantsANewVolume(_ mounted: [Volume]) -> Bool {
+    /// A volume of the kind a vault needs: APFS, case-insensitive, ownership on.
+    public static func isSuitableKind(_ v: Volume) -> Bool {
+        v.isAPFS && !v.filesystemPersonality.lowercased().contains("case-sensitive") && v.ownersEnabled
+    }
+
+    /// A mounted, case-insensitive APFS volume that would qualify if ownership were on (R7-D).
+    public static func onlyOwnershipBlocks(_ v: Volume) -> Bool {
+        guard v.isAPFS, !v.ownersEnabled, v.mountPoint != nil, !v.filesystemPersonality.lowercased().contains("case-sensitive") else { return false }
+        var owned = v
+        owned.ownersEnabled = true
+        return VolumeQualification.evaluate(owned).verdict != .unsuitable
+    }
+
+    /// A mounted APFS volume is case-sensitive or ignores ownership: the drive has a volume of the wrong kind.
+    public static func wantsANewVolume(_ mounted: [Volume]) -> Bool {
         mounted.contains { $0.isAPFS && ($0.filesystemPersonality.lowercased().contains("case-sensitive") || !$0.ownersEnabled) }
     }
 }
