@@ -305,24 +305,33 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertEqual(HelperIdentity.enableOwnershipRight, "com.xcodevault.helper.enable-ownership")
     }
 
-    /// What the database returns for a definition the helper wrote: ours, plus the metadata it adds.
+    static let team = "ABCDE12345"
+
+    /// What the database returns for a definition the helper wrote: ours, plus the metadata it adds — `tries`, which authd
+    /// adds to every user-class rule (fix round 5, F1), and the writer's requirement naming its team (F3).
     static func readBack(_ change: (inout [String: Any]) -> Void = { _ in }) -> [String: Any] {
         var d = OwnershipRightRule.definition
         d["identifier"] = "com.xcodevault.helper"
         d["created"] = 1.0
         d["modified"] = 2.0
-        d["requirement"] = "identifier \"com.xcodevault.helper\""
+        d["tries"] = 10000
+        d["requirement"] =
+            "identifier \"com.xcodevault.helper\" and anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ "
+            + "and certificate leaf[subject.OU] = \"\(team)\""
         change(&d)
         return d
     }
 
+    private func ours(_ d: [String: Any], team: String = R8HelperOwnershipTests.team) -> Bool { SecurityRightAuthority.isOurDefinition(d, teamID: team) }
+
     func testOnlyTheHelpersOwnDefinitionCountsAsOurs() {
-        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack()))
-        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack { $0["authenticate-user"] = true }), "a default at its safe value")
-        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack { $0["default-prompt"] = ["": "x"] }))
+        XCTAssertTrue(ours(Self.readBack()))
+        XCTAssertTrue(ours(Self.readBack { $0["authenticate-user"] = true }), "a default at its safe value")
+        XCTAssertTrue(ours(Self.readBack { $0["default-prompt"] = ["": OwnershipRightRule.prompt] }))
+        XCTAssertTrue(ours(Self.readBack { $0["default-prompt"] = ["": OwnershipRightRule.prompt, "fr": OwnershipRightRule.prompt] }))
         // The definition the user's database holds since 0.2.0 (H18): the stock admin rule. Not ours: rewritten.
         XCTAssertFalse(
-            SecurityRightAuthority.isOurDefinition([
+            ours([
                 "class": "rule", "rule": ["authenticate-admin"], "identifier": "com.xcodevault.helper", "version": 1, "created": 1.0,
             ]))
         let variants: [String: (inout [String: Any]) -> Void] = [
@@ -345,10 +354,53 @@ final class R8HelperOwnershipTests: XCTestCase {
             "a rule key": { $0["rule"] = ["allow"] },
             "authenticate-user off": { $0["authenticate-user"] = false },
             "session-owner on": { $0["session-owner"] = true },
+            "extract-password on": { $0["extract-password"] = true },
+            "password-only on": { $0["password-only"] = true },
         ]
         for (name, change) in variants {
-            XCTAssertFalse(SecurityRightAuthority.isOurDefinition(Self.readBack(change)), name)
+            XCTAssertFalse(ours(Self.readBack(change)), name)
         }
+    }
+
+    /// Fix round 5 (F1): authd adds `tries` (10000 on this Mac) to every user-class rule. Accepted as a whole number of at
+    /// least 1, and nothing else.
+    func testTriesIsAcceptedOnlyAsAWholeNumberOfAtLeastOne() {
+        XCTAssertTrue(ours(Self.readBack()), "the read-back as authd writes it, with tries 10000")
+        XCTAssertTrue(ours(Self.readBack { $0["tries"] = 1 }))
+        XCTAssertTrue(ours(Self.readBack { $0["tries"] = NSNumber(value: Int64(10000)) }))
+        XCTAssertTrue(ours(Self.readBack { $0["tries"] = nil }), "absent, as the fixture of round 4 had it")
+        let rejected: [String: Any] = [
+            "zero": 0, "negative": -1, "fractional": 1.5, "a double ten thousand": 10000.0, "a string": "10000", "true": true, "false": false,
+            "an array": [10000],
+        ]
+        for (name, value) in rejected {
+            XCTAssertFalse(ours(Self.readBack { $0["tries"] = value }), name)
+        }
+    }
+
+    /// Fix round 5 (F3): a squatter who defines the name first chooses the dialog's words and is recorded as the writer.
+    /// The words must be ours, and the writer's requirement must name this build's team.
+    func testThePromptMustBeOursAndTheWriterMustBeThisTeam() {
+        XCTAssertFalse(ours(Self.readBack { $0["default-prompt"] = ["": "Enter your password to update Safari."] }), "a squatter's wording")
+        XCTAssertFalse(ours(Self.readBack { $0["default-prompt"] = ["": OwnershipRightRule.prompt, "de": "anders"] }), "one language not ours")
+        XCTAssertFalse(ours(Self.readBack { $0["default-prompt"] = OwnershipRightRule.prompt }), "not a dictionary of languages")
+        XCTAssertFalse(ours(Self.readBack { $0["default-prompt"] = ["": 1] }))
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = nil }), "no requirement: the writer cannot be told")
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = "identifier \"com.xcodevault.helper\"" }), "an ad-hoc writer claiming the identifier")
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = "certificate leaf[subject.OU] = \"ZZZZZ99999\"" }), "another team")
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = "certificate leaf[subject.OU] = ABCDE123456" }), "a longer team")
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = 1 }))
+        XCTAssertTrue(ours(Self.readBack { $0["requirement"] = "anchor apple generic and certificate leaf[subject.OU] = ABCDE12345" }), "the bare spelling")
+        XCTAssertTrue(ours(Self.readBack { $0["requirement"] = "(certificate leaf[subject.OU] = ABCDE12345)" }))
+        XCTAssertFalse(ours(Self.readBack(), team: "ZZZZZ99999"), "the build's team, not any team")
+        XCTAssertFalse(ours(Self.readBack { $0["requirement"] = "certificate leaf[subject.OU] = \"TEAMID_PLACEHOLDER\"" }, team: HelperIdentity.teamIDPlaceholder),
+            "an unsubstituted build accepts no definition")
+        XCTAssertFalse(ours(Self.readBack(), team: ""))
+        // The team reaches the check: the listener hands each connection's service the one `main.swift` validated, and a
+        // service made without one holds the placeholder, which accepts nothing.
+        XCTAssertEqual(ListenerDelegate(teamID: Self.team).teamID, Self.team)
+        XCTAssertEqual(HelperService(callerUID: 1, callerGID: 1).teamID, HelperIdentity.teamIDPlaceholder)
+        XCTAssertEqual(SecurityRightAuthority(teamID: Self.team).teamID, Self.team)
     }
 
     /// The upgrade path: the daemon repairs the old definition as it starts, before it accepts a connection, so the

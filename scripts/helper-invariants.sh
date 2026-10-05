@@ -505,10 +505,55 @@ if [ -f "$AUTHZ_SITE" ]; then
         '    static let group = "admin"' \
         '    static let timeoutSeconds = 10' \
         '        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)' \
-        '            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false'
+        '            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false' \
+        '        let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]'
     do
         grep -qxF "$pinned" <<<"$authz_code" || violation "$AUTHZ_SITE — the right's definition changed" "missing: $pinned"
     done
+    # Fix round 5 (F4): the read-back check is pinned whole, line for line and in order, so a line slipped between two
+    # pinned lines — an early `return true` (B4), a changed safe default (B6), a key allowed without its check — fails
+    # here; pins of single lines could not see it. The team check (F3) is pinned the same way. Changing either function
+    # means changing this block in the same commit, in front of the helper-security review.
+    expected_ours=$(cat <<'OURS_BODY'
+    static func isOurDefinition(_ d: [String: Any], teamID: String) -> Bool {
+        let metadata: Set<String> = ["version", "created", "modified", "comment", "default-prompt", "identifier", "requirement", "tries"]
+        let fields = Set(OwnershipRightRule.definition.keys)
+        let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]
+        guard Set(d.keys).isSubset(of: metadata.union(fields).union(safeDefaults.keys)) else { return false }
+        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }
+        guard let requirement = d["requirement"] as? String, namesTeam(requirement, teamID: teamID) else { return false }
+        guard d["class"] as? String == OwnershipRightRule.ruleClass, d["group"] as? String == OwnershipRightRule.group,
+            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false
+        else { return false }
+        for (key, safe) in safeDefaults where d[key] != nil {
+            guard d[key] as? Bool == safe else { return false }
+        }
+        if let tries = d["tries"] {
+            guard let n = tries as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), !CFNumberIsFloatType(n), n.int64Value >= 1 else { return false }
+        }
+        if let prompts = d["default-prompt"] {
+            guard let byLanguage = prompts as? [String: Any], byLanguage.values.allSatisfy({ $0 as? String == OwnershipRightRule.prompt }) else { return false }
+        }
+        return true
+    }
+OURS_BODY
+)
+    [ "$(body_of "$AUTHZ_SITE" isOurDefinition)" = "$expected_ours" ] \
+        || violation "$AUTHZ_SITE — isOurDefinition changed" "the read-back check is pinned whole (fix round 5, F4)"
+    expected_team=$(cat <<'TEAM_BODY'
+    static func namesTeam(_ requirement: String, teamID: String) -> Bool {
+        guard HelperIdentity.isUsableTeamID(teamID) else { return false }
+        if requirement.contains("subject.OU] = \"\(teamID)\"") { return true }
+        guard let range = requirement.range(of: "subject.OU] = \(teamID)") else { return false }
+        guard let next = requirement[range.upperBound...].unicodeScalars.first else { return true }
+        return !(CharacterSet.alphanumerics.contains(next) || next == "_" || next == "\"")
+    }
+TEAM_BODY
+)
+    [ "$(body_of "$AUTHZ_SITE" namesTeam)" = "$expected_team" ] \
+        || violation "$AUTHZ_SITE — namesTeam changed" "the writer's team check is pinned whole (fix round 5, F3/F4)"
+    trues=$(body_of "$AUTHZ_SITE" isOurDefinition | grep -oE '[[:<:]]return[[:space:]]+true[[:>:]]' | grep -c .)
+    [ "$trues" -eq 1 ] || violation "$AUTHZ_SITE — isOurDefinition returns true $trues times" "one way to be ours: the last line (B4)"
     # Belt and braces for the one number: whatever the pins say, a credential longer than 30 s is not a re-check window.
     for t in $(grep -oE '"timeout": [0-9]+|timeoutSeconds = [0-9]+' <<<"$authz_code" | grep -oE '[0-9]+$'); do
         [ "$t" -le 30 ] || violation "$AUTHZ_SITE — the right's credential lives $t s" "at most 30 s: long enough for the helper's re-check, no longer"

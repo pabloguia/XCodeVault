@@ -30,7 +30,13 @@ let privilegedWork = DispatchQueue(label: "com.xcodevault.helper.work")
 final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     let callerUID: uid_t
     let callerGID: gid_t
-    init(callerUID: uid_t, callerGID: gid_t) { self.callerUID = callerUID; self.callerGID = callerGID }
+    /// The team this daemon was built for (R8 fix round 5, F3): the authorization right's definition counts as ours only
+    /// when its writer was signed by this team. `ListenerDelegate` passes the one `main.swift` validated; the default, the
+    /// placeholder, is not a usable team, so a service built without one accepts no definition and refuses the verb.
+    let teamID: String
+    init(callerUID: uid_t, callerGID: gid_t, teamID: String = HelperIdentity.teamIDPlaceholder) {
+        self.callerUID = callerUID; self.callerGID = callerGID; self.teamID = teamID
+    }
 
     /// The caller's name and primary gid. Seams like this one exist so the gate can be tested;
     /// see the target header for why that is not optional here.
@@ -227,9 +233,10 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     /// `rights`, `volumes` and `diskutil` are test seams, functions of nothing on the XPC wire; the dispatch above
     /// passes none of them.
     func doEnableOwnership(
-        volumeUUID: String, authorization: Data, rights: any OwnershipRightAuthority = SecurityRightAuthority(),
+        volumeUUID: String, authorization: Data, rights: (any OwnershipRightAuthority)? = nil,
         volumes: (any OwnershipVolumeReading)? = nil, diskutil: any DiskutilRunning = SpawnedDiskutil()
     ) -> HelperResult {
+        let rights = rights ?? SecurityRightAuthority(teamID: teamID)
         if let denied = authorize() { return HelperResult(ok: false, message: denied.message, code: .unauthorized) }
         guard let uuid = UUID(uuidString: volumeUUID), uuid != Self.nilVolumeUUID else {
             return HelperResult(ok: false, message: "invalid UUID", code: .invalidArgument)
@@ -1173,11 +1180,15 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
 public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     let requirement: String
+    let teamID: String
     /// Takes the team id, never the requirement itself. The split made this type public, and a
     /// public `init(requirement:)` would let a caller outside this module hand the listener
     /// `"anchor apple generic"` — which accepts any Developer-ID binary from any team, and is the
     /// entire peer-validation control. The string is built here and nowhere else.
-    public init(teamID: String) { self.requirement = HelperIdentity.clientRequirement(teamID: teamID) }
+    public init(teamID: String) {
+        self.requirement = HelperIdentity.clientRequirement(teamID: teamID)
+        self.teamID = teamID
+    }
     public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         // Code-signing requirement is enforced by the kernel/XPC layer for this connection — set
         // BEFORE resume(), never validated by PID (SECURITY_MODEL.md).
@@ -1190,7 +1201,7 @@ public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         // Caller identity comes from the connection's audit credentials, never from request payloads.
         let uid = connection.effectiveUserIdentifier, gid = connection.effectiveGroupIdentifier
         connection.exportedInterface = NSXPCInterface(with: XCodeVaultHelperXPC.self)
-        connection.exportedObject = HelperService(callerUID: uid, callerGID: gid)
+        connection.exportedObject = HelperService(callerUID: uid, callerGID: gid, teamID: teamID)
         connection.resume()
         return true
     }

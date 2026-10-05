@@ -50,25 +50,30 @@ protocol OwnershipRightAuthority: Sendable {
 /// and the first writes to its database.
 struct SecurityRightAuthority: OwnershipRightAuthority {
     let rightName: String = HelperIdentity.enableOwnershipRight
+    /// The team the build signed this helper with (`main.swift`, substituted by `scripts/bundle-app.sh`). The database
+    /// records the writer's code requirement, and a definition counts as ours only when that requirement names this
+    /// team (R8 fix round 5, F3). The placeholder is not a usable team, so an unsubstituted build accepts no definition.
+    let teamID: String
 
     func ensureDefinition() -> RightDefinition {
         var current: CFDictionary?
         let got = AuthorizationRightGet(rightName, &current)
         let existed = got == errAuthorizationSuccess
-        if existed, let dict = current as? [String: Any], Self.isOurDefinition(dict) { return .unchanged }
+        if existed, let dict = current as? [String: Any], Self.isOurDefinition(dict, teamID: teamID) { return .unchanged }
 
         // An empty reference, used only to write the definition: as root, the write needs no credential.
         var writer: AuthorizationRef?
         let created = AuthorizationCreate(nil, nil, [], &writer)
         guard created == errAuthorizationSuccess, let writer else { return .failed(created) }
         defer { AuthorizationFree(writer, []) }
-        let prompt = "XCodeVault wants to turn on ownership on an external volume." as CFString
+        let prompt = OwnershipRightRule.prompt as CFString
         let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)
         guard set == errAuthorizationSuccess else { return .failed(set) }
         // Read back: a definition the database stores differently from what was written would be rewritten on every
         // call and refuse every call. Say so once, as a failure, rather than loop.
         var written: CFDictionary?
-        guard AuthorizationRightGet(rightName, &written) == errAuthorizationSuccess, let back = written as? [String: Any], Self.isOurDefinition(back)
+        guard AuthorizationRightGet(rightName, &written) == errAuthorizationSuccess, let back = written as? [String: Any],
+            Self.isOurDefinition(back, teamID: teamID)
         else { return .failed(errAuthorizationInternal) }
         return existed ? .redefined : .defined
     }
@@ -102,25 +107,46 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
         return form
     }
 
-    /// Whether a definition read back from the database is the one this helper writes (R8 fix round 4): exactly
+    /// Whether a definition read back from the database is the one this helper writes (R8 fix rounds 4 and 5): exactly
     /// `OwnershipRightRule`'s security fields — a user-class right for the admin group, a 10-second credential that is
-    /// not shared and not given to root — **written by this helper** (the database records the writer's code
-    /// identifier; anything else is someone else's definition, L4). The keys the database adds itself are allowed; a
-    /// key it may add with a default is allowed only at its safe value; any other key, or any other value, makes it not
-    /// ours, and it is rewritten. The old definition, which pointed at the shared admin rule (`class` = rule), is not ours.
-    static func isOurDefinition(_ d: [String: Any]) -> Bool {
-        let metadata: Set<String> = ["version", "created", "modified", "comment", "default-prompt", "identifier", "requirement"]
+    /// not shared and not given to root — **written by this helper**: the writer's code identifier (L4) and the writer's
+    /// code requirement naming this build's team (F3; an ad-hoc binary can claim the identifier, not the team). The keys
+    /// the database adds itself are allowed; a key it may add with a default is allowed only at its safe value; `tries`
+    /// (authd adds 10000 to every user-class rule, F1) only as a whole number of at least 1; a `default-prompt` only when
+    /// every text in it is ours (F3: a squatter's wording is not shown under our name). Any other key, or any other
+    /// value, makes it not ours, and it is rewritten. The old definition, which pointed at the shared admin rule, is not
+    /// ours. `scripts/helper-invariants.sh` pins this body line for line.
+    static func isOurDefinition(_ d: [String: Any], teamID: String) -> Bool {
+        let metadata: Set<String> = ["version", "created", "modified", "comment", "default-prompt", "identifier", "requirement", "tries"]
         let fields = Set(OwnershipRightRule.definition.keys)
         let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]
         guard Set(d.keys).isSubset(of: metadata.union(fields).union(safeDefaults.keys)) else { return false }
         guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }
+        guard let requirement = d["requirement"] as? String, namesTeam(requirement, teamID: teamID) else { return false }
         guard d["class"] as? String == OwnershipRightRule.ruleClass, d["group"] as? String == OwnershipRightRule.group,
             (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false
         else { return false }
         for (key, safe) in safeDefaults where d[key] != nil {
             guard d[key] as? Bool == safe else { return false }
         }
+        if let tries = d["tries"] {
+            guard let n = tries as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), !CFNumberIsFloatType(n), n.int64Value >= 1 else { return false }
+        }
+        if let prompts = d["default-prompt"] {
+            guard let byLanguage = prompts as? [String: Any], byLanguage.values.allSatisfy({ $0 as? String == OwnershipRightRule.prompt }) else { return false }
+        }
         return true
+    }
+
+    /// Whether a code requirement, as the database stores it, pins the leaf certificate's team to `teamID`. The
+    /// requirement language quotes a value that does not start with a letter (`"4V58BSZL3W"`) and may leave one that
+    /// does bare, so both spellings count; the bare one only when the team ends there. Never for an unusable team.
+    static func namesTeam(_ requirement: String, teamID: String) -> Bool {
+        guard HelperIdentity.isUsableTeamID(teamID) else { return false }
+        if requirement.contains("subject.OU] = \"\(teamID)\"") { return true }
+        guard let range = requirement.range(of: "subject.OU] = \(teamID)") else { return false }
+        guard let next = requirement[range.upperBound...].unicodeScalars.first else { return true }
+        return !(CharacterSet.alphanumerics.contains(next) || next == "_" || next == "\"")
     }
 }
 
@@ -134,6 +160,8 @@ enum OwnershipRightRule {
     static let ruleClass = "user"
     static let group = "admin"
     static let timeoutSeconds = 10
+    /// The text the system dialog shows. Written with the definition, and the only text a read-back may carry (F3).
+    static let prompt = "XCodeVault wants to turn on ownership on an external volume."
     /// The dictionary `AuthorizationRightSet` writes. A pure value; `scripts/helper-invariants.sh` pins its lines.
     static var definition: [String: Any] {
         [
@@ -155,7 +183,8 @@ enum OwnershipRightRule {
 /// It is also the upgrade path (R8 fix round 4): a database still holding the earlier definition is rewritten here, by
 /// the new daemon as it starts, so the user's first click after the update is not refused for it.
 public enum HelperStartup {
-    public static func defineAuthorizationRights() { _ = defineAuthorizationRights(authority: SecurityRightAuthority()) }
+    /// `teamID` is the one `main.swift` validated: the definition counts as ours only when its writer was signed by it.
+    public static func defineAuthorizationRights(teamID: String) { _ = defineAuthorizationRights(authority: SecurityRightAuthority(teamID: teamID)) }
 
     /// The seam: a test passes a fake authority and reads the outcome.
     static func defineAuthorizationRights(authority: any OwnershipRightAuthority) -> RightDefinition {

@@ -131,6 +131,25 @@ final class R8HelperInvariantsTests: XCTestCase {
             name: "the stock admin rule again", file: authz, old: "OwnershipRightRule.definition as CFDictionary",
             new: "\"authenticate-admin\" as CFString"),
         Mutation(name: "a long read-back timeout", file: authz, old: "    static let timeoutSeconds = 10", new: "    static let timeoutSeconds = 300"),
+        // Fix round 5 (F4): the read-back check is pinned whole. B4 — an early way to be "ours"; B6 — a safe default
+        // changed; and the checks of rounds 4 and 5 weakened one at a time.
+        Mutation(
+            name: "B4: an early return true", file: authz, old: "        guard Set(d.keys).isSubset(",
+            new: "        if d[\"k\"] != nil { return true }\n        guard Set(d.keys).isSubset("),
+        Mutation(
+            name: "B4: a second way out without the word true", file: authz, old: "        guard Set(d.keys).isSubset(",
+            new: "        if d[\"k\"] != nil { return d[\"class\"] != nil }\n        guard Set(d.keys).isSubset("),
+        Mutation(name: "B6: session-owner accepted on", file: authz, old: "\"session-owner\": false,", new: "\"session-owner\": true,"),
+        Mutation(name: "B6: authenticate-user accepted off", file: authz, old: "[\"authenticate-user\": true,", new: "[\"authenticate-user\": false,"),
+        Mutation(name: "a stock rule key allowed", file: authz, old: "\"requirement\", \"tries\"]", new: "\"requirement\", \"tries\", \"rule\"]"),
+        Mutation(name: "tries of 0 accepted", file: authz, old: "n.int64Value >= 1", new: "n.int64Value >= 0"),
+        Mutation(
+            name: "any prompt accepted", file: authz, old: "allSatisfy({ $0 as? String == OwnershipRightRule.prompt })", new: "allSatisfy({ _ in true })"),
+        Mutation(
+            name: "the team check bypassed", file: authz, old: "namesTeam(requirement, teamID: teamID) else", new: "!requirement.isEmpty else"),
+        Mutation(
+            name: "the placeholder team accepted", file: authz,
+            old: "        guard HelperIdentity.isUsableTeamID(teamID) else { return false }\n", new: ""),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),
