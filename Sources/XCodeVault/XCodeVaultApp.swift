@@ -466,11 +466,13 @@ final class AppModel {
         if case .enableOwnership = action {
             // R8: success re-reads the drives (`refresh`) and the Plan moves on by itself; anything else but a cancelled
             // password dialog brings the guided route back with the reason, inline.
+            // The progress stays until the drives were read again, so the Plan never shows step 2 between "working" and
+            // its new state.
+            await refresh()
             endOwnershipRequest(action, fallback: OwnershipRoute.fallback(after: outcome))
             if case .done(let reply) = outcome {
                 feedback = AppFeedback(kind: .success, title: AppText.privilegedDone(action), detail: [reply.message])
             }
-            await refresh()
             return
         }
         switch outcome {

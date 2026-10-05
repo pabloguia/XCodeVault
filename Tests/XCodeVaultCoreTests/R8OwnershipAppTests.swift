@@ -211,7 +211,7 @@ final class R8OwnershipAppTests: XCTestCase {
         m.performPlanAction(action)
         XCTAssertEqual(m.ownershipRoute, .working)
         XCTAssertEqual(m.quitChoice, .keepRunningOnly(.diskPreparation), "not stoppable: Keep Running only")
-        for _ in 0..<200 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertNil(m.ownershipInFlight)
         XCTAssertEqual(helper.performed, [.enableOwnership(volumeUUID: R6DriveTests.u(302))])
         XCTAssertEqual(m.plan?.step(.prepareDrive)?.state, .done, "the drives were read again and step 2 is done")
@@ -226,7 +226,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let m = model(refused, drives: drives, journal: Self.scratch())
         await m.refresh()
         m.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
-        for _ in 0..<200 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(m.ownershipRoute, .guided(.didNotWork("a disk image is not eligible")))
         XCTAssertNil(m.lastError, "the reason is inline, beside the guided route, not an alert")
         let step = try XCTUnwrap(m.plan?.step(.prepareDrive))
@@ -237,7 +237,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let c = model(cancel, drives: ScriptedDrives(try R7ACoreTests.snapshotWithMadeVolume(owners: false)), journal: Self.scratch())
         await c.refresh()
         c.turnOnOwnership(volumeUUID: R6DriveTests.u(302))
-        for _ in 0..<200 where c.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<3000 where c.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(c.ownershipRoute, .oneClick, "a cancelled password offers the click again, quietly")
         XCTAssertNil(c.lastError)
     }
@@ -260,7 +260,7 @@ final class R8OwnershipAppTests: XCTestCase {
         XCTAssertTrue(m.showsHelperSheet, "the helper is requested first")
         XCTAssertEqual(m.ownershipRoute, .working)
         m.installHelper(then: m.pendingPrivilegedAction)
-        for _ in 0..<300 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<3000 where m.ownershipInFlight != nil { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(m.ownershipRoute, .guided(.approvalNotGiven(L10n.tr("app.helper.error.timedOut"))))
         XCTAssertTrue(helper.performed.isEmpty)
         // Closing the sheet instead is a quiet cancel.
