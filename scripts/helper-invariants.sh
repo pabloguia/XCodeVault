@@ -226,7 +226,8 @@ for f in $helper_files; do
     [ "$f" = "$SPAWN_SITE" ] && spawn_token='posix_spawnp'
     authz_token='AuthorizationCopyRight[s]|'
     [ "$f" = "$AUTHZ_SITE" ] && authz_token=''
-    forbid "$f" "/bin/(ba|z)?sh|\\bsystem\\(|\\bpopen\\(|$spawn_token|\\bexec(v|ve|vp|l|lp|le)\\(|NSTask|\\bProcess\\(|executableURL|launchPath|/usr/bin/env|xcrun" \
+    # Whitespace before `(` is still a call (fix round 2, N1), and `Process.` reaches its class methods.
+    forbid "$f" "/bin/(ba|z)?sh|[[:<:]]system[[:space:]]*\\(|[[:<:]]popen[[:space:]]*\\(|$spawn_token|[[:<:]]exec(v|ve|vp|l|lp|le|vP)[[:space:]]*\\(|execvP|NSTask|[[:<:]]Process[[:space:]]*(\\(|\\.)|executableURL|launchPath|/usr/bin/env|xcrun" \
         "process or shell execution in the privileged helper"
     forbid "$f" "${authz_token}processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity" \
         "hand-rolled or PID-based peer validation; the connection code-signing requirement is the only accepted form"
@@ -240,6 +241,13 @@ for f in $helper_files; do
         "a route around the helper's process and authorization rules (ADR-0014)"
     forbid "$f" '=[[:space:]]*(posix_spawn|AuthorizationCopyRights)[[:>:]][[:space:]]*($|[^([:space:]])' \
         "the spawn or rights API bound to a value; call it by name, where the rules can see it"
+    # Fix round 2 (N1): scripting and dynamic dispatch, which reach a process or any API by name at run time; and
+    # authorization flags or any other option set built from a raw value — the flags the one right check uses are a
+    # literal on its pinned line, so the type never needs naming.
+    forbid "$f" 'NSAppleScript|OSAScript|NSUserUnixTask|NSUserScriptTask|NSClassFromString|NSSelectorFromString|objc_getClass|objc_msgSend' \
+        "scripting or dynamic dispatch in the privileged helper"
+    forbid "$f" '[[:<:]]AuthorizationFlags[[:>:]]|\.init[[:space:]]*\([[:space:]]*rawValue|[[:<:]]Self[[:space:]]*\([[:space:]]*rawValue' \
+        "authorization flags, or a value built from a raw value, outside the pinned right check"
     forbid "$f" 'dlopen|Bundle\(path:|Bundle\(url:|NSBundle' \
         "dynamic code loading in the privileged helper"
     # `fchown`/`fchmod` are deliberately NOT matched: a descriptor already opened O_NOFOLLOW is the
@@ -414,19 +422,41 @@ if [ -f "$SPAWN_SITE" ]; then
         || violation "$SPAWN_SITE — the argv line changed" "argv is the executable and DiskutilInvocation.arguments, nothing else"
     code_of "$SPAWN_SITE" | grep -qxF '        case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]' \
         || violation "$SPAWN_SITE — the info argv changed" "info -plist <canonical UUID>"
-    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let uuid): return ["enableOwnership", uuid.uuidString]' \
-        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership <canonical UUID>"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let disk): return ["enableOwnership", disk.value]' \
+        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership <the pinned mount's validated disk identifier>"
+    code_of "$SPAWN_SITE" | grep -qxF '        let envp: [UnsafeMutablePointer<CChar>?] = [strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"), nil]' \
+        || violation "$SPAWN_SITE — the environment line changed" "the child's environment is one PATH entry"
+    # `DiskIdentifier.value` is assigned once, inside its validating initialiser (fix round 2, N2).
+    [ "$(code_of "$SPAWN_SITE" | grep -cE '[[:<:]]value[[:space:]]*=[^=]')" -eq 1 ] \
+        && code_of "$SPAWN_SITE" | grep -qxF '        value = raw' \
+        || violation "$SPAWN_SITE — DiskIdentifier.value is assigned outside its validating initialiser" "the identifier is built only by init?"
+    code_of "$SPAWN_SITE" | grep -qxF '    let value: String' \
+        || violation "$SPAWN_SITE — DiskIdentifier.value is not a let" "an identifier cannot change after it was validated"
     returns=$(code_of "$SPAWN_SITE" | grep -cE 'return \[')
     [ "$returns" -eq 2 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly two, both pinned"
-    [ "$(code_of "$SPAWN_SITE" | grep -cxE '    case (infoPlist|enableOwnership)\(volumeUUID: UUID\)')" -eq 2 ] \
+    code_of "$SPAWN_SITE" | grep -qxF '    case infoPlist(volumeUUID: UUID)' \
+        && code_of "$SPAWN_SITE" | grep -qxF '    case enableOwnership(disk: DiskIdentifier)' \
         && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 2 ] \
-        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "two cases, each carrying a parsed UUID and nothing else"
+        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "two cases: a parsed UUID, and a validated disk identifier"
     # Every absolute path literal in the file is one of these; `/dev/null` is stdin and stderr.
     bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
     [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
 else
     violation "$SPAWN_SITE — missing" "the R8 spawn rules check nothing; move them with the file"
 fi
+# Across every helper file (fix round 2, N1): one `DiskutilInvocation`, one `executable` — a local type of the same name
+# would shadow the pinned one at the spawn line.
+[ "$(cat $helper_files | sed -E '/"/!s@[[:space:]]*//.*$@@' | grep -cE '(enum|struct|class|typealias|actor)[[:space:]]+DiskutilInvocation[[:>:]]')" -eq 1 ] \
+    || violation "helper targets — more than one DiskutilInvocation" "a second declaration would shadow the pinned one"
+[ "$(cat $helper_files | sed -E '/"/!s@[[:space:]]*//.*$@@' | grep -cE '(let|var|func)[[:space:]]+executable[[:>:]]')" -eq 1 ] \
+    || violation "helper targets — more than one executable declaration" "the only one is DiskutilInvocation.executable = /usr/sbin/diskutil"
+# The last check before the command (L1) is a pinned line of the verb.
+# Read into a variable and searched as a here-string, not through a pipe: `grep -q` exits at the match, and under
+# `pipefail` the writer's SIGPIPE on a file this size would read as "not found".
+service_code=$(code_of Sources/XCodeVaultHelperCore/HelperService.swift)
+grep -qxF \
+    '        guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }' <<<"$service_code" \
+    || violation "Sources/XCodeVaultHelperCore/HelperService.swift — the pinned-mount check before the command is gone" "the volume must be the one read, right before diskutil runs"
 if [ -f "$AUTHZ_SITE" ]; then
     copy_calls=$(code_of "$AUTHZ_SITE" | grep -oE '[[:<:]]AuthorizationCopyRights[[:>:]]' | grep -c .)
     [ "$copy_calls" -eq 1 ] \
@@ -440,6 +470,21 @@ if [ -f "$AUTHZ_SITE" ]; then
     [ -z "$hit" ] || violation "$AUTHZ_SITE — clientRef is assigned" "$hit"
     code_of "$AUTHZ_SITE" | grep -qE 'AuthorizationCreateFromExternalForm\(&form, &clientRef\)' \
         || violation "$AUTHZ_SITE — clientRef does not come from AuthorizationCreateFromExternalForm" "the reference checked is the client's"
+    # Fix round 2 (N1): the check itself, the reference's release, the writer check, and every line that names
+    # `clientRef`, exactly — a closure parameter, an `if case` or a `for` binding of that name is a different reference.
+    code_of "$AUTHZ_SITE" | grep -qxF '                return AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)' \
+        || violation "$AUTHZ_SITE — the right check changed" "AuthorizationCopyRights(clientRef, …, [.extendRights], nil), exactly"
+    code_of "$AUTHZ_SITE" | grep -qxF '        defer { AuthorizationFree(clientRef, [.destroyRights]) }' \
+        || violation "$AUTHZ_SITE — the client's reference is no longer destroyed" "the externalized form works once (L3)"
+    code_of "$AUTHZ_SITE" | grep -qxF '        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }' \
+        || violation "$AUTHZ_SITE — the right's writer is no longer checked" "only the helper's own definition counts (L4)"
+    stray=$(code_of "$AUTHZ_SITE" | grep -E '[[:<:]]clientRef[[:>:]]' | grep -vxF \
+        -e '        var clientRef: AuthorizationRef?' \
+        -e '        let imported = AuthorizationCreateFromExternalForm(&form, &clientRef)' \
+        -e '        guard imported == errAuthorizationSuccess, let clientRef else { return .malformed }' \
+        -e '        defer { AuthorizationFree(clientRef, [.destroyRights]) }' \
+        -e '                return AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)' | head -3)
+    [ -z "$stray" ] || violation "$AUTHZ_SITE — clientRef on a line that is not allowlisted" "$stray"
 else
     violation "$AUTHZ_SITE — missing" "the R8 authorization rules check nothing; move them with the file"
 fi
