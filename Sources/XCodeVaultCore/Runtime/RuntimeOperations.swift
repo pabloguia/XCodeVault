@@ -232,6 +232,8 @@ public struct RuntimeOperations: Sendable {
                 // user needs in order to find the file, and the UUID is what `doctor` needs in
                 // order to know the file at that path is the one this operation verified.
                 "installerVolumeUUID": installerVolumeUUID ?? "",
+                // R7-C (F3): what the Plan counts as already off this Mac for a runtime parked by this offload.
+                "installerSizeBytes": String(installerSizeBytes),
             ].filter { !$0.value.isEmpty }
         }
     }

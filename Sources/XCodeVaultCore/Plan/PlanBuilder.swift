@@ -5,17 +5,22 @@ import Foundation
 // espaço a ser recuperado, e deixando claro o que vai ser uma cópia temporária e o que vai rodar no device)."
 //
 // The plan is DERIVED, NEVER STORED (ADR-0013): `PlanBuilder.plan` is a pure function of what the app already read — the
-// scan, the drives as assessed, the vault registry's checks, Xcode's locations, the journal's History rows and the
-// doctor's findings — so it cannot drift from the Mac it describes, and it updates when any of those does (a drive
-// plugged in, an operation finished). Nothing here runs anything: every step's action names an EXISTING sheet or screen,
-// and each keeps its own review and confirmation. Nothing is chained (ADR-0012, rule 6).
+// scan, the drives as assessed, the vault registry's checks, Xcode's locations, the runtimes the whole journal shows
+// parked (`ParkedRuntimes`) and the doctor's findings — so it cannot drift from the Mac it describes, and it updates when
+// any of those does (a drive plugged in, an operation finished). Nothing here runs anything: every step's action names an
+// EXISTING sheet or screen, and each keeps its own review and confirmation. Nothing is chained (ADR-0012, rule 6).
+//
+// The R7-C fix round (safety review F1–F7, quality I1–I3): data the user made is never "recreated on demand" (F1); old
+// DerivedData is its own item, deleted, not "run from the drive" (F2/I1); parked runtimes come from the whole journal
+// (F3/I2); an unusable vault says why (F4).
 
 /// What a plan step or item's button opens. The app maps each case to an existing opener (`AppModel.performPlanAction`);
 /// this enum is the whole of what the Plan can reach.
 public enum PlanAction: Sendable, Equatable {
     /// The Drives screen: connect, choose or read why a drive cannot be used.
     case showDrives
-    /// The preparation sheet for `option` on the disk `diskID` (R6), with its own review and typed-name confirmation.
+    /// The preparation sheet for `option` on the disk `diskID` (R6), with its own review and typed-name confirmation. The
+    /// app opens it only for the drive's recommended option, and offers no erasing option in it (F5, F6).
     case prepareDrive(diskID: String, option: PreparationOption)
     /// **Use This Drive** for the volume `volumeUUID` on `diskID` (R6): its own review; registers and makes the folders.
     case useDrive(diskID: String, volumeUUID: String)
@@ -36,23 +41,59 @@ public enum PlanBlock: Sendable, Equatable {
     case noUsableDrive
     /// A vault is registered but not connected: its name.
     case vaultOffline(String)
+    /// The vault is not mounted and its mount point holds data on this Mac (`ambiguous`): shadow data, which rule 6 says
+    /// must be reported. The vault's name and the size found there, when it could be read in full.
+    case vaultShadowed(name: String, bytes: UInt64?)
+    /// A different volume is mounted where the vault should be, or the vault's sentinel is gone (`foreign`,
+    /// `sentinelMissing`): its name.
+    case vaultReplaced(String)
     /// The drive has no recommended fix — what it offers erases data, or is the ownership setting the app does not run —
     /// so the choice is the user's, in Drives. The Plan never proposes an erase by itself.
     case chooseInDrives
+    /// The suitable volume has to be added first (step 2).
+    case addVolumeFirst
     /// A step above has to be done first.
     case needsEarlierStep
 }
 
-/// What happens to an item, in the user's terms (the four kinds of R7-C).
+/// What a step adds to its explanation beyond its state.
+public enum PlanNote: Sendable, Equatable {
+    /// Step 1: the drive holds the vault, but the vault's volume is case-sensitive or ignores ownership; step 2 adds a
+    /// suitable volume. The drive's name.
+    case vaultNeedsVolume(drive: String)
+    /// Step 2: the drive has a suitable volume. Says what is there, not who made it.
+    case suitableVolume(drive: String, volume: String)
+}
+
+/// What happens to an item, in the user's terms: what needs the drive connected, what leaves its only copy on the drive,
+/// what is deleted and whether anything rebuilds it (I3).
 public enum PlanOutcome: String, Sendable, CaseIterable, Codable {
-    /// New data is written to the vault (DerivedData, new Archives): it runs from the drive.
+    /// New data is written to the vault (new builds, new Archives): keep the drive connected while you work.
     case runsFromDrive
-    /// Existing data is copied to the vault, verified, and the original removed in the two-step remove (Archives).
+    /// Existing data is copied to the vault and verified; the original is removed only in the second step (Archives).
     case movedToDrive
-    /// Leaves this Mac and comes back when needed (a parked simulator runtime).
-    case leavesAndComesBack
-    /// Deleted here and recreated on demand (caches and other regenerable data). Never Archives (rule 5).
-    case deletedRecreated
+    /// Parked on the drive (a simulator runtime): it comes back to this Mac only when you restore it, which needs the drive.
+    case parkedOnDrive
+    /// Deleted here and rebuilt on demand (caches, old DerivedData). Never Archives (rule 5).
+    case deletedRebuilt
+    /// Deleted, and nothing recreates it: what you made in it is lost (simulator devices, F1).
+    case deletedLost
+}
+
+/// An item's name as the app words it: localized through keys, never the catalog's English name in another language.
+public enum PlanItemName: Sendable, Equatable {
+    /// New builds go to the drive (Xcode's DerivedData location).
+    case newDerivedData
+    /// The DerivedData already on this Mac.
+    case oldDerivedData
+    /// Archives made from now on (Xcode's Archives location).
+    case newArchives
+    /// The Archives already on this Mac.
+    case existingArchives
+    /// A catalog category, by id.
+    case category(String)
+    /// A runtime the journal shows parked: its name as recorded (a record, never translated).
+    case parkedRuntime(String)
 }
 
 /// One thing the move step can do.
@@ -60,14 +101,15 @@ public struct PlanItem: Sendable, Equatable, Identifiable {
     public var id: String
     public var outcome: PlanOutcome
     public var categoryID: String
-    /// The catalog's English name, or the journal's summary for a runtime already parked: records, never translated.
-    public var name: String
+    public var name: PlanItemName
     /// What it frees on this Mac: the item's internal bytes, counted once (`SavingsCalculator`). 0 for new data only.
     public var bytes: UInt64
     /// What is already off this Mac because of it: bytes found on the vault, or a parked runtime's recorded size.
     public var doneBytes: UInt64
     public var isDone: Bool
     public var isExperimental: Bool
+    /// Deleting it loses data the user made (F1): never in the headline, always tagged.
+    public var losesUserData: Bool
     /// The caveats that must stay visible on the item, as stable ids: `derivedDataTests` (unit tests fail to load from an
     /// external physical drive on macOS 26 — never hidden).
     public var warnings: [String]
@@ -83,6 +125,8 @@ public struct PlanStep: Sendable, Equatable, Identifiable {
     public enum State: Sendable, Equatable {
         case done
         case next
+        /// Some of the step's items can be acted on now; the rest waits for the vault (the move step without a vault).
+        case partly
         case blocked(PlanBlock)
         case notNeeded
     }
@@ -91,6 +135,7 @@ public struct PlanStep: Sendable, Equatable, Identifiable {
     public var state: State
     /// The drive or vault the step is about, as the user knows it (a volume name); nil when there is none.
     public var subject: String?
+    public var note: PlanNote?
     /// The space the step adds to what is freed; nil when it frees nothing by itself.
     public var bytes: UInt64?
     public var isExperimental: Bool
@@ -105,11 +150,26 @@ public struct PlanStep: Sendable, Equatable, Identifiable {
     public var id: String { kind.rawValue }
 }
 
-/// The header: up to how much can be freed, how much is done, and by outcome. Each item counted once.
+/// The header: up to how much can be freed, how much is done, and by outcome. Each item counted once. What deleting would
+/// lose for good is never in `upTo` (F1): it is `lostIfDeleted`, its own line.
 public struct PlanSummary: Sendable, Equatable {
     public var upTo: UInt64
     public var done: UInt64
     public var byOutcome: [PlanOutcome: UInt64]
+    public var lostIfDeleted: UInt64
+
+    public init(upTo: UInt64, done: UInt64, byOutcome: [PlanOutcome: UInt64], lostIfDeleted: UInt64 = 0) {
+        self.upTo = upTo
+        self.done = done
+        self.byOutcome = byOutcome
+        self.lostIfDeleted = lostIfDeleted
+    }
+}
+
+/// The one button the screen makes prominent.
+public enum PlanPrimary: Sendable, Equatable {
+    case step(PlanStep.Kind)
+    case item(String)
 }
 
 public struct Plan: Sendable, Equatable {
@@ -118,8 +178,18 @@ public struct Plan: Sendable, Equatable {
     /// The vault the moves go to (its UUID), when there is a usable one: the Run sheets open on its standard folders.
     public var vaultUUID: String?
 
-    /// The step whose button is the screen's one primary action: the first that is `next`.
-    public var primaryStepKind: PlanStep.Kind? { steps.first { $0.state == .next }?.kind }
+    /// The screen's one primary action: the first step that is next or partly available and has a button — the step's
+    /// own, or, for the move step, which has none, its first open item's.
+    public var primary: PlanPrimary? {
+        for step in steps where step.state == .next || step.state == .partly {
+            if step.action != nil { return .step(step.kind) }
+            if let item = step.items.first(where: { !$0.isDone && $0.action != nil }) { return .item(item.id) }
+        }
+        return nil
+    }
+
+    /// Whether something can be done now: a step is next, or partly available. The app opens on the Plan then.
+    public var hasSomethingToDo: Bool { steps.contains { $0.state == .next || $0.state == .partly } }
 
     public func step(_ kind: PlanStep.Kind) -> PlanStep? { steps.first { $0.kind == kind } }
 }
@@ -127,39 +197,63 @@ public struct Plan: Sendable, Equatable {
 public enum PlanBuilder {
     /// The plan for this Mac now. Pure: the same inputs give the same plan.
     public static func plan(
-        report: ScanReport, drives: [DriveAssessment], vaults: [VaultVolumeCheck], locations: XcodeLocations?, history: [JournalTimeline.Row],
+        report: ScanReport, drives: [DriveAssessment], vaults: [VaultVolumeCheck], locations: XcodeLocations?, parked: [ParkedRuntime],
         findings: [Finding]
     ) -> Plan {
         let usable = vaults.filter { $0.isUsable && $0.currentMountPoint != nil }
         // A good vault: usable, and not on a volume whose case-sensitivity or ignored ownership the drive's own fix is for
         // (PABLO's case: the plan's path goes through the recommended new volume first).
         let good = usable.first { v in !isFixable(v, drives) }
-        let chosen = chosenDrive(good: good, drives: drives)
+        let fixable = good == nil ? usable.first { v in isFixable(v, drives) } : nil
+        let chosen = chosenDrive(good: good, fixable: fixable, drives: drives)
         let candidate = chosen.flatMap(registrationCandidate)
 
-        // 1. Choose a drive.
+        // 1. Choose a drive. Shadow data at a vault's mount point is reported first (rule 6).
         var choose = step(.chooseDrive)
         if let good {
             choose.state = .done
             choose.subject = good.volume.volumeName
+        } else if let shadowed = vaults.first(where: { $0.state == .ambiguous }) {
+            choose.state = .blocked(.vaultShadowed(name: shadowed.volume.volumeName, bytes: shadowed.shadowBytes))
+            choose.action = .showHealth
         } else if let chosen {
             choose.state = .done
             choose.subject = chosen.displayName
+            if fixable != nil { choose.note = .vaultNeedsVolume(drive: chosen.displayName) }
         } else {
             choose.action = .showDrives
-            if let offline = vaults.first(where: { !$0.isUsable }) {
+            if let replaced = vaults.first(where: { $0.state == .foreign || $0.state == .sentinelMissing }) {
+                choose.state = .blocked(.vaultReplaced(replaced.volume.volumeName))
+            } else if let offline = vaults.first(where: { !$0.isUsable }) {
                 choose.state = .blocked(.vaultOffline(offline.volume.volumeName))
             } else {
                 choose.state = .blocked(drives.isEmpty ? .noExternalDrive : .noUsableDrive)
             }
         }
+        let chooseDone = choose.state == .done
 
         // 2. Prepare it: only when the chosen drive needs it, with its recommended option.
         var prepare = step(.prepareDrive)
         prepare.subject = chosen?.displayName
-        if good != nil || candidate != nil {
-            // A good vault, or a volume on the chosen drive that can be registered as it is: nothing to prepare (or it was).
-            prepare.state = good == nil && chosen?.recommendedOption != nil ? .done : .notNeeded
+        if !chooseDone {
+            prepare.state = .blocked(.needsEarlierStep)
+        } else if let good {
+            // The vault is suitable: done when its drive also has the unsuitable volume the fix was for, else not needed.
+            let drive = drives.first { $0.vault?.volume.volumeUUID == good.volume.volumeUUID }
+            if let drive, drive.recommendedOption != nil {
+                prepare.state = .done
+                prepare.note = .suitableVolume(drive: drive.displayName, volume: good.volume.volumeName)
+            } else {
+                prepare.state = .notNeeded
+            }
+        } else if let chosen, let candidate {
+            // A suitable volume is there: the fix is in place (or was never needed). Says what is there, not who made it.
+            if chosen.recommendedOption != nil {
+                prepare.state = .done
+                prepare.note = .suitableVolume(drive: chosen.displayName, volume: candidate.volumeName)
+            } else {
+                prepare.state = .notNeeded
+            }
         } else if let chosen {
             // Only the recommended option, which erases nothing (`DriveAssessment.isRecommended`): never an erase.
             if let option = chosen.recommendedOption {
@@ -180,30 +274,34 @@ public enum PlanBuilder {
         if let good {
             register.state = .done
             register.subject = good.volume.volumeName
-        } else if let chosen, let candidate, let uuid = candidate.volumeUUID {
+        } else if chooseDone, let chosen, let candidate, let uuid = candidate.volumeUUID {
             register.state = .next
             register.subject = candidate.volumeName
             register.action = .useDrive(diskID: chosen.disk.id, volumeUUID: uuid)
+        } else if prepare.state == .next {
+            register.state = .blocked(.addVolumeFirst)
         } else {
             register.state = .blocked(.needsEarlierStep)
         }
 
-        // 4. Move what can move.
-        let items = moveItems(report: report, vault: good, locations: locations, history: history)
+        // 4. Move what can move. No step-level button: each item has its own.
+        let items = moveItems(report: report, vault: good, locations: locations, parked: parked)
         var move = step(.moveItems)
         move.items = items.map { item in
             var i = item
             // Without a vault nothing can go to it yet; deleting needs none.
-            if good == nil && i.outcome != .deletedRecreated { i.action = nil }
+            if good == nil && i.outcome != .deletedRebuilt && i.outcome != .deletedLost { i.action = nil }
             return i
         }
         move.isExperimental = items.contains { $0.isExperimental && !$0.isDone }
         let open = items.filter { !$0.isDone }
-        move.bytes = open.reduce(0) { $0 + $1.bytes }
+        let headline = open.filter { !$0.losesUserData }
+        move.bytes = headline.reduce(0) { add($0, $1.bytes) }
+        let actionable = move.items.contains { !$0.isDone && $0.action != nil }
         if good == nil {
-            move.state = .blocked(.needsEarlierStep)
+            move.state = actionable ? .partly : .blocked(.needsEarlierStep)
         } else {
-            move.state = open.contains { $0.action != nil } ? .next : .done
+            move.state = actionable ? .next : .done
         }
 
         // 5. Check health: done when the last read found nothing that is a warning or worse.
@@ -213,13 +311,16 @@ public enum PlanBuilder {
         health.action = .showHealth
 
         let summary = PlanSummary(
-            upTo: open.reduce(0) { $0 + $1.bytes }, done: items.filter(\.isDone).reduce(0) { $0 + $1.doneBytes },
-            byOutcome: Dictionary(grouping: open, by: \.outcome).mapValues { $0.reduce(0) { $0 + $1.bytes } })
+            upTo: headline.reduce(0) { add($0, $1.bytes) }, done: items.filter(\.isDone).reduce(0) { add($0, $1.doneBytes) },
+            byOutcome: Dictionary(grouping: headline.filter { $0.bytes > 0 }, by: \.outcome).mapValues { $0.reduce(0) { add($0, $1.bytes) } },
+            lostIfDeleted: open.filter(\.losesUserData).reduce(0) { add($0, $1.bytes) })
         return Plan(steps: [choose, prepare, register, move, health], summary: summary, vaultUUID: good?.volume.volumeUUID)
     }
 
     private static func step(_ kind: PlanStep.Kind) -> PlanStep {
-        PlanStep(kind: kind, state: .notNeeded, subject: nil, bytes: nil, isExperimental: false, action: nil, items: [], option: nil, findingCount: 0)
+        PlanStep(
+            kind: kind, state: .notNeeded, subject: nil, note: nil, bytes: nil, isExperimental: false, action: nil, items: [], option: nil,
+            findingCount: 0)
     }
 
     // MARK: - The drive
@@ -231,10 +332,11 @@ public enum PlanBuilder {
         return drive.recommendedOption != nil && !isGoodVolume(volume)
     }
 
-    /// The drive the path goes through: the good vault's; else a drive holding a vault that needs its fix (PABLO);
-    /// else one that can be used; else one that needs preparation. `drives` is already ranked (`DriveEvaluation`).
-    static func chosenDrive(good: VaultVolumeCheck?, drives: [DriveAssessment]) -> DriveAssessment? {
+    /// The drive the path goes through: the good vault's; else the drive holding a vault that needs its fix (PABLO); else
+    /// one that can be used; else one that needs preparation. `drives` is already ranked (`DriveEvaluation`).
+    static func chosenDrive(good: VaultVolumeCheck?, fixable: VaultVolumeCheck?, drives: [DriveAssessment]) -> DriveAssessment? {
         if let good { return drives.first { $0.vault?.volume.volumeUUID == good.volume.volumeUUID } }
+        if let fixable, let drive = drives.first(where: { $0.vault?.volume.volumeUUID == fixable.volume.volumeUUID }) { return drive }
         return drives.first { $0.verdict == .ready } ?? drives.first { $0.verdict == .canBeUsed } ?? drives.first { $0.verdict == .needsPreparation }
     }
 
@@ -255,9 +357,11 @@ public enum PlanBuilder {
     // MARK: - The items
 
     /// The move step's items, from the scan's items counted once by their primary bucket — the rule the Overview, the
-    /// planner and the Storage chart share — plus Xcode's location for new Archives and the runtimes the journal says
-    /// were parked. Keep-local items are not in the plan; Archives are never deleted (rule 5).
-    static func moveItems(report: ScanReport, vault: VaultVolumeCheck?, locations: XcodeLocations?, history: [JournalTimeline.Row]) -> [PlanItem] {
+    /// planner and the Storage chart share — split where one button does not do the whole job: DerivedData's location
+    /// moves new builds only, so the DerivedData already here is its own item, deleted (F2/I1); Archives have a new-data
+    /// item and an existing-data item. Plus the runtimes the whole journal shows parked (F3). Keep-local items are not in
+    /// the plan; Archives are never deleted (rule 5).
+    static func moveItems(report: ScanReport, vault: VaultVolumeCheck?, locations: XcodeLocations?, parked: [ParkedRuntime]) -> [PlanItem] {
         let vaultMount = vault?.currentMountPoint
         var internalBytes: [String: UInt64] = [:]
         var vaultBytes: [String: UInt64] = [:]
@@ -273,64 +377,86 @@ public enum PlanBuilder {
                 vaultBytes[item.categoryID, default: 0] = add(vaultBytes[item.categoryID, default: 0], item.allocatedBytes)
             }
         }
-        var items: [PlanItem] = []
+        func option(_ id: String, _ bucket: SavingsBucket) -> SavingsOption? {
+            StorageCatalog.category(id)?.savingsOptionDetails.first { $0.bucket == bucket }
+        }
+        var newData: [PlanItem] = []
+        var rest: [PlanItem] = []
+
+        // DerivedData: new builds go to the drive (0 bytes, done when Xcode's location is on the vault, the tests caveat
+        // always shown), and the DerivedData already here is deleted and rebuilt on demand, with its bytes.
+        let derivedLocal = internalBytes["derivedData"] ?? 0
+        let newBuildsDone = isOnVault(locations?.derivedData, vaultMount)
+        if SavingsPlanner.command(categoryID: "derivedData", bucket: .runFromExternal) != nil {
+            newData.append(
+                PlanItem(
+                    id: "runFromExternal:derivedData", outcome: .runsFromDrive, categoryID: "derivedData", name: .newDerivedData, bytes: 0,
+                    doneBytes: 0, isDone: newBuildsDone, isExperimental: option("derivedData", .runFromExternal)?.isExperimental ?? false,
+                    losesUserData: false, warnings: ["derivedDataTests"],
+                    action: newBuildsDone ? nil : .run(categoryID: "derivedData", bucket: .runFromExternal)))
+        }
+        if derivedLocal > 0 || newBuildsDone {
+            let deleteOption = option("derivedData", .deleteAndRegenerate)
+            rest.append(
+                PlanItem(
+                    id: "deleteAndRegenerate:derivedData", outcome: .deletedRebuilt, categoryID: "derivedData", name: .oldDerivedData,
+                    bytes: derivedLocal, doneBytes: 0, isDone: derivedLocal == 0, isExperimental: deleteOption?.isExperimental ?? false,
+                    losesUserData: false, warnings: [], action: derivedLocal == 0 ? nil : .showBucket(.deleteAndRegenerate)))
+        }
+
+        // New Archives: Xcode's Archives location, new data only (0 bytes now). Done when it is on the vault.
+        if SavingsPlanner.command(categoryID: "archives", bucket: .runFromExternal) != nil {
+            let done = isOnVault(locations?.archives, vaultMount)
+            newData.append(
+                PlanItem(
+                    id: "runFromExternal:archives", outcome: .runsFromDrive, categoryID: "archives", name: .newArchives, bytes: 0, doneBytes: 0,
+                    isDone: done, isExperimental: option("archives", .runFromExternal)?.isExperimental ?? false, losesUserData: false, warnings: [],
+                    action: done ? nil : .run(categoryID: "archives", bucket: .runFromExternal)))
+        }
+
         let order: [SavingsBucket] = [.runFromExternal, .parkExternally, .deleteAndRegenerate]
-        let ids = bucketOf.keys.sorted { a, b in
+        let ids = bucketOf.keys.filter { $0 != "derivedData" }.sorted { a, b in
             let (ba, bb) = (order.firstIndex(of: bucketOf[a]!) ?? 9, order.firstIndex(of: bucketOf[b]!) ?? 9)
             if ba != bb { return ba < bb }
             let (sa, sb) = (internalBytes[a] ?? 0, internalBytes[b] ?? 0)
             return sa != sb ? sa > sb : a < b
         }
+        var moved: [PlanItem] = []
+        var deleted: [PlanItem] = []
         for id in ids {
-            guard let bucket = bucketOf[id], let category = StorageCatalog.category(id) else { continue }
+            guard let bucket = bucketOf[id], StorageCatalog.category(id) != nil else { continue }
             let bytes = internalBytes[id] ?? 0
             let onVault = vaultBytes[id] ?? 0
-            let option = category.savingsOptionDetails.first { $0.bucket == bucket }
+            let opt = option(id, bucket)
+            let outcome = outcome(categoryID: id, bucket: bucket, losesUserData: opt?.losesUserData ?? false)
             var item = PlanItem(
-                id: bucket.rawValue + ":" + id, outcome: outcome(categoryID: id, bucket: bucket), categoryID: id, name: category.name, bytes: bytes,
-                doneBytes: onVault, isDone: false, isExperimental: option?.isExperimental ?? false, warnings: [], action: nil)
-            switch item.outcome {
-            case .runsFromDrive:
-                // DerivedData: done once Xcode builds on the vault. Its tests caveat stays visible, done or not.
-                item.isDone = isOnVault(locations?.derivedData, vaultMount)
-                if id == "derivedData" { item.warnings = ["derivedDataTests"] }
-            case .movedToDrive, .leavesAndComesBack:
-                item.isDone = bytes == 0 && onVault > 0
-            case .deletedRecreated:
-                item.isDone = false
+                id: bucket.rawValue + ":" + id, outcome: outcome, categoryID: id, name: id == "archives" ? .existingArchives : .category(id),
+                bytes: bytes, doneBytes: onVault, isDone: false, isExperimental: opt?.isExperimental ?? false,
+                losesUserData: opt?.losesUserData ?? false, warnings: [], action: nil)
+            switch outcome {
+            case .runsFromDrive: item.isDone = false
+            case .movedToDrive, .parkedOnDrive: item.isDone = bytes == 0 && onVault > 0
+            case .deletedRebuilt, .deletedLost: item.isDone = false
             }
             if bytes == 0 && !item.isDone { continue }
             item.action = item.isDone ? nil : action(categoryID: id, bucket: bucket)
-            items.append(item)
+            if outcome == .deletedRebuilt || outcome == .deletedLost { deleted.append(item) } else { moved.append(item) }
         }
-        // New Archives: Xcode's Archives location, new data only (0 bytes now). Done when it is on the vault.
-        if SavingsPlanner.command(categoryID: "archives", bucket: .runFromExternal) != nil {
-            let done = isOnVault(locations?.archives, vaultMount)
-            let option = StorageCatalog.category("archives")?.savingsOptionDetails.first { $0.bucket == .runFromExternal }
-            items.insert(
-                PlanItem(
-                    id: "runFromExternal:archives", outcome: .runsFromDrive, categoryID: "archives",
-                    name: StorageCatalog.category("archives")?.name ?? "Archives",
-                    bytes: 0, doneBytes: 0, isDone: done, isExperimental: option?.isExperimental ?? false, warnings: [],
-                    action: done ? nil : .run(categoryID: "archives", bucket: .runFromExternal)),
-                at: items.firstIndex { $0.outcome != .runsFromDrive } ?? items.endIndex)
+        // Runtimes the whole journal shows parked now: done, each once, with their recorded installer size.
+        let parkedItems = parked.map { r in
+            PlanItem(
+                id: "parked:" + r.operationID, outcome: .parkedOnDrive, categoryID: "simulatorRuntimeAssets", name: .parkedRuntime(r.name),
+                bytes: 0, doneBytes: r.bytes ?? 0, isDone: true, isExperimental: true, losesUserData: false, warnings: [], action: nil)
         }
-        // Runtimes the journal records as parked (offloaded, completed): done, with their recorded size.
-        for row in history where row.kind == .runtimeOffload && row.outcome == .completed {
-            items.append(
-                PlanItem(
-                    id: "parked:" + row.id, outcome: .leavesAndComesBack, categoryID: "simulatorRuntimeAssets", name: row.summary, bytes: 0,
-                    doneBytes: row.bytes ?? 0, isDone: true, isExperimental: true, warnings: [], action: nil))
-        }
-        return items
+        return newData + moved + parkedItems + rest + deleted
     }
 
-    /// The outcome of an item counted in `bucket`: the four kinds the user asked to tell apart.
-    public static func outcome(categoryID: String, bucket: SavingsBucket) -> PlanOutcome {
+    /// The outcome of an item counted in `bucket`: the kinds the user asked to tell apart.
+    public static func outcome(categoryID: String, bucket: SavingsBucket, losesUserData: Bool = false) -> PlanOutcome {
         switch bucket {
         case .runFromExternal: .runsFromDrive
-        case .parkExternally: categoryID == "archives" ? .movedToDrive : .leavesAndComesBack
-        case .deleteAndRegenerate, .keepLocal: .deletedRecreated
+        case .parkExternally: categoryID == "archives" ? .movedToDrive : .parkedOnDrive
+        case .deleteAndRegenerate, .keepLocal: losesUserData ? .deletedLost : .deletedRebuilt
         }
     }
 
@@ -351,7 +477,7 @@ public enum PlanBuilder {
         return path == mountPoint || path.hasPrefix(mountPoint.hasSuffix("/") ? mountPoint : mountPoint + "/")
     }
 
-    private static func add(_ a: UInt64, _ b: UInt64) -> UInt64 {
+    static func add(_ a: UInt64, _ b: UInt64) -> UInt64 {
         let (v, o) = a.addingReportingOverflow(b)
         return o ? .max : v
     }
