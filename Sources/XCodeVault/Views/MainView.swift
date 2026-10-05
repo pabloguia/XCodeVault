@@ -6,10 +6,11 @@ import XCodeVaultCore
 /// The sidebar (spec 2026-10-03 §6.1): **Save space** — the Overview and one view per way of reclaiming — then
 /// **Details**.
 enum SidebarSection: String, CaseIterable, Identifiable {
-    case overview, delete, park, runExternally
+    case plan, overview, delete, park, runExternally
     case storage, simulators, drives, health, history, access
 
-    static let saveSpace: [SidebarSection] = [.overview, .delete, .park, .runExternally]
+    /// The guided Plan first (R7-C): the path through the other views, in order.
+    static let saveSpace: [SidebarSection] = [.plan, .overview, .delete, .park, .runExternally]
     static let details: [SidebarSection] = [.storage, .simulators, .drives, .health, .history, .access]
     static var saveSpaceTitle: String { L10n.tr("app.sidebar.saveSpace") }
     static var detailsTitle: String { L10n.tr("app.sidebar.details") }
@@ -38,6 +39,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .plan: L10n.tr("app.section.plan")
         case .overview: L10n.tr("app.section.overview")
         case .delete: L10n.tr("app.section.delete")
         case .park: L10n.tr("app.section.park")
@@ -58,6 +60,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         if self == .delete { return "trash" }
         if let bucket { return bucket.symbolName }
         return switch self {
+        case .plan: "list.number"
         case .overview: "square.grid.2x2"
         case .storage: "chart.pie"
         case .simulators: "iphone"
@@ -167,6 +170,8 @@ struct MainView: View {
     @ViewBuilder
     func detail(_ r: ScanReport) -> some View {
         switch model.section {
+        case .plan:
+            if let plan = model.plan { GuidedPlanView(plan: plan) { model.performPlanAction($0) } }
         case .overview:
             OverviewView(
                 report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) },

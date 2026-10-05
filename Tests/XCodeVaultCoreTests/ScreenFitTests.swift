@@ -172,6 +172,17 @@ final class ScreenFitTests: XCTestCase {
 
     /// A+B review M12: the box both charts sit in keeps its height with long labels — a Storage-sized box with long option
     /// names, a Simulators-sized box with long device names — and their rows scroll inside it rather than growing it.
+    /// R7-C: the Plan in each of its reviewed states (no drive, PABLO's drive, everything done), in en and ja.
+    func testThePlanFitsInEachState() throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            for (name, plan) in try R7CPlans.all() {
+                let height = minimumHeight(GuidedPlanView(plan: plan))
+                XCTAssertLessThanOrEqual(height, Self.ceiling, "plan \(name), \(language): minimum height \(height)")
+            }
+        }
+    }
+
     func testTheChartBoxKeepsItsHeightWithLongLabels() {
         let long = [
             "Dauerhaft auf einem externen Laufwerk ausführen, vollständig ausgeschrieben",

@@ -46,12 +46,14 @@ extension AppModel {
 
     // MARK: - Opening and reviewing
 
-    /// **Run…** on a row: opens the sheet on its review step. Refused while an operation runs (one at a time).
-    func openRun(_ row: SavingsPlanRow) {
+    /// **Run…** on a row: opens the sheet on its review step. Refused while an operation runs (one at a time). `vault`, from
+    /// the Plan (R7-C), starts the destination at that vault when it is usable; otherwise at the only usable vault.
+    func openRun(_ row: SavingsPlanRow, vault: String? = nil) {
         guard let kind = OperationKind.forRow(row), !isOperationRunning else { return }
         var inputs = OperationInputs()
+        let planVault = vault.flatMap { uuid in usableVaults.contains { $0.volume.volumeUUID == uuid } ? uuid : nil }
         // R6: the destination starts at the only usable vault, and a folder at that vault's standard folder (`VaultLayout`).
-        if kind.usesDestination, let uuid = defaultVaultUUID {
+        if kind.usesDestination, let uuid = planVault ?? defaultVaultUUID {
             inputs.vaultUUID = uuid
             if kind.needsFolder { Self.applyStandardFolder(kind, usableVaults.first { $0.volume.volumeUUID == uuid }, to: &inputs) }
         }

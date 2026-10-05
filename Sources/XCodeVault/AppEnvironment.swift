@@ -34,6 +34,9 @@ struct AppEnvironment: Sendable {
     /// model. No-ops unless set: a test never opens a window.
     var showAccessGuide: @MainActor @Sendable (@escaping @MainActor () -> Void) -> Void = { _ in }
     var closeAccessGuide: @MainActor @Sendable () -> Void = {}
+    /// Xcode's DerivedData and Archives locations, read with each scan for the Plan (R7-C). Nil unless set: a test never
+    /// reads this Mac's Xcode defaults.
+    var xcodeLocations: @Sendable () -> XcodeLocations? = { nil }
 
     static let live = AppEnvironment(
         survey: nil, fullDiskAccess: { FullDiskAccessProbe().state() }, helper: LiveHelper(),
@@ -56,5 +59,5 @@ struct AppEnvironment: Sendable {
             open.waitUntilExit()
         },
         showAccessGuide: { done in AccessGuidePanel.shared.show(done: done) },
-        closeAccessGuide: { AccessGuidePanel.shared.close() })
+        closeAccessGuide: { AccessGuidePanel.shared.close() }, xcodeLocations: { XcodeLocations.read() })
 }

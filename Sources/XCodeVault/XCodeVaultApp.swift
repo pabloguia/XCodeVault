@@ -135,6 +135,9 @@ final class AppModel {
     var findings: [Finding] = []
     var vaultChecks: [VaultVolumeCheck] = []
     var cleanPlan: CleanPlan?
+    /// Xcode's DerivedData and Archives locations as last read with the scan (R7-C): the Plan shows a "runs from the drive"
+    /// item done when Xcode's location is on the vault. Nil when they could not be read.
+    var xcodeLocations: XcodeLocations?
     /// Every scan starts through this: never two at once, and one more after the running one when a scan was
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
@@ -241,11 +244,16 @@ final class AppModel {
         guard !isOperationRunning else { return }
         guard scanGate.requestScan() else { return }
         let survey = environment.survey  // nil in the app: the real scan below runs
+        let readLocations = environment.xcodeLocations
         repeat {
             refreshPermissions()
-            let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
-                () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
-                if let survey { return survey() }
+            let (report, findings, checks, plan, journal, locations) = await Task.detached(priority: .userInitiated) {
+                () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry], XcodeLocations?) in
+                let locations = readLocations()
+                if let survey {
+                    let s = survey()
+                    return (s.0, s.1, s.2, s.3, s.4, locations)
+                }
                 // No capability detection: nothing in the app reads it, and it would run the selected Xcode's
                 // `xcodebuild` and `simctl` inside the app's grant for no use (ADR-0009).
                 let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
@@ -254,9 +262,10 @@ final class AppModel {
                 let checks = (try? VaultVerifier().checkAll()) ?? []
                 let plan = CleanPlanner().plan(report: report)
                 let journal = (try? Journal().entries()) ?? []
-                return (report, findings, checks, plan, journal)
+                return (report, findings, checks, plan, journal, locations)
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
+            self.xcodeLocations = locations
             // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
             // records themselves are not kept: the interrupted banner (R3) takes what it needs from them here. An operation
             // the Run sheet is running is in progress, not interrupted.
