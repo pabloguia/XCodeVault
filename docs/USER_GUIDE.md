@@ -45,13 +45,38 @@ this of XCodeVault has not been observed or measured.
 
 The app shows the same numbers and runs the same checks as the command line, in the language macOS uses for it
 (English, Brazilian Portuguese, Spanish, Japanese or Simplified Chinese; every translation except English is still
-awaiting native review). Rescan with ⌘R (View menu); ⌘1–⌘4 open the Save Space views. The sidebar has two groups: **Save
+awaiting native review). Rescan with ⌘R (View menu); ⌘1–⌘5 open the Save Space views. The sidebar has two groups: **Save
 Space** — what you can reclaim, and how — and **Details** — everything the scan, the doctor and the journal recorded. The
 toolbar's **Back** (⌘[) and **Forward** (⌘]) chevrons move through the screens you visited, like a browser's. The window's
 subtitle shows the Mac and its internal disk, or "Scanning…" while a scan runs. When an action finishes, its result shows
 in a line above the screen until the next action or its ×; an error says what failed and why.
 
 ### Save space
+
+**Plan** (first in the sidebar, ⌘1) is the best path for this Mac as numbered steps: choose a drive, prepare it, use it
+as your vault, move what can move, check health. The header says how much can be freed — "Up to 64 GB can be freed on
+this Mac; 18 GB is already done." — and splits it by what happens to each item. Each item is counted once, from the
+same scan as the Overview. Every step shows its state, with a word as well as a symbol: **Done**, **Next**, **Blocked**
+(with the reason, such as no drive connected) or **Not needed**. The step that is next has the one prominent button.
+
+The plan is worked out again every time from what the app reads — the scan, the drives, the vault, Xcode's locations,
+History and Health — and nothing about it is saved (ADR-0013). A step is done because the Mac shows it done; plug a
+drive in and the steps change. The Plan runs nothing: every button opens the sheet or screen that already does that
+job, with its own review and confirmation — **Add a Case-insensitive Volume…** or Drives for preparing, **Use This
+Drive…**, **Run…** on the vault's standard folder, **Review** for what is deleted, Health. It never proposes erasing a
+drive: when what a drive needs would erase data, the step sends you to Drives to choose.
+
+The move step lists each item with its size and one of four outcomes:
+
+- **Runs from the drive** — new data is written to the vault (DerivedData, new Archives). The drive must be connected to
+  build. On macOS 26, unit tests can fail to load when DerivedData is on an external drive; the item always says so,
+  and the Run sheet asks you to confirm it.
+- **Moved to the drive** — existing Archives are copied to the vault and verified; the original is removed only in the
+  second step, when you confirm it.
+- **Leaves this Mac, comes back when needed** — a simulator runtime is parked on the vault and restored when needed.
+- **Deleted, recreated on demand** — caches and other data Xcode rebuilds. Never Archives.
+
+Steps and items marked **Experimental** are; the mark stays until the strategy is verified.
 
 **Overview** draws the internal disk as one bar: other data, developer data split by the way each item can be
 reclaimed, and free space. Under it are three cards, one per way of reclaiming space, each with whether the space

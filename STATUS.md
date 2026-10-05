@@ -103,6 +103,13 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   `.superpowers/sdd/r7/b-report.md`. **Manual check, open:** the gallery and every screen in a real window, light, dark
   and Increase Contrast (the gallery cannot render increased contrast off-screen); a disabled prominent button in dark
   mode.
+- **R7-C — the guided Plan** (branch `feat/r7-polish-plan`, on R7-B; brief `.superpowers/sdd/r7/brief-c.md`, ADR-0013).
+  The user: a step-by-step to the best solution, with the space recovered and clear about what runs from the drive.
+  `PlanBuilder.plan` (Core, pure, tested from fixtures) and the **Plan** screen, first in Save Space (⌘1): five steps,
+  four item outcomes, a header counted once. Derived every time, never stored; every button opens an existing sheet or
+  screen (`AppModel.planTarget`, tested case by case); never an erase. Snapshots `r7c-plan-{en,ja}-{nodrive,pablo,done}`.
+  Report: `.superpowers/sdd/r7/c-report.md`. **Manual check, open:** the Plan in a real window with a drive plugged in
+  and out; a migration-safety review of the step→sheet mapping.
 
 ## Blocked / pending — manual (ask the user)
 
