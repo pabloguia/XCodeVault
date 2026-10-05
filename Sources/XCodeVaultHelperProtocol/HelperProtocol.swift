@@ -231,5 +231,5 @@ public enum HelperIdentity {
         teamID.count == 10 && teamID.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
     }
 
-    public static let version = "0.1.0-dev"
+    public static let version = "0.2.0-dev"
 }

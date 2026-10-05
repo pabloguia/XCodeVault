@@ -69,4 +69,14 @@ final class HelperContractTests: XCTestCase {
             HelperIdentity.version, XCodeVaultVersion.current,
             "the helper reports a different version from the product it ships inside; the version() verb is the skew check and it must not lie")
     }
+
+    /// R8 fix round 1 (L5): the XPC contract changed — a fourth state-changing verb, `enableOwnership`, and
+    /// `HelperResult.code` — so the version moved with it. There is one version for the product and the helper (the
+    /// test above), so the product moved too: `0.2.0-dev`. The client's `enableOwnership` refuses a helper that answers
+    /// another version before it sends the credential, so a daemon left over from a 0.1 build is never handed one.
+    /// Bump this again with the next change to `XCodeVaultHelperXPC` or `HelperResult`.
+    func testTheContractVersionMovedWithEnableOwnership() {
+        XCTAssertEqual(HelperIdentity.version, "0.2.0-dev")
+        XCTAssertTrue(HelperResultCode.allCases.contains(.enabled))
+    }
 }
