@@ -194,7 +194,9 @@ words beside a symbol:
 | Needs preparation | Nothing on it qualifies, and an option can fix that | The options below |
 | Can't be used | An internal disk, the boot disk, a disk image, a Time Machine disk, read-only media — or nothing can fix it | Nothing; it says why |
 
-**Preparation options**, least destructive first, every one marked *Experimental*:
+**Preparation options**, least destructive first, every one marked *Experimental*. Only **Add a Case-insensitive
+Volume…** has been seen to work on a physical USB disk (H17, 2026-10-04); the partition and erase options have been
+verified on disk images only:
 
 Each option is a button with a short title; the line under the buttons says which one is recommended and what the Erase
 options delete.
@@ -229,6 +231,17 @@ registered with `vault init` — stays *Ready*, and its row also offers **Add a 
 option: a new case-insensitive `XCodeVault` volume in the same container. Erasing it is never offered ("Erasing
 or repartitioning is blocked: this disk holds a vault"). **Prepare…** in the Run sheet opens that recommended option
 too, rather than registering a case-sensitive volume.
+
+**A new volume ignores ownership.** macOS creates an external volume with "Ignore ownership on this volume" on, so the
+`XCodeVault` volume you just added does not qualify yet. The drive's row then recommends **Turn On Ownership** for it —
+its **Show in Finder** is the row's main button, with **Copy Command** beside it — and no longer recommends another new
+volume (that would add a second volume with the same problem). In the Plan this is step 2, "Turn on ownership for
+XCodeVault". After you change it in Finder, press ⌘R (or the toolbar's refresh): the drives are read again, step 2 is
+done, and step 3 offers **Use This Drive…** for `XCodeVault` — registered as a second vault. Your existing vault stays
+registered and nothing on it moves.
+
+**Copy Command** on a Run Externally row copies two lines when you have a vault: the template, commented with `# `, then
+the command filled with the vault's folder. Without a vault it copies the template.
 
 **Telling buttons from labels** (R7-B, `docs/design/DESIGN_SYSTEM.md`). Everything you can click has a border: secondary
 actions are grey bordered buttons, and each screen, sheet or drive row has at most one filled blue button, its main

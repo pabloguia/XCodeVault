@@ -115,6 +115,13 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
     F3/I2 parked runtimes from the whole journal (`ParkedRuntimes`); F4 the unusable vault's reason; F5/F6 no forged or
     erasing option from the Plan; F7 stale-vault tests; I3 five outcomes and a legend; localized item names; the app
     opens on the Plan while something can be done. Re-review by migration-safety-reviewer owed.
+- **R7-D — the user's real-window check of R7** (brief `.superpowers/sdd/r7/brief-d.md`, report `d-report.md`). Add
+  Volume worked on the user's physical USB disk (H17: `apfs addVolume` verified physical; the others disk-image only),
+  but the new volume has Owners: Disabled and the app kept recommending another volume. Now: a case-insensitive volume
+  whose only blocker is ownership makes **Turn On Ownership** the recommended fix (`DriveAssessment.ownershipFixVolume`);
+  Plan step 2 shows it in Finder / copies the command; step 3 registers that volume as a second vault; ⌘R re-reads the
+  drives (tested); Copy Command copies the commented template and the filled line. **Manual check, open:** the same
+  disk after turning ownership on — step 3 next, Use This Drive for XCodeVault.
 
 ## Blocked / pending — manual (ask the user)
 

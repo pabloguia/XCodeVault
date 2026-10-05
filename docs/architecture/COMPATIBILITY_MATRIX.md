@@ -1188,3 +1188,18 @@ substitution may not be waved through. Issue #29 stays open.
   the command to copy instead.
 - Notes: the images were attached `-nomount`; the product lets `diskutil` mount what it creates, which E-diskprep's
   `eraseVolume` and `eraseDisk` did without sudo too.
+
+### H17 physical — `apfs addVolume` on a physical USB disk, through the app — macOS 26.7.1 · Intel
+
+- Date tested: 2026-10-04, by the user, in the app's real window (R7-D).
+- Hypothesis reference: H17.
+- Test performed: **Add a Case-insensitive Volume…** on the user's external USB disk (XS2000, APFS container `disk3`,
+  a registered case-sensitive vault on it), as the logged-in user, no sudo.
+- Result: **works without sudo.** The journal shows `diskutil apfs addVolume disk3 APFS XCodeVault` planned, started and
+  completed; `/Volumes/XCodeVault` (`disk3s2`, APFS, case-insensitive) mounted with **Owners: Disabled**.
+- Evidence: the user's report and journal (`.superpowers/sdd/r7/brief-d.md`, screenshots 23–24); no scripted evidence
+  file.
+- Verdict: **verified, one combination, physical USB, `addVolume` only.** `addPartition`, `eraseVolume` and `eraseDisk`
+  remain **disk-image only**; every preparation stays Experimental (rule 10).
+- Notes: a new external volume ignores ownership; the app now recommends turning ownership on (Finder Get Info, or the
+  copyable `sudo diskutil enableOwnership`) instead of another volume.
