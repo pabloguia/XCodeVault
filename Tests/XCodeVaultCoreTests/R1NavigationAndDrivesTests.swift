@@ -60,11 +60,14 @@ final class AppModelBackTests: XCTestCase {
         let model = makeModel(SwitchableHelper(.notInstalled), journal: t, survey: bucketSampleSurvey())
         await model.refresh()
         XCTAssertFalse(model.canGoBack, "nothing to go back to at launch")
+        // R7-C: the app opens on the Plan while something can be done (`AppModel.launchSection`), else the Overview.
+        let launch = model.section
+        XCTAssertEqual(launch, AppModel.launchSection(model.plan))
         model.review(.deleteAndRegenerate)
         XCTAssertEqual(model.section, .delete)
         XCTAssertTrue(model.canGoBack)
         model.goBack()
-        XCTAssertEqual(model.section, .overview)
+        XCTAssertEqual(model.section, launch)
         XCTAssertFalse(model.canGoBack, "going back records nothing")
         XCTAssertTrue(model.canGoForward)
         model.goForward()
