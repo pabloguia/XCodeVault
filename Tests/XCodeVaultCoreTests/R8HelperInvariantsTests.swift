@@ -123,6 +123,14 @@ final class R8HelperInvariantsTests: XCTestCase {
         Mutation(
             name: "the pin rebound and written to", file: service, old: "        guard reader.isUnchanged(pin) else",
             new: "        var pin = pin; pin.disk = DiskIdentifier(\"disk0s1\")!\n        guard reader.isUnchanged(pin) else"),
+        // Fix round 4 (H18 measured): the right's own definition.
+        Mutation(name: "a credential that lives 31 s", file: authz, old: "            \"timeout\": 10,", new: "            \"timeout\": 31,"),
+        Mutation(name: "a shared credential", file: authz, old: "            \"shared\": false,", new: "            \"shared\": true,"),
+        Mutation(name: "a credential root satisfies", file: authz, old: "            \"allow-root\": false,", new: "            \"allow-root\": true,"),
+        Mutation(
+            name: "the stock admin rule again", file: authz, old: "OwnershipRightRule.definition as CFDictionary",
+            new: "\"authenticate-admin\" as CFString"),
+        Mutation(name: "a long read-back timeout", file: authz, old: "    static let timeoutSeconds = 10", new: "    static let timeoutSeconds = 300"),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),
@@ -189,7 +197,7 @@ final class R8HelperInvariantsTests: XCTestCase {
             let m = Self.mutations[i]
             if let why = Self.outcome(m) { lock.withLock { misses.append("\(m.name): \(why)") } }
         }
-        XCTAssertGreaterThanOrEqual(Self.mutations.count, 43)
+        XCTAssertGreaterThanOrEqual(Self.mutations.count, 48)
         XCTAssertEqual(misses, [], misses.joined(separator: "\n\n"))
     }
 }

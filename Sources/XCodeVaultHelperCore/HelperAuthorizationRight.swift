@@ -63,8 +63,13 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
         guard created == errAuthorizationSuccess, let writer else { return .failed(created) }
         defer { AuthorizationFree(writer, []) }
         let prompt = "XCodeVault wants to turn on ownership on an external volume." as CFString
-        let set = AuthorizationRightSet(writer, rightName, kAuthorizationRuleAuthenticateAsAdmin as CFString, prompt, nil, nil)
+        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)
         guard set == errAuthorizationSuccess else { return .failed(set) }
+        // Read back: a definition the database stores differently from what was written would be rewritten on every
+        // call and refuse every call. Say so once, as a failure, rather than loop.
+        var written: CFDictionary?
+        guard AuthorizationRightGet(rightName, &written) == errAuthorizationSuccess, let back = written as? [String: Any], Self.isOurDefinition(back)
+        else { return .failed(errAuthorizationInternal) }
         return existed ? .redefined : .defined
     }
 
@@ -97,28 +102,65 @@ struct SecurityRightAuthority: OwnershipRightAuthority {
         return form
     }
 
-    /// Whether a definition read back from the database is the one this helper writes: a rule-class right whose rule is
-    /// `authenticate-admin`, nothing that could widen it, and **written by this helper** — the database records the
-    /// writer's code identifier, and anything but `com.xcodevault.helper` is someone else's definition, rewritten (fix
-    /// round 1, L4). The metadata keys the database adds itself are allowed; any other key — `k`, `allow-root`, `group`,
-    /// a `mechanisms` list — makes it not ours, and it is rewritten.
+    /// Whether a definition read back from the database is the one this helper writes (R8 fix round 4): exactly
+    /// `OwnershipRightRule`'s security fields — a user-class right for the admin group, a 10-second credential that is
+    /// not shared and not given to root — **written by this helper** (the database records the writer's code
+    /// identifier; anything else is someone else's definition, L4). The keys the database adds itself are allowed; a
+    /// key it may add with a default is allowed only at its safe value; any other key, or any other value, makes it not
+    /// ours, and it is rewritten. The old definition, which pointed at the shared admin rule (`class` = rule), is not ours.
     static func isOurDefinition(_ d: [String: Any]) -> Bool {
-        let metadata: Set<String> = ["class", "rule", "version", "created", "modified", "comment", "default-prompt", "identifier", "requirement"]
-        guard Set(d.keys).isSubset(of: metadata), d["class"] as? String == "rule" else { return false }
+        let metadata: Set<String> = ["version", "created", "modified", "comment", "default-prompt", "identifier", "requirement"]
+        let fields = Set(OwnershipRightRule.definition.keys)
+        let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]
+        guard Set(d.keys).isSubset(of: metadata.union(fields).union(safeDefaults.keys)) else { return false }
         guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }
-        let admin = kAuthorizationRuleAuthenticateAsAdmin
-        if let rule = d["rule"] as? String { return rule == admin }
-        if let rules = d["rule"] as? [String] { return rules == [admin] }
-        return false
+        guard d["class"] as? String == OwnershipRightRule.ruleClass, d["group"] as? String == OwnershipRightRule.group,
+            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false
+        else { return false }
+        for (key, safe) in safeDefaults where d[key] != nil {
+            guard d[key] as? Bool == safe else { return false }
+        }
+        return true
+    }
+}
+
+/// The right's own definition (R8 fix round 4, ADR-0014). Measured in a real window on 2026-10-05: with the stock
+/// admin rule — `timeout` 0 — the credential the client obtained could not be reused, so the helper's
+/// re-check without a dialog failed with `errAuthorizationInteractionNotAllowed` (-60007) every time. This rule keeps the
+/// credential valid for `timeoutSeconds` — long enough for the helper's immediate re-check — and never shares it: it lives
+/// in the client's one reference, which the client destroys afterwards and the helper frees with `.destroyRights`, so the
+/// next click asks for the password again. `allow-root` false: the helper's being root never satisfies the rule.
+enum OwnershipRightRule {
+    static let ruleClass = "user"
+    static let group = "admin"
+    static let timeoutSeconds = 10
+    /// The dictionary `AuthorizationRightSet` writes. A pure value; `scripts/helper-invariants.sh` pins its lines.
+    static var definition: [String: Any] {
+        [
+            "class": "user",
+            "group": "admin",
+            "timeout": 10,
+            "shared": false,
+            "allow-root": false,
+            "version": 1,
+            "comment": "XCodeVault: turn on ownership for one external volume (ADR-0014). An administrator password on every use.",
+        ]
     }
 }
 
 /// The daemon's startup step: put the right's definition in place before the listener accepts anything, so the client's
 /// first request is evaluated against our rule rather than the database's default. Not fatal when it fails: the verb
 /// tries again, and refuses while it cannot.
+///
+/// It is also the upgrade path (R8 fix round 4): a database still holding the earlier definition is rewritten here, by
+/// the new daemon as it starts, so the user's first click after the update is not refused for it.
 public enum HelperStartup {
-    public static func defineAuthorizationRights() {
-        let outcome = SecurityRightAuthority().ensureDefinition()
+    public static func defineAuthorizationRights() { _ = defineAuthorizationRights(authority: SecurityRightAuthority()) }
+
+    /// The seam: a test passes a fake authority and reads the outcome.
+    static func defineAuthorizationRights(authority: any OwnershipRightAuthority) -> RightDefinition {
+        let outcome = authority.ensureDefinition()
         HelperAudit.emitStartup(rightDefinition: outcome)
+        return outcome
     }
 }

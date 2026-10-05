@@ -293,22 +293,75 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertEqual(back, Data((0..<32).map { UInt8($0) }), "the bytes are copied as given")
     }
 
-    func testOnlyTheAdminRuleCountsAsOurDefinition() {
-        let ours = "com.xcodevault.helper"
-        XCTAssertTrue(
-            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "version": 1, "created": 1.0, "identifier": ours]))
-        XCTAssertTrue(
-            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": ["authenticate-admin"], "default-prompt": ["": "x"], "identifier": ours]))
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin"]), "no writer recorded (L4)")
-        XCTAssertFalse(
-            SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "identifier": "com.example.squatter"]),
-            "the right definition, written by someone else (L4)")
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "allow"]), "a squatter's allow")
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "allow"]))
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": ["authenticate-admin", "allow"], "k": 1]))
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "rule", "rule": "authenticate-admin", "allow-root": true]), "anything that widens it")
-        XCTAssertFalse(SecurityRightAuthority.isOurDefinition(["class": "user", "group": "staff"]))
+    /// Fix round 4: the definition the helper writes, as a value.
+    func testTheRightsDefinitionIsItsOwnShortUnsharedAdminRule() {
+        let d = OwnershipRightRule.definition
+        XCTAssertEqual(d["class"] as? String, "user")
+        XCTAssertEqual(d["group"] as? String, "admin")
+        XCTAssertEqual(d["timeout"] as? Int, 10)
+        XCTAssertEqual(d["shared"] as? Bool, false)
+        XCTAssertEqual(d["allow-root"] as? Bool, false)
+        XCTAssertNil(d["rule"], "never the stock admin rule, whose timeout of 0 made the re-check fail with -60007 (H18)")
         XCTAssertEqual(HelperIdentity.enableOwnershipRight, "com.xcodevault.helper.enable-ownership")
+    }
+
+    /// What the database returns for a definition the helper wrote: ours, plus the metadata it adds.
+    static func readBack(_ change: (inout [String: Any]) -> Void = { _ in }) -> [String: Any] {
+        var d = OwnershipRightRule.definition
+        d["identifier"] = "com.xcodevault.helper"
+        d["created"] = 1.0
+        d["modified"] = 2.0
+        d["requirement"] = "identifier \"com.xcodevault.helper\""
+        change(&d)
+        return d
+    }
+
+    func testOnlyTheHelpersOwnDefinitionCountsAsOurs() {
+        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack()))
+        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack { $0["authenticate-user"] = true }), "a default at its safe value")
+        XCTAssertTrue(SecurityRightAuthority.isOurDefinition(Self.readBack { $0["default-prompt"] = ["": "x"] }))
+        // The definition the user's database holds since 0.2.0 (H18): the stock admin rule. Not ours: rewritten.
+        XCTAssertFalse(
+            SecurityRightAuthority.isOurDefinition([
+                "class": "rule", "rule": ["authenticate-admin"], "identifier": "com.xcodevault.helper", "version": 1, "created": 1.0,
+            ]))
+        let variants: [String: (inout [String: Any]) -> Void] = [
+            "no writer": { $0["identifier"] = nil },
+            "another writer": { $0["identifier"] = "com.example.squatter" },
+            "class rule": { $0["class"] = "rule" },
+            "class allow": { $0["class"] = "allow" },
+            "another group": { $0["group"] = "staff" },
+            "no group": { $0["group"] = nil },
+            "timeout 0": { $0["timeout"] = 0 },
+            "timeout 11": { $0["timeout"] = 11 },
+            "timeout 300": { $0["timeout"] = 300 },
+            "no timeout": { $0["timeout"] = nil },
+            "shared": { $0["shared"] = true },
+            "no shared": { $0["shared"] = nil },
+            "allow-root": { $0["allow-root"] = true },
+            "no allow-root": { $0["allow-root"] = nil },
+            "a k": { $0["k"] = 1 },
+            "mechanisms": { $0["mechanisms"] = ["builtin:authenticate"] },
+            "a rule key": { $0["rule"] = ["allow"] },
+            "authenticate-user off": { $0["authenticate-user"] = false },
+            "session-owner on": { $0["session-owner"] = true },
+        ]
+        for (name, change) in variants {
+            XCTAssertFalse(SecurityRightAuthority.isOurDefinition(Self.readBack(change)), name)
+        }
+    }
+
+    /// The upgrade path: the daemon repairs the old definition as it starts, before it accepts a connection, so the
+    /// first click after the update finds the right already ours and is not refused for it.
+    func testTheDaemonRepairsTheOldDefinitionAtStartAndTheFirstCallProceeds() {
+        let rights = FakeRights(definition: .redefined)
+        XCTAssertEqual(HelperStartup.defineAuthorizationRights(authority: rights), .redefined)
+        XCTAssertEqual(rights.ensured, 1)
+        rights.definition = .unchanged  // what the database now holds
+        let r = service().doEnableOwnership(
+            volumeUUID: Self.uuid, authorization: Self.form, rights: rights, volumes: FakeVolumes(.found(Self.facts { $0.ownersEnabled = true })),
+            diskutil: FakeDiskutil())
+        XCTAssertEqual(r.code, .alreadyEnabled, "the first call after the repair is not refused for the definition")
     }
 
     // MARK: - Reading the volume

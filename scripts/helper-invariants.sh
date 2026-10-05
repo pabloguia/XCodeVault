@@ -490,6 +490,31 @@ if [ -f "$AUTHZ_SITE" ]; then
         || violation "$AUTHZ_SITE — the client's reference is no longer destroyed" "the externalized form works once (L3)"
     code_of "$AUTHZ_SITE" | grep -qxF '        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }' \
         || violation "$AUTHZ_SITE — the right's writer is no longer checked" "only the helper's own definition counts (L4)"
+    # Fix round 4 (H18 measured): the right has its own definition, never the shared admin rule — whose timeout of 0
+    # made the helper's re-check fail with -60007 — and never a shared, root-satisfiable or long-lived credential. The
+    # written dictionary, the values the read-back must match, and the write itself are pinned.
+    forbid "$AUTHZ_SITE" '"rule"|authenticate-admin|kAuthorizationRule' "the right must not point at a stock rule (fix round 4)"
+    authz_code=$(code_of "$AUTHZ_SITE")
+    for pinned in \
+        '            "class": "user",' \
+        '            "group": "admin",' \
+        '            "timeout": 10,' \
+        '            "shared": false,' \
+        '            "allow-root": false,' \
+        '    static let ruleClass = "user"' \
+        '    static let group = "admin"' \
+        '    static let timeoutSeconds = 10' \
+        '        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)' \
+        '            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false'
+    do
+        grep -qxF "$pinned" <<<"$authz_code" || violation "$AUTHZ_SITE — the right's definition changed" "missing: $pinned"
+    done
+    # Belt and braces for the one number: whatever the pins say, a credential longer than 30 s is not a re-check window.
+    for t in $(grep -oE '"timeout": [0-9]+|timeoutSeconds = [0-9]+' <<<"$authz_code" | grep -oE '[0-9]+$'); do
+        [ "$t" -le 30 ] || violation "$AUTHZ_SITE — the right's credential lives $t s" "at most 30 s: long enough for the helper's re-check, no longer"
+    done
+    grep -qE '"shared": true|"allow-root": true' <<<"$authz_code" \
+        && violation "$AUTHZ_SITE — the right's credential is shared or satisfied by root" "shared and allow-root stay false"
     stray=$(code_of "$AUTHZ_SITE" | grep -E '[[:<:]]clientRef[[:>:]]' | grep -vxF \
         -e '        var clientRef: AuthorizationRef?' \
         -e '        let imported = AuthorizationCreateFromExternalForm(&form, &clientRef)' \
