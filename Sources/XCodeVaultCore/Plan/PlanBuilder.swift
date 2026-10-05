@@ -63,6 +63,9 @@ public enum PlanNote: Sendable, Equatable {
     case vaultNeedsVolume(drive: String)
     /// Step 2: the drive has a suitable volume. Says what is there, not who made it.
     case suitableVolume(drive: String, volume: String)
+    /// Step 1, done with a good vault, while ANOTHER registered vault has shadow data at its mount point (`ambiguous`):
+    /// not blocking, but reported, pointing to Health (rule 6; safety re-review N3). The other vault's name and the size.
+    case otherVaultShadowed(name: String, bytes: UInt64?)
 }
 
 /// What happens to an item, in the user's terms: what needs the drive connected, what leaves its only copy on the drive,
@@ -183,12 +186,14 @@ public struct Plan: Sendable, Equatable {
     public var primary: PlanPrimary? {
         for step in steps where step.state == .next || step.state == .partly {
             if step.action != nil { return .step(step.kind) }
-            if let item = step.items.first(where: { !$0.isDone && $0.action != nil }) { return .item(item.id) }
+            // Never an item that loses the user's data (N1): it is listed, tagged, and never the thing to do next.
+            if let item = step.items.first(where: { !$0.isDone && !$0.losesUserData && $0.action != nil }) { return .item(item.id) }
         }
         return nil
     }
 
-    /// Whether something can be done now: a step is next, or partly available. The app opens on the Plan then.
+    /// Whether something can be done now: a step is next, or partly available. The app opens on the Plan then. Items that
+    /// lose the user's data never make a step next (N1), so they never open the app on the Plan either.
     public var hasSomethingToDo: Bool { steps.contains { $0.state == .next || $0.state == .partly } }
 
     public func step(_ kind: PlanStep.Kind) -> PlanStep? { steps.first { $0.kind == kind } }
@@ -213,6 +218,9 @@ public enum PlanBuilder {
         if let good {
             choose.state = .done
             choose.subject = good.volume.volumeName
+            if let shadowed = vaults.first(where: { $0.state == .ambiguous }) {
+                choose.note = .otherVaultShadowed(name: shadowed.volume.volumeName, bytes: shadowed.shadowBytes)
+            }
         } else if let shadowed = vaults.first(where: { $0.state == .ambiguous }) {
             choose.state = .blocked(.vaultShadowed(name: shadowed.volume.volumeName, bytes: shadowed.shadowBytes))
             choose.action = .showHealth
@@ -297,7 +305,8 @@ public enum PlanBuilder {
         let open = items.filter { !$0.isDone }
         let headline = open.filter { !$0.losesUserData }
         move.bytes = headline.reduce(0) { add($0, $1.bytes) }
-        let actionable = move.items.contains { !$0.isDone && $0.action != nil }
+        // Items that lose the user's data never drive the step (N1): with only those left, the step is done.
+        let actionable = move.items.contains { !$0.isDone && !$0.losesUserData && $0.action != nil }
         if good == nil {
             move.state = actionable ? .partly : .blocked(.needsEarlierStep)
         } else {

@@ -262,6 +262,55 @@ final class PlanBuilderTests: XCTestCase {
             p.step(.moveItems)!.items.contains { $0.losesUserData && $0.outcome == .deletedRebuilt }, "nothing that loses data is 'rebuilt on demand'")
     }
 
+    // MARK: - N1: data the user would lose never drives the Plan
+
+    func testOnlySimulatorDevicesLeftIsDoneAndNothingToDo() throws {
+        let (_, vault, drives) = try Self.good()
+        var r = Fixtures.minimalReport()
+        r.items = [Self.item("archives", 18 * Self.gb, mount: "/Volumes/Vault", onBoot: false), Self.item("simulatorDevices", 7 * Self.gb)]
+        let p = Self.plan(r, drives: drives, vaults: [vault], locations: Self.onVault)
+        XCTAssertEqual(p.step(.moveItems)?.state, .done, "only data the user would lose is left")
+        XCTAssertEqual(item(p, "deleteAndRegenerate:simulatorDevices")?.action, .showBucket(.deleteAndRegenerate), "still listed, with Review")
+        XCTAssertNil(p.primary)
+        XCTAssertFalse(p.hasSomethingToDo)
+        XCTAssertEqual(p.summary.lostIfDeleted, 7 * Self.gb)
+    }
+
+    func testSimulatorDevicesAreNeverThePrimaryEvenWhenFirst() {
+        var r = Fixtures.minimalReport()
+        r.items = [Self.item("simulatorDevices", 50 * Self.gb), Self.item("xcodeCaches", 1 * Self.gb)]
+        let p = Self.plan(r)
+        let deletable = p.step(.moveItems)?.items.filter { $0.action != nil }.map(\.id)
+        XCTAssertEqual(deletable?.first, "deleteAndRegenerate:simulatorDevices", "the largest deletable item comes first")
+        XCTAssertEqual(p.step(.moveItems)?.state, .partly)
+        XCTAssertEqual(p.primary, .item("deleteAndRegenerate:xcodeCaches"), "the next thing to do is never losing the user's data")
+        var onlyDevices = Fixtures.minimalReport()
+        onlyDevices.items = [Self.item("simulatorDevices", 50 * Self.gb)]
+        let q = Self.plan(onlyDevices)
+        XCTAssertEqual(q.step(.moveItems)?.state, .blocked(.needsEarlierStep))
+        XCTAssertNil(q.primary)
+    }
+
+    /// N5: the "Another … if you also delete simulator devices" line names one category. A second category that loses the
+    /// user's data must make someone review that wording: this test fails until it is updated.
+    func testExactlyOneCategoryLosesUserDataWhenDeleted() {
+        let losing = StorageCatalog.all.filter { c in c.savingsOptionDetails.contains { $0.bucket == .deleteAndRegenerate && $0.losesUserData } }
+        XCTAssertEqual(losing.map(\.id), ["simulatorDevices"], "review app.guide.summary.lost before adding another")
+    }
+
+    // MARK: - N3: shadow data on another vault
+
+    func testShadowDataOnAnotherVaultIsANoteOnStepOne() throws {
+        let (_, vault, drives) = try Self.good()
+        var shadowed = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(901), state: .ambiguous, mount: nil)
+        shadowed.volume.volumeName = "Old"
+        shadowed.shadowBytes = 2 * Self.gb
+        let p = Self.plan(drives: drives, vaults: [vault, shadowed])
+        XCTAssertEqual(p.step(.chooseDrive)?.state, .done, "not blocking: the good vault still works")
+        XCTAssertEqual(p.step(.chooseDrive)?.note, .otherVaultShadowed(name: "Old", bytes: 2 * Self.gb))
+        XCTAssertEqual(p.vaultUUID, vault.volume.volumeUUID)
+    }
+
     // MARK: - Done from state
 
     func testDoneItemsAreTheOnesTheStateShowsDone() throws {

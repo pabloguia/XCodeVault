@@ -58,8 +58,15 @@ enum GuideText {
         if case .blocked(let block) = step.state { return blockText(block, subject: subject) }
         switch (step.kind, step.state) {
         case (.chooseDrive, _):
-            if case .vaultNeedsVolume(let drive)? = step.note { return L10n.tr("app.guide.chooseDrive.vaultNeedsVolume", drive) }
-            return L10n.tr("app.guide.chooseDrive.done", subject)
+            switch step.note {
+            case .vaultNeedsVolume(let drive)?: return L10n.tr("app.guide.chooseDrive.vaultNeedsVolume", drive)
+            case .otherVaultShadowed(let name, let bytes?)?:
+                return L10n.tr("app.guide.chooseDrive.done", subject) + " "
+                    + L10n.tr("app.guide.chooseDrive.otherShadowed", name, ByteCount.format(bytes))
+            case .otherVaultShadowed(let name, nil)?:
+                return L10n.tr("app.guide.chooseDrive.done", subject) + " " + L10n.tr("app.guide.chooseDrive.otherShadowed.unmeasured", name)
+            default: return L10n.tr("app.guide.chooseDrive.done", subject)
+            }
         case (.prepareDrive, .notNeeded): return L10n.tr("app.guide.prepareDrive.notNeeded", subject)
         case (.prepareDrive, .done):
             if case .suitableVolume(let drive, let volume)? = step.note { return L10n.tr("app.guide.prepareDrive.suitableVolume", drive, volume) }

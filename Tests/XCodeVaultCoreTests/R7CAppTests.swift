@@ -297,9 +297,50 @@ final class R7CAppTests: XCTestCase {
         await m.refresh()
         XCTAssertEqual(m.section, .plan)
         XCTAssertFalse(m.canGoBack, "no Back entry for a screen the user did not choose")
+        XCTAssertNil(m.operationSheet, "opening on the Plan opens nothing (N4)")
+        XCTAssertFalse(m.isOperationRunning, "and runs nothing")
         m.section = .storage
         await m.refresh()
         XCTAssertEqual(m.section, .storage, "never moves the user after the first scan")
+    }
+
+    /// N1: only data the user would lose left: the app opens on the Overview, not on the Plan.
+    func testOnlySimulatorDevicesLeftOpensOnTheOverview() throws {
+        let (_, vault, drives) = try PlanBuilderTests.good()
+        var r = Fixtures.minimalReport()
+        r.items = [PlanBuilderTests.item("simulatorDevices", 7 * PlanBuilderTests.gb)]
+        let p = PlanBuilderTests.plan(r, drives: drives, vaults: [vault], locations: PlanBuilderTests.onVault)
+        XCTAssertEqual(AppModel.launchSection(p), .overview)
+    }
+
+    /// N2: the vault goes away and the app has NOT rescanned yet: the Run sheet's own review, which reads the disk afresh
+    /// (here, the scripted Core preview), blocks it, and nothing runs.
+    func testTheVaultGoneWithoutARescanIsRefusedAtReview() async throws {
+        let ops = ScriptedOperations()
+        let mounted = SurveyBox(bucketSampleSurvey(checks: [R6DriveTests.vaultCheck()]))  // what the preview "sees" on disk
+        ops.preview = { _, inputs in
+            guard inputs.vaultUUID != nil else { return OperationPreview(blockers: [.chooseVault]) }
+            return mounted.survey.2.isEmpty ? OperationPreview(blockers: [.core("The vault is not mounted.")]) : OperationPreview()
+        }
+        let survey = bucketSampleSurvey(checks: [R6DriveTests.vaultCheck()])
+        var env = AppEnvironment(
+            survey: { survey }, fullDiskAccess: { .granted }, helper: SwitchableHelper(.unavailableInThisBuild),
+            approvalFlow: { HelperApprovalFlow(helper: $0) }, runner: { PrivilegedActionRunner(helper: $0) },
+            clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in }, operations: ops.services)
+        env.drives = ScriptedDrives(try R6DriveTests.snapshot()).services
+        let m = AppModel(environment: env)
+        await m.refresh()
+        let action = try XCTUnwrap(m.plan?.step(.moveItems)?.items.first { $0.id == "runFromExternal:archives" }?.action)
+        // Unplugged: the next preview sees it; the model has not rescanned and still lists the vault as usable.
+        mounted.survey = bucketSampleSurvey(checks: [])
+        XCTAssertFalse(m.usableVaults.isEmpty, "no refresh() yet")
+        m.performPlanAction(action)
+        await eventually("the review") { m.operationSheet?.preview != nil && m.operationSheet?.isPreviewing == false }
+        XCTAssertEqual(m.operationSheet?.preview?.blockers, [.core("The vault is not mounted.")])
+        XCTAssertFalse(m.canConfirmOperation, "the confirm button is disabled")
+        await m.runOperation()
+        XCTAssertEqual(ops.runs, 0, "nothing ran")
+        XCTAssertEqual(m.operationSheet?.phase, .review)
     }
 
     // MARK: - The words
@@ -342,6 +383,10 @@ final class R7CAppTests: XCTestCase {
             GuideText.blockText(.vaultShadowed(name: "V", bytes: 3_000_000_000), subject: ""),
             "Shadow data was found where your vault V mounts: 3 GB on this Mac. Health says what to do.")
         XCTAssertTrue(GuideText.blockText(.vaultShadowed(name: "V", bytes: nil), subject: "").contains("Shadow data"))
+        let noted = PlanStep(
+            kind: .chooseDrive, state: .done, subject: "Vault", note: .otherVaultShadowed(name: "Old", bytes: 2_000_000_000), bytes: nil,
+            isExperimental: false, action: nil, items: [], option: nil, findingCount: 0)
+        XCTAssertTrue(GuideText.explanation(noted).hasSuffix("Your vault Old has shadow data where it mounts: 2 GB on this Mac. Health says what to do."))
         XCTAssertEqual(
             GuideText.blockText(.vaultReplaced("V"), subject: ""), "A different volume is mounted where your vault V should be. Drives shows what is connected."
         )

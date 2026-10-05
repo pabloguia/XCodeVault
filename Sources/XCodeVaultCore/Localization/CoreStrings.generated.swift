@@ -893,6 +893,20 @@ extension L10nCatalog {
                 "ja": "%@ を保管庫用のドライブにします。",
                 "zh-Hans": "%@ 是保管库所用的驱动器。",
             ],
+            "app.guide.chooseDrive.otherShadowed": [
+                "en": "Your vault %1$@ has shadow data where it mounts: %2$@ on this Mac. Health says what to do.",
+                "pt-BR": "Seu disco-cofre %1$@ tem dados-sombra onde é montado: %2$@ neste Mac. Diagnóstico diz o que fazer.",
+                "es": "Tu bóveda %1$@ tiene datos sombra donde se monta: %2$@ en este Mac. Diagnóstico explica qué hacer.",
+                "ja": "保管庫 %1$@ のマウント先にシャドウデータがあります（この Mac 上に %2$@）。対処方法は「診断」にあります。",
+                "zh-Hans": "保管库 %1$@ 的挂载位置有影子数据：此 Mac 上有 %2$@。“健康状况”中有处理方法。",
+            ],
+            "app.guide.chooseDrive.otherShadowed.unmeasured": [
+                "en": "Your vault %@ has shadow data where it mounts. Health says what to do.",
+                "pt-BR": "Seu disco-cofre %@ tem dados-sombra onde é montado. Diagnóstico diz o que fazer.",
+                "es": "Tu bóveda %@ tiene datos sombra donde se monta. Diagnóstico explica qué hacer.",
+                "ja": "保管庫 %@ のマウント先にシャドウデータがあります。対処方法は「診断」にあります。",
+                "zh-Hans": "保管库 %@ 的挂载位置有影子数据。“健康状况”中有处理方法。",
+            ],
             "app.guide.chooseDrive.vaultNeedsVolume": [
                 "en": "%@ holds your vault, but its volume is case-sensitive or ignores ownership; the next step adds a suitable volume.",
                 "pt-BR": "%@ contém seu disco-cofre, mas o volume diferencia maiúsculas ou ignora a titularidade; o próximo passo adiciona um volume adequado.",
