@@ -3,8 +3,8 @@
 // Everything else in the helper targets is forbidden to start a process, and still is: this file is the single
 // exemption in both `scripts/helper-invariants.sh` and the editor hook, and the script holds its shape — the spawn
 // function named exactly once in this file's code, on `DiskutilInvocation.executable`; the argv built on one pinned
-// line from `arguments`, whose three returns are pinned too; no other absolute path literal but `/usr/sbin/diskutil` and
-// `/dev/null`; and none of the routes around those rules (a PATH search, an aliased function, an inherited descriptor,
+// line from `arguments`, whose four returns are pinned too; no other absolute path literal but `/usr/sbin/diskutil`,
+// `/dev/null` and the `/dev/` prefix of a validated disk; and none of the routes around those rules (a PATH search, an aliased function, an inherited descriptor,
 // a fork, a symbol looked up at run time).
 //
 // **What can be run is a closed enum.** `info -plist` takes the volume's UUID — the helper's own parse, re-serialized, so
@@ -13,7 +13,8 @@
 // (`disk5s1`) of the pinned mount (fix round 2, N2): a UUID names whichever volume carries it at the
 // moment diskutil looks, and two mounted volumes can carry the same one, while the identifier comes from
 // the mount table entry diskutil's own plist names, re-verified immediately before the spawn (fix round 6: the
-// helper holds no descriptor on the volume). `list -plist` takes no argument at all. `DiskIdentifier` can only be built
+// helper holds no descriptor on the volume), and is passed as `/dev/diskNsM` (fix round 7, L1). `list -plist` and
+// `apfs list -plist` take no argument at all. `DiskIdentifier` can only be built
 // from a string that matches `disk<N>s<M>`, anchored, on bytes.
 
 import Foundation
@@ -36,6 +37,10 @@ struct DiskIdentifier: Equatable, Sendable {
         }
         value = raw
     }
+
+    /// `/dev/disk<N>s<M>`: what `diskutil enableOwnership` is given (fix round 7, L1). diskutil also accepts a bare
+    /// name, which a volume could be called too; a `/dev/` path cannot be a volume name. Built from the validated value only.
+    var devicePath: String { "/dev/" + value }
 }
 
 /// A `diskutil` command the helper may run. The executable is fixed; the arguments are built here, never passed in.
@@ -47,15 +52,19 @@ enum DiskutilInvocation: Equatable, Sendable {
     /// `diskutil list -plist`: every disk, partition and APFS volume with its UUID, so the helper can tell the UUID is on
     /// exactly one (fix round 6). No argument at all.
     case listPlist
+    /// `diskutil apfs list -plist`: every APFS volume with its roles (fix round 7, H1: `info -plist` carries no roles on
+    /// macOS 26.7.1, so a Time Machine volume is recognised only here). No argument at all.
+    case apfsListPlist
 
     static let executable = "/usr/sbin/diskutil"
 
-    /// The argv after the executable: a verb this enum names and a canonical UUID, a validated disk identifier, or nothing.
+    /// The argv after the executable: a verb this enum names and a canonical UUID, a validated disk's `/dev/` path, or nothing.
     var arguments: [String] {
         switch self {
         case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]
-        case .enableOwnership(let disk): return ["enableOwnership", disk.value]
+        case .enableOwnership(let disk): return ["enableOwnership", disk.devicePath]
         case .listPlist: return ["list", "-plist"]
+        case .apfsListPlist: return ["apfs", "list", "-plist"]
         }
     }
 }
@@ -93,7 +102,8 @@ protocol DiskutilRunning: Sendable {
 /// and file action is checked; any failure refuses to spawn. Never run by a test: it would touch this Mac's disks.
 struct SpawnedDiskutil: DiskutilRunning {
     var timeoutSeconds: Int = 120
-    /// A plist for one volume is a few kilobytes; anything near this cap is not `diskutil info`.
+    /// One volume's `info` plist is a few kilobytes and `list` / `apfs list` for a whole Mac some tens; a megabyte is far
+    /// past any of them, and output that reaches it is refused.
     var outputCap: Int = 1 << 20
 
     func run(_ invocation: DiskutilInvocation) -> DiskutilOutput {

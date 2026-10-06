@@ -8,9 +8,12 @@
 //   - `diskutil info -plist <UUID>` (DiskArbitration): the volume's device node, mount point and facts;
 //   - the mount table (`getmntinfo_r_np`, reading statfs entries, not files): exactly one entry at that mount point,
 //     exactly one with that device node, and they are the same entry; its `f_fsid`, type and flags are pinned;
-//   - `diskutil list -plist`: the UUID is carried by exactly one volume or partition on this Mac.
+//   - `diskutil list -plist`: the UUID is carried by exactly one volume or partition on this Mac;
+//   - `diskutil apfs list -plist`: the volume's APFS roles, which must be present and empty (fix round 7, H1: `info`
+//     carries no roles on macOS 26.7.1).
 //
-// Immediately before the command all three are read again and must still agree with the pin. No descriptor is held:
+// The mount entry must be `nosuid` and `nodev` (fix round 7, M1). Immediately before the command all of it is read again
+// and must still agree with the pin, the mount table last. No descriptor is held:
 // the window is the device-node reassignment the reviews already accepted (ADR-0014, SECURITY_MODEL).
 // `scripts/helper-invariants.sh` forbids every file-access call in this file and in the verb.
 //
@@ -40,9 +43,10 @@ struct OwnershipVolumeFacts: Equatable, Sendable {
     var isWritable: Bool
     /// `diskutil`'s `GlobalPermissionsEnabled`, and `MNT_IGNORE_OWNERSHIP` clear.
     var ownersEnabled: Bool
-    /// `diskutil`'s `APFSVolumeRoles`; `Backup` is Time Machine (the only way it is detected since fix round 6: the
-    /// helper no longer looks at the volume's root), `System`/`Data` the running OS's own.
-    var roles: [String]
+    /// The volume's APFS roles from `diskutil apfs list -plist` (fix round 7, H1: `info -plist` has no roles key on
+    /// macOS 26.7.1), or nil when they could not be read — which refuses. Only an empty set is eligible: an external data
+    /// volume has none; `Backup` is Time Machine, `System`/`Data` the running OS's own.
+    var roles: [String]?
     /// The volume is the running system's, or lives in the same container / on the same disk as it.
     var sharesTheBootContainer: Bool
     /// A disk image, or virtual: a key naming a disk image, or `VirtualOrPhysical` = `Virtual`.
@@ -74,7 +78,7 @@ struct MountPin: Equatable, Sendable {
     let fsid: [Int32]
     let flags: UInt32
     let fileSystemType: String
-    /// The bare identifier of `deviceNode`: what `diskutil enableOwnership` is given (fix round 2, N2).
+    /// The validated identifier of `deviceNode`; `diskutil enableOwnership` is given its `/dev/` path (fix rounds 2 and 7).
     let disk: DiskIdentifier
     /// The volume UUID the pin was made for.
     let uuid: UUID
@@ -102,7 +106,8 @@ enum HelperOwnership {
     /// The messages go to the audit `.public`, so none quotes a name, a path or a device node.
     static func refusal(_ f: OwnershipVolumeFacts) -> String? {
         if !isVolumeDeviceNode(f.deviceNode) { return "not a volume device node" }
-        if f.mountPoint == "/" || f.mountPoint.hasPrefix("/System/Volumes") || f.roles.contains("System") || f.roles.contains("Data") && f.isInternal {
+        let knownRoles = f.roles ?? []
+        if f.mountPoint == "/" || f.mountPoint.hasPrefix("/System/Volumes") || knownRoles.contains("System") || knownRoles.contains("Data") && f.isInternal {
             return "this is the running system's volume"
         }
         if f.sharesTheBootContainer { return "this volume shares a container or disk with the running system" }
@@ -110,7 +115,9 @@ enum HelperOwnership {
         if networkFileSystems.contains(f.filesystemType.lowercased()) || !f.isLocal { return "a network volume is not eligible" }
         if !fileSystemsAllowed.contains(f.filesystemType.lowercased()) { return "only an APFS volume is eligible" }
         if f.busProtocol == "Disk Image" || f.isDiskImageOrVirtual { return "a disk image is not eligible" }
-        if f.roles.contains("Backup") { return "a Time Machine backup is not eligible" }
+        guard let roles = f.roles else { return "the volume's APFS roles could not be read" }
+        if roles.contains("Backup") { return "a Time Machine backup is not eligible" }
+        if !roles.isEmpty { return "a volume with an APFS role is not eligible" }
         if !f.isWritable { return "the volume is read-only" }
         return nil
     }
@@ -143,7 +150,32 @@ enum HelperOwnership {
                 entries.append(contentsOf: list)
             }
         }
-        return entries.filter { ($0["VolumeUUID"] as? String).flatMap(UUID.init(uuidString:)) == wanted }.count
+        return entries.filter { ($0["VolumeUUID"] as? String).flatMap { UUID(uuidString: $0) } == wanted }.count
+    }
+
+    /// The volume's APFS roles in `diskutil apfs list -plist` (`Containers[].Volumes[].Roles`), or nil — which refuses —
+    /// unless the output is that plist, the volume whose `DeviceIdentifier` is `disk` appears in it exactly once, and its
+    /// `Roles` is present as a list of strings (fix round 7, H1). Measured on macOS 26.7.1: an external data volume's
+    /// roles are `[]`; `info -plist` carries no roles at all.
+    static func roles(inAPFSListPlist data: Data, disk: DiskIdentifier) -> [String]? {
+        guard let d = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+            let containers = d["Containers"] as? [[String: Any]]
+        else { return nil }
+        var found: [[String: Any]] = []
+        for container in containers {
+            guard let volumes = container["Volumes"] as? [[String: Any]] else { return nil }
+            found.append(contentsOf: volumes.filter { $0["DeviceIdentifier"] as? String == disk.value })
+        }
+        guard found.count == 1 else { return nil }
+        return found[0]["Roles"] as? [String]
+    }
+
+    /// Both `MNT_NOSUID` and `MNT_NODEV` (fix round 7, M1): a mount without them is not one this verb touches, so if the
+    /// device node is reassigned between the re-check and the command, what it lands on cannot carry a setuid binary
+    /// or a device node either. Measured: external and disk-image mounts carry both.
+    static func isNosuidNodev(_ flags: UInt32) -> Bool {
+        let both = UInt32(MNT_NOSUID) | UInt32(MNT_NODEV)
+        return flags & both == both
     }
 
     /// The pin, when diskutil and the mount table name one and the same volume (fix round 6). Pure, so every refusal
@@ -156,7 +188,7 @@ enum HelperOwnership {
         let fromNode = mounts.filter { $0.from == info.deviceNode }
         guard atPoint.count == 1, fromNode.count == 1, atPoint[0] == fromNode[0] else { return nil }
         let entry = atPoint[0]
-        guard let disk = diskIdentifier(ofDeviceNode: entry.from) else { return nil }
+        guard isNosuidNodev(entry.flags), let disk = diskIdentifier(ofDeviceNode: entry.from) else { return nil }
         return MountPin(
             mountPoint: entry.mountedOn, deviceNode: entry.from, fsid: entry.fsid, flags: entry.flags, fileSystemType: entry.type, disk: disk,
             uuid: wanted)
@@ -172,13 +204,15 @@ enum HelperOwnership {
         return e.from == pin.deviceNode && e.fsid == pin.fsid ? e : nil
     }
 
-    /// The re-check before the command (fix round 6): the same entry, with the same flags; diskutil still describing the
-    /// pinned volume at that mount point and device node; and the UUID still on exactly one volume.
-    static func isUnchanged(_ pin: MountPin, info: InfoPlist?, mounts: [MountEntry]?, uuidCount: Int?) -> Bool {
-        guard let e = entry(of: pin, in: mounts), e.flags == pin.flags, e.type == pin.fileSystemType else { return false }
+    /// The re-check before the command (fix rounds 6 and 7): diskutil still describing the pinned volume at that mount
+    /// point and device node; the UUID still on exactly one volume; its APFS roles still present and empty; and the same
+    /// mount entry, with the same flags, still `nosuid` and `nodev`. The live reader reads the mount table last (M1).
+    static func isUnchanged(_ pin: MountPin, info: InfoPlist?, uuidCount: Int?, roles: [String]?, mounts: [MountEntry]?) -> Bool {
         guard let info, UUID(uuidString: info.volumeUUID) == pin.uuid, info.mountPoint == pin.mountPoint, info.deviceNode == pin.deviceNode
         else { return false }
-        return uuidCount == 1
+        guard uuidCount == 1, roles == [] else { return false }
+        guard let e = entry(of: pin, in: mounts), e.flags == pin.flags, e.type == pin.fileSystemType else { return false }
+        return isNosuidNodev(e.flags)
     }
 
     /// The device nodes of `/` and `/System/Volumes/Data`, from the mount table: where the running system lives.
@@ -195,7 +229,6 @@ enum HelperOwnership {
         var busProtocol: String
         var isWritable: Bool
         var ownersEnabled: Bool
-        var roles: [String]
         var containerReference: String?
         var isDiskImageOrVirtual: Bool = false
     }
@@ -211,8 +244,8 @@ enum HelperOwnership {
         let virtual = (d["VirtualOrPhysical"] as? String)?.caseInsensitiveCompare("Virtual") == .orderedSame || d["Virtual"] as? Bool == true
         return InfoPlist(
             volumeUUID: uuid, deviceNode: node, mountPoint: mp, isInternal: isInternal, busProtocol: bus, isWritable: writable,
-            ownersEnabled: d["GlobalPermissionsEnabled"] as? Bool ?? false, roles: d["APFSVolumeRoles"] as? [String] ?? [],
-            containerReference: d["APFSContainerReference"] as? String, isDiskImageOrVirtual: imageKey || virtual)
+            ownersEnabled: d["GlobalPermissionsEnabled"] as? Bool ?? false, containerReference: d["APFSContainerReference"] as? String,
+            isDiskImageOrVirtual: imageKey || virtual)
     }
 
     /// `/dev/disk3s1` → `disk3`, the container (APFS) or whole disk (a partition) the node lives on.
@@ -233,8 +266,9 @@ enum HelperOwnership {
         return false
     }
 
-    /// Facts from the pinned mount's entry and the plist, refusing when they do not describe the same volume.
-    static func facts(wanted: UUID, entry: MountEntry, info: InfoPlist, bootNodes: [String]) -> OwnershipVolumeLookup {
+    /// Facts from the pinned mount's entry, the plist and the roles `apfs list` gave (nil when it could not be read),
+    /// refusing when the entry and the plist do not describe the same volume.
+    static func facts(wanted: UUID, entry: MountEntry, info: InfoPlist, roles: [String]?, bootNodes: [String]) -> OwnershipVolumeLookup {
         guard UUID(uuidString: info.volumeUUID) == wanted else { return .unreadable("diskutil described a different volume") }
         guard info.mountPoint == entry.mountedOn else { return .unreadable("diskutil and the mount table disagree on the mount point") }
         guard info.deviceNode == entry.from else { return .unreadable("diskutil and the mount table disagree on the device node") }
@@ -244,7 +278,7 @@ enum HelperOwnership {
             OwnershipVolumeFacts(
                 deviceNode: info.deviceNode, mountPoint: entry.mountedOn, filesystemType: entry.type, isInternal: info.isInternal,
                 busProtocol: info.busProtocol, isLocal: entry.flags & UInt32(MNT_LOCAL) != 0, isWritable: !readOnly && info.isWritable,
-                ownersEnabled: info.ownersEnabled && !ignoresOwnership, roles: info.roles,
+                ownersEnabled: info.ownersEnabled && !ignoresOwnership, roles: roles,
                 sharesTheBootContainer: sharesBoot(node: info.deviceNode, container: info.containerReference, bootNodes: bootNodes),
                 isDiskImageOrVirtual: info.isDiskImageOrVirtual))
     }
@@ -264,19 +298,31 @@ struct OwnershipVolumeReader: OwnershipVolumeReading {
     }
 
     func lookup(volumeUUID wanted: UUID, pin: MountPin) -> OwnershipVolumeLookup {
+        guard let info = info(wanted) else { return .unreadable("diskutil info failed") }
+        let roles = roles(pin.disk)
         let mounts = readMounts()
         guard let entry = HelperOwnership.entry(of: pin, in: mounts), let mounts else { return .unreadable("the volume changed") }
-        guard let info = info(wanted) else { return .unreadable("diskutil info failed") }
-        return HelperOwnership.facts(wanted: wanted, entry: entry, info: info, bootNodes: HelperOwnership.bootNodes(mounts))
+        return HelperOwnership.facts(wanted: wanted, entry: entry, info: info, roles: roles, bootNodes: HelperOwnership.bootNodes(mounts))
     }
 
+    /// In this order, so the mount table — the reading a lost race would change — is the last thing read before the
+    /// command (fix round 7, M1).
     func isUnchanged(_ pin: MountPin) -> Bool {
-        HelperOwnership.isUnchanged(pin, info: info(pin.uuid), mounts: readMounts(), uuidCount: uuidCount(pin.uuid))
+        let info = info(pin.uuid)
+        let count = uuidCount(pin.uuid)
+        let roles = roles(pin.disk)
+        let mounts = readMounts()
+        return HelperOwnership.isUnchanged(pin, info: info, uuidCount: count, roles: roles, mounts: mounts)
     }
 
     private func info(_ uuid: UUID) -> HelperOwnership.InfoPlist? {
         let output = runner.run(.infoPlist(volumeUUID: uuid))
         return output.succeeded ? HelperOwnership.parseInfo(output.stdout) : nil
+    }
+
+    private func roles(_ disk: DiskIdentifier) -> [String]? {
+        let output = runner.run(.apfsListPlist)
+        return output.succeeded ? HelperOwnership.roles(inAPFSListPlist: output.stdout, disk: disk) : nil
     }
 
     private func uuidCount(_ uuid: UUID) -> Int? {
