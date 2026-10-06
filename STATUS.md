@@ -26,7 +26,13 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   our prompt text, pins the read-back check whole, and reinstalls only an OLDER helper (a newer one falls back with the
   reason). **Re-test 2026-10-06:** authorization PASS; the root daemon then could not read the volume (TCC, [LIKELY]).
   Fix round 6: the helper identifies the volume from the mount table and diskutil only, never touching it; APFS-only —
-  **pending a re-test**. Reviews
+  **pending a re-test**. Fix round 7: roles from `apfs list` (`info` has none on macOS 26 — round 6's Backup check
+  never fired), `nosuid`+`nodev` required and the mount table read last, `/dev/diskNsM` to diskutil, an allowlist
+  tripwire, contract 0.2.2-dev. **Follow-ups:** (1) Core's `VolumeDiscovery.parse` reads `APFSVolumeRoles` from
+  `info -plist`, which macOS 26 does not carry; only `isBoot` uses it, and the mount-point test still marks the running
+  system's volumes, so nothing safety-relevant depends on it (Time Machine detection in Core reads `apfs list` roles
+  in `DiskTopology`) — read roles from `apfs list` there too. (2) `createVaultDirectory` opens the volume as root and
+  probably fails under TCC on a removable volume; untested, out of R8's verb. Reviews
   required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,

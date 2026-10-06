@@ -33,7 +33,8 @@ the second because a root process asking the rights API about a reference it mad
       -plist` only (below). *Originally:* mount table + `getattrlist`, `statfs` and the plist, APFS or HFS+, Time
       Machine by role or marker file;
    5. runs nothing if ownership is already on;
-   6. runs `/usr/sbin/diskutil enableOwnership <diskNsM>` — the bare disk identifier of the mount it holds open; fixed argv, absolute path, no shell, an environment of one
+   6. runs `/usr/sbin/diskutil enableOwnership /dev/<diskNsM>` — the validated disk of the pinned mount entry, as a
+      `/dev/` path since fix round 7 (the bare identifier before); fixed argv, absolute path, no shell, an environment of one
       PATH entry, an empty signal mask and default dispositions, every setup call checked, a deadline after which the
       child is killed and reaped — and verifies by reading the volume again.
 
@@ -47,11 +48,28 @@ the second because a root process asking the rights API about a reference it mad
    exactly one volume or partition. All three are read again immediately before the command. **No descriptor is
    held**: the window between that re-check and `diskutil enableOwnership <diskNsM>` is the device-node reassignment
    the reviews already judged acceptable, now without the descriptor's extra assurance. The verb is **APFS-only**: Time
-   Machine is detected by the APFS `Backup` role alone, which HFS+ does not carry, and no marker file is looked for. The
+   Machine is detected by the APFS `Backup` role alone (from `apfs list`, round 7 — *not* from `info`, which round 6
+   wrongly claimed), which HFS+ does not carry, and no marker file is looked for. The
    post-verify reads diskutil and the mount table again: `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the
    same entry. `helper-invariants.sh` forbids every file-access call in `HelperOwnership.swift` and in the verb, any
    route to one through `HelperService`, and extending the ownership types elsewhere. The descriptions of rounds 1–3
    below are kept as history.
+
+   *Fix round 7 (helper-security review of round 6, 2026-10-06).* **Correction (H1):** round 6 said Time Machine was
+   refused by the APFS `Backup` role read from `diskutil info -plist`. On macOS 26.7.1 that plist has **no**
+   `APFSVolumeRoles` key, so the check could never fire, and a missing key read as "no roles" — fail-open. Roles now come
+   from `diskutil apfs list -plist` (`Containers[].Volumes[].Roles`), a fourth closed, argument-free invocation: the
+   volume whose `DeviceIdentifier` is the pinned disk must appear there exactly once, `Roles` must be present as a list
+   of strings, and only an **empty** set is eligible (measured: an external data volume's roles are `[]`). **M1:** the
+   mount entry must carry both `MNT_NOSUID` and `MNT_NODEV` (external and image mounts do, measured), so a device-node
+   reassignment lost in the window lands on a mount that can hold neither a setuid binary nor a device node; and the
+   re-check reads diskutil `info`, `list`, `apfs list`, then the mount table **last**, right before the spawn. **L1:**
+   `enableOwnership` is given `/dev/diskNsM`, built from the validated identifier, not the bare name — diskutil also
+   accepts a volume *name*, and a `/dev/` path cannot be one. **M2:** the file-access tripwire is an allowlist: every
+   identifier called in `HelperOwnership.swift` and in the verb's body is compared with a pinned set; `Darwin.` /
+   `Glibc.` qualifiers (beyond two pre-existing lines in `HelperMountHistory.swift`), `.init(` spellings, top-level
+   functions and typealiases of the ownership types are forbidden across the helper targets. The contract moved to
+   `0.2.2-dev`, so a 0.2.1 daemon is reported outdated and reinstalled.
 
    *Fix round 1 (helper-security review, 2026-10-05):* the command names the **UUID**, not the device node (L1) —
    `diskutil(8)` on macOS 26.7.1 accepts "a UUID" as the device (DEVICES), and that it resolves a *volume* UUID was

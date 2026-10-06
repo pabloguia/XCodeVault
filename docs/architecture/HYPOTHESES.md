@@ -2076,8 +2076,8 @@ log here and in `COMPATIBILITY_MATRIX.md`.
 **Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
 (a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
 externalized right (`AuthorizationCopyRights` on `clientRef`, no interaction) succeeds after a correct password and fails
-after a cancel or a wrong one; (c) `diskutil enableOwnership <diskNsM>` — the bare disk identifier of the mount the
-helper holds open — run as root by the daemon turns ownership on
+after a cancel or a wrong one; (c) `diskutil enableOwnership /dev/<diskNsM>` — the validated disk of the pinned mount entry
+(fix rounds 6–7) — run as root by the daemon turns ownership on
 for a **mounted** external APFS volume without a remount; (d) the helper's re-read then shows `GlobalPermissionsEnabled`
 and no `MNT_IGNORE_OWNERSHIP`, and the app's Plan advances to Use This Drive.
 
@@ -2150,10 +2150,16 @@ failed closed: `Owners: Disabled`, no `<vault> 1`.
 from `diskutil info -plist <UUID>` (DiskArbitration), the mount table (one entry at the plist's mount point, the same
 one as the only entry with its device node; `f_fsid`, type and flags pinned) and `diskutil list -plist` (the UUID on
 exactly one volume); all three are read again immediately before the command, with no descriptor held. The verb is
-APFS-only; Time Machine is refused by the APFS `Backup` role, with no marker-file check. The post-verify reads diskutil
+APFS-only; Time Machine is refused by the APFS `Backup` role, with no marker-file check (**corrected in fix round 7:**
+the role was read from `info -plist`, which has no roles key on macOS 26.7.1, so the check never fired; roles now come
+from `diskutil apfs list -plist` and must be present and empty). The post-verify reads diskutil
 and the mount table again: `GlobalPermissionsEnabled` on, `MNT_IGNORE_OWNERSHIP` clear, the same entry.
 `helper-invariants.sh` forbids file access in `HelperOwnership.swift` and in the verb. **(c)/(d) pending** the same
 re-test with this build.
 
-**Status: (a)/(b) PASS with the right's own rule (2026-10-06); (c)/(d) PENDING (fix round 6).** Experimental
+**Fix round 7.** Roles from `apfs list` (present, found once, empty); the mount entry must be `nosuid` and `nodev`;
+the re-check reads the mount table last; `enableOwnership` gets `/dev/diskNsM`; the contract moved to 0.2.2-dev, so
+the installed 0.2.1 daemon is reinstalled before the re-test. **(c)/(d) pending** with this build.
+
+**Status: (a)/(b) PASS with the right's own rule (2026-10-06); (c)/(d) PENDING (fix rounds 6–7).** Experimental
 everywhere (rule 10).

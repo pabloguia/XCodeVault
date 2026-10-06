@@ -107,9 +107,10 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
 - **One process execution.** `posix_spawn` in `HelperCore/HelperDiskutil.swift` only, named once, on the constant
   `/usr/sbin/diskutil`; no `posix_spawnp`, no shell, no other absolute path, none of the routes around those rules
   (`dlsym`, `fork`, `@_silgen_name`, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, the API bound to a value). The argv comes
-  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership <diskNsM>`): the UUID the helper's
-  own parse, re-serialized; the disk identifier the bare `f_mntfromname` of the mount the helper holds open, validated
-  by `DiskIdentifier` (anchored, on bytes) and re-verified immediately before the spawn. The lines that build it, the
+  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership /dev/<diskNsM>`, and the
+  argument-free `list -plist` and `apfs list -plist`): the UUID the helper's own parse, re-serialized; the disk the
+  pinned mount entry's `f_mntfromname`, validated by `DiskIdentifier` (anchored, on bytes), passed as its `/dev/` path
+  (fix round 7, L1) and re-verified immediately before the spawn. The lines that build it, the
   environment and the identifier's one assignment are pinned by the script. Environment: one PATH entry. stdin/stderr
   `/dev/null`, every other descriptor closed in the child, an empty signal mask and default dispositions, every setup
   call checked, output capped, a deadline after which the child is killed and reaped without blocking past it.
@@ -144,13 +145,16 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
   asks attributes of anything on the target volume: TCC refused the root daemon there in the H18 re-test ([LIKELY]).
   `diskutil info -plist <UUID>` gives the device node and mount point; the mount table must hold exactly one entry at
   that mount point and exactly one with that device node, and they must be the same entry (its `f_fsid`, type and
-  flags are pinned); `diskutil list -plist` must list the UUID on exactly one volume. All three are read again
-  immediately before the command. No descriptor is held: the residual window is a device-node reassignment between
-  that re-check and the spawn, which the reviews accepted. Refused unless mounted, local, writable, external, APFS,
-  not the boot volume or its container, not a disk image or virtual, not Time Machine (the APFS `Backup` role) — and
-  refused when the plist lacks a key those answers rest on. Verified afterwards from diskutil and the mount table:
-  `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the same entry. `helper-invariants.sh` forbids file access in
-  `HelperOwnership.swift` and in the verb.
+  flags are pinned, and must include `MNT_NOSUID` and `MNT_NODEV`); `diskutil list -plist` must list the UUID on
+  exactly one volume; `diskutil apfs list -plist` must list the pinned disk exactly once with its `Roles` present and
+  **empty** (fix round 7: `info -plist` carries no roles on macOS 26.7.1, so round 6's `Backup` check never fired).
+  All of it is read again immediately before the command, the mount table last. No descriptor is held: the residual
+  window is a device-node reassignment between that re-check and the spawn, which the reviews accepted, and which can
+  land only on a `nosuid`, `nodev` mount. The command is given `/dev/diskNsM`, never a bare name a volume could also be
+  called. Refused unless mounted, local, writable, external, APFS, not the boot volume or its container, not a disk
+  image or virtual, without APFS roles (so not Time Machine) — and refused when a plist lacks a key those answers rest
+  on. Verified afterwards from diskutil and the mount table: `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the
+  same entry. `helper-invariants.sh` holds what the reader and the verb may call to a pinned allowlist.
 
 `authenticate-admin` on this Mac: `allow-root = false`, `shared = true`, `timeout = 0` (read by the reviewer,
 2026-10-05). Unmeasured until the user's signed run (H18): whether the helper's non-interactive check succeeds on the
@@ -233,7 +237,9 @@ require it as a precondition for any documented flow. Never modify `/System`.
   helper's `getattrlist`/`open` on `/Volumes/<vault>` failed as the daemon, while the same code as the user found the
   volume. The denial was inferred, not observed (no log reached the session). Design consequence: the helper does no
   file access on an external volume; `enableOwnership` works from the mount table and diskutil only (ADR-0014, fix
-  round 6). `createVaultDirectory`, which does open the volume, is likely affected the same way — unmeasured.
+  round 6). `createVaultDirectory`, which does open the volume, probably fails the same way on a removable volume —
+  unmeasured, out of R8's scope; the app's Use This Drive only takes that helper path when the volume's root is not
+  writable by the user, which it is on a volume with ownership on.
 
 ### Distribution
 Developer ID for app *and* helper · inside-out signing (helper first) · hardened runtime

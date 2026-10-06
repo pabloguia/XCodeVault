@@ -86,3 +86,6 @@ launchd daemon under TCC, where removable volumes are their own category that a 
 It failed closed: nothing ran, Owners stays Disabled, nothing was remounted.
 Fix round 6: the helper no longer touches any file on the volume — identity from the mount table and diskutil only,
 APFS only, Time Machine by the APFS Backup role. (c)/(d) pending a re-test.
+Correction (fix round 7): the Backup role was read from `diskutil info -plist`, which on macOS 26.7.1 has no
+APFSVolumeRoles key, so that check could not fire. Roles are now read from `diskutil apfs list -plist`, where this
+Mac's external data volume shows `Roles = []`.
