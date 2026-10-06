@@ -140,13 +140,17 @@ and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`
 - **A tripwire, not the control.** `helper-invariants.sh` and its mutation tests catch every route the reviews found,
   but a source lint cannot prove the absence of every encoding of a forbidden call; the mandatory helper-security
   review is the control.
-- **The volume is the helper's to resolve.** Mount table + `getattrlist`, then the mount point opened
-  `O_RDONLY|O_DIRECTORY|O_NOFOLLOW` and held; `fstatfs` on that descriptor and `diskutil info -plist` agree on UUID,
-  mount point and device node, and the descriptor must still name the same device and `f_fsid` immediately before the
-  command. Refused unless mounted, local, writable, external, APFS or HFS+, not the boot volume or its container, not a
-  disk image or virtual, not Time Machine — and refused when the plist lacks a key those answers rest on, or when more
-  than one mounted volume carries the UUID (checked when pinning and again before the command). Verified
-  afterwards by reading it again through the same descriptor.
+- **The volume is the helper's to resolve — without touching it (fix round 6).** The helper never opens, stats or
+  asks attributes of anything on the target volume: TCC refused the root daemon there in the H18 re-test ([LIKELY]).
+  `diskutil info -plist <UUID>` gives the device node and mount point; the mount table must hold exactly one entry at
+  that mount point and exactly one with that device node, and they must be the same entry (its `f_fsid`, type and
+  flags are pinned); `diskutil list -plist` must list the UUID on exactly one volume. All three are read again
+  immediately before the command. No descriptor is held: the residual window is a device-node reassignment between
+  that re-check and the spawn, which the reviews accepted. Refused unless mounted, local, writable, external, APFS,
+  not the boot volume or its container, not a disk image or virtual, not Time Machine (the APFS `Backup` role) — and
+  refused when the plist lacks a key those answers rest on. Verified afterwards from diskutil and the mount table:
+  `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the same entry. `helper-invariants.sh` forbids file access in
+  `HelperOwnership.swift` and in the verb.
 
 `authenticate-admin` on this Mac: `allow-root = false`, `shared = true`, `timeout = 0` (read by the reviewer,
 2026-10-05). Unmeasured until the user's signed run (H18): whether the helper's non-interactive check succeeds on the
@@ -225,6 +229,11 @@ require it as a precondition for any documented flow. Never modify `/System`.
   a clean VM before designing either way.
 - Removable volumes have their own TCC category with **no API to preflight or request
   it** — see H6/E2; this may constrain the product regardless of mount path.
+- **A root launchd daemon was refused access to an external volume's root** ([LIKELY], H18 re-test 2026-10-06): the
+  helper's `getattrlist`/`open` on `/Volumes/<vault>` failed as the daemon, while the same code as the user found the
+  volume. The denial was inferred, not observed (no log reached the session). Design consequence: the helper does no
+  file access on an external volume; `enableOwnership` works from the mount table and diskutil only (ADR-0014, fix
+  round 6). `createVaultDirectory`, which does open the volume, is likely affected the same way — unmeasured.
 
 ### Distribution
 Developer ID for app *and* helper · inside-out signing (helper first) · hardened runtime

@@ -48,3 +48,41 @@ reused for a later evaluation. The client obtained it with the dialog; the helpe
 reference, with extendRights and no interaction allowed, needed a fresh authentication and failed with -60007.
 H18 (a)/(b) with the stock rule: FAIL, for this reason. Fix round 4 gives the right its own definition (class user,
 group admin, timeout 10, shared false, allow-root false); pending a re-test.
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Re-test after fix rounds 4 and 5
+# Date: 2026-10-06
+# Build: signed with the user's Developer ID team (debug configuration, --with-helper), helper contract 0.2.1-dev
+# Runner: <user>, by hand in the app's window; reported to the controller, recorded here. Same redaction as above;
+#         the volume UUID is omitted.
+
+## Steps
+1. Turn On Ownership on <vault>; the system dialog asked for the administrator password, which was entered.
+
+## Observed
+journal (the app's operation journal), in order:
+  planned  -> started -> failed: "volume not mounted"
+
+$ security authorizationdb read com.xcodevault.helper.enable-ownership      (after the 0.2.1-dev daemon wrote the right)
+class      = user
+group      = admin
+shared     = false
+timeout    = 10
+tries      = 10000         (added by authd, as fix round 5 F1 expected)
+identifier = com.xcodevault.helper
+
+The UUID the app sent is <vault>'s. A read-only probe as <user>, with the helper's own lookup code (getmntinfo_r_np +
+getattrlist on each mount point), found /Volumes/<vault> carrying exactly that UUID.
+`diskutil info /Volumes/<vault> | grep Owners` -> Owners: Disabled; `ls /Volumes` -> no "<vault> 1".
+`log show --predicate 'subsystem == "com.xcodevault.helper"'` returned nothing to this session.
+
+## Reading
+Authorization now works: the helper's re-check passed (the journal reached `started` and the verb went on to the
+volume), with the right's own rule stored as above. H18 (a)/(b): PASS.
+The failure is in the root daemon's pin: the same lookup that finds the volume as the user found no mount as the
+daemon, so its getattrlist (or open) on the mount point failed. The only difference is the process context: a root
+launchd daemon under TCC, where removable volumes are their own category that a daemon cannot request.
+[LIKELY], not [VERIFIED]: the TCC denial itself was not observed (no log reached this session).
+It failed closed: nothing ran, Owners stays Disabled, nothing was remounted.
+Fix round 6: the helper no longer touches any file on the volume — identity from the mount table and diskutil only,
+APFS only, Time Machine by the APFS Backup role. (c)/(d) pending a re-test.

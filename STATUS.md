@@ -24,7 +24,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   the fallback worked; fix round 4 gives the right its own rule (timeout 10, unshared, admin, not root) and an update
   path for the 0.2.0 daemon; fix round 5 accepts authd's `tries` (10000) in the read-back, requires the writer's team and
   our prompt text, pins the read-back check whole, and reinstalls only an OLDER helper (a newer one falls back with the
-  reason) — **pending a re-test** with the signed build, which must capture the right's dictionary as authd stores it. Reviews
+  reason). **Re-test 2026-10-06:** authorization PASS; the root daemon then could not read the volume (TCC, [LIKELY]).
+  Fix round 6: the helper identifies the volume from the mount table and diskutil only, never touching it; APFS-only —
+  **pending a re-test**. Reviews
   required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,

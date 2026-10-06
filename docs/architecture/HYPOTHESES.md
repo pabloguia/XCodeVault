@@ -2071,7 +2071,7 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
 
-## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; **(a)/(b) FAILED with the stock admin rule, 2026-10-05; the right's own rule PENDING a re-test**)*
+## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; (a)/(b) FAILED with the stock admin rule, 2026-10-05; **(a)/(b) PASS with the right's own rule, 2026-10-06; (c)/(d) PENDING — the daemon could not read the volume (TCC [LIKELY]), fix round 6**)*
 
 **Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
 (a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
@@ -2135,4 +2135,25 @@ Terminal as the user, which `config.add.` permits — then start the new daemon,
 keeps the **original creator's** requirement on a rewrite, the read-back can never be ours and every call is refused;
 the code fix is then `AuthorizationRightRemove` before `AuthorizationRightSet` in `ensureDefinition`.
 
-**Status: (a)/(b) FAILED with the stock rule; the right's own rule PENDING.** Experimental everywhere (rule 10).
+**Re-test 2026-10-06 (macOS 26.7.1 25G241 · Intel, signed 0.2.1-dev build, by the user; evidence appended to the
+same file).** The password was asked and given; the journal reads `planned` → `started` → `failed: "volume not
+mounted"`. `security authorizationdb read` shows the right as `class user, group admin, shared false, timeout 10,
+tries 10000, identifier com.xcodevault.helper` — F1's `tries` confirmed on device. **(a)/(b): PASS** — the helper's
+re-check passed and the verb went on to the volume. It then failed in the root daemon's pin: the UUID was the right one,
+and the same lookup (`getmntinfo_r_np` + `getattrlist` on each mount point) run read-only as the user finds
+`/Volumes/<vault>` with it. The only difference is the process context: a root launchd daemon is subject to TCC, and
+removable volumes are their own category, which a daemon cannot request (SECURITY_MODEL "Privilege and TCC facts").
+**[LIKELY], not [VERIFIED]:** `log show` returned nothing to this session, so the denial itself was not observed. It
+failed closed: `Owners: Disabled`, no `<vault> 1`.
+
+**Fix round 6.** The helper never opens, stats or asks attributes of anything on the target volume. Identity comes
+from `diskutil info -plist <UUID>` (DiskArbitration), the mount table (one entry at the plist's mount point, the same
+one as the only entry with its device node; `f_fsid`, type and flags pinned) and `diskutil list -plist` (the UUID on
+exactly one volume); all three are read again immediately before the command, with no descriptor held. The verb is
+APFS-only; Time Machine is refused by the APFS `Backup` role, with no marker-file check. The post-verify reads diskutil
+and the mount table again: `GlobalPermissionsEnabled` on, `MNT_IGNORE_OWNERSHIP` clear, the same entry.
+`helper-invariants.sh` forbids file access in `HelperOwnership.swift` and in the verb. **(c)/(d) pending** the same
+re-test with this build.
+
+**Status: (a)/(b) PASS with the right's own rule (2026-10-06); (c)/(d) PENDING (fix round 6).** Experimental
+everywhere (rule 10).

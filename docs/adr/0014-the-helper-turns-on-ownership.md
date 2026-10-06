@@ -27,13 +27,31 @@ the second because a root process asking the rights API about a reference it mad
    1. applies the existing administrator gate (and, before it, the connection's code-signing requirement);
    2. parses the UUID (never the all-zero one);
    3. ensures the right's definition, then **re-checks the right** from the client's form with no interaction;
-   4. resolves the UUID to a volume itself (mount table + `getattrlist`, `statfs`, `diskutil info -plist <UUID>`, all three
-      agreeing on UUID, mount point and device node) and refuses unless it is mounted, local, writable, external, APFS or
-      HFS+, not the boot volume or its container, not a disk image, not Time Machine (role or marker);
+   4. resolves the UUID to a volume itself and refuses unless it is mounted, local, writable, external, APFS, not the
+      boot volume or its container, not a disk image or virtual, not Time Machine. *Since fix round 6* it does so
+      **without touching any file on the volume**: `diskutil info -plist <UUID>`, the mount table and `diskutil list
+      -plist` only (below). *Originally:* mount table + `getattrlist`, `statfs` and the plist, APFS or HFS+, Time
+      Machine by role or marker file;
    5. runs nothing if ownership is already on;
    6. runs `/usr/sbin/diskutil enableOwnership <diskNsM>` — the bare disk identifier of the mount it holds open; fixed argv, absolute path, no shell, an environment of one
       PATH entry, an empty signal mask and default dispositions, every setup call checked, a deadline after which the
       child is killed and reaped — and verifies by reading the volume again.
+
+   *Fix round 6 (H18 re-test, 2026-10-06): the helper does no file access on the volume.* With authorization working,
+   the root daemon failed to find the volume the user's own lookup finds: its `getattrlist`/`open` on the mount point
+   failed, most likely because TCC refuses a root launchd daemon access to a removable volume ([LIKELY]; H18). The
+   volume is now identified only from sources TCC does not gate: `diskutil info -plist <UUID>` gives the device node
+   and mount point; the mount table (`getmntinfo_r_np`) must hold exactly one entry at that mount point and exactly one
+   with that device node, the same entry, whose `f_fsid`, type and flags are pinned; `diskutil list -plist` (a third
+   closed, argument-free invocation, chosen over one `info -plist` per mounted device for cost) must list the UUID on
+   exactly one volume or partition. All three are read again immediately before the command. **No descriptor is
+   held**: the window between that re-check and `diskutil enableOwnership <diskNsM>` is the device-node reassignment
+   the reviews already judged acceptable, now without the descriptor's extra assurance. The verb is **APFS-only**: Time
+   Machine is detected by the APFS `Backup` role alone, which HFS+ does not carry, and no marker file is looked for. The
+   post-verify reads diskutil and the mount table again: `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the
+   same entry. `helper-invariants.sh` forbids every file-access call in `HelperOwnership.swift` and in the verb, any
+   route to one through `HelperService`, and extending the ownership types elsewhere. The descriptions of rounds 1–3
+   below are kept as history.
 
    *Fix round 1 (helper-security review, 2026-10-05):* the command names the **UUID**, not the device node (L1) —
    `diskutil(8)` on macOS 26.7.1 accepts "a UUID" as the device (DEVICES), and that it resolves a *volume* UUID was

@@ -208,7 +208,7 @@ options delete.
 3. **Erase “<volume>”…** — only that volume becomes APFS; the disk's other partitions stay (`diskutil eraseVolume`).
 4. **Erase the Disk…** — the whole disk: GUID partition map and one APFS volume (`diskutil eraseDisk`).
 5. **Ownership off** — **Turn On Ownership** (Experimental): in a signed build that includes the privileged helper, one
-   click. macOS asks for your administrator password every time; the helper checks the volume is an external one it may
+   click. macOS asks for your administrator password every time; the helper checks the volume is an external APFS one it may
    change and runs `diskutil enableOwnership` on it, then the drives are read again. The first time, the app installs the
    helper and you approve it in System Settings ▸ General ▸ Login Items & Extensions. Cancelling the password dialog
    changes nothing. If the build cannot use the helper, the helper was not approved, or turning it on did not work, the

@@ -1217,6 +1217,8 @@ substitution may not be waved through. Issue #29 stays open.
 - Test to perform: in a build signed with the user's Developer ID team and `--with-helper`, approve the helper, press
   **Turn On Ownership** for an external volume with Owners: Disabled, enter the administrator password; once more with
   the dialog cancelled.
-- Result (round 4 design): **pending.** Unit-tested with fakes.
+- Re-test 2026-10-06 (0.2.1-dev): authorization **PASS** (the right stored with `tries 10000`); the daemon then
+  failed to find the volume — TCC refusing a root daemon access to a removable volume, **[LIKELY]**. Failed closed.
+- Result (fix round 6 design: no file access on the volume, APFS-only): **pending.** Unit-tested with fakes.
 - Verdict: **pending.** Experimental (rule 10). The guided route (Show in Finder, Copy Command) stays the fallback and is
   what an unsigned build shows.
