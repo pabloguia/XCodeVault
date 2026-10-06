@@ -42,15 +42,12 @@ final class R8HelperOwnershipTests: XCTestCase {
         var unchanged = true
         private(set) var lookups: [UUID] = []
         private(set) var pins = 0
-        private(set) var releases = 0
         init(_ answers: OwnershipVolumeLookup...) { self.answers = answers }
         func pin(volumeUUID: UUID) -> MountPin? {
             lock.withLock {
                 guard answers.first != .notMounted else { return nil }
                 pins += 1
-                return MountPin(
-                    descriptor: 42, mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: [1, 2], disk: DiskIdentifier("disk5s1")!,
-                    uuid: volumeUUID)
+                return R8HelperOwnershipTests.pin(uuid: volumeUUID)
             }
         }
         func lookup(volumeUUID: UUID, pin: MountPin) -> OwnershipVolumeLookup {
@@ -60,7 +57,6 @@ final class R8HelperOwnershipTests: XCTestCase {
             }
         }
         func isUnchanged(_ pin: MountPin) -> Bool { lock.withLock { unchanged } }
-        func release(_ pin: MountPin) { lock.withLock { releases += 1 } }
     }
 
     final class FakeDiskutil: DiskutilRunning, @unchecked Sendable {
@@ -81,7 +77,7 @@ final class R8HelperOwnershipTests: XCTestCase {
     static func facts(_ change: (inout OwnershipVolumeFacts) -> Void = { _ in }) -> OwnershipVolumeFacts {
         var f = OwnershipVolumeFacts(
             deviceNode: "/dev/disk5s1", mountPoint: "/Volumes/XCodeVault", filesystemType: "apfs", isInternal: false, busProtocol: "USB",
-            isLocal: true, isWritable: true, ownersEnabled: false, roles: [], hasTimeMachineMarker: false, sharesTheBootContainer: false)
+            isLocal: true, isWritable: true, ownersEnabled: false, roles: [], sharesTheBootContainer: false)
         change(&f)
         return f
     }
@@ -98,7 +94,6 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertEqual(r.code, .enabled)
         XCTAssertEqual(du.runs, [.enableOwnership(disk: DiskIdentifier("disk5s1")!)], "the command names the pinned mount's disk identifier (N2)")
         XCTAssertEqual(volumes.pins, 1)
-        XCTAssertEqual(volumes.releases, 1, "the pinned descriptor is released")
         XCTAssertEqual(rights.checked, [Self.form], "the right is checked from the client's form, once")
         XCTAssertEqual(rights.ensured, 1)
         XCTAssertEqual(volumes.lookups.count, 2, "read before, and again to verify")
@@ -164,7 +159,7 @@ final class R8HelperOwnershipTests: XCTestCase {
             "not local": Self.facts { $0.isLocal = false },
             "exFAT": Self.facts { $0.filesystemType = "exfat" },
             "Time Machine role": Self.facts { $0.roles = ["Backup"] },
-            "Time Machine marker": Self.facts { $0.hasTimeMachineMarker = true },
+            "HFS+ (fix round 6: APFS only)": Self.facts { $0.filesystemType = "hfs" },
             "whole disk node": Self.facts { $0.deviceNode = "/dev/disk5" },
         ]
         for (name, f) in ineligible {
@@ -176,7 +171,8 @@ final class R8HelperOwnershipTests: XCTestCase {
             XCTAssertTrue(du.runs.isEmpty, name)
         }
         XCTAssertNil(HelperOwnership.refusal(Self.facts()), "the eligible fixture")
-        XCTAssertNil(HelperOwnership.refusal(Self.facts { $0.filesystemType = "hfs" }), "HFS+ is eligible")
+        XCTAssertEqual(HelperOwnership.refusal(Self.facts { $0.filesystemType = "hfs" }), "only an APFS volume is eligible")
+        XCTAssertEqual(HelperOwnership.refusal(Self.facts { $0.roles = ["Backup"] }), "a Time Machine backup is not eligible", "by the APFS role alone")
     }
 
     func testAlreadyOnRunsNothing() {
@@ -229,6 +225,7 @@ final class R8HelperOwnershipTests: XCTestCase {
         let uuid = UUID(uuidString: Self.uuid.lowercased())!
         XCTAssertEqual(DiskutilInvocation.enableOwnership(disk: DiskIdentifier("disk5s1")!).arguments, ["enableOwnership", "disk5s1"])
         XCTAssertEqual(DiskutilInvocation.infoPlist(volumeUUID: uuid).arguments, ["info", "-plist", Self.uuid])
+        XCTAssertEqual(DiskutilInvocation.listPlist.arguments, ["list", "-plist"], "no argument at all")
         XCTAssertEqual(DiskutilInvocation.executable, "/usr/sbin/diskutil")
     }
 
@@ -251,17 +248,168 @@ final class R8HelperOwnershipTests: XCTestCase {
         XCTAssertNil(HelperOwnership.diskIdentifier(ofDeviceNode: "disk5s1"), "a device node, or nothing")
     }
 
-    /// N2 / data F3: two mounted volumes with one UUID leave "the volume" undefined; nothing is pinned and nothing runs.
-    func testTwoMountsWithTheSameUUIDAreRefused() {
-        XCTAssertNil(HelperOwnership.soleMountPoint(["/Volumes/A", "/Volumes/A 1"]))
-        XCTAssertNil(HelperOwnership.soleMountPoint([]))
-        XCTAssertEqual(HelperOwnership.soleMountPoint(["/Volumes/A"]), "/Volumes/A")
-        // A reader that sees two mounts pins nothing (the live reader's `soleMountPoint`), so the verb refuses.
+    // MARK: - Fix round 6: identity from the mount table and diskutil only
+
+    static let fsid: [Int32] = [7, 8]
+    static let apfsLocal = UInt32(MNT_LOCAL) | UInt32(MNT_IGNORE_OWNERSHIP)
+
+    static func entry(
+        _ mp: String = "/Volumes/XCodeVault", from: String = "/dev/disk5s1", type: String = "apfs", flags: UInt32 = apfsLocal, fsid: [Int32] = fsid
+    ) -> MountEntry {
+        MountEntry(mountedOn: mp, from: from, type: type, flags: flags, fsid: fsid)
+    }
+
+    static var mounts: [MountEntry] {
+        [entry("/", from: "/dev/disk3s1s1"), entry("/System/Volumes/Data", from: "/dev/disk3s5", fsid: [1, 1]), entry()]
+    }
+
+    static func pin(uuid: UUID = UUID(uuidString: R8HelperOwnershipTests.uuid)!) -> MountPin {
+        MountPin(
+            mountPoint: "/Volumes/XCodeVault", deviceNode: "/dev/disk5s1", fsid: fsid, flags: apfsLocal, fileSystemType: "apfs",
+            disk: DiskIdentifier("disk5s1")!, uuid: uuid)
+    }
+
+    static func listPlist(_ uuids: [String]) -> Data {
+        let volumes = uuids.enumerated().map { i, u in ["DeviceIdentifier": "disk5s\(i + 1)", "VolumeUUID": u] }
+        let d: [String: Any] = [
+            "AllDisksAndPartitions": [
+                ["DeviceIdentifier": "disk3", "APFSVolumes": [["DeviceIdentifier": "disk3s5", "VolumeUUID": UUID().uuidString]]],
+                ["DeviceIdentifier": "disk5", "APFSVolumes": volumes, "Partitions": [["DeviceIdentifier": "disk4s1"]]],
+            ]
+        ]
+        return try! PropertyListSerialization.data(fromPropertyList: d, format: .xml, options: 0)
+    }
+
+    func testThePinComesFromDiskutilAndOneMountEntry() throws {
+        let wanted = UUID(uuidString: Self.uuid)!
+        let info = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist()))
+        XCTAssertEqual(HelperOwnership.pin(wanted: wanted, info: info, mounts: Self.mounts, uuidCount: 1), Self.pin())
+        XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: nil, mounts: Self.mounts, uuidCount: 1), "no plist")
+        XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: info, mounts: nil, uuidCount: 1), "no mount table")
+        XCTAssertNil(HelperOwnership.pin(wanted: UUID(), info: info, mounts: Self.mounts, uuidCount: 1), "diskutil described another UUID")
+        XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: info, mounts: Self.mounts, uuidCount: nil), "uniqueness unknown")
+        XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: info, mounts: Self.mounts, uuidCount: 0))
+    }
+
+    /// The mount table and the plist must name one and the same entry.
+    func testTheMountTableAndThePlistMustAgree() throws {
+        let wanted = UUID(uuidString: Self.uuid)!
+        let info = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist()))
+        let cases: [String: [MountEntry]] = [
+            "nothing at the mount point": [Self.entry("/Volumes/Other")],
+            "another device at the mount point": [Self.entry(from: "/dev/disk6s1")],
+            "the device mounted elsewhere too": [Self.entry(), Self.entry("/Volumes/XCodeVault 1")],
+            "two entries at the mount point": [Self.entry(), Self.entry(from: "/dev/disk6s1")],
+            "the point and the node on different entries": [Self.entry(from: "/dev/disk6s1"), Self.entry("/Volumes/Other")],
+            "a snapshot node": [Self.entry(from: "/dev/disk5s1s1")],
+        ]
+        for (name, mounts) in cases {
+            let snapshotInfo = name == "a snapshot node" ? try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist { $0["DeviceNode"] = "/dev/disk5s1s1" })) : info
+            XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: snapshotInfo, mounts: mounts, uuidCount: 1), name)
+        }
+    }
+
+    /// N2 / data F3, now from `diskutil list -plist`: two volumes carrying one UUID leave "the volume" undefined.
+    func testTwoVolumesWithTheSameUUIDAreRefused() throws {
+        let wanted = UUID(uuidString: Self.uuid)!
+        XCTAssertEqual(HelperOwnership.volumeUUIDCount(inListPlist: Self.listPlist([Self.uuid]), wanted: wanted), 1)
+        XCTAssertEqual(HelperOwnership.volumeUUIDCount(inListPlist: Self.listPlist([Self.uuid, Self.uuid.lowercased()]), wanted: wanted), 2)
+        XCTAssertEqual(HelperOwnership.volumeUUIDCount(inListPlist: Self.listPlist([]), wanted: wanted), 0)
+        XCTAssertNil(HelperOwnership.volumeUUIDCount(inListPlist: Data("not a plist".utf8), wanted: wanted))
+        let malformed = try PropertyListSerialization.data(
+            fromPropertyList: ["AllDisksAndPartitions": [["APFSVolumes": "x"]]] as [String: Any], format: .xml, options: 0)
+        XCTAssertNil(HelperOwnership.volumeUUIDCount(inListPlist: malformed, wanted: wanted), "an unexpected shape is not a count")
+        let info = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist()))
+        XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: info, mounts: Self.mounts, uuidCount: 2))
+        // A reader that pins nothing: the verb refuses and nothing runs.
         let du = FakeDiskutil()
         let r = service().doEnableOwnership(
             volumeUUID: Self.uuid, authorization: Self.form, rights: FakeRights(), volumes: FakeVolumes(.notMounted), diskutil: du)
         XCTAssertEqual(r.code, .volumeNotFound)
         XCTAssertTrue(du.runs.isEmpty)
+    }
+
+    /// The live reader composes the pure parts over two closed diskutil invocations and the mount table; with a scripted
+    /// runner and table it never reaches this Mac. It never asks for anything but `info -plist <UUID>` and `list -plist`.
+    func testTheReaderUsesOnlyDiskutilAndTheMountTable() throws {
+        final class Scripted: DiskutilRunning, @unchecked Sendable {
+            let lock = NSLock()
+            var info = R8HelperOwnershipTests.infoPlist()
+            var list = R8HelperOwnershipTests.listPlist([R8HelperOwnershipTests.uuid])
+            private(set) var runs: [DiskutilInvocation] = []
+            func run(_ invocation: DiskutilInvocation) -> DiskutilOutput {
+                lock.withLock {
+                    runs.append(invocation)
+                    switch invocation {
+                    case .infoPlist: return DiskutilOutput(exitStatus: 0, stdout: info, failure: nil)
+                    case .listPlist: return DiskutilOutput(exitStatus: 0, stdout: list, failure: nil)
+                    case .enableOwnership: return DiskutilOutput(exitStatus: 0, stdout: Data(), failure: nil)
+                    }
+                }
+            }
+        }
+        final class Table: @unchecked Sendable {
+            let lock = NSLock()
+            var mounts: [MountEntry]? = R8HelperOwnershipTests.mounts
+            var current: [MountEntry]? { lock.withLock { mounts } }
+        }
+        let wanted = UUID(uuidString: Self.uuid)!
+        let runner = Scripted(), table = Table()
+        let reader = OwnershipVolumeReader(runner: runner, readMounts: { table.current })
+        let pin = try XCTUnwrap(reader.pin(volumeUUID: wanted))
+        XCTAssertEqual(pin, Self.pin())
+        guard case .found(let f) = reader.lookup(volumeUUID: wanted, pin: pin) else { return XCTFail() }
+        XCTAssertNil(HelperOwnership.refusal(f))
+        XCTAssertTrue(reader.isUnchanged(pin))
+        XCTAssertTrue(runner.runs.allSatisfy { $0 == .infoPlist(volumeUUID: wanted) || $0 == .listPlist }, "\(runner.runs)")
+        runner.list = Self.listPlist([Self.uuid, Self.uuid])
+        XCTAssertFalse(reader.isUnchanged(pin), "a second volume with the UUID appeared")
+        XCTAssertNil(reader.pin(volumeUUID: wanted))
+        runner.list = Self.listPlist([Self.uuid])
+        table.lock.withLock { table.mounts = [Self.entry(fsid: [9, 9])] }
+        XCTAssertFalse(reader.isUnchanged(pin), "remounted")
+        guard case .unreadable = reader.lookup(volumeUUID: wanted, pin: pin) else { return XCTFail("a remounted volume is not the pinned one") }
+        XCTAssertNil(reader.pin(volumeUUID: HelperService.nilVolumeUUID))
+    }
+
+    /// The re-check before the command: a change in the mount table, in diskutil's answer, or in uniqueness refuses.
+    func testAMountTableChangeIsSeenAtTheRecheck() throws {
+        let info = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist()))
+        let pin = Self.pin()
+        XCTAssertTrue(HelperOwnership.isUnchanged(pin, info: info, mounts: Self.mounts, uuidCount: 1))
+        let changed: [String: [MountEntry]] = [
+            "remounted (new fsid)": [Self.entry(fsid: [9, 9])],
+            "another device at the point": [Self.entry(from: "/dev/disk6s1")],
+            "flags changed": [Self.entry(flags: UInt32(MNT_LOCAL))],
+            "unmounted": [],
+            "a second mount of the device": [Self.entry(), Self.entry("/Volumes/XCodeVault 1")],
+            "another type": [Self.entry(type: "hfs")],
+        ]
+        for (name, mounts) in changed {
+            XCTAssertFalse(HelperOwnership.isUnchanged(pin, info: info, mounts: mounts, uuidCount: 1), name)
+        }
+        XCTAssertFalse(HelperOwnership.isUnchanged(pin, info: info, mounts: nil, uuidCount: 1))
+        XCTAssertFalse(HelperOwnership.isUnchanged(pin, info: info, mounts: Self.mounts, uuidCount: 2), "a second volume with the UUID")
+        XCTAssertFalse(HelperOwnership.isUnchanged(pin, info: nil, mounts: Self.mounts, uuidCount: 1))
+        let moved = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist { $0["DeviceNode"] = "/dev/disk6s1" }))
+        XCTAssertFalse(HelperOwnership.isUnchanged(pin, info: moved, mounts: Self.mounts, uuidCount: 1), "diskutil now names another device")
+    }
+
+    /// The post-verify reads the flags anew: ownership is on only with `GlobalPermissionsEnabled` and without
+    /// `MNT_IGNORE_OWNERSHIP`, on the same entry.
+    func testThePostVerifyReadsTheFlagsAnew() throws {
+        let wanted = UUID(uuidString: Self.uuid)!
+        let on = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist { $0["GlobalPermissionsEnabled"] = true }))
+        let cleared = Self.entry(flags: UInt32(MNT_LOCAL))
+        XCTAssertEqual(HelperOwnership.entry(of: Self.pin(), in: [cleared]), cleared, "flags may change after the command; the entry is the same")
+        guard case .found(let good) = HelperOwnership.facts(wanted: wanted, entry: cleared, info: on, bootNodes: ["/dev/disk3s5"]) else { return XCTFail() }
+        XCTAssertTrue(good.ownersEnabled)
+        guard case .found(let ignoring) = HelperOwnership.facts(wanted: wanted, entry: Self.entry(), info: on, bootNodes: ["/dev/disk3s5"]) else {
+            return XCTFail()
+        }
+        XCTAssertFalse(ignoring.ownersEnabled, "MNT_IGNORE_OWNERSHIP still set: not verified")
+        XCTAssertNil(HelperOwnership.entry(of: Self.pin(), in: [Self.entry(fsid: [9, 9])]), "another mount is not the verified one")
+        XCTAssertEqual(HelperOwnership.bootNodes(Self.mounts), ["/dev/disk3s1s1", "/dev/disk3s5"])
     }
 
     func testAVolumeThatChangedBeforeTheCommandIsRefused() {
@@ -271,7 +419,6 @@ final class R8HelperOwnershipTests: XCTestCase {
         let r = service().doEnableOwnership(volumeUUID: Self.uuid, authorization: Self.form, rights: FakeRights(), volumes: volumes, diskutil: du)
         XCTAssertEqual(r.code, .volumeNotFound)
         XCTAssertTrue(du.runs.isEmpty, "nothing runs on a mount that is no longer the one read")
-        XCTAssertEqual(volumes.releases, 1)
     }
 
     func testHowARunEndedDecidesItsOutcome() {
@@ -432,15 +579,10 @@ final class R8HelperOwnershipTests: XCTestCase {
         let wanted = UUID(uuidString: Self.uuid)!
         let info = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist()))
         let local = UInt32(MNT_LOCAL)
-        let ok = HelperOwnership.facts(
-            wanted: wanted, mountPoint: "/Volumes/XCodeVault", statfsNode: "/dev/disk5s1", statfsType: "apfs",
-            statfsFlags: local | UInt32(MNT_IGNORE_OWNERSHIP),
-            info: info, bootNodes: ["/dev/disk3s1s1", "/dev/disk3s5"], hasTimeMachineMarker: false)
+        let ok = HelperOwnership.facts(wanted: wanted, entry: Self.entry(), info: info, bootNodes: ["/dev/disk3s1s1", "/dev/disk3s5"])
         XCTAssertEqual(ok, .found(Self.facts()))
         func with(_ i: HelperOwnership.InfoPlist, mp: String = "/Volumes/XCodeVault", node: String = "/dev/disk5s1") -> OwnershipVolumeLookup {
-            HelperOwnership.facts(
-                wanted: wanted, mountPoint: mp, statfsNode: node, statfsType: "apfs", statfsFlags: local, info: i, bootNodes: ["/dev/disk3s5"],
-                hasTimeMachineMarker: false)
+            HelperOwnership.facts(wanted: wanted, entry: Self.entry(mp, from: node, flags: local), info: i, bootNodes: ["/dev/disk3s5"])
         }
         var other = info
         other.volumeUUID = UUID().uuidString
@@ -452,8 +594,7 @@ final class R8HelperOwnershipTests: XCTestCase {
         guard case .found(let f) = with(on) else { return XCTFail() }
         XCTAssertTrue(f.ownersEnabled)
         let readOnly = HelperOwnership.facts(
-            wanted: wanted, mountPoint: "/Volumes/XCodeVault", statfsNode: "/dev/disk5s1", statfsType: "apfs", statfsFlags: local | UInt32(MNT_RDONLY),
-            info: on, bootNodes: ["/dev/disk3s5"], hasTimeMachineMarker: false)
+            wanted: wanted, entry: Self.entry(flags: local | UInt32(MNT_RDONLY)), info: on, bootNodes: ["/dev/disk3s5"])
         guard case .found(let ro) = readOnly else { return XCTFail() }
         XCTAssertFalse(ro.isWritable)
         XCTAssertNil(HelperOwnership.parseInfo(Data("not a plist".utf8)))

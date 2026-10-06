@@ -227,8 +227,10 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     ///   4. the volume, resolved by the helper from the UUID, and refused unless eligible (`HelperOwnership.refusal`);
     ///   5. nothing run when ownership is already on;
     ///   6. the pinned mount checked once more, then `diskutil enableOwnership <its disk identifier>`, then the volume read again
-    ///      through the pin: the same device node, and ownership on. A `diskutil` that reports success without that is
-    ///      `notVerified`.
+    ///      from the mount table and diskutil: the same mount entry, `GlobalPermissionsEnabled`, and no
+    ///      `MNT_IGNORE_OWNERSHIP`. A `diskutil` that reports success without that is `notVerified`.
+    ///
+    /// Fix round 6: nothing here, nor in `HelperOwnership.swift`, touches a file on the volume (`helper-invariants.sh`).
     ///
     /// `rights`, `volumes` and `diskutil` are test seams, functions of nothing on the XPC wire; the dispatch above
     /// passes none of them.
@@ -257,10 +259,9 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
         }
 
         let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)
-        // Pinned before anything is read, held until the reply: every reading and the last check before the command
-        // go through this one descriptor (fix round 1, L1).
+        // Pinned from the mount table and diskutil only (fix round 6): the helper never opens, stats or getattrlists
+        // anything on the volume, because TCC refuses a root launchd daemon access to a removable volume (H18).
         guard let pin = reader.pin(volumeUUID: uuid) else { return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound) }
-        defer { reader.release(pin) }
         let facts: OwnershipVolumeFacts
         switch reader.lookup(volumeUUID: uuid, pin: pin) {
         case .found(let f): facts = f
@@ -1121,12 +1122,6 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     /// and why reading offset 24 unconditionally would be reading whatever happened to be there.
     static func volumeUUID(ofMountPoint mp: String) -> UUID? {
         volumeUUID { attrList, raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
-    }
-
-    /// The same, asked of an open descriptor (R8 fix round 3): the volume the descriptor is on, whatever the name now
-    /// resolves to.
-    static func volumeUUID(ofDescriptor fd: Int32) -> UUID? {
-        volumeUUID { attrList, raw in getattrlistat(fd, ".", &attrList, raw.baseAddress, raw.count, UInt(FSOPT_NOFOLLOW)) }
     }
 
     /// The request and the reply's parsing, shared by both forms; `call` makes the one system call.

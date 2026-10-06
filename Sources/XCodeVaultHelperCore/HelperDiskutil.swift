@@ -3,16 +3,17 @@
 // Everything else in the helper targets is forbidden to start a process, and still is: this file is the single
 // exemption in both `scripts/helper-invariants.sh` and the editor hook, and the script holds its shape — the spawn
 // function named exactly once in this file's code, on `DiskutilInvocation.executable`; the argv built on one pinned
-// line from `arguments`, whose two returns are pinned too; no other absolute path literal but `/usr/sbin/diskutil` and
+// line from `arguments`, whose three returns are pinned too; no other absolute path literal but `/usr/sbin/diskutil` and
 // `/dev/null`; and none of the routes around those rules (a PATH search, an aliased function, an inherited descriptor,
 // a fork, a symbol looked up at run time).
 //
 // **What can be run is a closed enum.** `info -plist` takes the volume's UUID — the helper's own parse, re-serialized, so
 // no byte of the client's string reaches argv; `diskutil(8)` (macOS 26.7.1, DEVICES) accepts "a UUID", and a *volume*
 // UUID resolving to its volume was measured read-only on 2026-10-05. `enableOwnership` takes the bare disk identifier
-// (`disk5s1`) of the mount the helper holds open (fix round 2, N2): a UUID names whichever volume carries it at the
-// moment diskutil looks, and two mounted volumes can carry the same one, while the identifier comes from `fstatfs` on
-// the very descriptor that was checked, re-verified immediately before the spawn. `DiskIdentifier` can only be built
+// (`disk5s1`) of the pinned mount (fix round 2, N2): a UUID names whichever volume carries it at the
+// moment diskutil looks, and two mounted volumes can carry the same one, while the identifier comes from
+// the mount table entry diskutil's own plist names, re-verified immediately before the spawn (fix round 6: the
+// helper holds no descriptor on the volume). `list -plist` takes no argument at all. `DiskIdentifier` can only be built
 // from a string that matches `disk<N>s<M>`, anchored, on bytes.
 
 import Foundation
@@ -43,14 +44,18 @@ enum DiskutilInvocation: Equatable, Sendable {
     case infoPlist(volumeUUID: UUID)
     /// `diskutil enableOwnership <disk identifier>`: the one state change. Turns ownership on; erases nothing.
     case enableOwnership(disk: DiskIdentifier)
+    /// `diskutil list -plist`: every disk, partition and APFS volume with its UUID, so the helper can tell the UUID is on
+    /// exactly one (fix round 6). No argument at all.
+    case listPlist
 
     static let executable = "/usr/sbin/diskutil"
 
-    /// The argv after the executable: a verb this enum names and a canonical UUID or a validated disk identifier.
+    /// The argv after the executable: a verb this enum names and a canonical UUID, a validated disk identifier, or nothing.
     var arguments: [String] {
         switch self {
         case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]
         case .enableOwnership(let disk): return ["enableOwnership", disk.value]
+        case .listPlist: return ["list", "-plist"]
         }
     }
 }
