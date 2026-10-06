@@ -178,7 +178,8 @@ final class R8HelperInvariantsTests: XCTestCase {
             name: "file access in the verb", file: service, old: readerLine,
             new: readerLine + "        _ = Self.volumeUUID(ofMountPoint: \"/Volumes\")\n"),
         Mutation(
-            name: "a descriptor opened in the verb", file: service, old: readerLine, new: readerLine + "        let fd = open(\"/Volumes\", O_RDONLY); close(fd)\n"),
+            name: "a descriptor opened in the verb", file: service, old: readerLine,
+            new: readerLine + "        let fd = open(\"/Volumes\", O_RDONLY); close(fd)\n"),
         Mutation(
             name: "an ownership type extended elsewhere", file: service, old: "final class HelperService: NSObject",
             new: "extension OwnershipVolumeReader { func peek() {} }\nfinal class HelperService: NSObject"),

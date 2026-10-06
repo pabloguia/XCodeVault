@@ -303,9 +303,10 @@ final class R8HelperOwnershipTests: XCTestCase {
             "the point and the node on different entries": [Self.entry(from: "/dev/disk6s1"), Self.entry("/Volumes/Other")],
             "a snapshot node": [Self.entry(from: "/dev/disk5s1s1")],
         ]
+        let snapshot = try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist { $0["DeviceNode"] = "/dev/disk5s1s1" }))
         for (name, mounts) in cases {
-            let snapshotInfo = name == "a snapshot node" ? try XCTUnwrap(HelperOwnership.parseInfo(Self.infoPlist { $0["DeviceNode"] = "/dev/disk5s1s1" })) : info
-            XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: snapshotInfo, mounts: mounts, uuidCount: 1), name)
+            let i = name == "a snapshot node" ? snapshot : info
+            XCTAssertNil(HelperOwnership.pin(wanted: wanted, info: i, mounts: mounts, uuidCount: 1), name)
         }
     }
 
