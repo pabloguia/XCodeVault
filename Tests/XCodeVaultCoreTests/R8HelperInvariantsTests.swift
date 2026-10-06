@@ -19,6 +19,8 @@ final class R8HelperInvariantsTests: XCTestCase {
     static let own = "Sources/XCodeVaultHelperCore/HelperOwnership.swift"
     static let recheck = "    func isUnchanged(_ pin: MountPin) -> Bool {\n"
     static let readerLine = "        let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)\n"
+    static let pinLine = "    func pin(volumeUUID wanted: UUID) -> MountPin? {\n"
+    static let probe = "func probeVolume(pin: Int) -> Bool { var s = stat(); return lstat(\"/Volumes/X\", &s) == 0 }\n"
     static let pid = "        var pid: pid_t = 0\n"
     static let writerFree = "        defer { AuthorizationFree(writer, []) }\n"
     static let check = "AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)"
@@ -82,8 +84,8 @@ final class R8HelperInvariantsTests: XCTestCase {
             new: "            posix_spawn_file_actions_adddup2(&actions, writeEnd, 1),\n            posix_spawn_file_actions_addinherit_np(&actions, 5),\n"),
         Mutation(name: "POSIX_SPAWN_SETEXEC", file: spawn, old: "POSIX_SPAWN_CLOEXEC_DEFAULT |", new: "POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETEXEC |"),
         Mutation(
-            name: "an extra argv element", file: spawn, old: "return [\"enableOwnership\", disk.value]",
-            new: "return [\"enableOwnership\", \"-force\", disk.value]"),
+            name: "an extra argv element", file: spawn, old: "return [\"enableOwnership\", disk.devicePath]",
+            new: "return [\"enableOwnership\", \"-force\", disk.devicePath]"),
         Mutation(
             name: "a case carrying a String", file: spawn, old: "    case enableOwnership(disk: DiskIdentifier)", new: "    case enableOwnership(disk: String)"),
         Mutation(name: "a path built by concatenation", file: spawn, old: "\"/dev/null\", O_RDONLY", new: "\"/dev/\" + \"null\", O_RDONLY"),
@@ -186,6 +188,36 @@ final class R8HelperInvariantsTests: XCTestCase {
         Mutation(name: "the list argv takes an argument", file: spawn, old: "return [\"list\", \"-plist\"]", new: "return [\"list\", \"-plist\", \"disk0\"]"),
         Mutation(
             name: "a fourth diskutil invocation", file: spawn, old: "    case listPlist\n", new: "    case listPlist\n    case unmount(disk: DiskIdentifier)\n"),
+        // Fix round 7 (M2): the helper-security reviewer's bypasses of the round-6 denylist, B1–B8, each caught by the
+        // allowlist of calls or by the qualifier, top-level-function and typealias rules.
+        Mutation(
+            name: "B1: open as a function value", file: own, old: pinLine,
+            new: pinLine + "        let o: (UnsafePointer<CChar>, Int32) -> Int32 = Darwin.open; _ = o(\"/Volumes/X\", O_RDONLY)\n"),
+        Mutation(name: "B2: fts_open", file: own, old: pinLine, new: pinLine + "        _ = fts_open(nil, 0, nil)\n"),
+        Mutation(name: "B3: statvfs", file: own, old: pinLine, new: pinLine + "        var v = statvfs(); _ = statvfs(\"/Volumes/X\", &v)\n"),
+        Mutation(name: "B4: removexattr", file: own, old: pinLine, new: pinLine + "        _ = removexattr(\"/Volumes/X\", \"a\", 0)\n"),
+        Mutation(
+            name: "B5: Data.init(contentsOf:)", file: own, old: pinLine,
+            new: pinLine + "        _ = try? Data.init(contentsOf: URL.init(string: \"file:///Volumes/X\")!)\n"),
+        Mutation(
+            name: "B6: a helper defined in the service file, called by the verb", file: service, old: readerLine,
+            new: readerLine + "        guard probeVolume(pin: 0) else { return HelperResult(ok: false, message: \"x\", code: .volumeNotFound) }\n",
+            appendToService: probe),
+        Mutation(
+            name: "B7: a free function called by the reader", file: own, old: pinLine, new: pinLine + "        _ = probeVolume(pin: 0)\n",
+            appendToService: probe),
+        Mutation(
+            name: "B8: an extension through a typealias", file: own, old: pinLine, new: pinLine + "        _ = 0\n",
+            appendToService:
+                "typealias HO = HelperOwnership\nextension HO { static func probe() -> Bool { var s = stat(); return lstat(\"/Volumes/X\", &s) == 0 } }\n"),
+        // Fix round 7 (H1, L1): the roles' invocation and the /dev/ path are pinned.
+        Mutation(
+            name: "the apfs list argv takes an argument", file: spawn, old: "return [\"apfs\", \"list\", \"-plist\"]",
+            new: "return [\"apfs\", \"list\", \"-plist\", \"disk0\"]"),
+        Mutation(
+            name: "enableOwnership given the bare name again", file: spawn, old: "[\"enableOwnership\", disk.devicePath]",
+            new: "[\"enableOwnership\", disk.value]"),
+        Mutation(name: "the /dev/ path built otherwise", file: spawn, old: "{ \"/dev/\" + value }", new: "{ \"/dev/r\" + value }"),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),

@@ -422,8 +422,13 @@ if [ -f "$SPAWN_SITE" ]; then
         || violation "$SPAWN_SITE — the argv line changed" "argv is the executable and DiskutilInvocation.arguments, nothing else"
     code_of "$SPAWN_SITE" | grep -qxF '        case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]' \
         || violation "$SPAWN_SITE — the info argv changed" "info -plist <canonical UUID>"
-    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let disk): return ["enableOwnership", disk.value]' \
-        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership <the pinned mount's validated disk identifier>"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let disk): return ["enableOwnership", disk.devicePath]' \
+        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership /dev/<the pinned mount's validated disk identifier> (fix round 7, L1)"
+    code_of "$SPAWN_SITE" | grep -qxF '    var devicePath: String { "/dev/" + value }' \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '[[:<:]]devicePath[[:>:]]')" -eq 2 ] \
+        || violation "$SPAWN_SITE — DiskIdentifier.devicePath changed" "\"/dev/\" + the validated value, declared once and used once"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .apfsListPlist: return ["apfs", "list", "-plist"]' \
+        || violation "$SPAWN_SITE — the apfs list argv changed" "apfs list -plist, with no argument (fix round 7, H1)"
     code_of "$SPAWN_SITE" | grep -qxF '        let envp: [UnsafeMutablePointer<CChar>?] = [strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"), nil]' \
         || violation "$SPAWN_SITE — the environment line changed" "the child's environment is one PATH entry"
     # `DiskIdentifier.value` is assigned once, inside its validating initialiser (fix round 2, N2).
@@ -436,14 +441,15 @@ if [ -f "$SPAWN_SITE" ]; then
     code_of "$SPAWN_SITE" | grep -qxF '        case .listPlist: return ["list", "-plist"]' \
         || violation "$SPAWN_SITE — the list argv changed" "list -plist, with no argument"
     returns=$(code_of "$SPAWN_SITE" | grep -cE 'return \[')
-    [ "$returns" -eq 3 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly three, all pinned"
+    [ "$returns" -eq 4 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly four, all pinned"
     code_of "$SPAWN_SITE" | grep -qxF '    case infoPlist(volumeUUID: UUID)' \
         && code_of "$SPAWN_SITE" | grep -qxF '    case enableOwnership(disk: DiskIdentifier)' \
         && code_of "$SPAWN_SITE" | grep -qxF '    case listPlist' \
-        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 3 ] \
-        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "three cases: a parsed UUID, a validated disk identifier, and none"
+        && code_of "$SPAWN_SITE" | grep -qxF '    case apfsListPlist' \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 4 ] \
+        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "four cases: a parsed UUID, a validated disk identifier, and two with none"
     # Every absolute path literal in the file is one of these; `/dev/null` is stdin and stderr.
-    bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
+    bad_paths=$(code_of "$SPAWN_SITE" | grep -vxF '    var devicePath: String { "/dev/" + value }' | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
     [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
 else
     violation "$SPAWN_SITE — missing" "the R8 spawn rules check nothing; move them with the file"
@@ -490,6 +496,29 @@ hit=$(grep -nE "$file_access" <<<"$verb_body" | head -3)
 hit=$(for f in $helper_files; do [ "$f" = "$OWN_SITE" ] || code_of "$f"; done \
     | grep -nE 'extension[[:space:]]+(HelperOwnership|OwnershipVolumeReader|MountEntry|MountPin)[[:>:]]' | head -3)
 [ -z "$hit" ] || violation "helper targets — an ownership type extended outside $OWN_SITE" "$hit"
+# Fix round 7 (M2): a denylist cannot name every call that reaches a file (fts_open, statvfs, removexattr, a helper
+# defined elsewhere, a function value…), so what the reader and the verb CALL is an allowlist: every identifier
+# followed by `(` — free functions, initialisers, methods, enum cases — compared with the set below. Whole-line
+# comments are dropped first. A new call means changing this list, in front of the helper-security review.
+calls_in() { grep -vE '^[[:space:]]*//' | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(' | sed -E 's/[[:space:]]*\($//' | sort -u | tr '\n' ' '; }
+own_calls_allowed='DiskIdentifier InfoPlist Int MountEntry MountPin OwnershipVolumeFacts Sendable Set String UInt32 UUID append bootNodes cString caseInsensitiveCompare compactMap contains diskIdentifier diskOf dropFirst entry facts filter found free getmntinfo_r_np hasPrefix info infoPlist isNosuidNodev isUnchanged isVolumeDeviceNode lookup lowercased map mountTable parseInfo pin propertyList range readMounts refusal return roles run sharesBoot unreadable uuidCount volumeUUIDCount withMemoryRebound withUnsafePointer '
+verb_calls_allowed='HelperResult OwnershipVolumeReader SecurityRightAuthority SpawnedDiskutil UUID authorize check defined denied doEnableOwnership enableOwnership ensureDefinition failed found granted isUnchanged lookup pin refusal run unreadable '
+own_calls=$(code_of "$OWN_SITE" | calls_in)
+[ "$own_calls" = "$own_calls_allowed" ] \
+    || violation "$OWN_SITE — the calls changed" "allowed: $own_calls_allowed| found: $own_calls"
+verb_calls=$(calls_in <<<"$verb_body")
+[ "$verb_calls" = "$verb_calls_allowed" ] \
+    || violation "HelperService.swift — doEnableOwnership's calls changed" "allowed: $verb_calls_allowed| found: $verb_calls"
+# No `.init` spelling (it would hide the type from the allowlist), no top-level function (a helper reachable by a bare
+# name), no module-qualified C call except the two reads/writes HelperMountHistory has always made, and no typealias of
+# an ownership type (an alias would carry an extension past the rule above).
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '\.init[[:space:]]*[(]|^(public |private |fileprivate |internal )?func ' | head -3)
+[ -z "$hit" ] || violation "helper targets — an .init call or a top-level function" "$hit"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '[[:<:]](Darwin|Glibc)[[:space:]]*\.' \
+    | grep -vE ':[[:space:]]+let n = buffer\.withUnsafeMutableBytes \{ Darwin\.read\(fd, \$0\.baseAddress, \$0\.count\) \}$|:[[:space:]]+let written = bytes\.withUnsafeBytes \{ Darwin\.write\(fd, \$0\.baseAddress, \$0\.count\) \}$' | head -3)
+[ -z "$hit" ] || violation "helper targets — a Darwin. / Glibc. qualified call" "$hit"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE 'typealias[^=]*=[[:space:]]*(HelperOwnership|OwnershipVolumeReader|OwnershipVolumeReading|MountEntry|MountPin|OwnershipVolumeFacts|DiskutilInvocation|DiskIdentifier)[[:>:]]' | head -3)
+[ -z "$hit" ] || violation "helper targets — a typealias of an ownership type" "$hit"
 pin_vars=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+var[[:space:]]')
 pin_lets=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+let[[:space:]]')
 [ "$pin_vars" -eq 0 ] && [ "$pin_lets" -ge 6 ] \
