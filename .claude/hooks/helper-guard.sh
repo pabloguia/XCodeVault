@@ -63,6 +63,8 @@ case "$path" in
     has "$peer_pat" && deny "forbidden peer-validation pattern (PID / hand-rolled validation / AuthorizationCopyRights) in helper ($path)"
     # The helper never shows an authorization dialog of its own: interaction belongs to the client.
     has 'interactionAllowed' && deny "authorization interaction in the privileged helper ($path)"
+    # Fix round 4 (H18 measured): the right has its own definition; the stock admin rule's timeout of 0 broke the re-check.
+    has 'authenticate-admin|kAuthorizationRule' && deny "the helper's right must not point at a stock rule ($path)"
     # The routes around the two exemptions, mirrored from scripts/helper-invariants.sh (fix rounds 1–2, M1 / N1). The hook
     # sees the proposed text only, so the counts and the pinned lines stay the script's; these are the tokens it can match.
     has 'dlsym|\bv?fork *\(|@_silgen_name|AuthorizationCopyRightsAsync|addinherit_np|POSIX_SPAWN_SETEXEC' \
