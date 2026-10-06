@@ -16,6 +16,9 @@ final class R8HelperInvariantsTests: XCTestCase {
     static let spawn = "Sources/XCodeVaultHelperCore/HelperDiskutil.swift"
     static let authz = "Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift"
     static let service = "Sources/XCodeVaultHelperCore/HelperService.swift"
+    static let own = "Sources/XCodeVaultHelperCore/HelperOwnership.swift"
+    static let recheck = "    func isUnchanged(_ pin: MountPin) -> Bool {\n"
+    static let readerLine = "        let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)\n"
     static let pid = "        var pid: pid_t = 0\n"
     static let writerFree = "        defer { AuthorizationFree(writer, []) }\n"
     static let check = "AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)"
@@ -159,6 +162,29 @@ final class R8HelperInvariantsTests: XCTestCase {
             name: "N1: the read-back no longer asks isOurDefinition", file: authz,
             old: "let back = written as? [String: Any],\n            Self.isOurDefinition(back, teamID: teamID)\n",
             new: "let back = written as? [String: Any], !back.isEmpty\n"),
+        // Fix round 6 (H18 re-test, TCC): no file access on the volume, in the reader or in the verb; diskutil closed.
+        Mutation(name: "an open of the mount point", file: own, old: recheck, new: recheck + "        _ = open(pin.mountPoint, O_RDONLY)\n"),
+        Mutation(
+            name: "a getattrlist on the mount point", file: own, old: recheck,
+            new: recheck + "        var a = attrlist()\n        _ = getattrlist(pin.mountPoint, &a, nil, 0, 0)\n"),
+        Mutation(
+            name: "the UUID read through HelperService", file: own, old: recheck,
+            new: recheck + "        _ = HelperService.volumeUUID(ofMountPoint: pin.mountPoint)\n"),
+        Mutation(name: "a statfs of the mount point", file: own, old: recheck, new: recheck + "        _ = statfs(pin.mountPoint, nil)\n"),
+        Mutation(
+            name: "a marker file looked at", file: own, old: recheck,
+            new: recheck + "        _ = FileManager.default.fileExists(atPath: pin.mountPoint + \"/.timemachine\")\n"),
+        Mutation(
+            name: "file access in the verb", file: service, old: readerLine,
+            new: readerLine + "        _ = Self.volumeUUID(ofMountPoint: \"/Volumes\")\n"),
+        Mutation(
+            name: "a descriptor opened in the verb", file: service, old: readerLine, new: readerLine + "        let fd = open(\"/Volumes\", O_RDONLY); close(fd)\n"),
+        Mutation(
+            name: "an ownership type extended elsewhere", file: service, old: "final class HelperService: NSObject",
+            new: "extension OwnershipVolumeReader { func peek() {} }\nfinal class HelperService: NSObject"),
+        Mutation(name: "the list argv takes an argument", file: spawn, old: "return [\"list\", \"-plist\"]", new: "return [\"list\", \"-plist\", \"disk0\"]"),
+        Mutation(
+            name: "a fourth diskutil invocation", file: spawn, old: "    case listPlist\n", new: "    case listPlist\n    case unmount(disk: DiskIdentifier)\n"),
         // Fix round 2 (N2): the identifier is built only by its validating initialiser.
         Mutation(
             name: "DiskIdentifier.value assigned twice", file: spawn, old: "        value = raw\n", new: "        value = raw\n        value = \"disk0s1\"\n"),

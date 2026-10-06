@@ -432,12 +432,16 @@ if [ -f "$SPAWN_SITE" ]; then
         || violation "$SPAWN_SITE — DiskIdentifier.value is assigned outside its validating initialiser" "the identifier is built only by init?"
     code_of "$SPAWN_SITE" | grep -qxF '    let value: String' \
         || violation "$SPAWN_SITE — DiskIdentifier.value is not a let" "an identifier cannot change after it was validated"
+    # Fix round 6: a third, argument-free case, `list -plist`, for the UUID's uniqueness without touching any volume.
+    code_of "$SPAWN_SITE" | grep -qxF '        case .listPlist: return ["list", "-plist"]' \
+        || violation "$SPAWN_SITE — the list argv changed" "list -plist, with no argument"
     returns=$(code_of "$SPAWN_SITE" | grep -cE 'return \[')
-    [ "$returns" -eq 2 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly two, both pinned"
+    [ "$returns" -eq 3 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly three, all pinned"
     code_of "$SPAWN_SITE" | grep -qxF '    case infoPlist(volumeUUID: UUID)' \
         && code_of "$SPAWN_SITE" | grep -qxF '    case enableOwnership(disk: DiskIdentifier)' \
-        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 2 ] \
-        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "two cases: a parsed UUID, and a validated disk identifier"
+        && code_of "$SPAWN_SITE" | grep -qxF '    case listPlist' \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 3 ] \
+        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "three cases: a parsed UUID, a validated disk identifier, and none"
     # Every absolute path literal in the file is one of these; `/dev/null` is stdin and stderr.
     bad_paths=$(code_of "$SPAWN_SITE" | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
     [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
@@ -465,6 +469,27 @@ enable_sites=$(for f in $helper_files; do [ "$f" = "$SPAWN_SITE" ] || code_of "$
 [ "$enable_sites" -eq 1 ] || violation "helper targets — .enableOwnership(disk: named $enable_sites times outside $SPAWN_SITE" "one command site, the pinned one"
 hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '[[:<:]]var[[:space:]]+pin[[:>:]]|[[:<:]]pin\.[a-zA-Z]+[[:space:]]*=[^=]' | head -3)
 [ -z "$hit" ] || violation "helper targets — the mount pin is rebound or written to" "$hit"
+# Fix round 6 (H18 re-test): TCC refuses a root launchd daemon access to a removable volume, so the verb identifies
+# the volume from the mount table and diskutil only. No call that opens, stats or asks attributes of a path may appear
+# in HelperOwnership.swift or in doEnableOwnership's body; neither may a route to one (a HelperService function, the
+# getattrlist UUID reader, a FileManager or URL API), nor an extension of the ownership types in another file.
+OWN_SITE=Sources/XCodeVaultHelperCore/HelperOwnership.swift
+file_access='[[:<:]](open|openat|open_dprotected_np|fstatat|stat|lstat|fstat|statfs|statfs64|fstatfs|getattrlist|getattrlistat|fgetattrlist|getattrlistbulk|access|faccessat|opendir|fopen|readlink|readlinkat|realpath|chdir|fchdir|setxattr|getxattr|listxattr)[[:space:]]*\(|FileManager|FileHandle|(Data|String|NSData|NSString)[[:space:]]*\([[:space:]]*contentsOf|contentsOfDirectory|contentsOfFile|fileURLWithPath|URL[[:space:]]*\(|volumeUUID[[:space:]]*\([[:space:]]*of|ATTR_|openGuardedDirectory'
+if [ -f "$OWN_SITE" ]; then
+    hit=$(code_of "$OWN_SITE" | grep -nE "$file_access" | head -3)
+    [ -z "$hit" ] || violation "$OWN_SITE — file access on a volume" "the helper reads only the mount table and diskutil (fix round 6): $hit"
+    hit=$(code_of "$OWN_SITE" | grep -oE 'HelperService\.[A-Za-z_]+' | grep -vxF 'HelperService.nilVolumeUUID' | head -3)
+    [ -z "$hit" ] || violation "$OWN_SITE — a HelperService function reached from the volume reader" "$hit"
+else
+    violation "$OWN_SITE — missing" "the fix-round-6 file-access rule checks nothing; move it with the file"
+fi
+verb_body=$(body_of Sources/XCodeVaultHelperCore/HelperService.swift doEnableOwnership)
+[ -n "$verb_body" ] || violation "HelperService.swift — doEnableOwnership not found" "the fix-round-6 file-access rule checks nothing"
+hit=$(grep -nE "$file_access" <<<"$verb_body" | head -3)
+[ -z "$hit" ] || violation "HelperService.swift — doEnableOwnership touches a file" "fix round 6: $hit"
+hit=$(for f in $helper_files; do [ "$f" = "$OWN_SITE" ] || code_of "$f"; done \
+    | grep -nE 'extension[[:space:]]+(HelperOwnership|OwnershipVolumeReader|MountEntry|MountPin)[[:>:]]' | head -3)
+[ -z "$hit" ] || violation "helper targets — an ownership type extended outside $OWN_SITE" "$hit"
 pin_vars=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+var[[:space:]]')
 pin_lets=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+let[[:space:]]')
 [ "$pin_vars" -eq 0 ] && [ "$pin_lets" -ge 6 ] \
