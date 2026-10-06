@@ -76,8 +76,9 @@ final class HelperContractTests: XCTestCase {
     /// another version before it sends the credential, so a daemon left over from a 0.1 build is never handed one.
     /// Bump this again with the next change to `XCodeVaultHelperXPC` or `HelperResult`. Round 4 bumped it to 0.2.1 for the
     /// right's new definition: a 0.2.0 daemon still running checks the old one, and the client's handshake has to see it.
+    /// Round 7 bumped it to 0.2.2: the 0.2.1 daemon reads the volume's files, which TCC refuses it (H18), and must be replaced.
     func testTheContractVersionMovedWithEnableOwnership() {
-        XCTAssertEqual(HelperIdentity.version, "0.2.1-dev")
+        XCTAssertEqual(HelperIdentity.version, "0.2.2-dev")
         XCTAssertTrue(HelperResultCode.allCases.contains(.enabled))
     }
 }
