@@ -91,17 +91,17 @@ APFSVolumeRoles key, so that check could not fire. Roles are now read from `disk
 Mac's external data volume shows `Roles = []`.
 
 --- Re-test 2026-10-07 (signed 0.2.2-dev build, fix rounds 6-7; by the user, in the app's window; Intel, macOS 26.7.1 25G241) ---
-The user pressed Turn On Ownership on the external APFS volume "XCodeVault" and entered the administrator password.
+The user pressed Turn On Ownership on the external APFS volume "<vault>" and entered the administrator password.
 Journal: planned -> started -> completed ("ownership is on").
-$ diskutil info /Volumes/XCodeVault | grep Owners
+$ diskutil info /Volumes/<vault> | grep Owners
    Owners:                    Enabled
 $ ls /Volumes
-MacOS  PABLO  XCodeVault          (no "XCodeVault 1"; the mount point is unchanged, no remount)
+MacOS  <other>  <vault>          (no "<vault> 1"; the mount point is unchanged, no remount)
 $ mount | grep XCodeVault          (read again 2026-10-08)
-/dev/disk3s2 on /Volumes/XCodeVault (apfs, local, nodev, nosuid, journaled)
+/dev/disk3s2 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled)
 The Plan then moved on to Use This Drive (d). H18 (c)/(d): PASS. Fix rounds 6-7 confirmed on device: the helper identified the
 volume from diskutil and the mount table alone, and passed /dev/diskNsM to diskutil, with no file access on the volume.
 Side finding (not H18): with ownership on, the volume root is root:wheel 775, so Use This Drive could not create
-XCodeVault/ (EACCES). The helper's createVaultDirectory opens the volume as root and is not expected to work under TCC
+the vault folder (EACCES). The helper's createVaultDirectory opens the volume as root and is not expected to work under TCC
 (not run). Fix: the app makes the folder first, as the user, while ownership is still off (VaultFolderPrecreate); on a
 disk image the folder kept the user's owner after the remount with ownership on. Pending a real-window re-test.

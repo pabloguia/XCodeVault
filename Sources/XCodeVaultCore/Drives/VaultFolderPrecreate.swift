@@ -28,7 +28,8 @@ public enum VaultFolderPrecreate {
         public var note: String? {
             switch self {
             case .created(let path, let journalled):
-                return "Created the vault folder \(path) first, while the drive was still yours to write to." + (journalled ? "" : " (It could not be written to the journal.)")
+                let base = "Created the vault folder \(path) first, while the drive was still yours to write to."
+                return base + (journalled ? "" : " (It could not be written to the journal.)")
             case .alreadyThere: return nil
             case .skipped(let why): return "The vault folder was not created before ownership: \(why)"
             case .failed(let why): return "The vault folder could not be created before ownership: \(why)"
