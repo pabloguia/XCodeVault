@@ -2071,7 +2071,7 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
 
-## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; (a)/(b) FAILED with the stock admin rule, 2026-10-05; **(a)/(b) PASS with the right's own rule, 2026-10-06; (c)/(d) PENDING — the daemon could not read the volume (TCC [LIKELY]), fix round 6**)*
+## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; (a)/(b) FAILED with the stock admin rule, 2026-10-05; **(a)/(b) PASS with the right's own rule, 2026-10-06; (c)/(d) PASS 2026-10-07 with fix rounds 6–7**)*
 
 **Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
 (a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
@@ -2161,5 +2161,19 @@ re-test with this build.
 the re-check reads the mount table last; `enableOwnership` gets `/dev/diskNsM`; the contract moved to 0.2.2-dev, so
 the installed 0.2.1 daemon is reinstalled before the re-test. **(c)/(d) pending** with this build.
 
-**Status: (a)/(b) PASS with the right's own rule (2026-10-06); (c)/(d) PENDING (fix rounds 6–7).** Experimental
-everywhere (rule 10).
+**Re-test 2026-10-07 (signed 0.2.2-dev build, by the user; evidence appended to the same file).** (c)/(d): **PASS.** After
+the password the journal reads `planned` → `started` → `completed` ("ownership is on"); `diskutil info` reports `Owners:
+Enabled`; `ls /Volumes` lists no `<vault> 1` and the mount point is unchanged; the Plan moved on to Use This Drive. The
+design of rounds 6–7 (identity from diskutil and the mount table only, `/dev/diskNsM`, no file access on the volume) is
+what worked. Not re-run in this pass: the two-clicks-within-10-s and replayed-form checks, and the Time Machine refusal.
+
+**Side finding, same run.** With ownership on the volume root is `root:wheel`, so **Use This Drive** failed creating
+`XCodeVault/` (R7-D and R8 had assumed the root stays the user's). The helper's `createVaultDirectory` opens the volume as
+root and is expected to fail under TCC, so it is not the route. The fix needs no helper change: **Turn On Ownership**
+first makes `XCodeVault/` as the user while ownership is off (`VaultFolderPrecreate`: one `mkdir`, after the mount point
+and UUID are asserted, nothing followed or overwritten), and the folder stays the user's after ownership is on (measured on a
+disk image 2026-10-07; **[VERIFIED] on a disk image only — a real drive is pending**). A volume that already has
+ownership on keeps the guided `sudo mkdir && chown` command.
+
+**Status: (a)/(b) PASS (2026-10-06); (c)/(d) PASS (2026-10-07).** Experimental everywhere (rule 10): one drive, one macOS
+version, Intel.

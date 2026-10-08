@@ -1204,7 +1204,7 @@ substitution may not be waved through. Issue #29 stays open.
 - Notes: a new external volume ignores ownership; the app now recommends turning ownership on (Finder Get Info, or the
   copyable `sudo diskutil enableOwnership`) instead of another volume.
 
-### H18 — `enableOwnership` through the privileged helper — pending
+### H18 — `enableOwnership` through the privileged helper — PASS (experimental)
 
 - Date tested: 2026-10-05, by the user, signed build (helper 0.2.0-dev), macOS 26.7.1 (25G241) · Intel.
 - Hypothesis reference: H18; ADR-0014.
@@ -1219,6 +1219,10 @@ substitution may not be waved through. Issue #29 stays open.
   the dialog cancelled.
 - Re-test 2026-10-06 (0.2.1-dev): authorization **PASS** (the right stored with `tries 10000`); the daemon then
   failed to find the volume — TCC refusing a root daemon access to a removable volume, **[LIKELY]**. Failed closed.
-- Result (fix round 6 design: no file access on the volume, APFS-only): **pending.** Unit-tested with fakes.
-- Verdict: **pending.** Experimental (rule 10). The guided route (Show in Finder, Copy Command) stays the fallback and is
+- Re-test 2026-10-07 (0.2.2-dev, fix rounds 6–7, by the user, Intel, macOS 26.7.1 25G241): **PASS.** Password asked; journal
+  `planned` → `started` → `completed`; `Owners: Enabled`; no `<vault> 1`; the mount point unchanged; the Plan moved on.
+- Side finding: with ownership on, the volume root is `root:wheel`, so Use This Drive could not create `XCodeVault/`. Fixed
+  by making the folder first, as the user (`VaultFolderPrecreate`); real-drive re-test **pending**.
+- Verdict: **PASS on one drive / one macOS / Intel.** Experimental (rule 10): not Apple Silicon, not HFS+, not a second
+  macOS version. The guided route (Show in Finder, Copy Command) stays the fallback and is what an unsigned build shows. The guided route (Show in Finder, Copy Command) stays the fallback and is
   what an unsigned build shows.

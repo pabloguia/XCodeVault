@@ -355,6 +355,8 @@ final class AppModel {
     var ownershipFallback: OwnershipFallback?
     /// R8 fix round 4: this click already reinstalled an out-of-date helper; a second mismatch falls back.
     private var ownershipHelperReinstalled = false
+    /// What `VaultFolderPrecreate` said for this click; shown with the result.
+    private var ownershipFolderNote: String?
 
     /// One click, progress, or the guided route with its reason: `OwnershipRoute.decide`, never the views.
     var ownershipRoute: OwnershipRoute {
@@ -377,6 +379,9 @@ final class AppModel {
         }
         ownershipFallback = nil
         ownershipHelperReinstalled = false
+        // H18 follow-up: with ownership on the drive's root is root's, so the vault folder is made now, as the user, while
+        // it still can be. Best effort: whatever it says is shown with the result, and Use This Drive's own route remains.
+        ownershipFolderNote = VaultFolderPrecreate.createBeforeOwnership(mountPoint: mountPoint, volumeUUID: volumeUUID).note
         ownershipInFlight = volumeUUID
         request(.enableOwnership(volumeUUID: volumeUUID))
     }
@@ -503,7 +508,7 @@ final class AppModel {
             await refresh()
             endOwnershipRequest(action, fallback: OwnershipRoute.fallback(after: outcome))
             if case .done(let reply) = outcome {
-                feedback = AppFeedback(kind: .success, title: AppText.privilegedDone(action), detail: [reply.message])
+                feedback = AppFeedback(kind: .success, title: AppText.privilegedDone(action), detail: [reply.message, ownershipFolderNote].compactMap { $0 })
             }
             return
         }
