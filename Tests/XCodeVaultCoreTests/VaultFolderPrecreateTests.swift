@@ -71,7 +71,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
 
     func testRefusesAnythingButATopLevelVolume() {
         let r = rig()
-        for mp in [r.root, r.root + "/", r.mp + "/sub", "/Users/x", r.mp + "/../x", "relative"] {
+        for mp in [r.root, r.root + "/", r.root + "/..", r.root + "/.", r.mp + "/sub", "/Users/x", r.mp + "/../x", "relative"] {
             guard case .skipped = run(r, mountPoint: mp) else { return XCTFail("\(mp) was not refused") }
         }
     }
@@ -89,6 +89,29 @@ final class VaultFolderPrecreateTests: XCTestCase {
         addTeardownBlock { chmod(mp, 0o755) }
         guard case .failed = run(r, writable: true) else { return XCTFail("expected failed") }
         XCTAssertEqual(try r.journal.entries().filter { $0.state == .failed }.count, 1)
+    }
+
+    func testAVolumeThatChangesDuringTheMkdirIsNotReportedAsCreated() throws {
+        let r = rig()
+        var calls = 0
+        let outcome = VaultFolderPrecreate.createBeforeOwnership(
+            mountPoint: r.mp, volumeUUID: uuid, journal: r.journal, isMountPoint: { _ in true },
+            volumeUUIDAt: { _ in
+                calls += 1
+                return calls == 1 ? self.uuid : "0F0E0D0C-0B0A-4908-8706-050403020100"
+            }, volumesRoot: r.root)
+        guard case .failed = outcome else { return XCTFail("expected failed, got \(outcome)") }
+        XCTAssertEqual(try r.journal.entries().filter { $0.state == .completed }.count, 0)
+        XCTAssertEqual(try r.journal.entries().filter { $0.state == .failed }.count, 1)
+    }
+
+    func testAnUnwritableJournalIsSaidInTheNote() throws {
+        let r = rig()
+        let outcome = VaultFolderPrecreate.createBeforeOwnership(
+            mountPoint: r.mp, volumeUUID: uuid, journal: Journal(url: URL(fileURLWithPath: "/nonexistent-dir-xcv/j.jsonl")), isMountPoint: { _ in true },
+            volumeUUIDAt: { _ in self.uuid }, volumesRoot: r.root)
+        XCTAssertEqual(outcome, .created(r.mp + "/XCodeVault", journalled: false))
+        XCTAssertTrue(outcome.note?.contains("journal") == true)
     }
 
     func testTheNoteSaysWhatHappened() {

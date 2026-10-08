@@ -1224,5 +1224,5 @@ substitution may not be waved through. Issue #29 stays open.
 - Side finding: with ownership on, the volume root is `root:wheel`, so Use This Drive could not create `XCodeVault/`. Fixed
   by making the folder first, as the user (`VaultFolderPrecreate`); real-drive re-test **pending**.
 - Verdict: **PASS on one drive / one macOS / Intel.** Experimental (rule 10): not Apple Silicon, not HFS+, not a second
-  macOS version. The guided route (Show in Finder, Copy Command) stays the fallback and is what an unsigned build shows. The guided route (Show in Finder, Copy Command) stays the fallback and is
-  what an unsigned build shows.
+  macOS version. The guided route (Show in Finder, Copy Command) stays the fallback and is
+  what an unsigned build shows. The one-click Use This Drive flow on a real drive is **not** verified yet.

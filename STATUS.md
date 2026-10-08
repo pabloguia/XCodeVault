@@ -14,6 +14,12 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Use This Drive after ownership (2026-10-08, branch `feat/r8-helper-ownership`).** H18 **PASS** on the user's drive
+  (2026-10-07; evidence appended). It exposed that an ownership-on volume root is `root:wheel`, so Use This Drive could
+  not create `XCodeVault/`. Fix without a helper change: **Turn On Ownership** first makes the folder as the user while the
+  root is still writable (`VaultFolderPrecreate`); on a disk image it stays the user's after ownership is on. A drive that
+  already has ownership on keeps the guided `sudo mkdir && chown`. Real-drive re-test pending; migration-safety review
+  dispatched.
 - **R8 — Turn On Ownership through the privileged helper (2026-10-05, branch `feat/r8-helper-ownership`, ADR-0014,
   EXPERIMENTAL).** One new allowlisted verb, `enableOwnership(volumeUUID:authorization:)`: the system password dialog
   every call (custom right `com.xcodevault.helper.enable-ownership`, `authenticate-admin`, defined by the root daemon),

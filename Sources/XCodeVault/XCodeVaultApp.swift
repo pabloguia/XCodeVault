@@ -509,7 +509,11 @@ final class AppModel {
             endOwnershipRequest(action, fallback: OwnershipRoute.fallback(after: outcome))
             if case .done(let reply) = outcome {
                 feedback = AppFeedback(kind: .success, title: AppText.privilegedDone(action), detail: [reply.message, ownershipFolderNote].compactMap { $0 })
+            } else if let note = ownershipFolderNote {
+                // The folder was made before the password: a cancelled or failed click must not leave it unmentioned.
+                feedback = AppFeedback(kind: .notice, title: AppText.privilegedFailed(action), detail: [note])
             }
+            ownershipFolderNote = nil
             return
         }
         switch outcome {
