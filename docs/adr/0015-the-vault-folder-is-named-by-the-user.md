@@ -33,6 +33,12 @@ several vaults on one drive for one Mac — was offered and not chosen.
    this Mac (or from before the field existed), and refuses one of another Mac, of another volume, or one it cannot read,
    with "Nothing was written; choose another folder name". `VaultFolderPrecreate` refuses the same folder before ownership.
 
+5. **A typed name is never made a vault over files in use.** The app's path (Use This Drive, its preview, and the precreate)
+   uses a folder only when it is absent, empty (Finder's `.DS_Store` aside) or already this Mac's vault; otherwise it blocks
+   with "choose another folder name". The CLI's `--directory` keeps its earlier behaviour.
+6. **A sentinel is created exclusively** (a temporary file, then `link(2)`), so two Macs claiming a name at once cannot
+   replace each other. If this Mac cannot be identified (`gethostuuid` fails) a new sentinel is not written.
+
 ## Consequences
 
 - Several vaults on one drive for one Mac are **not** supported (the registry is keyed by volume). If they are wanted, the
@@ -40,4 +46,6 @@ several vaults on one drive for one Mac — was offered and not chosen.
 - Two Macs that chose the same name find out when the second tries to register, not by corrupting the first.
 - A folder made by an older version of this build under another Mac's name has no host recorded and is adopted by whoever
   registers it first. That is the price of not breaking vaults registered before this decision.
+- An adopted legacy sentinel is not stamped with the host, so two Macs can end up sharing its `sentinelID`.
+- A drive already registered under one folder cannot be registered again under another name without `vault forget`.
 - The CLI's `vault init --directory` now defaults to `Vault` and keeps accepting a nested path.

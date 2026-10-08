@@ -174,6 +174,10 @@ extension AppModel {
             if let problem = VaultFolderName.problem(inputs.vaultFolderName) {
                 return OperationPreview(destination: mp, warnings: q.warnings, blockers: [.vaultFolderName(problem)])
             }
+            let occupancy = VaultFolderName.occupancy(of: mp + "/" + inputs.vaultFolderName, volumeUUID: uuid, host: HostFingerprint.current())
+            if let why = VaultFolderName.message(for: occupancy, name: inputs.vaultFolderName) {
+                return OperationPreview(destination: mp, warnings: q.warnings, blockers: [.core(why)])
+            }
             return OperationPreview(
                 destination: mp + "/" + inputs.vaultFolderName, warnings: q.warnings,
                 prepared: .useDrive(v, folderName: inputs.vaultFolderName))

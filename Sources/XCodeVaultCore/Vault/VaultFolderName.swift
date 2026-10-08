@@ -48,6 +48,43 @@ public enum VaultFolderName {
     }
 }
 
+extension VaultFolderName {
+    /// What is at `<drive>/<name>` now, for the app's path (ADR-0015): a folder the user named is only ever used when it is
+    /// absent, empty, or already this Mac's vault. A folder with files is never turned into a vault by a typed name.
+    public enum Occupancy: Sendable, Equatable {
+        case absent, empty
+        /// This volume's sentinel, written by this Mac or before the host was recorded.
+        case vault
+        /// A sentinel of another Mac, of another volume, or one that cannot be read.
+        case anotherVault
+        case hasFiles
+        case unreadable
+    }
+
+    public static func occupancy(of dir: String, volumeUUID: String, host: String?, fileManager: FileManager = .default) -> Occupancy {
+        var st = stat()
+        guard lstat(dir, &st) == 0 else { return errno == ENOENT ? .absent : .unreadable }
+        guard (st.st_mode & S_IFMT) == S_IFDIR else { return .hasFiles }
+        if fileManager.fileExists(atPath: dir + "/" + VaultVolume.sentinelName) {
+            guard let s = VaultVerifier.readSentinel(at: dir), s.volumeUUID.caseInsensitiveCompare(volumeUUID) == .orderedSame else { return .anotherVault }
+            if let other = s.hostFingerprint, other != host { return .anotherVault }
+            return .vault
+        }
+        guard let names = try? fileManager.contentsOfDirectory(atPath: dir) else { return .unreadable }
+        return names.allSatisfy { $0 == ".DS_Store" } ? .empty : .hasFiles
+    }
+
+    /// The sentence for an occupancy the app will not use; nil when it may be used.
+    public static func message(for occupancy: Occupancy, name: String) -> String? {
+        switch occupancy {
+        case .absent, .empty, .vault: return nil
+        case .anotherVault: return "“\(name)” is already a vault of another Mac or volume. Choose another folder name."
+        case .hasFiles: return "“\(name)” already has files in it, and a vault is never made in a folder that is in use. Choose another folder name."
+        case .unreadable: return "“\(name)” cannot be read. Choose another folder name."
+        }
+    }
+}
+
 /// Which Mac wrote a vault's sentinel, without naming it: a hash of the hardware identifier, which on a drive shared
 /// between Macs tells one Mac's vault folder from another's (ADR-0015). Not a secret and not an identity proof; it only
 /// keeps one Mac from taking over another's folder by accident.

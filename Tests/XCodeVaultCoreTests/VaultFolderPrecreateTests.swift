@@ -42,7 +42,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
         let r = rig()
         try FileManager.default.createDirectory(atPath: r.mp + "/Vault", withIntermediateDirectories: false)
         try "x".write(toFile: r.mp + "/Vault/keep", atomically: true, encoding: .utf8)
-        XCTAssertEqual(run(r), .alreadyThere(r.mp + "/Vault"))
+        guard case .skipped = run(r) else { return XCTFail("a folder with files is not a vault") }
         XCTAssertTrue(FileManager.default.fileExists(atPath: r.mp + "/Vault/keep"))
         XCTAssertNil(VaultFolderPrecreate.Outcome.alreadyThere("x").note)
     }
@@ -58,7 +58,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
         let elsewhere = r.t.path + "/elsewhere"
         try FileManager.default.createDirectory(atPath: elsewhere, withIntermediateDirectories: false)
         try FileManager.default.createSymbolicLink(atPath: r.mp + "/Vault", withDestinationPath: elsewhere)
-        guard case .failed = run(r) else { return XCTFail("expected failed for a symlink") }
+        guard case .skipped = run(r) else { return XCTFail("expected skipped for a symlink") }
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: elsewhere), [])
     }
 

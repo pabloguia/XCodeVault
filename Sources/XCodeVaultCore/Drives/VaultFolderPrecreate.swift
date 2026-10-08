@@ -58,16 +58,14 @@ public enum VaultFolderPrecreate {
         if let problem = VaultFolderName.problem(folderName) { return .skipped(VaultFolderName.message(for: problem) ?? "The folder name is not usable.") }
         let dir = mp + "/" + folderName
         var st = stat()
-        if lstat(dir, &st) == 0 {
-            guard (st.st_mode & S_IFMT) == S_IFDIR else { return .failed("\(dir) exists and is not a directory.") }
-            guard st.st_uid == uid else { return .skipped("\(dir) exists and is not yours.") }
-            // A drive shared between Macs: a folder that is another Mac's vault is not taken (ADR-0015).
-            if let other = VaultVerifier.readSentinel(at: dir)?.hostFingerprint, other != host() {
-                return .skipped("\(folderName) is already a vault of another Mac; choose another folder name.")
-            }
-            return .alreadyThere(dir)
+        switch VaultFolderName.occupancy(of: dir, volumeUUID: uuid, host: host()) {
+        case .absent: break
+        case .empty, .vault:
+            guard lstat(dir, &st) == 0 else { return .failed("cannot look at \(dir)") }
+            return st.st_uid == uid ? .alreadyThere(dir) : .skipped("\(dir) exists and is not yours.")
+        case let other: return .skipped(VaultFolderName.message(for: other, name: folderName) ?? "\(dir) is in use.")
         }
-        guard errno == ENOENT else { return .failed("cannot look at \(dir): \(String(cString: strerror(errno)))") }
+        guard lstat(dir, &st) != 0, errno == ENOENT else { return .failed("\(dir) appeared while it was being looked at.") }
         guard rootIsWritable(mp) else { return .skipped("the drive's root is already not writable by you.") }
         guard mkdir(dir, 0o755) == 0 else {
             let why = String(cString: strerror(errno))

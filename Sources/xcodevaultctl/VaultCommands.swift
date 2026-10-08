@@ -20,8 +20,8 @@ struct Vault: ParsableCommand {
                     (the destinations the app pre-fills). Exit status: 0 when done; 3 when the vault was registered but those \
                     folders could not be created (the message says why and what to run); 1 when it was not registered.
 
-                    Note --directory is a client-side choice: the privileged helper can only ever create the default \
-                    \(VaultVolume.directoryName), so a custom directory has to be created by you either way.
+                    Note --directory is a client-side choice: the privileged helper can only ever create \
+                    \(VaultVolume.directoryName), so any other directory has to be created by you.
 
                     EXAMPLES:
                       xcodevaultctl vault init /Volumes/MyDrive
@@ -33,7 +33,7 @@ struct Vault: ParsableCommand {
         @Option(
             name: .long,
             help:
-                "Vault directory relative to the volume root (default: \(VaultFolderName.suggested)). Not creatable by the privileged helper — see the discussion."
+                "Vault directory relative to the volume root (default: \(VaultFolderName.suggested)). Create it yourself (or let the app do it) — see the discussion."
         ) var directory: String = VaultFolderName.suggested
         func run() throws {
             let vols = try VolumeDiscovery.mountedVolumes()

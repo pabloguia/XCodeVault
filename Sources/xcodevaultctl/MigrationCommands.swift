@@ -61,7 +61,7 @@ struct Restore: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     @Option(name: .long) var category: String = "archives"
     @Option(name: .long, help: "Vault volume: UUID, name or mount point.") var vault: String
-    @Option(name: .long, help: "Entry name inside <vault>/\(VaultVolume.directoryName)/<category>/.") var name: String
+    @Option(name: .long, help: "Entry name inside <vault folder>/<category>/.") var name: String
     @Option(name: .long, help: "Destination path (defaults to the category's standard path).") var to: String?
     @Flag(name: .long) var apply = false
     func run() throws {

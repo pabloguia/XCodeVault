@@ -128,6 +128,17 @@ public enum DriveRegistration {
         guard !volume.isNetwork else { throw VaultError("\(volume.volumeName) is a network volume; a vault must be a local disk.") }
         // ADR-0015: the folder is the user's to name; one folder directly in the drive's root, whatever was typed.
         if let problem = VaultFolderName.problem(folderName) { throw VaultError(VaultFolderName.message(for: problem) ?? "The folder name is not usable.") }
+        if let uuid = volume.volumeUUID, let already = try registry.volumes().first(where: { $0.volumeUUID == uuid }), already.relativeDirectory != folderName {
+            throw VaultError(
+                "\(volume.volumeName) is already a vault, in the folder “\(already.relativeDirectory)”. Use that, or forget it first to choose another name.")
+        }
+        // A folder the user named is used only when it is absent, empty, or already this Mac's vault (ADR-0015).
+        if let mp = volume.mountPoint, let uuid = volume.volumeUUID,
+            let why = VaultFolderName.message(
+                for: VaultFolderName.occupancy(of: mp + "/" + folderName, volumeUUID: uuid, host: HostFingerprint.current()), name: folderName)
+        {
+            throw VaultError(why)
+        }
         let vault = try registry.register(volume, relativeDirectory: folderName, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
         guard let mp = volume.mountPoint else { throw VaultError("Volume has no mount point.") }
         return outcome(vault: vault) { try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp)) }

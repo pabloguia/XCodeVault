@@ -203,4 +203,80 @@ final class VaultFolderNameTests: XCTestCase {
         XCTAssertTrue(why.contains("another Mac"))
         XCTAssertEqual(run("Vault", host: "mac1"), .alreadyThere(mp + "/Vault"))
     }
+
+    // MARK: - A typed name is never turned into a vault over files in use (review of ADR-0015, finding 1)
+
+    func testOccupancyTellsAbsentEmptyOursForeignAndInUse() throws {
+        let t = TempDir()
+        let d = t.dir("d")
+        let dir = d + "/Vault"
+        func occ(_ host: String? = "mac1") -> VaultFolderName.Occupancy { VaultFolderName.occupancy(of: dir, volumeUUID: uuidA, host: host) }
+        XCTAssertEqual(occ(), .absent)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: false)
+        XCTAssertEqual(occ(), .empty)
+        try "".write(toFile: dir + "/.DS_Store", atomically: true, encoding: .utf8)
+        XCTAssertEqual(occ(), .empty, "Finder's file alone does not make a folder in use")
+        try "x".write(toFile: dir + "/photo.jpg", atomically: true, encoding: .utf8)
+        XCTAssertEqual(occ(), .hasFiles)
+        XCTAssertNotNil(VaultFolderName.message(for: .hasFiles, name: "Vault"))
+        try FileManager.default.removeItem(atPath: dir + "/photo.jpg")
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .iso8601
+        try enc.encode(VaultSentinel(volumeUUID: uuidA, sentinelID: "s", createdAt: Date(), createdBy: "t", hostFingerprint: "mac1")).write(
+            to: URL(fileURLWithPath: dir + "/" + VaultVolume.sentinelName))
+        XCTAssertEqual(occ("mac1"), .vault)
+        XCTAssertEqual(occ("mac2"), .anotherVault)
+        XCTAssertEqual(occ(nil), .anotherVault)
+    }
+
+    func testUseDriveNeverMakesAVaultOfAFolderWithFiles() throws {
+        let t = TempDir()
+        let drive = t.dir("drive")
+        try FileManager.default.createDirectory(atPath: drive + "/Documents", withIntermediateDirectories: false)
+        try "mine".write(toFile: drive + "/Documents/thesis.txt", atomically: true, encoding: .utf8)
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        XCTAssertThrowsError(
+            try DriveRegistration.useDrive(
+                volume(uuidA, drive), folderName: "Documents", registry: reg, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")))
+        ) {
+            XCTAssertTrue("\($0)".contains("already has files"), "\($0)")
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: drive + "/Documents"), ["thesis.txt"], "nothing added to it")
+        XCTAssertEqual(try reg.volumes().count, 0)
+    }
+
+    func testUseDriveWithAnotherNameForAnAlreadyRegisteredDriveSaysSo() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let drive = t.dir("drive")
+        _ = try register(reg, volume(uuidA, drive), "Vault", host: "mac1", journal: journal)
+        XCTAssertThrowsError(try DriveRegistration.useDrive(volume(uuidA, drive), folderName: "Other", registry: reg, journal: journal)) {
+            XCTAssertTrue("\($0)".contains("already a vault"), "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: drive + "/Other"))
+    }
+
+    // MARK: - Claiming a sentinel (review of ADR-0015, findings 2 and 3)
+
+    func testWithoutThisMacsIdentityNothingIsClaimed() throws {
+        let t = TempDir()
+        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        let drive = t.dir("drive")
+        XCTAssertThrowsError(try register(reg, volume(uuidA, drive), "Vault", host: nil, journal: Journal(url: URL(fileURLWithPath: t.path + "/j")))) {
+            XCTAssertTrue("\($0)".contains("could not be identified"), "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: drive + "/Vault/" + VaultVolume.sentinelName))
+    }
+
+    func testCreatingASentinelNeverReplacesOne() throws {
+        let t = TempDir()
+        let path = t.path + "/s.json"
+        try VaultRegistry.createExclusively(Data("first".utf8), at: path)
+        XCTAssertThrowsError(try VaultRegistry.createExclusively(Data("second".utf8), at: path)) {
+            XCTAssertTrue("\($0)".contains("Nothing was overwritten"), "\($0)")
+        }
+        XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), "first")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: t.path).filter { $0.hasSuffix(".tmp") }, [], "no temporary file is left")
+    }
 }
