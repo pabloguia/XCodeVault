@@ -11,7 +11,7 @@ struct Vault: ParsableCommand {
     struct Init: ParsableCommand {
         static var configuration: CommandConfiguration {
             CommandConfiguration(
-                abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.init.abstract", VaultVolume.directoryName)),
+                abstract: HelpText.experimental(L10n.tr("cli.cmd.vault.init.abstract", VaultFolderName.suggested)),
                 discussion: """
                     Volume roots are usually root-owned. Until the privileged helper ships, pass --directory <subpath> \
                     to use a folder you can write, or create the default one with the command this prints when it fails.
@@ -33,8 +33,8 @@ struct Vault: ParsableCommand {
         @Option(
             name: .long,
             help:
-                "Vault directory relative to the volume root (default: \(VaultVolume.directoryName)). Not creatable by the privileged helper — see the discussion."
-        ) var directory: String = VaultVolume.directoryName
+                "Vault directory relative to the volume root (default: \(VaultFolderName.suggested)). Not creatable by the privileged helper — see the discussion."
+        ) var directory: String = VaultFolderName.suggested
         func run() throws {
             let vols = try VolumeDiscovery.mountedVolumes()
             guard let v = vols.first(where: { $0.mountPoint == mountPoint }) else {

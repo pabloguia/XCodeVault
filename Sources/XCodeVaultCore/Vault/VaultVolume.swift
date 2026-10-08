@@ -44,6 +44,8 @@ public struct VaultSentinel: Sendable, Codable, Equatable {
     public var sentinelID: String
     public var createdAt: Date
     public var createdBy: String  // tool version
+    /// Which Mac wrote it (`HostFingerprint`); nil in a sentinel from before ADR-0015.
+    public var hostFingerprint: String?
 }
 
 /// What we can say about a registered volume right now. `ambiguous` and `foreign` are refusal
@@ -108,7 +110,8 @@ public struct VaultRegistry: Sendable {
     public func register(
         _ v: Volume, relativeDirectory: String = VaultVolume.directoryName, journal: Journal = Journal(),
         isMountPoint: @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
-        volumeUUID: @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) }
+        volumeUUID: @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) },
+        host: @Sendable () -> String? = { HostFingerprint.current() }
     ) throws -> VaultVolume {
         guard let mp = v.mountPoint, let uuid = v.volumeUUID else { throw VaultError("Volume has no mount point or UUID.") }
         let q = VolumeQualification.evaluate(v)
@@ -198,9 +201,29 @@ public struct VaultRegistry: Sendable {
             throw VaultError(problem)
         }
 
-        let sentinel = VaultSentinel(volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current)
-        let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)
+        // ADR-0015: a drive can be shared by several Macs, each with its own folder. A sentinel already in this folder is
+        // never overwritten. It is adopted when it is this volume's and this Mac's (or from before the host was recorded);
+        // anything else — another Mac's, another volume's, or one that cannot be read — refuses, and nothing is written.
+        let me = host()
+        let sentinel: VaultSentinel
+        if FileManager.default.fileExists(atPath: sentinelPath) {
+            guard let found = VaultVerifier.readSentinel(at: dir) else {
+                throw VaultError("\(dir) already holds a \(VaultVolume.sentinelName) that cannot be read. Nothing was written; choose another folder name.")
+            }
+            guard found.volumeUUID.caseInsensitiveCompare(uuid) == .orderedSame else {
+                throw VaultError("\(dir) holds the sentinel of another volume (\(found.volumeUUID)). Nothing was written; choose another folder name.")
+            }
+            if let other = found.hostFingerprint, other != me {
+                throw VaultError(
+                    "\(rel) is already a vault of another Mac. Nothing was written; choose another folder name (for example one that names this Mac).")
+            }
+            sentinel = found
+        } else {
+            sentinel = VaultSentinel(
+                volumeUUID: uuid, sentinelID: UUID().uuidString, createdAt: Date(), createdBy: XCodeVaultVersion.current, hostFingerprint: me)
+            let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601; enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try enc.encode(sentinel).write(to: URL(fileURLWithPath: sentinelPath), options: .atomic)
+        }
         let vv = VaultVolume(
             volumeUUID: uuid, volumeName: v.volumeName, lastMountPoint: mp, registeredAt: Date(), sentinelID: sentinel.sentinelID, relativeDirectory: rel)
         existing.append(vv)

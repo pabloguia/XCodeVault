@@ -157,6 +157,8 @@ struct ExternalDriveActions {
     var turnOnOwnership: @MainActor (DriveAssessment, String) -> Void = { _, _ in }
     /// R8: one click, progress, or the guided route with its reason (`OwnershipRoute.decide`). Guided by default, for renders.
     var ownershipRoute: OwnershipRoute = .guided(.unavailableInThisBuild)
+    /// ADR-0015: the vault folder's name, which the click creates the folder with.
+    var vaultFolder = VaultFolderField()
 }
 
 /// One external drive (R6): its verdict in words with a symbol, its facts, why nothing can change it when that is so,
@@ -195,8 +197,10 @@ struct ExternalDriveRowView: View {
                     // button is **Turn On Ownership** when the route is one click; the guided route keeps R7-D's two, with why.
                     switch actions.ownershipRoute {
                     case .oneClick:
+                        VaultFolderNameField(field: actions.vaultFolder)
                         Tag.marker(.experimental)
                         Button(L10n.tr("app.ownership.turnOn")) { actions.turnOnOwnership(a, mp) }
+                            .disabled(actions.vaultFolder.message != nil)
                             .actionButton(prominent: a.primaryAction == .option(.enableOwnership(mountPoint: mp))).controlSize(.small)
                     case .working:
                         HStack(spacing: Spacing.s) {

@@ -280,6 +280,7 @@ struct OperationSheetView: View {
                 }
             } else {
                 Text.l10n(L10n.tr("app.prep.useDrive.detail")).font(.callout).fixedSize(horizontal: false, vertical: true)
+                VaultFolderNameField(field: model.vaultFolderField)
                 // R8: a root the user cannot write to — the vault folder is made by the helper first (`useDriveHelperStep`).
                 if let step = model.useDriveHelperStep {
                     Text.l10n(L10n.tr("app.prep.useDrive.needsHelper")).font(.callout).fixedSize(horizontal: false, vertical: true)

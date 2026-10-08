@@ -220,6 +220,7 @@ extension AppModel {
         case .driveGone: L10n.tr("app.run.blocker.driveGone")
         case .typeName(let name): L10n.tr("app.run.blocker.typeName", name)
         case .diskChanged: L10n.tr("app.run.blocker.diskChanged")
+        case .vaultFolderName(let problem): VaultFolderText.message(problem)
         case .core(let why): why
         }
     }

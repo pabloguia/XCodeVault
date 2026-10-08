@@ -9,7 +9,7 @@ import Foundation
 /// remount with ownership on (2026-10-07); on a real drive that is still to be re-tested. While ownership is off `stat`
 /// reports every file as the caller's, so the owner checks below cannot see the owner stored on disk.
 ///
-/// This creates exactly one directory, named `VaultVolume.directoryName`, directly in a top-level `/Volumes/<name>`
+/// This creates exactly one directory, named `folderName` (a single, validated component), directly in a top-level `/Volumes/<name>`
 /// root, after asserting that the mount point is the volume the user clicked. It never creates intermediate
 /// directories, never follows a symlink, never touches anything that is already there, and never writes to the
 /// internal disk: every refusal leaves the disk as it was. It does not register the vault.
@@ -42,6 +42,7 @@ public enum VaultFolderPrecreate {
         isMountPoint: (String) -> Bool = { MountStatus.isMountPoint($0) },
         volumeUUIDAt: (String) -> String? = { MountStatus.volumeUUID(at: $0) },
         rootIsWritable: (String) -> Bool = { access($0, W_OK) == 0 }, uid: uid_t = getuid(),
+        folderName: String = VaultFolderName.suggested, host: () -> String? = { HostFingerprint.current() },
         volumesRoot: String = "/Volumes"  // only a test passes another
     ) -> Outcome {
         let name = mp.dropFirst(volumesRoot.count + 1)
@@ -54,11 +55,17 @@ public enum VaultFolderPrecreate {
         guard let now = volumeUUIDAt(mp), now.caseInsensitiveCompare(uuid) == .orderedSame else {
             return .skipped("\(mp) is not the volume you chose.")
         }
-        let dir = mp + "/" + VaultVolume.directoryName
+        if let problem = VaultFolderName.problem(folderName) { return .skipped(VaultFolderName.message(for: problem) ?? "The folder name is not usable.") }
+        let dir = mp + "/" + folderName
         var st = stat()
         if lstat(dir, &st) == 0 {
             guard (st.st_mode & S_IFMT) == S_IFDIR else { return .failed("\(dir) exists and is not a directory.") }
-            return st.st_uid == uid ? .alreadyThere(dir) : .skipped("\(dir) exists and is not yours.")
+            guard st.st_uid == uid else { return .skipped("\(dir) exists and is not yours.") }
+            // A drive shared between Macs: a folder that is another Mac's vault is not taken (ADR-0015).
+            if let other = VaultVerifier.readSentinel(at: dir)?.hostFingerprint, other != host() {
+                return .skipped("\(folderName) is already a vault of another Mac; choose another folder name.")
+            }
+            return .alreadyThere(dir)
         }
         guard errno == ENOENT else { return .failed("cannot look at \(dir): \(String(cString: strerror(errno)))") }
         guard rootIsWritable(mp) else { return .skipped("the drive's root is already not writable by you.") }

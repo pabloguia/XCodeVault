@@ -18973,6 +18973,244 @@
         }
       }
     },
+    "app.vaultFolder.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This folder is made on the drive. On a drive shared by several Macs, give each Mac its own name."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta carpeta se crea en la unidad. En una unidad compartida por varios Mac, da a cada Mac su propio nombre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このフォルダはドライブ上に作成されます。複数の Mac で共有するドライブでは、Mac ごとに別の名前を付けてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta pasta é criada no disco. Num disco compartilhado por vários Macs, dê a cada Mac o seu próprio nome."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此文件夹会创建在驱动器上。多台 Mac 共用同一驱动器时,请为每台 Mac 使用不同的名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault folder name"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nombre de la carpeta del vault"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault フォルダ名"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nome da pasta do vault"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault 文件夹名称"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.dotName" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“.” and “..” are not folder names."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.” y “..” no son nombres de carpeta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "「.」と「..」はフォルダ名にできません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.” e “..” não são nomes de pasta."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.”和“..”不能作为文件夹名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type a name for the vault folder."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Escribe un nombre para la carpeta del vault."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault フォルダの名前を入力してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Digite um nome para a pasta do vault."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "请输入 vault 文件夹的名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.hiddenSystemName" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS keeps that name for itself. Choose another."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "macOS se reserva ese nombre. Elige otro."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "その名前は macOS が使用します。別の名前を選んでください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O macOS reserva esse nome. Escolha outro."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "macOS 保留了该名称,请选择其他名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.notOneFolder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name must be one folder: no “/”, “:” or control characters, and no space at either end."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El nombre debe ser una sola carpeta: sin “/”, “:” ni caracteres de control, y sin espacios en los extremos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名前は 1 つのフォルダ名にしてください。「/」「:」や制御文字、前後の空白は使えません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O nome deve ser uma só pasta: sem “/”, “:” nem caracteres de controle, e sem espaço nas pontas."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名称必须是单个文件夹:不能包含“/”、“:”或控制字符,且首尾不能有空格。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.tooLong" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That name is too long."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ese nombre es demasiado largo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "その名前は長すぎます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esse nome é longo demais."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "该名称太长。"
+          }
+        }
+      }
+    },
     "app.volumes.bar.a11y" : {
       "localizations" : {
         "en" : {

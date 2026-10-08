@@ -148,6 +148,8 @@ struct OperationInputs: Sendable, Equatable {
     var volume = VolumeConfiguration()
     /// R6, **Use This Drive**: the volume to register, by UUID.
     var driveVolumeUUID: String?
+    /// ADR-0015, **Use This Drive**: the folder of the vault on the drive, suggested and editable.
+    var vaultFolderName = VaultFolderName.suggested
 }
 
 /// Why **Run** is disabled. The app's own reasons are localized; Core's are its English prose, shown as given.
@@ -161,6 +163,8 @@ enum OperationBlocker: Sendable, Equatable {
     case typeName(String)
     /// R6 (H1): the disk at the previewed device id is not the disk that was previewed. Sticky until the sheet closes.
     case diskChanged
+    /// ADR-0015: the vault folder's name cannot be a folder's.
+    case vaultFolderName(VaultFolderName.Problem)
     case core(String)
 }
 
@@ -175,7 +179,7 @@ enum PreparedOperation: Sendable {
     /// name, whatever this layer decided).
     case diskPreparation(DiskPreparationPlan, confirmedName: String)
     /// R6: **Use This Drive** on a mounted volume.
-    case useDrive(Volume)
+    case useDrive(Volume, folderName: String)
     /// R6 (I1): first create the vault's missing standard `folder` (only that, inside `vaultDirectory`), then run `then`.
     /// N1: `vaultUUID` is the vault whose identity the run verifies at the mount point before the mkdir.
     indirect case creatingFolder(folder: String, vaultDirectory: String, vaultUUID: String, then: PreparedOperation)

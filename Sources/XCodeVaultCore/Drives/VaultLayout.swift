@@ -121,12 +121,14 @@ public enum DriveRegistration {
     }
 
     public static func useDrive(
-        _ volume: Volume, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal(),
+        _ volume: Volume, folderName: String = VaultVolume.directoryName, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal(),
         isMountPoint: @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
         volumeUUID: @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) }
     ) throws -> Outcome {
         guard !volume.isNetwork else { throw VaultError("\(volume.volumeName) is a network volume; a vault must be a local disk.") }
-        let vault = try registry.register(volume, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
+        // ADR-0015: the folder is the user's to name; one folder directly in the drive's root, whatever was typed.
+        if let problem = VaultFolderName.problem(folderName) { throw VaultError(VaultFolderName.message(for: problem) ?? "The folder name is not usable.") }
+        let vault = try registry.register(volume, relativeDirectory: folderName, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
         guard let mp = volume.mountPoint else { throw VaultError("Volume has no mount point.") }
         return outcome(vault: vault) { try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp)) }
     }
@@ -138,10 +140,12 @@ public enum DriveRegistration {
     /// (`VaultDirectoryRefusal.helperAccepts`) and only while the folder is known to be absent: never for a folder that
     /// is there, or that cannot be looked at.
     public static func vaultFolderHelperStep(
-        _ volume: Volume, rootIsWritable: (String) -> Bool = { access($0, W_OK) == 0 },
+        _ volume: Volume, folderName: String = VaultVolume.directoryName, rootIsWritable: (String) -> Bool = { access($0, W_OK) == 0 },
         folderIsAbsent: ((String) -> Bool)? = nil
     ) -> PrivilegedAction? {
         let folderIsAbsent = folderIsAbsent ?? { VaultDirectoryRefusal.folderState($0) == .absent }
+        // The helper makes exactly one folder name, `XCodeVault`; any other name is made by the user (ADR-0015).
+        guard folderName == VaultVolume.directoryName else { return nil }
         guard let mp = volume.mountPoint, let uuid = volume.volumeUUID, VaultDirectoryRefusal.helperAccepts(mountPoint: mp, volumeUUID: uuid) else {
             return nil
         }

@@ -355,6 +355,9 @@ final class AppModel {
     var ownershipFallback: OwnershipFallback?
     /// R8 fix round 4: this click already reinstalled an out-of-date helper; a second mismatch falls back.
     private var ownershipHelperReinstalled = false
+    /// ADR-0015: the name of the vault's folder on the drive, suggested and editable; one field for the Plan, the Drives
+    /// screen and **Use This Drive**.
+    var vaultFolderName = VaultFolderName.suggested
     /// What `VaultFolderPrecreate` said for this click; shown with the result.
     private var ownershipFolderNote: String?
 
@@ -368,6 +371,8 @@ final class AppModel {
     func turnOnOwnership(volumeUUID: String, mountPoint: String) {
         // One check for the Drives row and the Plan (F4): a volume a drive shows with ownership off now, at that mount
         // point, with that UUID. And nothing else running (F5): no operation, no clean.
+        // The folder is made with the name in the field: a name that is no folder's name stops the click, with the reason shown there.
+        guard VaultFolderName.problem(vaultFolderName) == nil else { return }
         guard
             Self.mayTurnOnOwnership(
                 inFlight: ownershipInFlight != nil, operationRunning: isOperationRunning, cleaning: isCleaning,
@@ -381,7 +386,7 @@ final class AppModel {
         ownershipHelperReinstalled = false
         // H18 follow-up: with ownership on the drive's root is root's, so the vault folder is made now, as the user, while
         // it still can be. Best effort: whatever it says is shown with the result, and Use This Drive's own route remains.
-        ownershipFolderNote = VaultFolderPrecreate.createBeforeOwnership(mountPoint: mountPoint, volumeUUID: volumeUUID).note
+        ownershipFolderNote = VaultFolderPrecreate.createBeforeOwnership(mountPoint: mountPoint, volumeUUID: volumeUUID, folderName: vaultFolderName).note
         ownershipInFlight = volumeUUID
         request(.enableOwnership(volumeUUID: volumeUUID))
     }

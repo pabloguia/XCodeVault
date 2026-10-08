@@ -31,25 +31,25 @@ final class VaultFolderPrecreateTests: XCTestCase {
 
     func testCreatesTheFolderOwnedByTheCallerAndJournalsIt() throws {
         let r = rig()
-        XCTAssertEqual(run(r), .created(r.mp + "/XCodeVault"))
+        XCTAssertEqual(run(r), .created(r.mp + "/Vault"))
         var st = stat()
-        XCTAssertEqual(lstat(r.mp + "/XCodeVault", &st), 0)
+        XCTAssertEqual(lstat(r.mp + "/Vault", &st), 0)
         XCTAssertEqual(st.st_uid, getuid())
         XCTAssertEqual(try r.journal.entries().filter { $0.state == .completed }.count, 1)
     }
 
     func testAFolderAlreadyThereIsLeftAlone() throws {
         let r = rig()
-        try FileManager.default.createDirectory(atPath: r.mp + "/XCodeVault", withIntermediateDirectories: false)
-        try "x".write(toFile: r.mp + "/XCodeVault/keep", atomically: true, encoding: .utf8)
-        XCTAssertEqual(run(r), .alreadyThere(r.mp + "/XCodeVault"))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: r.mp + "/XCodeVault/keep"))
+        try FileManager.default.createDirectory(atPath: r.mp + "/Vault", withIntermediateDirectories: false)
+        try "x".write(toFile: r.mp + "/Vault/keep", atomically: true, encoding: .utf8)
+        XCTAssertEqual(run(r), .alreadyThere(r.mp + "/Vault"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: r.mp + "/Vault/keep"))
         XCTAssertNil(VaultFolderPrecreate.Outcome.alreadyThere("x").note)
     }
 
     func testAFolderOfAnotherOwnerIsSkipped() throws {
         let r = rig()
-        try FileManager.default.createDirectory(atPath: r.mp + "/XCodeVault", withIntermediateDirectories: false)
+        try FileManager.default.createDirectory(atPath: r.mp + "/Vault", withIntermediateDirectories: false)
         guard case .skipped = run(r, uid: getuid() &+ 1) else { return XCTFail("expected skipped") }
     }
 
@@ -57,7 +57,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
         let r = rig()
         let elsewhere = r.t.path + "/elsewhere"
         try FileManager.default.createDirectory(atPath: elsewhere, withIntermediateDirectories: false)
-        try FileManager.default.createSymbolicLink(atPath: r.mp + "/XCodeVault", withDestinationPath: elsewhere)
+        try FileManager.default.createSymbolicLink(atPath: r.mp + "/Vault", withDestinationPath: elsewhere)
         guard case .failed = run(r) else { return XCTFail("expected failed for a symlink") }
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: elsewhere), [])
     }
@@ -66,7 +66,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
         let r = rig()
         guard case .skipped = run(r, mounted: false) else { return XCTFail("unmounted") }
         guard case .skipped = run(r, volumeUUID: "0F0E0D0C-0B0A-4908-8706-050403020100") else { return XCTFail("other volume") }
-        XCTAssertFalse(FileManager.default.fileExists(atPath: r.mp + "/XCodeVault"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: r.mp + "/Vault"))
     }
 
     func testRefusesAnythingButATopLevelVolume() {
@@ -79,7 +79,7 @@ final class VaultFolderPrecreateTests: XCTestCase {
     func testARootTheUserCannotWriteIsSkippedNotForced() {
         let r = rig()
         guard case .skipped = run(r, writable: false) else { return XCTFail("expected skipped") }
-        XCTAssertFalse(FileManager.default.fileExists(atPath: r.mp + "/XCodeVault"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: r.mp + "/Vault"))
     }
 
     func testAMkdirThatFailsIsReportedAndJournalled() throws {
@@ -110,12 +110,12 @@ final class VaultFolderPrecreateTests: XCTestCase {
         let outcome = VaultFolderPrecreate.createBeforeOwnership(
             mountPoint: r.mp, volumeUUID: uuid, journal: Journal(url: URL(fileURLWithPath: "/nonexistent-dir-xcv/j.jsonl")), isMountPoint: { _ in true },
             volumeUUIDAt: { _ in self.uuid }, volumesRoot: r.root)
-        XCTAssertEqual(outcome, .created(r.mp + "/XCodeVault", journalled: false))
+        XCTAssertEqual(outcome, .created(r.mp + "/Vault", journalled: false))
         XCTAssertTrue(outcome.note?.contains("journal") == true)
     }
 
     func testTheNoteSaysWhatHappened() {
-        XCTAssertTrue(VaultFolderPrecreate.Outcome.created("/Volumes/D/XCodeVault").note?.contains("/Volumes/D/XCodeVault") == true)
+        XCTAssertTrue(VaultFolderPrecreate.Outcome.created("/Volumes/D/Vault").note?.contains("/Volumes/D/Vault") == true)
         XCTAssertNotNil(VaultFolderPrecreate.Outcome.skipped("why").note)
         XCTAssertNotNil(VaultFolderPrecreate.Outcome.failed("why").note)
     }

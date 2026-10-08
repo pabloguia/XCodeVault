@@ -323,9 +323,9 @@ enum LiveOperations {
                 plan, confirmedName: typed, runner: runner, journal: Journal(),
                 registeredVaultUUIDs: { Set(try VaultRegistry().volumes().map(\.volumeUUID)) }, snapshot: { try DriveSnapshot.read() })
             return .drivePrepared(outcome.plan)
-        case .useDrive(let volume):
-            observer(LogLine(.command, "register \(volume.mountPoint ?? volume.deviceNode) as a vault"))
-            let outcome = try DriveRegistration.useDrive(volume)
+        case .useDrive(let volume, let folderName):
+            observer(LogLine(.command, "register \(volume.mountPoint ?? volume.deviceNode) as a vault, folder \(folderName)"))
+            let outcome = try DriveRegistration.useDrive(volume, folderName: folderName)
             for folder in outcome.folders { observer(LogLine(.stdout, folder)) }
             if let why = outcome.foldersError { observer(LogLine(.stderr, why)) }
             return .driveRegistered(outcome)
