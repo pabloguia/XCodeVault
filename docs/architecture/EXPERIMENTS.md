@@ -623,3 +623,17 @@ run's. Second, capture the output: three of the attempts above ran with stdout o
 the cleanup's own messages — the thing that says whether it ran at all — were invisible, and the
 absence of a "detaching" line was read as "nothing to detach" rather than "the cleanup never got
 there".
+
+## E19 — can the bulk of DerivedData live on a physical external volume while the test bundle loads? (gates H19)
+
+`scripts/experiments/e19-split-products.sh`. Scratch only. External writes are confined to an already-existing
+per-user `.TemporaryItems/folders.<uid>/TemporaryItems/XCodeVault-experiments/E19` on the volume named by
+`XCV_E19_VOLUME`. Internal writes are confined to `~/.xcodevault-e19-scratch`. The script refuses any other
+external path, refuses a non-external volume, and deletes only those two directories. It does not write Xcode
+defaults and does not touch CoreSimulator.
+
+Three layouts, not a re-run of E2's nine cases: entire DerivedData on the volume; DerivedData on the volume with
+`SYMROOT` internal; DerivedData internal with intermediates, the index and the module cache on the volume.
+
+**Status: run 2026-10-10.** CTRL failed with the E2 error. SYM and INV passed. H19 is probable. Recorded in
+`HYPOTHESES.md` and `COMPATIBILITY_MATRIX.md`. The app does not grow a command from this.

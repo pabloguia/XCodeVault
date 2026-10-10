@@ -2177,3 +2177,37 @@ ownership on keeps the guided `sudo mkdir && chown` command.
 
 **Status: (a)/(b) PASS (2026-10-06); (c)/(d) PASS (2026-10-07).** Experimental everywhere (rule 10): one drive, one macOS
 version, Intel.
+
+## H19 — test products can stay internal while DerivedData's bulk sits on a physical external volume *(new, 2026-10-10; **probable**)*
+
+**Claim:** `xcodebuild test` of a dynamic-library XCTest bundle can pass when the test products are on the internal
+disk and the bulky build directories are on a physical external volume. H6 still holds for a bundle that itself
+sits on that volume.
+
+**Status: probable (E19, 2026-10-10, macOS 26.7.1 25G241 / Xcode 26.5 17F42 / Intel).** One USB disk, owners on,
+case-sensitive APFS. The fixture is `fixtures/E2Fixture`. Scratch only: the volume's pre-existing per-user
+`.TemporaryItems`, and `~/.xcodevault-e19-scratch`. No Xcode defaults were written (`IDEBuildLocationStyle` stayed
+`Shared`; the four custom location keys stayed unset). Evidence:
+`docs/research/evidence/e19-split-products-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+
+| Layout | Products | Bulk | `xcodebuild test` |
+|---|---|---|---|
+| CTRL — entire DerivedData on the USB volume | external | external (module cache 80 MB, index 21 MB, SDK stat caches 14 MB, build 3.9 MB) | **FAIL** exit 65, the E2 bundle-instance error |
+| SYM — `-derivedDataPath` on the volume, `SYMROOT` internal, intermediates/index/module cache on the volume | internal, 376 KB | external (module cache 80 MB, index 21 MB, intermediates 3.4 MB, SDK stat caches 14 MB inside that DerivedData) | **PASS** |
+| INV — DerivedData internal, `OBJROOT` / index / module cache on the volume | internal, inside DerivedData | those three external; SDK stat caches (14 MB) stayed internal | **PASS** |
+
+What this allows: an invocation can keep the bytes that dominate this build (module cache, index, intermediates, and,
+when DerivedData itself is external, the SDK stat caches) on the USB volume and still load the test bundle. SYM is
+the layout that moves more: the compilation cache and the logs went with DerivedData.
+
+What this does not allow: pointing Xcode's DerivedData location at the volume. That is CTRL, and it still fails.
+The app's Locations command does that, and it must keep warning. E19 did not write `IDECustomDerivedDataLocation`
+or `IDECustomBuildProductsPath`, so a saved Locations split is unmeasured. Not Apple Silicon, not the Xcode GUI
+runner, not a Simulator destination, not a second disk, not Thunderbolt (E14d), disconnect not tested. The fixture
+is small; the split of *where* the bytes went is measured, a large project's ratio is not. `swift test` was not
+repeated; E2 already passed it on this class of volume.
+
+A 2023 forum note says `tccutil reset SystemPolicyRemovableVolumes` then a permission prompt makes the bundle load
+from the volume itself. That would mutate the user's TCC database. It was not run. It is a hypothesis, not a result.
+
+Not the Definition of Done. Experimental everywhere. No product command.

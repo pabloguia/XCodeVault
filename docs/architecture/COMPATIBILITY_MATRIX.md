@@ -740,6 +740,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
+| E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 
 ### Pending — added 2026-09-27 (user-first permissions, ADR-0007)
 
@@ -1226,3 +1227,27 @@ substitution may not be waved through. Issue #29 stays open.
 - Verdict: **PASS on one drive / one macOS / Intel.** Experimental (rule 10): not Apple Silicon, not HFS+, not a second
   macOS version. The guided route (Show in Finder, Copy Command) stays the fallback and is
   what an unsigned build shows. The one-click Use This Drive flow on a real drive is **not** verified yet.
+
+### E19 split DerivedData — products internal, bulk on the USB volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-10
+- Hypothesis reference: H19 (and H6's scope: the bundle, not every byte of DerivedData)
+- Test performed: `scripts/experiments/e19-split-products.sh` with `fixtures/E2Fixture`,
+  `xcodebuild test -scheme E2Fixture -destination platform=macOS`. Three layouts. External scratch was the
+  volume's pre-existing per-user `.TemporaryItems`; internal scratch was `~/.xcodevault-e19-scratch`.
+  No `defaults write`. The four custom Locations keys were unset before and after; `IDEBuildLocationStyle`
+  stayed `Shared`.
+- Result: **partial.** CTRL (entire DerivedData on the USB volume) **FAIL** exit 65,
+  `Failed to create a bundle instance representing '…/E2LibTests.xctest'`. SYM (`-derivedDataPath` on the
+  volume, `SYMROOT` internal, intermediates/index/module cache on the volume) **PASS**; products 376 KB
+  internal, and on the volume the module cache 80 MB, index 21 MB, intermediates 3.4 MB, SDK stat caches
+  14 MB. INV (DerivedData internal, those three overrides external) **PASS**; the 14 MB SDK stat caches
+  stayed internal because nothing moved them.
+- Evidence: `../research/evidence/e19-split-products-macos26.7.1-25G241-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild test ✓ (the probe); simulator N/A; physical device N/A
+- Verdict: H19 **probable**. The whole-folder DerivedData relocation stays a warned `nativeConfiguration`.
+  The split is not a Locations setting and is not offered. Experimental (rule 10).
+- Notes: one USB disk (case-sensitive APFS, owners enabled, External/Fixed). Not Apple Silicon, not the
+  Xcode GUI, not a Simulator destination, not Thunderbolt. A 2023 note about resetting
+  `SystemPolicyRemovableVolumes` was not run — it would change the user's TCC database. Scratch removed
+  after the run.

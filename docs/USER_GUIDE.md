@@ -74,7 +74,9 @@ drive connected and which leave their only copy on it.
 
 - **Runs from the drive** — keep the drive connected while you work. *New builds go to the drive* sets Xcode's
   DerivedData location (new builds only; on macOS 26 unit tests can fail to load from an external drive, which the item
-  always says and the Run sheet asks you to confirm). *New Archives* does the same for Archives.
+  always says and the Run sheet asks you to confirm). The button sets the whole folder. Keeping the built test products
+  on this Mac and the rest of that build on the external drive passed once, on one Intel Mac, and the app does not do
+  that split (*experimental*, E19). *New Archives* does the same for Archives.
 - **Moved to the drive** — *Existing Archives* are copied and verified; the original is removed only after that, when
   you confirm it.
 - **Parked on the drive** — a simulator runtime. It comes back to this Mac only when you restore it, and that needs the
