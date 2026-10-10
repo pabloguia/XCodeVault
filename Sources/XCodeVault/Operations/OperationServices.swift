@@ -17,6 +17,10 @@ struct OperationServices: Sendable {
     /// **Undo** after a Locations change: the previous folder put back when there was one, else Core's reset path
     /// (`xcodevaultctl locations reset-*`).
     var restoreLocation: @Sendable (XcodeLocations.Key, _ previous: String?, ChildProcesses, @escaping LogObserver) throws -> Void
+    /// **Undo** after the split: every key the split wrote, put back from the values the run recorded.
+    var restoreSplit: @Sendable (XcodeLocations.SplitRestore, ChildProcesses, @escaping LogObserver) throws -> Void = { _, _, _ in
+        throw RuntimeOperationError("No operations in this environment.")
+    }
     /// Allocated bytes under a path, for the progress bar; nil when it cannot be measured.
     var measure: @Sendable (String) -> UInt64?
     /// The folder panel, opened at `startingAt` as a sheet on the key window; nil when the user cancels.
@@ -44,6 +48,10 @@ struct OperationServices: Sendable {
             try MigrationEngine(runner: StreamingCommandRunner(observer: observer)).removeSource(outcome, confirmNonRegenerable: confirm)
         },
         restoreLocation: { try LiveOperations.restoreLocation($0, previous: $1, children: $2, observer: $3) },
+        restoreSplit: { restore, children, observer in
+            _ = try XcodeLocations.preflightDerivedData(path: nil, volumes: [], xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExternalTests: true)
+            try XcodeLocations.restore(restore, runner: StreamingCommandRunner(observer: observer, children: children))
+        },
         measure: { DiskUsage.measure($0)?.allocatedBytes },
         chooseFolder: { start in
             let panel = NSOpenPanel()
@@ -110,6 +118,11 @@ enum LiveOperations {
         if kind.needsFolder, let folder = plan.inputs.folder, let why = DestinationFolder.networkRefusal(filesystem(folder)) {
             return OperationPreview(destination: inputs.folder, blockers: [.core(why)])
         }
+        if kind == .setDerivedData, inputs.keepProductsOnThisMac, let products = inputs.productsFolder,
+            let why = DestinationFolder.networkRefusal(filesystem(products))
+        {
+            return OperationPreview(destination: inputs.folder, blockers: [.core(why)])
+        }
         let reviewed = core(kind, plan.inputs)
         guard let create = plan.willCreate, let vaultDirectory = inputs.standardFolderOf, let vaultUUID = inputs.vaultUUID else { return reviewed }
         return withNewFolder(reviewed, folder: create, vaultDirectory: vaultDirectory, vaultUUID: vaultUUID)
@@ -145,6 +158,8 @@ enum LiveOperations {
     static func retarget(_ prepared: PreparedOperation, to folder: String) -> PreparedOperation? {
         switch prepared {
         case .location(let change, let ack): return .location(XcodeLocations.Change(key: change.key, newValue: folder), acknowledgeTests: ack)
+        case .derivedDataSplit(let split, let ack):
+            return .derivedDataSplit(XcodeLocations.DerivedDataSplit(bulk: folder, products: split.products), acknowledgeExperimental: ack)
         case .export(var req, let x, let h):
             req.destination = folder
             return .export(req, x, h)
@@ -241,6 +256,7 @@ enum LiveOperations {
     }
 
     static func locationPreview(_ kind: OperationKind, _ inputs: OperationInputs) -> OperationPreview {
+        if kind == .setDerivedData, inputs.keepProductsOnThisMac { return splitPreview(inputs) }
         guard let key = kind.locationKey, let folder = inputs.folder else { return OperationPreview() }
         let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
         let xcodeRunning = CleanExecutor.xcodeIsRunning()
@@ -255,6 +271,23 @@ enum LiveOperations {
         return OperationPreview(
             source: key == .derivedData ? current.derivedData : current.archives, destination: folder, warnings: warnings, blockers: blockers,
             prepared: blockers.isEmpty ? .location(XcodeLocations.Change(key: key, newValue: folder), acknowledgeTests: inputs.acknowledgeTests) : nil)
+    }
+
+    /// The split's review. The placement rule is Core's; this only turns a missing acknowledgement into the checkbox.
+    static func splitPreview(_ inputs: OperationInputs) -> OperationPreview {
+        guard let bulk = inputs.folder, let products = inputs.productsFolder else {
+            return OperationPreview(blockers: [inputs.folder == nil ? .chooseFolder : .chooseProductsFolder])
+        }
+        let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
+        let xcodeRunning = CleanExecutor.xcodeIsRunning()
+        let (warnings, blockers) = locationPreflight(acknowledged: inputs.acknowledgeTests, unacknowledged: .acknowledgeSplit) { ack in
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: products, volumes: volumes, xcodeRunning: xcodeRunning, acknowledgeExperimental: ack)
+        }
+        let split = XcodeLocations.DerivedDataSplit(bulk: bulk, products: products)
+        return OperationPreview(
+            source: XcodeLocations.read().derivedData, destination: bulk, warnings: warnings, blockers: blockers,
+            prepared: blockers.isEmpty ? .derivedDataSplit(split, acknowledgeExperimental: inputs.acknowledgeTests) : nil)
     }
 
     static func exportPreview(_ inputs: OperationInputs) throws -> OperationPreview {
@@ -304,6 +337,11 @@ enum LiveOperations {
             let previous = read.flatMap { $0.succeeded ? $0.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil }.flatMap { $0.isEmpty ? nil : $0 }
             try XcodeLocations.apply(change, runner: runner)
             return .locationApplied(change.key, previous: previous)
+        case .derivedDataSplit(let split, let ack):
+            let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
+            _ = try XcodeLocations.preflightDerivedDataSplit(
+                bulk: split.bulk, products: split.products, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExperimental: ack)
+            return .splitApplied(try XcodeLocations.apply(split, runner: runner))
         case .export(let req, let x, let h):
             let ops = RuntimeOperations(runner: runner, xcode: x, host: h)
             _ = try ops.preflightExport(req, freeBytesAtDestination: MountStatus.space(at: req.destination)?.free)
@@ -368,11 +406,13 @@ enum LiveOperations {
 
     /// The preflight's warnings and blockers. When it refuses only because the tests risk was not acknowledged — it
     /// passes with the acknowledgement — the blocker is the checkbox, not Core's sentence naming the CLI's flag.
-    static func locationPreflight(acknowledged: Bool, _ preflight: (Bool) throws -> [String]) -> (warnings: [String], blockers: [OperationBlocker]) {
+    static func locationPreflight(
+        acknowledged: Bool, unacknowledged: OperationBlocker = .acknowledgeTests, _ preflight: (Bool) throws -> [String]
+    ) -> (warnings: [String], blockers: [OperationBlocker]) {
         do {
             return (try preflight(acknowledged), [])
         } catch {
-            if !acknowledged, let warnings = try? preflight(true) { return (warnings, [.acknowledgeTests]) }
+            if !acknowledged, let warnings = try? preflight(true) { return (warnings, [unacknowledged]) }
             return ([], [.core("\(error)")])
         }
     }

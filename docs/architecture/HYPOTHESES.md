@@ -2201,13 +2201,18 @@ when DerivedData itself is external, the SDK stat caches) on the USB volume and 
 the layout that moves more: the compilation cache and the logs went with DerivedData.
 
 What this does not allow: pointing Xcode's DerivedData location at the volume. That is CTRL, and it still fails.
-The app's Locations command does that, and it must keep warning. E19 did not write `IDECustomDerivedDataLocation`
-or `IDECustomBuildProductsPath`, so a saved Locations split is unmeasured. Not Apple Silicon, not the Xcode GUI
-runner, not a Simulator destination, not a second disk, not Thunderbolt (E14d), disconnect not tested. The fixture
-is small; the split of *where* the bytes went is measured, a large project's ratio is not. `swift test` was not
-repeated; E2 already passed it on this class of volume.
+`locations set-derived-data` still does that, and it still warns. The product also offers the split, as
+`locations set-derived-data-split` and as a choice on the DerivedData Run sheet. It writes
+`IDECustomDerivedDataLocation` (the external folder), `IDEBuildLocationStyle=Custom`,
+`IDECustomBuildLocationType=Absolute`, `IDECustomBuildProductsPath` (on this Mac) and
+`IDECustomBuildIntermediatesPath` (under the external folder). Index and module cache follow the DerivedData
+location. E19 did not write those keys — it passed the directories as `xcodebuild` settings — so a saved Locations
+split is still unmeasured. Not Apple Silicon, not the Xcode GUI runner, not a Simulator destination, not a second
+disk, not Thunderbolt (E14d), disconnect not tested. The fixture is small; the split of *where* the bytes went is
+measured, a large project's ratio is not. `swift test` was not repeated; E2 already passed it on this class of
+volume. A project's own workspace location settings can override the global keys; that was not measured.
 
 A 2023 forum note says `tccutil reset SystemPolicyRemovableVolumes` then a permission prompt makes the bundle load
 from the volume itself. That would mutate the user's TCC database. It was not run. It is a hypothesis, not a result.
 
-Not the Definition of Done. Experimental everywhere. No product command.
+Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.

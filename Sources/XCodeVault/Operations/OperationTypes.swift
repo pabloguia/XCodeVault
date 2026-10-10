@@ -66,7 +66,8 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
     var needsFolder: Bool { [.offloadRuntime, .setDerivedData, .setArchives, .exportRuntime].contains(self) }
     var needsRuntime: Bool { [.offloadRuntime, .deleteRuntime].contains(self) }
     var needsPlatform: Bool { self == .exportRuntime }
-    /// DerivedData on an external volume breaks `xcodebuild test` (E2): the CLI's `--i-understand-tests-may-fail`.
+    /// DerivedData on an external volume breaks `xcodebuild test` (E2), and the split has its own residual risk.
+    /// The sheet's checkbox text follows `OperationInputs.keepProductsOnThisMac`.
     var asksTestsAcknowledgement: Bool { self == .setDerivedData }
     /// Deletes data on this Mac when it runs: the confirm button is destructive and not the default (HIG).
     var deletesData: Bool { [.offloadRuntime, .deleteRuntime, .eraseVolume, .eraseDisk].contains(self) }
@@ -134,8 +135,13 @@ struct OperationInputs: Sendable, Equatable {
     var platform = "iOS"
     /// `--build-version`: set only by **Export installer first**, so the export fetches the installed runtime's version.
     var buildVersion: String?
-    /// `--i-understand-tests-may-fail`.
+    /// `--i-understand-tests-may-fail` for the whole folder, or `--i-understand-the-split-is-experimental` for the split.
     var acknowledgeTests = false
+    /// The measured split: bulky build data on the drive, built test products on this Mac. The whole-folder action is the
+    /// other choice and stays the default, so a confirmation that does not pick this still points the whole folder.
+    var keepProductsOnThisMac = false
+    /// The folder on this Mac where built test products stay. Used only when `keepProductsOnThisMac` is true.
+    var productsFolder: String?
     /// True when the folder was chosen with **Choose Another Folder…** rather than from a vault's standard layout (R6).
     var folderIsCustom = false
     /// I1: set when `folder` is a usable vault's standard folder (`VaultLayout`) — the vault directory it belongs to. Only
@@ -155,6 +161,10 @@ struct OperationInputs: Sendable, Equatable {
 /// Why **Run** is disabled. The app's own reasons are localized; Core's are its English prose, shown as given.
 enum OperationBlocker: Sendable, Equatable {
     case chooseVault, chooseFolder, chooseRuntime, acknowledgeTests
+    /// The split needs the folder on this Mac where built test products stay.
+    case chooseProductsFolder
+    /// The split's residual risk, which is not the whole-folder "tests may fail" acknowledgement.
+    case acknowledgeSplit
     /// Simulator work (a simulator, `simctl`, a test run) is running: offload and delete wait for it (review L3).
     case simulatorWorkRunning
     /// R6: the drive is no longer connected, or the disks could not be read.
@@ -173,6 +183,8 @@ enum PreparedOperation: Sendable {
     case migration(MigrationPlan)
     case offload(RuntimeOperations.OffloadPlan, XcodeInstallation, HostEnvironment)
     case location(XcodeLocations.Change, acknowledgeTests: Bool)
+    /// The measured split. The rule is `XcodeLocations.DerivedDataSplit`; this only carries what the review showed.
+    case derivedDataSplit(XcodeLocations.DerivedDataSplit, acknowledgeExperimental: Bool)
     case export(RuntimeOperations.ExportRequest, XcodeInstallation, HostEnvironment)
     case deleteRuntime(identifier: String, XcodeInstallation, HostEnvironment)
     /// R6: one `diskutil` preparation; `confirmedName` is what the user typed (Core refuses an erase without the exact
@@ -190,6 +202,7 @@ enum PreparedOperation: Sendable {
         case .migration: .externalizeArchives
         case .offload: .offloadRuntime
         case .location(let change, _): change.key == .archives ? .setArchives : .setDerivedData
+        case .derivedDataSplit: .setDerivedData
         case .export: .exportRuntime
         case .deleteRuntime: .deleteRuntime
         case .diskPreparation(let plan, _):
@@ -236,6 +249,8 @@ enum OperationResult: Sendable {
     /// `previous`: the folder Xcode used before, read just before the change (the value the journal records as
     /// `previous`); nil when it used its default. **Undo** puts it back.
     case locationApplied(XcodeLocations.Key, previous: String?)
+    /// Every key the split wrote, and what it was before, so **Undo** can put the build location style back.
+    case splitApplied(XcodeLocations.SplitRestore)
     case offloaded
     case exported
     case runtimeDeleted

@@ -857,6 +857,162 @@ final class XcodeLocationsTests: XCTestCase {
         try XcodeLocations.apply(.init(key: .derivedData, newValue: nil), runner: runner, journal: journal)
         XCTAssertEqual(try journal.entries().map(\.state), [.started, .completed, .started, .completed])
     }
+
+    func testTheSplitKeepsProductsOffTheExternalVolume() {
+        XCTAssertNil(XcodeLocations.splitPlacementProblem(bulkExternal: true, productsExternal: false, productsInsideBulk: false))
+        XCTAssertTrue(XcodeLocations.splitPlacementProblem(bulkExternal: false, productsExternal: false, productsInsideBulk: false)!.contains("external drive"))
+        XCTAssertTrue(XcodeLocations.splitPlacementProblem(bulkExternal: true, productsExternal: true, productsInsideBulk: false)!.contains("stay on this Mac"))
+        XCTAssertTrue(XcodeLocations.splitPlacementProblem(bulkExternal: true, productsExternal: false, productsInsideBulk: true)!.contains("inside"))
+        XCTAssertTrue(XcodeLocations.productsSitInsideBulk(products: "/Volumes/Fast/DD/Products", bulk: "/Volumes/Fast/DD"))
+        XCTAssertFalse(XcodeLocations.productsSitInsideBulk(products: "/Users/me/Products", bulk: "/Volumes/Fast/DD"))
+        XCTAssertTrue(XcodeLocations.pathIsExternal(resolved: "/Volumes/Fast/DD", volumes: []))
+        XCTAssertFalse(XcodeLocations.pathIsExternal(resolved: "/Users/me/Products", volumes: []))
+    }
+
+    func testTheSplitNamesTheFiveLocationKeysAndNotTheWholeFolderRisk() throws {
+        let split = XcodeLocations.DerivedDataSplit(bulk: "/Volumes/Fast/DD", products: "/Users/me/Library/Developer/Xcode/Products")
+        XCTAssertEqual(split.intermediates, "/Volumes/Fast/DD/Intermediates")
+        XCTAssertEqual(
+            split.changes.map(\.key), [.derivedData, .buildLocationStyle, .buildLocationType, .buildProducts, .buildIntermediates])
+        XCTAssertEqual(
+            split.changes.map(\.newValue),
+            [
+                "/Volumes/Fast/DD", XcodeLocations.customBuildLocationStyle, XcodeLocations.absoluteBuildLocationType,
+                "/Users/me/Library/Developer/Xcode/Products", "/Volumes/Fast/DD/Intermediates",
+            ])
+        let t = TempDir()
+        let bulk = t.dir("bulk")
+        let products = t.dir("products")
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: products, volumes: [], xcodeRunning: false, acknowledgeExperimental: true)
+        ) { error in
+            XCTAssertTrue("\(error)".contains("external drive"), "\(error)")
+        }
+        let mount = try XCTUnwrap(MountStatus.filesystem(containing: bulk)?.mountPoint)
+        let external = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: mount, filesystemPersonality: "APFS", filesystemType: "apfs",
+            isInternal: false, isRemovableMedia: false, isEjectable: true, busProtocol: "USB", isSolidState: true, isWritable: true, ownersEnabled: true,
+            totalBytes: 1, freeBytes: 1, isBootVolume: false)
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: products, volumes: [external], xcodeRunning: false, acknowledgeExperimental: true)
+        ) { error in
+            let text = "\(error)"
+            XCTAssertTrue(text.contains("stay on this Mac"), text)
+            XCTAssertFalse(text.contains(XcodeLocations.splitAcknowledgementFlag), "placement fails before the acknowledgement: \(text)")
+        }
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: "relative", products: products, volumes: [], xcodeRunning: false, acknowledgeExperimental: true))
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: products, volumes: [], xcodeRunning: true, acknowledgeExperimental: true))
+    }
+
+    func testTheSplitAcknowledgementIsTheResidualRisk() throws {
+        let t = TempDir()
+        let bulk = t.dir("bulk")
+        let products = t.dir("products")
+        let externalBulk: (String) -> Bool = { $0.hasSuffix("/bulk") }
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: products, volumes: [], xcodeRunning: false, acknowledgeExperimental: false, pathIsExternal: externalBulk)
+        ) { error in
+            let text = "\(error)"
+            XCTAssertTrue(text.contains(XcodeLocations.splitAcknowledgementFlag), text)
+            XCTAssertFalse(text.contains("--i-understand-tests-may-fail"), "the whole-folder flag is a different risk: \(text)")
+            XCTAssertFalse(text.contains("E19"), text)
+            XCTAssertTrue(text.contains("experimental"), text)
+        }
+        let warnings = try XcodeLocations.preflightDerivedDataSplit(
+            bulk: bulk, products: products, volumes: [], xcodeRunning: false, acknowledgeExperimental: true, pathIsExternal: externalBulk)
+        XCTAssertTrue(warnings.contains { $0.contains("stay in \(products) on this Mac") && $0.contains(bulk) })
+        XCTAssertTrue(warnings.contains { $0.contains("measured to pass only with this split") })
+        XCTAssertTrue(warnings.contains { $0.contains("Experimental") })
+        XCTAssertFalse(warnings.contains { $0.contains("E19") || $0.contains("E2") })
+    }
+
+    func testApplyingTheSplitWritesTheFiveKeysAndRestoresTheEarlierStyle() throws {
+        let t = TempDir()
+        let bulk = t.dir("bulk")
+        let products = t.dir("products")
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let runner = RecordingRunner(responses: [
+            "defaults read com.apple.dt.Xcode IDEBuildLocationStyle": CommandResult(status: 0, stdout: "Shared\n", stderr: ""),
+            "defaults write": CommandResult(status: 0, stdout: "", stderr: ""),
+            "defaults delete": CommandResult(status: 0, stdout: "", stderr: ""),
+        ])
+        let split = XcodeLocations.DerivedDataSplit(bulk: bulk, products: products)
+        let restore = try XcodeLocations.apply(split, runner: runner, journal: journal)
+        XCTAssertEqual(restore.previous[XcodeLocations.buildLocationStyleKey], "Shared")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: split.intermediates))
+        let writes = runner.invocations.filter { $0.contains("defaults write") }
+        XCTAssertTrue(writes.contains { $0.contains("IDECustomDerivedDataLocation") && $0.contains(bulk) })
+        XCTAssertTrue(writes.contains { $0.contains("IDEBuildLocationStyle") && $0.contains("Custom") })
+        XCTAssertTrue(writes.contains { $0.contains("IDECustomBuildLocationType") && $0.contains("Absolute") })
+        XCTAssertTrue(writes.contains { $0.contains("IDECustomBuildProductsPath") && $0.contains(products) })
+        XCTAssertTrue(writes.contains { $0.contains("IDECustomBuildIntermediatesPath") && $0.contains("Intermediates") })
+        XCTAssertFalse(runner.invocations.contains { $0.contains("IDEDerivedDataPathOverride") })
+        let splitEntry = try journal.entries().last { $0.state == .completed && $0.detail["layout"] == XcodeLocations.splitLayout }
+        XCTAssertEqual(splitEntry?.detail["previous." + XcodeLocations.buildLocationStyleKey], "Shared")
+
+        runner.responses["defaults read com.apple.dt.Xcode IDEBuildLocationStyle"] = CommandResult(status: 0, stdout: "Custom\n", stderr: "")
+        runner.responses["defaults read com.apple.dt.Xcode IDECustomBuildProductsPath"] = CommandResult(status: 0, stdout: products + "\n", stderr: "")
+        let again = try XcodeLocations.apply(split, runner: runner, journal: journal)
+        XCTAssertEqual(again.previous[XcodeLocations.buildLocationStyleKey], "Shared", "a second split must not record Custom as the style to restore")
+
+        _ = try XcodeLocations.resetDerivedData(runner: runner, journal: journal)
+        XCTAssertTrue(runner.invocations.contains { $0.contains("defaults write") && $0.contains("IDEBuildLocationStyle") && $0.contains("Shared") })
+        for key in [XcodeLocations.derivedDataKey, XcodeLocations.buildProductsKey, XcodeLocations.buildIntermediatesKey, XcodeLocations.buildLocationTypeKey] {
+            XCTAssertTrue(runner.invocations.contains { $0.contains("defaults delete") && $0.contains(key) }, key)
+        }
+    }
+
+    func testAFailedSplitRollsBackTheKeysItAlreadyWrote() throws {
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let runner = SplitWriteFailure()
+        XCTAssertThrowsError(
+            try XcodeLocations.apply(
+                XcodeLocations.DerivedDataSplit(bulk: t.dir("bulk"), products: t.dir("products")), runner: runner, journal: journal))
+        XCTAssertEqual(try journal.entries().map(\.state), [.started, .failed])
+        let rolledBack = runner.deletes
+        XCTAssertTrue(rolledBack.contains(XcodeLocations.derivedDataKey))
+        XCTAssertTrue(rolledBack.contains(XcodeLocations.buildLocationStyleKey))
+        XCTAssertTrue(rolledBack.contains(XcodeLocations.buildLocationTypeKey))
+        XCTAssertFalse(rolledBack.contains(XcodeLocations.buildIntermediatesKey), "intermediates was not written, so it is not rolled back")
+    }
+
+    func testTheSuggestedProductsFolderIsCreatedOnlyUnderAnExistingXcodeFolder() throws {
+        let t = TempDir()
+        XCTAssertThrowsError(try XcodeLocations.ensureProductsDirectory(home: t.path))
+        t.dir("Library/Developer/Xcode")
+        let products = try XcodeLocations.ensureProductsDirectory(home: t.path)
+        XCTAssertEqual(products, t.path + "/Library/Developer/Xcode/Products")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: products))
+        XCTAssertEqual(try XcodeLocations.ensureProductsDirectory(home: t.path), products)
+    }
+}
+
+/// Fails the products-path write and records the deletes a rollback issues. Reads look unset.
+private final class SplitWriteFailure: CommandRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _deletes: [String] = []
+    var deletes: [String] { lock.withLock { _deletes } }
+
+    func run(_ executable: String, _ arguments: [String], environment: [String: String]?) throws -> CommandResult {
+        if arguments.first == "write" {
+            let key = arguments.dropFirst(2).first ?? ""
+            if key == XcodeLocations.buildProductsKey { return CommandResult(status: 1, stdout: "", stderr: "refused") }
+            return CommandResult(status: 0, stdout: "", stderr: "")
+        }
+        if arguments.first == "delete" {
+            lock.withLock { _deletes.append(arguments.last ?? "") }
+            return CommandResult(status: 0, stdout: "", stderr: "")
+        }
+        return CommandResult(status: 1, stdout: "", stderr: "unset")
+    }
 }
 
 /// `privilegeRequirement` is the one requirement the CLI tag, the GUI column and the executor's refusal

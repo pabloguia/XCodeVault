@@ -72,6 +72,7 @@ extension AppModel {
         if kind.needsVault && inputs.vaultUUID == nil { out.append(.chooseVault) }
         if kind.needsRuntime && inputs.runtimeID == nil { out.append(.chooseRuntime) }
         if kind.needsFolder && inputs.folder == nil { out.append(.chooseFolder) }
+        if kind == .setDerivedData, inputs.keepProductsOnThisMac, inputs.productsFolder == nil { out.append(.chooseProductsFolder) }
         return out
     }
 
@@ -153,6 +154,12 @@ extension AppModel {
         }
     }
 
+    /// **Choose…** for the folder on this Mac where built test products stay. It does not change the drive folder.
+    func chooseProductsFolder() async {
+        guard let path = await environment.operations.chooseFolder(operationSheet?.inputs.productsFolder) else { return }
+        updateOperationInputs { $0.productsFolder = path }
+    }
+
     /// What disables the confirm button: the preview's blockers once it has run.
     var operationBlockers: [OperationBlocker] {
         let blockers = operationSheet?.preview?.blockers ?? []
@@ -216,6 +223,8 @@ extension AppModel {
         case .chooseFolder: L10n.tr("app.run.blocker.chooseFolder")
         case .chooseRuntime: L10n.tr("app.run.blocker.chooseRuntime")
         case .acknowledgeTests: L10n.tr("app.run.blocker.acknowledgeTests")
+        case .chooseProductsFolder: L10n.tr("app.run.blocker.chooseProducts")
+        case .acknowledgeSplit: L10n.tr("app.run.blocker.acknowledgeSplit")
         case .simulatorWorkRunning: L10n.tr("app.run.blocker.simulatorWork")
         case .driveGone: L10n.tr("app.run.blocker.driveGone")
         case .typeName(let name): L10n.tr("app.run.blocker.typeName", name)
@@ -478,7 +487,7 @@ extension AppModel {
     static func secondStep(after result: OperationResult) -> OperationSheetState.SecondStep {
         switch result {
         case .copied(let outcome): outcome.plan.direction == .externalize && !outcome.sourceRemoved ? .removeOriginal : .none
-        case .locationApplied: .undo
+        case .locationApplied, .splitApplied: .undo
         case .offloaded, .exported, .runtimeDeleted, .drivePrepared, .driveRegistered: .none
         }
     }
@@ -596,7 +605,16 @@ extension AppModel {
 
     /// **Undo** after a Locations change: the previous folder put back, or Xcode's default when it had none.
     func undoLocation() async {
-        guard var s = operationSheet, !isOperationRunning, case .locationApplied(let key, let previous)? = s.result else { return }
+        guard var s = operationSheet, !isOperationRunning else { return }
+        let single: (XcodeLocations.Key, String?)? = {
+            if case .locationApplied(let key, let previous) = s.result { return (key, previous) }
+            return nil
+        }()
+        let split: XcodeLocations.SplitRestore? = {
+            if case .splitApplied(let restore) = s.result { return restore }
+            return nil
+        }()
+        guard single != nil || split != nil else { return }
         switch s.secondStep {
         case .undo, .undoFailed: break
         default: return
@@ -606,8 +624,11 @@ extension AppModel {
         operationSheet = s
         beginOperationLog("undo")
         appendLog([LogLine(.stage, OperationStage.applying.rawValue)])
-        let restore = environment.operations.restoreLocation
-        let result = await execute(nil) { children, observer in try restore(key, previous, children, observer) }
+        let restoreLocation = environment.operations.restoreLocation
+        let restoreSplit = environment.operations.restoreSplit
+        let result = await execute(nil) { children, observer in
+            if let split { try restoreSplit(split, children, observer) } else if let single { try restoreLocation(single.0, single.1, children, observer) }
+        }
         guard var done = operationSheet else { return }
         switch result {
         case .success:

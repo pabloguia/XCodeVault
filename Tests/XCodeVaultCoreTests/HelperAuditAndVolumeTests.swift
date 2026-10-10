@@ -304,13 +304,17 @@ final class HelperAuditAndVolumeTests: XCTestCase {
 /// Issue #16 — `Change.key` was a free-form `String` written straight into
 /// `defaults write com.apple.dt.Xcode`.
 final class XcodeLocationsKeyTests: XCTestCase {
-    /// The enumeration must cover exactly the four keys the tool owns, and each case must resolve
-    /// to the key the rest of the type already declares. Without this the enum is a second place
-    /// the key literals live, free to disagree with the first.
+    /// The enumeration must cover exactly the keys the tool owns, and each case must resolve to the
+    /// key the rest of the type already declares. Without this the enum is a second place the key
+    /// literals live, free to disagree with the first. The three build-location cases are the split's
+    /// (H19); a case beyond these seven is another Xcode preference this tool would write.
     func testEveryCaseResolvesToTheKeyTheTypeAlreadyDeclares() {
-        XCTAssertEqual(XcodeLocations.Key.allCases.count, 4, "four keys are owned; a fifth case is a fifth Xcode preference this tool writes")
+        XCTAssertEqual(XcodeLocations.Key.allCases.count, 7, "seven keys are owned; another case is another Xcode preference this tool writes")
         XCTAssertEqual(XcodeLocations.Key.derivedData.defaultsKey, XcodeLocations.derivedDataKey)
         XCTAssertEqual(XcodeLocations.Key.buildLocationStyle.defaultsKey, XcodeLocations.buildLocationStyleKey)
+        XCTAssertEqual(XcodeLocations.Key.buildLocationType.defaultsKey, XcodeLocations.buildLocationTypeKey)
+        XCTAssertEqual(XcodeLocations.Key.buildProducts.defaultsKey, XcodeLocations.buildProductsKey)
+        XCTAssertEqual(XcodeLocations.Key.buildIntermediates.defaultsKey, XcodeLocations.buildIntermediatesKey)
         XCTAssertEqual(XcodeLocations.Key.archives.defaultsKey, XcodeLocations.archivesKey)
         XCTAssertEqual(XcodeLocations.Key.compilationCache.defaultsKey, XcodeLocations.compilationCacheKey)
     }

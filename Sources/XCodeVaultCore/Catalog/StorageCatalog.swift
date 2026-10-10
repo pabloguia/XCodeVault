@@ -22,7 +22,7 @@ public enum StorageCatalog {
             notes: [
                 "Relocate via Xcode ▸ Settings ▸ Locations (IDECustomDerivedDataLocation).",
                 "Known caveat: framework unit tests fail when the test bundle is on a physical external volume (F4/H6, E2, E19 control). The scanner warns before you point DerivedData there.",
-                "Experimental, not a command (E19, one Intel Mac, Xcode 26.5, macOS destination): the same test passed with SYMROOT on the internal disk and DerivedData, intermediates, the index and the module cache on the USB volume. Locations was not written. Not the Definition of Done.",
+                "Experimental (E19, one Intel Mac, Xcode 26.5, macOS destination): the same test passed with products on the internal disk and DerivedData, intermediates, the index and the module cache on the USB volume. `locations set-derived-data-split` writes that layout with Xcode's Locations keys. Those keys were not what E19 wrote, so the saved setting is unmeasured. Not the Definition of Done.",
             ]),
         StorageCategory(
             id: "archives", name: "Archives", subsystem: .xcodeIDE,

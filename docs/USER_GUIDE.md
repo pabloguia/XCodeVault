@@ -73,10 +73,14 @@ The move step lists each item with its size and one of five outcomes. The line a
 drive connected and which leave their only copy on it.
 
 - **Runs from the drive** — keep the drive connected while you work. *New builds go to the drive* sets Xcode's
-  DerivedData location (new builds only; on macOS 26 unit tests can fail to load from an external drive, which the item
-  always says and the Run sheet asks you to confirm). The button sets the whole folder. Keeping the built test products
-  on this Mac and the rest of that build on the external drive passed once, on one Intel Mac, and the app does not do
-  that split (*experimental*, E19). *New Archives* does the same for Archives.
+  DerivedData location (new builds only). The Run sheet offers two layouts. **Whole DerivedData folder on the drive**
+  puts everything, including built test products, on the external volume; My Mac framework tests can fail to load a
+  test bundle from there, and the sheet asks you to confirm that. **Keep test products on this Mac** leaves those
+  products on this Mac and puts DerivedData, intermediates, the index and the module cache on the drive. My Mac
+  framework tests were measured to pass only with that split, once, with `xcodebuild` on one Intel Mac. Saving it in
+  Xcode's Locations settings was not part of that measurement, a project's own location settings can override it, and
+  a disconnected drive has not been tested. It stays **Experimental**. The command is
+  `locations set-derived-data-split`. *New Archives* is unchanged.
 - **Moved to the drive** — *Existing Archives* are copied and verified; the original is removed only after that, when
   you confirm it.
 - **Parked on the drive** — a simulator runtime. It comes back to this Mac only when you restore it, and that needs the

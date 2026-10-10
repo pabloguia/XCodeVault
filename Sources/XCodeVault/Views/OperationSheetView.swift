@@ -167,9 +167,26 @@ struct OperationSheetView: View {
                     .disabled(s.offloadToReturnTo != nil)
                 }
             }
+            if s.kind == .setDerivedData {
+                GridRow {
+                    Text.l10n(L10n.tr("app.run.derivedData.mode")).foregroundStyle(.secondary)
+                    Picker(L10n.tr("app.run.derivedData.mode"), selection: keepProductsBinding) {
+                        Text.l10n(L10n.tr("app.run.derivedData.whole")).tag(false)
+                        Text.l10n(L10n.tr("app.run.derivedData.split")).tag(true)
+                    }
+                    .labelsHidden().pickerStyle(.radioGroup)
+                }
+                GridRow {
+                    Text.l10n(s.inputs.keepProductsOnThisMac ? L10n.tr("app.run.derivedData.splitDetail") : L10n.tr("app.run.derivedData.wholeDetail"))
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).gridCellColumns(2)
+                }
+            }
             if s.kind.needsFolder {
                 GridRow {
-                    Text.l10n(L10n.tr("app.run.label.folder")).foregroundStyle(.secondary)
+                    Text.l10n(
+                        s.kind == .setDerivedData && s.inputs.keepProductsOnThisMac
+                            ? L10n.tr("app.run.label.onTheDrive") : L10n.tr("app.run.label.folder")
+                    ).foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline) {
                         // R7-A: the folder in full, wrapping, shown once — the facts below do not repeat it as "To".
                         Text(verbatim: s.inputs.folder ?? L10n.tr("app.run.choose.none"))
@@ -182,6 +199,18 @@ struct OperationSheetView: View {
                     }
                 }
             }
+            if s.kind == .setDerivedData, s.inputs.keepProductsOnThisMac {
+                GridRow {
+                    Text.l10n(L10n.tr("app.run.label.products")).foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(verbatim: s.inputs.productsFolder ?? L10n.tr("app.run.choose.none"))
+                            .font(.system(.body, design: .monospaced)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                            .foregroundStyle(s.inputs.productsFolder == nil ? .secondary : .primary)
+                        Spacer(minLength: 0)
+                        Button(L10n.tr("app.run.destination.chooseFolder")) { Task { await model.chooseProductsFolder() } }.actionButton()
+                    }
+                }
+            }
         }
         if s.kind.usesDestination { otherDrives(s) }
         if let locked = model.operationChoicesLockedReason {
@@ -189,7 +218,9 @@ struct OperationSheetView: View {
             Text(verbatim: locked).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         if s.kind.asksTestsAcknowledgement {
-            Toggle(L10n.tr("app.run.acknowledgeTests"), isOn: ackBinding).toggleStyle(.checkbox)
+            Toggle(
+                s.inputs.keepProductsOnThisMac ? L10n.tr("app.run.acknowledgeSplit") : L10n.tr("app.run.acknowledgeTests"), isOn: ackBinding
+            ).toggleStyle(.checkbox)
         }
     }
 
@@ -454,14 +485,22 @@ struct OperationSheetView: View {
             }
         case .undo, .undoing, .undoFailed:
             let previous = model.undoRestores ?? nil
+            let undoTitle: String = {
+                if case .splitApplied = s.result { return L10n.tr("app.run.undoAction.split") }
+                return OperationText.undoAction(restoring: previous)
+            }()
             HStack {
                 if case .undoFailed = s.secondStep {
                     Text.l10n(L10n.tr("app.run.undoFailed") + " " + L10n.tr("app.run.failed.seeDetails")).font(.callout).foregroundStyle(.secondary)
                 }
-                Button(OperationText.undoAction(restoring: previous)) { Task { await model.undoLocation() } }.actionButton().disabled(model.isOperationRunning)
+                Button(undoTitle) { Task { await model.undoLocation() } }.actionButton().disabled(model.isOperationRunning)
             }
         case .undone:
-            Label(OperationText.undone(restored: model.undoRestores ?? nil), systemImage: "arrow.uturn.backward.circle")
+            let undone: String = {
+                if case .splitApplied = s.result { return L10n.tr("app.run.undone.split") }
+                return OperationText.undone(restored: model.undoRestores ?? nil)
+            }()
+            Label(undone, systemImage: "arrow.uturn.backward.circle")
         case .originalRemoved, .none:
             EmptyView()
         }
@@ -560,6 +599,17 @@ struct OperationSheetView: View {
 
     private var ackBinding: Binding<Bool> {
         Binding(get: { model.operationSheet?.inputs.acknowledgeTests ?? false }, set: { v in model.updateOperationInputs { $0.acknowledgeTests = v } })
+    }
+
+    /// Switching layout clears the acknowledgement: the two checkboxes confirm different risks.
+    private var keepProductsBinding: Binding<Bool> {
+        Binding(
+            get: { model.operationSheet?.inputs.keepProductsOnThisMac ?? false },
+            set: { keep in
+                model.updateOperationInputs {
+                    $0.keepProductsOnThisMac = keep; $0.acknowledgeTests = false
+                }
+            })
     }
 
     private var destinationBinding: Binding<String?> {
