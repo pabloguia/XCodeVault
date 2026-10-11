@@ -741,6 +741,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
+| E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
 
 ### Pending — added 2026-09-27 (user-first permissions, ADR-0007)
 
@@ -1251,3 +1252,28 @@ substitution may not be waved through. Issue #29 stays open.
   Xcode GUI, not a Simulator destination, not Thunderbolt. A 2023 note about resetting
   `SystemPolicyRemovableVolumes` was not run — it would change the user's TCC database. Scratch removed
   after the run.
+
+### E19 Locations keys — one-shot split, products internal, bulk on the USB volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-11
+- Hypothesis reference: H19
+- Test performed: `scripts/experiments/e19-locations-keys.sh` with `fixtures/E2Fixture`,
+  `xcodebuild test -scheme E2Fixture -destination platform=macOS`. Two layouts. External scratch was the
+  volume's pre-existing per-user `.TemporaryItems` (`E19-keys`). Internal scratch was
+  `~/.xcodevault-e19-keys-scratch`. No `defaults write`. The five keys `DerivedDataSplit` writes were
+  passed as `-IDE…` arguments. There is no separate index or module-cache defaults key. CTRL was
+  `-derivedDataPath` on the external scratch, the layout E2 and E19 already failed.
+- Result: **partial, and interpretable.** CTRL **FAIL** exit 65, the same bundle-instance error
+  (`Failed to create a bundle instance representing '…/E2LibTests.xctest'`). KEYS **PASS** exit 0.
+  Products 376 KB internal (`E2LibTests.xctest` and `E2Lib.framework`). On the volume: intermediates
+  3.5 MB, the workspace folder holding the index 21 MB, module cache 79 MB, SDK stat caches 14 MB,
+  compilation cache 28 KB. `IDEBuildLocationStyle` stayed `Shared`. The custom location keys, the
+  compilation-cache key, the archives key and `IDEDerivedDataPathOverride` stayed unset before and after.
+- Evidence: `../research/evidence/e19-locations-keys-macos26.7.1-25G241-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild test ✓ (the probe); simulator N/A; physical device N/A
+- Verdict: H19 stays **probable**. The one-shot keys produce the split E19 measured with build settings.
+  A persisted `defaults write` and the Xcode GUI were not this run. Experimental (rule 10).
+- Notes: one USB disk (case-sensitive APFS, owners enabled, External/Fixed), `/dev/disk3s1`, the same
+  volume class as E19. Not Apple Silicon, not the Xcode GUI, not a Simulator destination, not
+  Thunderbolt. Scratch removed. No disk image was attached for this probe. The invoking user's Xcode
+  defaults were unchanged.

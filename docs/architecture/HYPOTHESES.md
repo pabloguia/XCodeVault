@@ -2184,7 +2184,7 @@ version, Intel.
 disk and the bulky build directories are on a physical external volume. H6 still holds for a bundle that itself
 sits on that volume.
 
-**Status: probable (E19, 2026-10-10, macOS 26.7.1 25G241 / Xcode 26.5 17F42 / Intel).** One USB disk, owners on,
+**Status: probable (E19, 2026-10-10, macOS 26.7.1 25G241 / Xcode 26.5 17F42 / Intel; one-shot Locations keys passed 2026-10-11, same machine).** One USB disk, owners on,
 case-sensitive APFS. The fixture is `fixtures/E2Fixture`. Scratch only: the volume's pre-existing per-user
 `.TemporaryItems`, and `~/.xcodevault-e19-scratch`. No Xcode defaults were written (`IDEBuildLocationStyle` stayed
 `Shared`; the four custom location keys stayed unset). Evidence:
@@ -2206,8 +2206,14 @@ What this does not allow: pointing Xcode's DerivedData location at the volume. T
 `IDECustomDerivedDataLocation` (the external folder), `IDEBuildLocationStyle=Custom`,
 `IDECustomBuildLocationType=Absolute`, `IDECustomBuildProductsPath` (on this Mac) and
 `IDECustomBuildIntermediatesPath` (under the external folder). Index and module cache follow the DerivedData
-location. E19 did not write those keys — it passed the directories as `xcodebuild` settings — so a saved Locations
-split is still unmeasured. Not Apple Silicon, not the Xcode GUI runner, not a Simulator destination, not a second
+location. E19 did not write those keys — it passed the directories as `xcodebuild` settings. On 2026-10-11 the same
+five keys, as one-shot `-IDE…` arguments and with no `defaults write`, made `xcodebuild test` pass (exit 0) on this
+machine: products 376 KB internal, and on the USB volume the intermediates (3.5 MB), the workspace folder that holds
+the index (21 MB), the module cache (79 MB), the SDK stat caches (14 MB) and the compilation cache. There is no
+separate index or module-cache defaults key; both followed `IDECustomDerivedDataLocation`. CTRL, the whole DerivedData
+on that volume, still failed (exit 65, the E2 bundle-instance error), so the baseline holds. `IDEBuildLocationStyle`
+stayed `Shared` and the custom keys stayed unset. This is not a persisted Locations write and not the Xcode GUI.
+Evidence: `docs/research/evidence/e19-locations-keys-macos26.7.1-25G241-xcode26.5-x86_64.txt`. Not Apple Silicon, not the Xcode GUI runner, not a Simulator destination, not a second
 disk, not Thunderbolt (E14d), disconnect not tested. The fixture is small; the split of *where* the bytes went is
 measured, a large project's ratio is not. `swift test` was not repeated; E2 already passed it on this class of
 volume. A project's own workspace location settings can override the global keys; that was not measured.

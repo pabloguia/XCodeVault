@@ -637,3 +637,6 @@ Three layouts, not a re-run of E2's nine cases: entire DerivedData on the volume
 
 **Status: run 2026-10-10.** CTRL failed with the E2 error. SYM and INV passed. H19 is probable. Recorded in
 `HYPOTHESES.md` and `COMPATIBILITY_MATRIX.md`. The app does not grow a command from this.
+
+**Locations keys (2026-10-11):** `scripts/experiments/e19-locations-keys.sh`. One-shot `-IDE…` arguments, no
+`defaults write`. CTRL failed; KEYS passed. H19 stays probable. Recorded beside the E19 entry.
