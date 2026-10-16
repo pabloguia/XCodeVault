@@ -47,11 +47,19 @@ at runtime.
 Model a downloaded runtime **installer** and an **installed** runtime as distinct
 catalog entries with distinct strategies (`downloadRepository` vs. the runtime's own
 `appleManaged`/`canonicalMount` entry), so a user can keep installers on external
-storage (`ExternalDrive/XCodeVault/RuntimeLibrary/...`) without re-downloading
+storage (`<vault>/XCodeVault/Runtimes/...`, the `runtimes` folder of `VaultLayout` — R6, ADR-0012) without re-downloading
 multi-GB runtimes, install/offload on demand, and see which Xcode versions support
 each operation (`xcodebuild -downloadPlatform` / `-downloadAllPlatforms` /
 `-importPlatform`, feature-detected — never assumed present).
 
+
+## Standard vault layout (R6, ADR-0012)
+
+Defined once in `VaultLayout` (`Sources/XCodeVaultCore/Drives/VaultLayout.swift`) and created by `vault init` and the
+app's **Use This Drive**: `<volume>/XCodeVault/DerivedData` (the `derivedData` category's external location),
+`<volume>/XCodeVault/Archives` (`archives`, when Xcode's Archives location is moved; Externalize Archives keeps the
+migration engine's own path under the vault directory) and `<volume>/XCodeVault/Runtimes` (runtime installers for offload
+and export). The app pre-fills these as destinations.
 ---
 
 ## Corrections from the 2026-09-05 research pass (read this before populating the catalog)

@@ -251,7 +251,7 @@ final class HistoryKindPaletteTests: XCTestCase {
 
     func testEveryKindHasADistinctColorAndSymbol() {
         let all = JournalTimeline.Kind.allCases
-        XCTAssertEqual(all.count, 9)
+        XCTAssertEqual(all.count, 10, "R6 added diskPreparation")
         XCTAssertEqual(Set(all.map(\.lightColorHex)).count, all.count)
         XCTAssertEqual(Set(all.map(\.darkColorHex)).count, all.count)
         XCTAssertEqual(Set(all.map(\.symbolName)).count, all.count)

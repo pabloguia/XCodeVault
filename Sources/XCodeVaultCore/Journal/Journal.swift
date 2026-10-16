@@ -8,6 +8,8 @@ import Foundation
 public struct JournalEntry: Sendable, Codable, Equatable, Identifiable {
     public enum Kind: String, Sendable, Codable {
         case clean, runtimeDelete, runtimeExport, runtimeImport, runtimeOffload, xcodeLocationChange, migration
+        /// R6: adding a volume or partition to, or erasing, an external drive (`DiskPreparation`).
+        case diskPreparation
     }
     public enum State: String, Sendable, Codable { case planned, started, completed, failed, rolledBack, skipped }
     public var id: String  // operation id shared across its state transitions

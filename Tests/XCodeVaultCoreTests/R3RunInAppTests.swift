@@ -917,6 +917,23 @@ final class R3SheetFitTests: XCTestCase {
             XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m, showsLog: true)), Self.ceiling, "\(language) finished, log open")
         }
     }
+
+    /// R6 (I3): the Run sheet with drives of every verdict listed under the Destination picker, with their Prepare….
+    func testTheRunSheetFitsWithDrivesUnderTheDestination() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let ops = ScriptedOperations()
+            let drives = ScriptedDrives(try R6DriveTests.snapshot())
+            var env = makeR3Model(ops, survey: sampleSurvey(checks: [r3VaultCheck()])).environment
+            env.drives = drives.services
+            let m = AppModel(environment: env)
+            await m.refresh()
+            XCTAssertGreaterThanOrEqual(m.destinationDrives.count, 3, "can be used, and two that need preparation")
+            m.openRun(r3Row(categoryID: "derivedData", bucket: .runFromExternal))
+            await eventually("the review") { m.operationSheet?.preview != nil }
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) run sheet with drives")
+        }
+    }
 }
 
 @MainActor
@@ -930,10 +947,10 @@ func makeR3Model(_ ops: ScriptedOperations, survey: AppModel.Survey) -> AppModel
             clean: { _, _ in CleanResult(deleted: [], failedPairs: []) }, open: { _ in }, copy: { _ in }, operations: ops.services))
 }
 
-func r3Row() -> SavingsPlanRow {
+func r3Row(categoryID: String = "archives", bucket: SavingsBucket = .parkExternally) -> SavingsPlanRow {
     SavingsPlanRow(
-        categoryID: "archives", categoryName: "Archives", bytes: 18_000_000_000,
-        option: SavingsOption(bucket: .parkExternally, isExperimental: true, appliesToExistingData: true, losesUserData: false),
+        categoryID: categoryID, categoryName: "Archives", bytes: 18_000_000_000,
+        option: SavingsOption(bucket: bucket, isExperimental: true, appliesToExistingData: true, losesUserData: false),
         command: "xcodevaultctl externalize --category archives --vault <vault>", itemCount: 1, actsImmediately: false, noteIDs: ["archivesPark"])
 }
 

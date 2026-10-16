@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk10</string>
+		<string>disk10s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk10</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Microsoft Basic Data</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s1</string>
+					<key>DiskUUID</key>
+					<string>BDEC3F79-30BE-4A10-83AF-93FCC0FD3236</string>
+					<key>MountPoint</key>
+					<string>/Volumes/XCVDPX</string>
+					<key>Size</key>
+					<integer>799014912</integer>
+					<key>VolumeName</key>
+					<string>XCVDPX</string>
+					<key>VolumeUUID</key>
+					<string>912C2F59-8301-38F6-BB1F-7F9D407148EA</string>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array>
+		<string>XCVDPX</string>
+	</array>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk10</string>
+	</array>
+</dict>
+</plist>

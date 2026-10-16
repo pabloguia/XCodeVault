@@ -23,6 +23,11 @@ public struct Volume: Sendable, Codable, Equatable, Identifiable {
     public var isDiskImage: Bool { busProtocol == "Disk Image" }
     public var isAPFS: Bool { filesystemType.lowercased() == "apfs" }
     public var isExternal: Bool { !isInternal }
+    /// A network file system (R6): SMB, NFS, AFP or WebDAV. Never a destination — it disconnects with the network, and
+    /// its ownership and xattrs are the server's.
+    public var isNetwork: Bool { Volume.isNetworkFilesystem(filesystemType) }
+    public static let networkFilesystemTypes: Set<String> = ["smbfs", "nfs", "afpfs", "webdav", "ftp", "cifs"]
+    public static func isNetworkFilesystem(_ type: String) -> Bool { networkFilesystemTypes.contains(type.lowercased()) }
 }
 
 /// Why a volume can or cannot be used as an XCodeVault destination.
@@ -36,6 +41,9 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
         var blockers: [String] = [], warnings: [String] = []
         if v.isBootVolume { blockers.append("This is the boot/system volume — the thing we are trying to free.") }
         if v.mountPoint == nil { blockers.append("Not mounted.") }
+        if v.isNetwork {
+            blockers.append("This is a network volume (\(v.filesystemType)). XCodeVault needs a local disk: a network share disconnects with the network.")
+        }
         if !v.isAPFS { blockers.append("Filesystem is \(v.filesystemPersonality); XCodeVault requires APFS (ownership, xattrs, clones, symlinks).") }
         if !v.isWritable { blockers.append("Volume is read-only.") }
         if !v.ownersEnabled, let mp = v.mountPoint {

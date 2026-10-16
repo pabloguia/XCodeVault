@@ -9,8 +9,19 @@ struct DrivesView: View {
     let list: DrivesList
     /// Each row's usage bar (R2, `AppModel.driveBar`); nil draws none.
     var bar: (DriveRow) -> DiskBar? = { _ in nil }
+    /// R6: the external drives, judged (`AppModel.driveAssessments`), and what their buttons do. Nil hides the section.
+    var external: [DriveAssessment]? = nil
+    var actions = ExternalDriveActions()
     var body: some View {
         List {
+            if let external {
+                Section(L10n.tr("app.drives.external")) {
+                    if external.isEmpty {
+                        Text.l10n(L10n.tr("app.drives.none")).foregroundStyle(.secondary)
+                    }
+                    ForEach(external) { ExternalDriveRowView(assessment: $0, actions: actions) }
+                }
+            }
             Section(L10n.tr("app.volumes.mounted")) {
                 ForEach(list.rows) { DriveRowView(row: $0, bar: bar($0)) }
             }
@@ -171,5 +182,73 @@ struct DriveRowView: View {
         case .suitableWithWarnings: "exclamationmark.circle"
         case .unsuitable: "minus.circle"
         }
+    }
+}
+
+/// What an external drive's buttons do (R6), supplied by `AppModel`; empty closures by default, for renders.
+struct ExternalDriveActions {
+    var prepare: @MainActor (DriveAssessment, PreparationOption) -> Void = { _, _ in }
+    var useDrive: @MainActor (DriveAssessment) -> Void = { _ in }
+    var showInFinder: @MainActor (String) -> Void = { _ in }
+    var copyOwnershipCommand: @MainActor (String) -> Void = { _ in }
+}
+
+/// One external drive (R6): its verdict in words with a symbol, its facts, why nothing can change it when that is so,
+/// **Use This Drive** when one of its volumes qualifies, and each preparation option as a button, least destructive first,
+/// every one marked experimental (rule 10). Decides nothing: `DriveEvaluation` did.
+struct ExternalDriveRowView: View {
+    let assessment: DriveAssessment
+    let actions: ExternalDriveActions
+
+    var body: some View {
+        let a = assessment
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(verbatim: a.displayName).font(.headline)
+                Text(verbatim: DriveText.facts(a)).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+            }
+            Label {
+                Text(verbatim: DriveText.verdict(a.verdict)).font(.callout)
+            } icon: {
+                Image(systemName: DriveText.symbol(a.verdict)).foregroundStyle(a.verdict == .ready ? Color.green : Color.secondary).accessibilityHidden(true)
+            }
+            // `DriveAssessment.shownRefusals` and `.volumeReasons`: Core chose what to say.
+            ForEach(a.shownRefusals, id: \.self) { r in
+                Text(verbatim: DriveText.refusal(r)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(a.volumeReasons, id: \.volumeName) { reason in
+                Label {
+                    InlineCodeText(reason.volumeName + ": " + reason.reason).font(.caption).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "xmark.octagon").foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+            }
+            // Least destructive first (minor 1): ownership runs nothing, so it comes before every button that does.
+            ForEach(a.ownershipMountPoints, id: \.self) { mp in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
+                        Button(L10n.tr("app.plan.copyCommand")) { actions.copyOwnershipCommand(mp) }
+                    }
+                    .controlSize(.small)
+                }
+            }
+            if a.verdict == .canBeUsed {
+                Button(L10n.tr("app.drives.useDrive")) { actions.useDrive(a) }
+            }
+            if !a.commandOptions.isEmpty {
+                HStack(spacing: 6) {
+                    MarkerBadges(markers: [.experimental])
+                    ForEach(a.commandOptions, id: \.self) { o in
+                        Button(DriveText.optionButton(o, recommended: a.isRecommended(o))) { actions.prepare(a, o) }
+                    }
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

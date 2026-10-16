@@ -1,0 +1,657 @@
+# Experiment: E-diskprep (H17) — disk preparation commands without sudo, on scratch images
+# Date: 2026-10-04T18:18:19Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Script: scripts/experiments/e-diskprep.sh @ c19d595
+# sudo: deliberately never used; every command below runs as <user>
+
+## create image A (GPT, APFS, sparse)
+$ hdiutil create -size 2g -layout GPTSPUD -fs APFS -volname XCVDPA -type SPARSE /private/tmp/xcv-dp-a
+created: /private/tmp/xcv-dp-a.sparseimage
+[exit=0]
+
+## image A attached as: disk8
+## image A identity
+$ sh -c diskutil info -plist disk8 | plutil -p - | grep -E 'BusProtocol|VirtualOrPhysical|Internal"|DeviceNode|MediaName|DiskUUID|"Size"'
+  "BusProtocol" => "Disk Image"
+  "DeviceNode" => "/dev/disk8"
+  "Internal" => false
+  "MediaName" => "Disk Image"
+  "Size" => 2147483648
+  "VirtualOrPhysical" => "Virtual"
+[exit=0]
+
+## diskutil list -plist disk8
+$ diskutil list -plist disk8
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk8</string>
+		<string>disk8s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk8</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk8s1</string>
+					<key>DiskUUID</key>
+					<string>3CE0BE17-B4AC-4EE9-9007-BECA1FA95F33</string>
+					<key>Size</key>
+					<integer>2147442688</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array/>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk8</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## image A container: disk9
+[guard ok: disk9 via store disk8s1 on image disk8]
+## apfs addVolume, case-insensitive (no sudo)
+$ diskutil apfs addVolume disk9 APFS XCVDP1 -nomount
+Will export new APFS Volume "XCVDP1" from APFS Container Reference disk9
+Started APFS operation on disk9
+Preparing to add APFS Volume to APFS Container disk9
+Creating APFS Volume
+Created new APFS Volume disk9s2
+Disk from APFS operation: disk9s2
+Finished APFS operation on disk9
+[exit=0]
+
+RESULT: apfs addVolume, case-insensitive => exit 0 (works-without-sudo)
+
+[guard ok: disk9 via store disk8s1 on image disk8]
+## apfs addVolume, case-sensitive (no sudo)
+$ diskutil apfs addVolume disk9 Case-sensitive APFS XCVDP2 -nomount
+Will export new APFS (Case-sensitive) Volume "XCVDP2" from APFS Container Reference disk9
+Started APFS operation on disk9
+Preparing to add APFS Volume to APFS Container disk9
+Creating APFS Volume
+Created new APFS Volume disk9s3
+Disk from APFS operation: disk9s3
+Finished APFS operation on disk9
+[exit=0]
+
+RESULT: apfs addVolume, case-sensitive => exit 0 (works-without-sudo)
+
+[guard ok: disk9 via store disk8s1 on image disk8]
+## apfs addVolume with -quota 200m (no sudo)
+$ diskutil apfs addVolume disk9 APFS XCVDP3 -quota 200m -nomount
+Will export new APFS Volume "XCVDP3" from APFS Container Reference disk9 with a 200000000-byte quota
+Started APFS operation on disk9
+Preparing to add APFS Volume to APFS Container disk9
+Creating APFS Volume
+Created new APFS Volume disk9s4
+Disk from APFS operation: disk9s4
+Finished APFS operation on disk9
+[exit=0]
+
+RESULT: apfs addVolume with -quota 200m => exit 0 (works-without-sudo)
+
+[guard ok: disk9 via store disk8s1 on image disk8]
+## apfs addVolume with -reserve 100m (no sudo)
+$ diskutil apfs addVolume disk9 APFS XCVDP4 -reserve 100m -nomount
+Will export new APFS Volume "XCVDP4" from APFS Container Reference disk9 with a 100000000-byte reserve
+Started APFS operation on disk9
+Preparing to add APFS Volume to APFS Container disk9
+Error: -69493: You can't add any more APFS Volumes to its APFS Container
+[exit=1]
+
+RESULT: apfs addVolume with -reserve 100m => exit 1 (FAILED-without-sudo)
+
+## diskutil list -plist disk8
+$ diskutil list -plist disk8
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk8</string>
+		<string>disk8s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk8</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk8s1</string>
+					<key>DiskUUID</key>
+					<string>3CE0BE17-B4AC-4EE9-9007-BECA1FA95F33</string>
+					<key>Size</key>
+					<integer>2147442688</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array/>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk8</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## apfs list (container A)
+$ sh -c diskutil apfs list disk9
+|
++-- Container disk9 211C9B7C-BDBB-43EC-A432-11AEAD34379E
+    ====================================================
+    APFS Container Reference:     disk9
+    Size (Capacity Ceiling):      2147442688 B (2.1 GB)
+    Capacity In Use By Volumes:   8527872 B (8.5 MB) (0.4% used)
+    Capacity Not Allocated:       2138914816 B (2.1 GB) (99.6% free)
+    |
+    +-< Physical Store disk8s1 3CE0BE17-B4AC-4EE9-9007-BECA1FA95F33
+    |   -----------------------------------------------------------
+    |   APFS Physical Store Disk:   disk8s1
+    |   Size:                       2147442688 B (2.1 GB)
+    |
+    +-> Volume disk9s1 B971D2AD-0855-408A-AF4A-224726A566D8
+    |   ---------------------------------------------------
+    |   APFS Volume Disk (Role):   disk9s1 (No specific role)
+    |   Name:                      XCVDPA (Case-insensitive)
+    |   Mount Point:               Not Mounted
+    |   Capacity Consumed:         20480 B (20.5 KB)
+    |   Sealed:                    No
+    |   FileVault:                 No
+    |
+    +-> Volume disk9s2 F94A0859-F7F5-40E8-8AFC-3B8B4AE970C1
+    |   ---------------------------------------------------
+    |   APFS Volume Disk (Role):   disk9s2 (No specific role)
+    |   Name:                      XCVDP1 (Case-insensitive)
+    |   Mount Point:               Not Mounted
+    |   Capacity Consumed:         20480 B (20.5 KB)
+    |   Sealed:                    No
+    |   FileVault:                 No
+    |
+    +-> Volume disk9s3 B8CD9434-D164-4538-B4D8-02A8BC746F38
+    |   ---------------------------------------------------
+    |   APFS Volume Disk (Role):   disk9s3 (No specific role)
+    |   Name:                      XCVDP2 (Case-sensitive)
+    |   Mount Point:               Not Mounted
+    |   Capacity Consumed:         20480 B (20.5 KB)
+    |   Sealed:                    No
+    |   FileVault:                 No
+    |
+    +-> Volume disk9s4 41E6C946-9912-4274-B3CF-62E620B26CCF
+        ---------------------------------------------------
+        APFS Volume Disk (Role):   disk9s4 (No specific role)
+        Name:                      XCVDP3 (Case-insensitive)
+        Mount Point:               Not Mounted
+        Capacity Consumed:         20480 B (20.5 KB)
+        Capacity Reserve:          None
+        Capacity Quota:            200003584 B (200.0 MB) (0.0% reached)
+        Sealed:                    No
+        FileVault:                 No
+[exit=0]
+
+## volume to erase (XCVDP2): disk9s3
+[guard ok: disk9s3 via store disk8s1 on image disk8]
+## eraseVolume APFS on an APFS volume (case-sensitive -> case-insensitive) (no sudo)
+$ diskutil eraseVolume APFS XCVDPE disk9s3
+Started erase
+Preparing to erase APFS Volume content
+Checking mount state
+Erasing APFS Volume disk9s3 by deleting and re-adding
+Deleting APFS Volume from its APFS Container
+Unmounting disk9s3
+Erasing any xART session referenced by B8CD9434-D164-4538-B4D8-02A8BC746F38
+Deleting Volume
+Removing any Preboot and Recovery Directories
+Preparing to add APFS Volume to APFS Container disk9
+Creating APFS Volume
+Created new APFS Volume disk9s3
+Setting mount state
+Setting volume permissions
+Finished erase
+[exit=0]
+
+RESULT: eraseVolume APFS on an APFS volume (case-sensitive -> case-insensitive) => exit 0 (works-without-sudo)
+
+## personality after eraseVolume
+$ sh -c diskutil info disk9s3 | grep -E 'Volume Name|Personality|Mount Point'
+   Volume Name:               XCVDPE
+   Mount Point:               /Volumes/XCVDPE
+   File System Personality:   APFS
+[exit=0]
+
+## diskutil list -plist disk8
+$ diskutil list -plist disk8
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk8</string>
+		<string>disk8s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk8</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk8s1</string>
+					<key>DiskUUID</key>
+					<string>3CE0BE17-B4AC-4EE9-9007-BECA1FA95F33</string>
+					<key>Size</key>
+					<integer>2147442688</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array/>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk8</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+[guard ok: disk8 on image disk8]
+## eraseDisk APFS GPT on the whole disk (no sudo)
+$ diskutil eraseDisk APFS XCVDPD GPT disk8
+Started erase on disk8
+Unmounting disk
+Creating the partition map
+Waiting for partitions to activate
+Formatting disk8s1 as APFS with name XCVDPD
+Mounting disk
+Finished erase on disk8
+[exit=0]
+
+RESULT: eraseDisk APFS GPT on the whole disk => exit 0 (works-without-sudo)
+
+## diskutil list -plist disk8
+$ diskutil list -plist disk8
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk8</string>
+		<string>disk8s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk8</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk8s1</string>
+					<key>DiskUUID</key>
+					<string>717B74EB-D4A2-4277-8BF6-6E62AD15B883</string>
+					<key>Size</key>
+					<integer>2147442688</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array/>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk8</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## create image B (no partition map, sparse)
+$ hdiutil create -size 2g -layout NONE -type SPARSE /private/tmp/xcv-dp-b
+created: /private/tmp/xcv-dp-b.sparseimage
+[exit=0]
+
+## image B attached as: disk10
+[guard ok: disk10 on image disk10]
+## partitionDisk GPT: 800M exFAT + free space (setup) (no sudo)
+$ diskutil partitionDisk disk10 GPT ExFAT XCVDPX 800M Free Space gap R
+Started partitioning on disk10
+Unmounting disk
+Creating the partition map
+Waiting for partitions to activate
+Formatting disk10s1 as ExFAT with name XCVDPX
+Volume name      : XCVDPX
+Partition offset : 2048 sectors (1048576 bytes)
+Volume size      : 1560576 sectors (799014912 bytes)
+Bytes per sector : 512
+Bytes per cluster: 32768
+FAT offset       : 128 sectors (65536 bytes)
+# FAT sectors    : 256
+Number of FATs   : 1
+Cluster offset   : 384 sectors (196608 bytes)
+# Clusters       : 24378
+Volume Serial #  : 6ac29899
+Bitmap start     : 2
+Bitmap file size : 3048
+Upcase start     : 3
+Upcase file size : 5836
+Root start       : 4
+Mounting disk
+Finished partitioning on disk10
+/dev/disk10 (disk image):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:      GUID_partition_scheme                        +2.1 GB     disk10
+   1:       Microsoft Basic Data XCVDPX                  799.0 MB   disk10s1
+                    (free space)                         1.3 GB     -
+[exit=0]
+
+RESULT: partitionDisk GPT: 800M exFAT + free space (setup) => exit 0 (works-without-sudo)
+
+## diskutil list -plist disk10
+$ diskutil list -plist disk10
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk10</string>
+		<string>disk10s1</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk10</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Microsoft Basic Data</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s1</string>
+					<key>DiskUUID</key>
+					<string>BDEC3F79-30BE-4A10-83AF-93FCC0FD3236</string>
+					<key>MountPoint</key>
+					<string>/Volumes/XCVDPX</string>
+					<key>Size</key>
+					<integer>799014912</integer>
+					<key>VolumeName</key>
+					<string>XCVDPX</string>
+					<key>VolumeUUID</key>
+					<string>912C2F59-8301-38F6-BB1F-7F9D407148EA</string>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array>
+		<string>XCVDPX</string>
+	</array>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk10</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## exFAT partition: disk10s1
+[guard ok: disk10s1 on image disk10]
+## addPartition APFS into the free space after the exFAT partition (no sudo)
+$ diskutil addPartition disk10s1 APFS XCVDPN 0
+The new partition to be added will be of a filesystem personality of APFS apfs APFS 7C3457EF-0000-11AA-AA11-00306543ECAC
+The new partition will be added following disk10s1
+Started partitioning on disk10
+Modifying partition map
+Mounting disk
+Finished partitioning on disk10
+[exit=0]
+
+RESULT: addPartition APFS into the free space after the exFAT partition => exit 0 (works-without-sudo)
+
+## diskutil list -plist disk10
+$ diskutil list -plist disk10
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk10</string>
+		<string>disk10s1</string>
+		<string>disk10s2</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk10</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Microsoft Basic Data</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s1</string>
+					<key>DiskUUID</key>
+					<string>BDEC3F79-30BE-4A10-83AF-93FCC0FD3236</string>
+					<key>MountPoint</key>
+					<string>/Volumes/XCVDPX</string>
+					<key>Size</key>
+					<integer>799014912</integer>
+					<key>VolumeName</key>
+					<string>XCVDPX</string>
+					<key>VolumeUUID</key>
+					<string>912C2F59-8301-38F6-BB1F-7F9D407148EA</string>
+				</dict>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s2</string>
+					<key>DiskUUID</key>
+					<string>9801B270-1ECF-4F4A-BC3A-05407405279D</string>
+					<key>Size</key>
+					<integer>1347399680</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array>
+		<string>XCVDPX</string>
+	</array>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk10</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## apfs list after addPartition
+$ sh -c diskutil apfs list -plist | plutil -p - | grep -E 'ContainerReference|DesignatedPhysicalStore|"Name"'
+      "ContainerReference" => "disk1"
+      "DesignatedPhysicalStore" => "disk0s2"
+          "Name" => "<bootvolume> - Data"
+          "Name" => "Preboot"
+          "Name" => "Recovery"
+          "Name" => "<bootvolume>"
+          "Name" => "Update"
+          "Name" => "VM"
+      "ContainerReference" => "disk3"
+      "DesignatedPhysicalStore" => "disk2s1"
+          "Name" => "<vault>"
+      "ContainerReference" => "disk5"
+      "DesignatedPhysicalStore" => "disk4s1"
+          "Name" => "iOS 26.5 Simulator"
+      "ContainerReference" => "disk7"
+      "DesignatedPhysicalStore" => "disk6s1"
+          "Name" => "WatchOS 26.5 Simulator"
+      "ContainerReference" => "disk9"
+      "DesignatedPhysicalStore" => "disk8s1"
+          "Name" => "XCVDPD"
+      "ContainerReference" => "disk11"
+      "DesignatedPhysicalStore" => "disk10s2"
+          "Name" => "XCVDPN"
+[exit=0]
+
+[guard ok: disk10s1 on image disk10]
+## eraseVolume APFS on the exFAT partition (others stay) (no sudo)
+$ diskutil eraseVolume APFS XCVDPV disk10s1
+Started erase on disk10s1 (XCVDPX)
+Unmounting disk
+Erasing
+Mounting disk
+Finished erase on disk10s1
+[exit=0]
+
+RESULT: eraseVolume APFS on the exFAT partition (others stay) => exit 0 (works-without-sudo)
+
+## diskutil list -plist disk10
+$ diskutil list -plist disk10
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AllDisks</key>
+	<array>
+		<string>disk10</string>
+		<string>disk10s1</string>
+		<string>disk10s2</string>
+	</array>
+	<key>AllDisksAndPartitions</key>
+	<array>
+		<dict>
+			<key>Content</key>
+			<string>GUID_partition_scheme</string>
+			<key>DeviceIdentifier</key>
+			<string>disk10</string>
+			<key>OSInternal</key>
+			<false/>
+			<key>Partitions</key>
+			<array>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s1</string>
+					<key>DiskUUID</key>
+					<string>BDEC3F79-30BE-4A10-83AF-93FCC0FD3236</string>
+					<key>Size</key>
+					<integer>799014912</integer>
+				</dict>
+				<dict>
+					<key>Content</key>
+					<string>Apple_APFS</string>
+					<key>DeviceIdentifier</key>
+					<string>disk10s2</string>
+					<key>DiskUUID</key>
+					<string>9801B270-1ECF-4F4A-BC3A-05407405279D</string>
+					<key>Size</key>
+					<integer>1347399680</integer>
+				</dict>
+			</array>
+			<key>Size</key>
+			<integer>2147483648</integer>
+		</dict>
+	</array>
+	<key>VolumesFromDisks</key>
+	<array/>
+	<key>WholeDisks</key>
+	<array>
+		<string>disk10</string>
+	</array>
+</dict>
+</plist>
+[exit=0]
+
+## teardown
+## images gone
+$ sh -c ls -l /private/tmp/xcv-dp-a.sparseimage /private/tmp/xcv-dp-b.sparseimage 2>&1; true
+ls: /private/tmp/xcv-dp-a.sparseimage: No such file or directory
+ls: /private/tmp/xcv-dp-b.sparseimage: No such file or directory
+[exit=0]
+
+## summary
+RESULT: apfs addVolume, case-insensitive => exit 0 (works-without-sudo)
+RESULT: apfs addVolume, case-sensitive => exit 0 (works-without-sudo)
+RESULT: apfs addVolume with -quota 200m => exit 0 (works-without-sudo)
+RESULT: apfs addVolume with -reserve 100m => exit 1 (FAILED-without-sudo)
+RESULT: eraseVolume APFS on an APFS volume (case-sensitive -> case-insensitive) => exit 0 (works-without-sudo)
+RESULT: eraseDisk APFS GPT on the whole disk => exit 0 (works-without-sudo)
+RESULT: partitionDisk GPT: 800M exFAT + free space (setup) => exit 0 (works-without-sudo)
+RESULT: addPartition APFS into the free space after the exFAT partition => exit 0 (works-without-sudo)
+RESULT: eraseVolume APFS on the exFAT partition (others stay) => exit 0 (works-without-sudo)

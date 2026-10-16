@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BusProtocol</key>
+	<string>USB</string>
+	<key>Content</key>
+	<string>GUID_partition_scheme</string>
+	<key>DeviceIdentifier</key>
+	<string>disk9</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk9</string>
+	<key>Internal</key>
+	<false/>
+	<key>MediaName</key>
+	<string>Expansion HDD</string>
+	<key>ParentWholeDisk</key>
+	<string>disk9</string>
+	<key>RemovableMediaOrExternalDevice</key>
+	<true/>
+	<key>Size</key>
+	<integer>1000204886016</integer>
+	<key>TotalSize</key>
+	<integer>1000204886016</integer>
+	<key>VirtualOrPhysical</key>
+	<string>Physical</string>
+	<key>WholeDisk</key>
+	<true/>
+	<key>WritableMedia</key>
+	<true/>
+</dict>
+</plist>
