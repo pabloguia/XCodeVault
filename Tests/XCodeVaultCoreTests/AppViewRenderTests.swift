@@ -158,7 +158,7 @@ final class AppViewRenderTests: XCTestCase {
                 let model = await scannedModel(.unavailableInThisBuild, survey: survey, journal: t)
                 render(StorageView(report: survey.0))
                 render(SimulatorsView(report: survey.0))
-                render(DrivesView(report: survey.0, checks: survey.2))
+                render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: survey.2)))
                 render(HealthView(model: model))
                 render(HistoryView(entries: model.journal))
                 for section in SidebarSection.details {
@@ -231,7 +231,7 @@ final class AppViewRenderTests: XCTestCase {
             render(StorageView(report: survey.0))
             render(HealthView(model: model))
             render(DeleteView(model: model))
-            render(DrivesView(report: survey.0, checks: []))
+            render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: [])))
             render(SimulatorsView(report: survey.0))
             render(HistoryView(entries: []))
             let entry = JournalEntry(

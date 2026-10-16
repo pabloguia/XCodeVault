@@ -174,30 +174,30 @@ struct DeleteView: View {
     @State private var useTrash = true
     /// The root row whose own button was pressed, waiting on its destructive confirmation.
     @State private var confirmPrivileged: CleanAction?
+    /// The notes panel's state once the user opened or closed it; until then `DeleteNotes.startsExpanded` decides.
+    @State private var notesExpanded: Bool?
+
+    /// `notesInitiallyExpanded` is for `ScreenFitTests`, which measures the panel opened while the table has rows; the app
+    /// passes nil and `DeleteNotes.startsExpanded` decides.
+    init(model: AppModel, notesInitiallyExpanded: Bool? = nil) {
+        _model = Bindable(model)
+        _notesExpanded = State(initialValue: notesInitiallyExpanded)
+    }
 
     var body: some View {
         if let plan = model.cleanPlan, let list = model.deleteList {
             VStack(alignment: .leading, spacing: 10) {
                 BucketHeaderView(bucket: .deleteAndRegenerate).padding([.horizontal, .top])
-                // Asked for where it matters (spec §6.3): the helper's row, when a listed row needs root and the helper is
-                // not enabled (`AppModel.deleteAccessRow`, from `AccessChecklist.deleteRow`).
+                // Asked for where it matters (spec §6.3), and so never folded away: the helper's row, when a listed row needs
+                // root and the helper is not enabled (`AppModel.deleteAccessRow`, from `AccessChecklist.deleteRow`).
                 if let access = model.deleteAccessRow {
                     GroupBox { AccessRowView(row: access) { model.handle($0) } }.padding(.horizontal)
                 }
-                // A floor for the table, and the rest in a capped scroll: at the window's minimum (960×620) the lower block
-                // can be taller than the window, and it must never squeeze the table away or be clipped unreachable.
-                table(list).frame(minHeight: 200)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
-                        privileged(plan)
-                        otherTools(list)
-                        skipped(plan)
-                    }
-                    .padding(.horizontal)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 190)
+                // No floor for the table (R1): a rigid minimum made the screen taller than the window, which pushed the split
+                // view's sidebar off the top and left the table undrawn. The table takes whatever the notes and footer leave,
+                // and gets the space first: the notes' bounded scroll gives way before it does.
+                table(list).layoutPriority(1)
+                if let notes = model.deleteNotes, !notes.isEmpty { notesPanel(plan, list, notes) }
                 footer(list)
             }
             .onChange(of: model.deleteList) { _, newList in
@@ -252,6 +252,38 @@ struct DeleteView: View {
                 }
             }
         }
+    }
+
+    /// Everything below the table, in one panel folded by default (R1): the planner's warnings, the root rows, the rows
+    /// another tool deletes and the skipped lines. The access row is not here: it stays above the table. Open, it scrolls
+    /// inside a bounded height, so it can never push the footer out of the window.
+    private func notesPanel(_ plan: CleanPlan, _ list: DeleteList, _ notes: DeleteNotes) -> some View {
+        let expanded = notesExpanded ?? notes.startsExpanded
+        return VStack(alignment: .leading, spacing: 6) {
+            // The disclosure triangle and its label only: a DisclosureGroup's own content keeps its full height, which put a
+            // floor under the screen again; the content below is a plain scroll that can shrink to nothing.
+            DisclosureGroup(isExpanded: Binding(get: { expanded }, set: { notesExpanded = $0 })) {
+                EmptyView()
+            } label: {
+                // Names the warnings when there are any (`DeleteNotes.title`): folded, the panel never hides that they exist.
+                Text.l10n(AppText.deleteNotesTitle(notes.title)).font(.callout)
+            }
+            if expanded { notesContent(plan, list) }
+        }
+        .padding(.horizontal)
+    }
+
+    private func notesContent(_ plan: CleanPlan, _ list: DeleteList) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(plan.warnings, id: \.self) { Label($0, systemImage: "info.circle").font(.callout) }
+                privileged(plan)
+                otherTools(list)
+                skipped(plan)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 220)
     }
 
     /// The root rows the helper can act on (the dyld cache): name, the experimental badge in the words every other badge

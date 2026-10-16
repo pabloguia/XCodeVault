@@ -3159,3 +3159,26 @@ Storage with a Bucket column). The legacy `ScanSummary` savings numbers are gone
 User docs: `docs/USER_GUIDE.md` § The app; spec: `docs/product/UX_AND_CLI.md` § GUI. The snapshot tests now return
 instead of skipping without `XCV_SNAPSHOTS=1`: the no-skips gate holds the suite to zero skipped tests, and the two
 earlier snapshot tests would have failed it. Follow-ups are in "Blocked / pending" above.
+
+## 2026-10-04 — R1: screens fit any window, Back, Drives without duplicates
+
+Brief `.superpowers/sdd/r1/brief.md`, branch `fix/r1-layout-navigation`. The user's "the sidebar gets lost" and the
+undrawn Delete table had one cause, measured: Delete asked for 451 pt minimum (a `Table.frame(minHeight: 200)` plus the
+blocks around it) and Simulators for 410 pt (two tables with `minHeight: 140`), so with real data the split view grew
+taller than the window and was centered off the top. Delete's table now takes the remaining height; the helper's access row
+stays above it and everything else sits below in one notes panel folded by default (`DeleteNotes`); Simulators is one scrolling page whose tables are as tall
+as their rows (`SimulatorsTable.fittedTableHeight`). Minimums now: Delete 182 pt (188 with the panel open, 274 with the access row), every other
+screen 1 pt; `ScreenFitTests` holds every screen to 300 pt in en and ja over the sample and a stress fixture, without a
+window. **Back** (⌘[): `NavigationHistory` in Core, recorded by every section change in `AppModel`. **Drives**:
+`DrivesList` groups the boot System and Data volumes on one APFS container into one row, shows a mounted vault as a
+badge on its own row, and keeps a section only for vaults that are not connected; warnings are folded. Six new keys,
+drafts `needs_review`. The snapshot test's comment that blamed off-screen drawing for the undrawn Delete is corrected.
+
+**R1 review round 1 (same day).** Simulators tables may scroll inside again (`scrollDisabled` removed: a wrong row
+metric now degrades to a small internal scroll, never hidden rows). A mounted vault that is not usable shows its
+check's sentence as text (`DriveRow.showsVaultDetail`), not only as a tooltip. The boot row now holds only the running
+system's pair, the volumes at `/` and `/System/Volumes/Data` on one container; another install's System/Data in the same
+container keeps its own rows. **Known limitation:** `Volume` does not carry the APFS volume-group UUID, so System and
+its Data sibling are tied by those mount points, not by the group itself. Also: the Delete notes label names its
+warnings, the table gets layout priority over the notes, duplicate registry entries are shown rather than dropped, and
+the not-mounted vaults' symbol follows their state.

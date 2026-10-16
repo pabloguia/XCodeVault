@@ -42,6 +42,14 @@ struct SimulatorsView: View {
     var body: some View {
         let runtimes = SimulatorsTable.runtimes(report: report)
         let devices = SimulatorsTable.devices(report: report)
+        // One page that scrolls as a whole (R1): each table is exactly as tall as its rows (`SimulatorsTable.fittedTableHeight`)
+        // and does not scroll inside, so the screen never asks the window for more height than it has.
+        ScrollView {
+            content(runtimes: runtimes, devices: devices)
+        }
+    }
+
+    private func content(runtimes: [SimulatorRuntime], devices: [SimulatorDeviceRow]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text.l10n(L10n.tr("app.simulators.runtimes.title", ByteCount.format(SimulatorsTable.runtimesBytes(report: report)))).font(.headline)
             if runtimes.isEmpty {
@@ -59,7 +67,7 @@ struct SimulatorsView: View {
                     TableColumn(L10n.tr("app.column.mounted")) { Text(verbatim: $0.isMounted ? L10n.tr("app.value.yes") : L10n.tr("app.value.no")) }
                     TableColumn(L10n.tr("app.column.image")) { Text(verbatim: $0.path ?? "").font(.system(.caption, design: .monospaced)) }
                 }
-                .frame(minHeight: 140)
+                .frame(height: SimulatorsTable.fittedTableHeight(rowCount: runtimes.count))
             }
             Text.l10n(L10n.tr("app.simulators.devices.title", ByteCount.format(SimulatorsTable.devicesBytes(report: report)))).font(.headline)
             // simctl's per-device data size, not the catalog's `du` of the Devices folder that Delete shows (final review M2).
@@ -77,50 +85,97 @@ struct SimulatorsView: View {
                     TableColumn(L10n.tr("app.column.state")) { Text(verbatim: $0.device.state) }
                     TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.device.dataPath ?? "").font(.system(.caption, design: .monospaced)) }
                 }
-                .frame(minHeight: 140)
+                .frame(height: SimulatorsTable.fittedTableHeight(rowCount: devices.count))
             }
             Text.l10n(L10n.tr("app.simulators.footer")).font(.footnote).foregroundStyle(.secondary)
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Drives: mounted volumes, whether each qualifies as a vault, and the registered vault volumes.
+/// Drives (R1): one row per drive — the running system's volume group as one "Internal disk (boot)" row — with whether it
+/// qualifies as a vault, a vault badge on the row of a registered vault's own volume, and a section only for the vaults
+/// that are not connected. The rows are Core's (`DrivesList`), through `AppModel.drivesList`.
 struct DrivesView: View {
-    let report: ScanReport
-    let checks: [VaultVolumeCheck]
+    let list: DrivesList
     var body: some View {
         List {
             Section(L10n.tr("app.volumes.mounted")) {
-                ForEach(report.volumes) { v in
-                    let q = VolumeQualification.evaluate(v)
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(verbatim: v.volumeName).bold()
-                            Text(verbatim: v.filesystemPersonality)
-                            Text(verbatim: v.busProtocol)
-                            Text(verbatim: v.isInternal ? L10n.tr("app.volumes.internal") : L10n.tr("app.volumes.external"))
-                            Spacer()
-                            Text.l10n(L10n.tr("app.volumes.free", ByteCount.format(v.freeBytes))).monospacedDigit()
+                ForEach(list.rows) { DriveRowView(row: $0) }
+            }
+            if list.hasNoVaults {
+                Section(L10n.tr("app.volumes.vaults")) {
+                    Text.l10n(L10n.tr("app.volumes.vaults.none")).foregroundStyle(.secondary)
+                }
+            } else if !list.offlineVaults.isEmpty {
+                Section(L10n.tr("app.volumes.vaults.offline")) {
+                    // By position: a damaged registry can hold one UUID twice, and both entries are shown.
+                    ForEach(Array(list.offlineVaults.enumerated()), id: \.offset) { _, c in
+                        VStack(alignment: .leading) {
+                            HStack {
+                                // The state's words and its symbol first (`DrivesList.offlineSymbol`); the color only repeats them.
+                                Label(AppText.vaultState(c.state), systemImage: DrivesList.offlineSymbol(for: c)).bold()
+                                    .foregroundStyle(c.isUsable ? .green : .red)
+                                Text(verbatim: c.volume.volumeName)
+                            }
+                            Text(verbatim: c.detail).font(.caption)
                         }
-                        Text(verbatim: v.isBootVolume ? L10n.tr("app.volumes.bootVolume") : AppText.verdict(q.verdict)).font(.caption)
-                            .foregroundStyle(.secondary)
-                        // A mark and a sentence before the color: never color alone.
-                        ForEach(q.blockers, id: \.self) { Text(verbatim: "✗ " + $0).font(.caption).foregroundStyle(.red) }
-                        ForEach(q.warnings, id: \.self) { Text(verbatim: "! " + $0).font(.caption).foregroundStyle(.orange) }
                     }
                 }
             }
-            Section(L10n.tr("app.volumes.vaults")) {
-                if checks.isEmpty { Text.l10n(L10n.tr("app.volumes.vaults.none")).foregroundStyle(.secondary) }
-                ForEach(checks, id: \.volume.volumeUUID) { c in
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text(verbatim: AppText.vaultState(c.state)).bold().foregroundStyle(c.isUsable ? .green : .red)
-                            Text(verbatim: c.volume.volumeName)
+        }
+    }
+}
+
+/// One Drives row: the name (or "Internal disk (boot)"), the facts, the vault badge, the blockers always, and the warnings
+/// folded behind their count (`DriveRow.warningsStartCollapsed`).
+struct DriveRowView: View {
+    let row: DriveRow
+    @State private var showsWarnings: Bool?
+
+    var body: some View {
+        let v = row.volume
+        let q = row.qualification
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(verbatim: row.isBootGroup ? L10n.tr("app.volumes.bootGroup") : v.volumeName).bold()
+                Text(verbatim: v.filesystemPersonality)
+                Text(verbatim: v.busProtocol)
+                Text(verbatim: v.isInternal ? L10n.tr("app.volumes.internal") : L10n.tr("app.volumes.external"))
+                if let vault = row.vault, let symbol = row.vaultSymbolName {
+                    // The vault's state in words, with its symbol: never color alone.
+                    Label(L10n.tr("app.volumes.vaultBadge", AppText.vaultState(vault.state)), systemImage: symbol)
+                        .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                        .help(vault.detail)
+                }
+                Spacer()
+                Text.l10n(L10n.tr("app.volumes.free", ByteCount.format(v.freeBytes))).monospacedDigit()
+            }
+            Text(verbatim: v.isBootVolume ? L10n.tr("app.volumes.bootVolume") : AppText.verdict(q.verdict)).font(.caption)
+                .foregroundStyle(.secondary)
+            // A mark and a sentence before the color: never color alone.
+            ForEach(q.blockers, id: \.self) { Text(verbatim: "✗ " + $0).font(.caption).foregroundStyle(.red) }
+            // A mounted vault that is not usable says why in visible text, not only in the badge's tooltip
+            // (`DriveRow.showsVaultDetail`).
+            if let vault = row.vault, row.showsVaultDetail {
+                Text(verbatim: vault.detail).font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            // Further registry entries for this volume (`DriveRow.duplicateVaults`): shown, never dropped.
+            ForEach(Array(row.duplicateVaults.enumerated()), id: \.offset) { _, extra in
+                Label(L10n.tr("app.volumes.vaultBadge", AppText.vaultState(extra.state)) + " — " + extra.detail, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+            }
+            if !q.warnings.isEmpty {
+                DisclosureGroup(isExpanded: Binding(get: { showsWarnings ?? !row.warningsStartCollapsed }, set: { showsWarnings = $0 })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(q.warnings, id: \.self) {
+                            Text(verbatim: "! " + $0).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                         }
-                        Text(verbatim: c.detail).font(.caption)
                     }
+                } label: {
+                    Text.l10n(L10n.plural("app.volumes.warnings.count", count: q.warnings.count)).font(.caption)
                 }
             }
         }
