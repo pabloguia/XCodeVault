@@ -156,9 +156,15 @@ final class AppViewRenderTests: XCTestCase {
             L10n.configure(override: locale, environment: [:], preferred: [])
             for survey in [detailSampleSurvey(), sampleSurvey()] {
                 let model = await scannedModel(.unavailableInThisBuild, survey: survey, journal: t)
-                render(StorageView(report: survey.0))
-                render(SimulatorsView(report: survey.0))
-                render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: survey.2)))
+                render(StorageView(model: model, report: survey.0))
+                render(SimulatorsView(model: model, report: survey.0))
+                render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: survey.2)) { model.driveBar($0, report: survey.0) })
+                // R2: the Storage table filtered by a bar, and a simulator row selected from the chart.
+                model.clickStorageBar(model.storageBars(survey.0).first?.id)
+                render(StorageView(model: model, report: survey.0))
+                model.clickSimulatorBar(SimulatorsChart.bars(report: survey.0).first?.id)
+                render(SimulatorsView(model: model, report: survey.0))
+                model.clearStorageFilter()
                 render(HealthView(model: model))
                 render(HistoryView(entries: model.journal))
                 for section in SidebarSection.details {
@@ -228,11 +234,11 @@ final class AppViewRenderTests: XCTestCase {
             let model = await scannedModel(.notInstalled, fullDiskAccess: .notGranted, survey: survey, journal: t)
             render(MainView(model: model))
             render(OverviewView(report: survey.0, findings: [finding], access: model.accessBanner))
-            render(StorageView(report: survey.0))
+            render(StorageView(model: model, report: survey.0))
             render(HealthView(model: model))
             render(DeleteView(model: model))
-            render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: [])))
-            render(SimulatorsView(report: survey.0))
+            render(DrivesView(list: DrivesList.make(volumes: survey.0.volumes, checks: [])) { model.driveBar($0, report: survey.0) })
+            render(SimulatorsView(model: model, report: survey.0))
             render(HistoryView(entries: []))
             let entry = JournalEntry(
                 id: "op", sequence: 1, timestamp: Date(timeIntervalSince1970: 1_800_000_000), kind: .clean, state: .completed, summary: "s", paths: [],

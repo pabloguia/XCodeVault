@@ -139,6 +139,10 @@ struct OverviewCardView: View {
 /// names every segment with a symbol, a title and a size, so no segment is told by color alone.
 struct DiskBarView: View {
     let bar: DiskBar
+    /// Under the bar; the Overview's says the bar counts each item once. Nil for none.
+    var caption: String? = L10n.tr("app.overview.bar.caption")
+    var accessibilityTitle: String = L10n.tr("app.overview.bar.a11y")
+    var barHeight: CGFloat = 18
 
     var body: some View {
         let total = max(bar.segments.reduce(UInt64(0)) { $0 + $1.bytes }, 1)
@@ -151,12 +155,14 @@ struct DiskBarView: View {
                     }
                 }
             }
-            .frame(height: 18)
+            .frame(height: barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 5))
             // The legend says the same thing in words.
             .accessibilityHidden(true)
             // The bar counts each item once, the cards every option: say so, or the same title shows two numbers.
-            Text.l10n(L10n.tr("app.overview.bar.caption")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let caption {
+                Text.l10n(caption).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             // Wraps into as many columns as fit instead of truncating at narrow widths; in the cards' order.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 14, alignment: .leading)], alignment: .leading, spacing: 6) {
                 ForEach(Array(bar.legend.enumerated()), id: \.offset) { _, segment in legendItem(segment) }
@@ -167,7 +173,7 @@ struct DiskBarView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text(verbatim: L10n.tr("app.overview.bar.a11y")))
+        .accessibilityLabel(Text(verbatim: accessibilityTitle))
     }
 
     private func legendItem(_ segment: DiskBar.Segment) -> some View {

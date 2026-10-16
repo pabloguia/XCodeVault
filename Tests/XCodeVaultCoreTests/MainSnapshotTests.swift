@@ -63,4 +63,25 @@ final class MainSnapshotTests: XCTestCase {
         XCTAssertEqual(written.count, 3 * 2 * SidebarSection.allCases.count)
         print("snapshots:\n" + written.joined(separator: "\n"))
     }
+
+    /// The Drives rows with their usage bars (R2), outside the `List` whose rows an off-screen draw leaves blank.
+    func testWriteDriveRowSnapshots() async throws {
+        guard SnapshotWriter.isEnabled else { return }
+        let t = TempDir()
+        var written: [String] = []
+        for locale in ["en", "ja"] {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: detailSampleSurvey())
+            await model.refresh()
+            let report = try XCTUnwrap(model.report)
+            let rows = VStack(alignment: .leading, spacing: 16) {
+                ForEach(model.drivesList(report).rows) { DriveRowView(row: $0, bar: model.driveBar($0, report: report)) }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            written.append(try SnapshotWriter.write(rows, name: "drive-rows-\(locale)", size: NSSize(width: 900, height: 420)))
+        }
+        XCTAssertEqual(written.count, 2)
+        print("snapshots:\n" + written.joined(separator: "\n"))
+    }
 }

@@ -62,12 +62,31 @@ public struct SavingsSummary: Sendable, Codable, Equatable {
 }
 
 public enum SavingsCalculator {
-    /// The items a saving is counted from, with their category: existing, not a symlink, on the boot volume, of a
-    /// known category that is not a breakdown. Shared with `SavingsPlanner`, so a plan row can never count a
-    /// byte the summary does not.
+    /// The one counting rule (R2 review I2): an item's bytes count once when it exists, is not a symlink, and is of a known
+    /// category that is not a breakdown of another category's bytes. The Storage chart, the Storage rows' totals, every
+    /// drive's bar and the savings model all start from this; none restates it.
+    public static func countsOnce(_ item: StorageItem, category: StorageCategory?) -> Bool {
+        guard item.exists, !item.isSymlink, let category else { return false }
+        return category.isBreakdownOf == nil
+    }
+
+    /// The bucket an item's bytes count once in: its category's first option that applies to existing data, which is
+    /// `StorageCategory.primaryBucket` whenever one applies. Nil when the item does not count once, or when no option
+    /// applies to the data already there — the savings model adds no primary bytes for those either.
+    public static func countedOnceBucket(_ item: StorageItem, category: StorageCategory?) -> SavingsBucket? {
+        guard countsOnce(item, category: category), let category else { return nil }
+        return category.savingsOptionDetails.first(where: \.appliesToExistingData)?.bucket
+    }
+
+    /// The savings model's filter on top of `countsOnce`: only bytes on the boot volume are an internal saving. The
+    /// Storage chart, an inventory of every drive, does not apply it; the Overview's bar and the boot row's bar do.
+    public static func isInternalSaving(_ item: StorageItem) -> Bool { item.onBootVolume }
+
+    /// The items a saving is counted from, with their category: `countsOnce` and `isInternalSaving`. Shared with
+    /// `SavingsPlanner`, so a plan row can never count a byte the summary does not.
     static func countedItems(_ items: [StorageItem], category: (String) -> StorageCategory?) -> [(item: StorageItem, category: StorageCategory)] {
         items.compactMap { item in
-            guard item.exists, !item.isSymlink, item.onBootVolume, let c = category(item.categoryID), c.isBreakdownOf == nil else { return nil }
+            guard isInternalSaving(item), let c = category(item.categoryID), countsOnce(item, category: c) else { return nil }
             return (item, c)
         }
     }

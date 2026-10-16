@@ -26,14 +26,21 @@ public struct DiskBar: Sendable, Equatable {
     public let isClamped: Bool
 
     public init(host: HostEnvironment, savings: SavingsSummary) {
-        let buckets = DiskBar.bucketOrder.map { Segment(kind: .bucket($0), bytes: savings[$0].primaryBytes) }
-        let accounted = buckets.reduce(host.dataVolumeFreeBytes) { sum, s in
+        self.init(
+            totalBytes: host.dataVolumeTotalBytes, freeBytes: host.dataVolumeFreeBytes,
+            bucketBytes: Dictionary(uniqueKeysWithValues: DiskBar.bucketOrder.map { ($0, savings[$0].primaryBytes) }))
+    }
+
+    /// Any volume's bar (R2: the Drives screen draws one per drive): `totalBytes` split into other data, `bucketBytes` in
+    /// `bucketOrder`, and `freeBytes`.
+    public init(totalBytes total: UInt64, freeBytes: UInt64, bucketBytes: [SavingsBucket: UInt64]) {
+        let buckets = DiskBar.bucketOrder.map { Segment(kind: .bucket($0), bytes: bucketBytes[$0] ?? 0) }
+        let accounted = buckets.reduce(freeBytes) { sum, s in
             let (value, overflow) = sum.addingReportingOverflow(s.bytes)
             return overflow ? .max : value
         }
-        let total = host.dataVolumeTotalBytes
         let other = Segment(kind: .otherData, bytes: total > accounted ? total - accounted : 0)
-        segments = ([other] + buckets + [Segment(kind: .free, bytes: host.dataVolumeFreeBytes)]).filter { $0.bytes > 0 }
+        segments = ([other] + buckets + [Segment(kind: .free, bytes: freeBytes)]).filter { $0.bytes > 0 }
         isClamped = accounted > total
     }
 

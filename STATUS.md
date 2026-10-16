@@ -3182,3 +3182,38 @@ container keeps its own rows. **Known limitation:** `Volume` does not carry the 
 its Data sibling are tied by those mount points, not by the group itself. Also: the Delete notes label names its
 warnings, the table gets layout priority over the notes, duplicate registry entries are shown rather than dropped, and
 the not-mounted vaults' symbol follows their state.
+
+## 2026-10-04 — R2: charts and sortable, filterable tables (Storage, Simulators, Drives)
+
+Brief `.superpowers/sdd/r2/brief.md`, branch `feat/r2-charts` (stacked on R1). **Storage**: a Swift Charts bar per bucket
+with rows (bucket color as fill, symbol + title on the axis, size at the bar's end), 150 pt high; a click on a bar filters
+the table (`StorageTable.filter(after:clicked:)`, `AppModel.storageBucketFilter`), a chip with × and **All** clear it; every
+column sorts through Core comparators (`StorageTable.Column`, default size descending, ties by path). Bars sum only the
+rows that `countsInBucketTotal` (no symlinks, no breakdowns). The click is read with a `chartOverlay` tap and
+`ChartProxy.value(atY:)`, not `chartYSelection`, whose value resets when the gesture ends. **Simulators**: horizontal bars
+per measured runtime and device (`SimulatorsChart.bars`), colored and marked by kind, unmeasured counted under the chart;
+a click selects the row (`SimulatorSelection`, in the model) and scrolls the page to it (`SimulatorsChart.rowAnchor`);
+both tables sort. The chart is as tall as its bars inside the page's ScrollView. **Drives**: `DiskBar` gained a general
+`init(totalBytes:freeBytes:bucketBytes:)` (the Overview's init now calls it) and `DiskBar.drive(_:report:)`; each measured
+drive row draws `DiskBarView` with its legend. `Volume.totalBytes` already existed and is Codable, so the scan was not
+changed. `ScreenFitTests` passes unchanged. 14 new keys in the first commit (not 15), drafts `needs_review`.
+
+**Follow-up (vault contents):** the vault's bar shows only what the scan found on that volume (items whose mount point is
+the vault's). The registry records no sizes of what XCodeVault placed there, so the bar cannot show "vault contents" as
+such without measuring the vault directory, which this change does not do; the row says so in a caption.
+**Needs a real window:** the click-to-filter and click-to-select gestures (no test can click), the scroll to a selected row,
+and the tables' sort headers — off-screen drawing leaves `Table`/`List` rows blank.
+
+**R2 review round 1 (same day).** I1: the Simulators tables set the selection through `SimulatorSelection.selecting(runtimeID:)`
+and `selecting(deviceID:)`, which clear the other table's row, so only one row is ever selected; the page scrolls only for a
+chart click (`AppModel.simulatorScrollRequests`), never under the pointer in a table (M8). I2: one counting rule,
+`SavingsCalculator.countsOnce` and `countedOnceBucket`, used by the Storage chart, the Storage rows, every drive's bar and the
+savings model; the savings model and the boot row add the named filter `isInternalSaving` (boot volume) on top. Storage stays
+the inventory of every drive and its caption says "on all drives"; a test pins that an item on an external drive is in the
+chart and not in the Overview's bar, and that the chart's boot-volume subset equals the Overview's buckets. Minors: the click's
+plot geometry moved to Core (`ChartHit.plotY`, tested); the strategy column's key documents that the cell shows the identifier
+and puts the experimental one second; `StorageTable.rows`, `SimulatorsTable.runtimes` and `devices` are now `sorted(_:using:)`
+with the default order, one tie-breaker each (fixture with ties); Storage says so when no bucket has rows instead of drawing an
+empty plot; a **Bucket** menu next to **All** sets the filter without a pointer; a rescan clears a filter whose bucket has no
+bar and a selection whose row is gone. Two more keys (`app.storage.chart.none`, `app.storage.filter.menu`), 16 for R2 in all.
+**Still needs a real window:** the menu, the chart clicks, and the scroll on a chart click.

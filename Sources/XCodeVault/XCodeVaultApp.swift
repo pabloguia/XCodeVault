@@ -114,6 +114,7 @@ final class AppModel {
             self.journal = journal.suffix(100).reversed()
             // The bucket views first: the Delete view's access row reads their list.
             updateBucketViews()
+            revalidateDetailState()
             updateAccessBanner()
         } while scanGate.scanEnded()
     }
@@ -227,6 +228,96 @@ final class AppModel {
     /// The Drives screen's rows (`DrivesList.make`): one row per drive, the boot volume group as one, a vault as a badge on
     /// its own volume's row, and a section only for the vaults that are not connected.
     func drivesList(_ report: ScanReport) -> DrivesList { DrivesList.make(volumes: report.volumes, checks: vaultChecks) }
+
+    // MARK: - The Details charts (R2)
+
+    /// The Storage chart's filter: the bucket whose rows the table shows, nil for all of them. Set by a click on a bar
+    /// (`clickStorageBar`), cleared by the chip's × or **All** (`clearStorageFilter`).
+    var storageBucketFilter: SavingsBucket?
+    /// The Storage table's sort order; largest first until the user clicks a column header.
+    var storageSortOrder = StorageTable.defaultSortOrder
+
+    /// The Storage table's rows: filtered by `storageBucketFilter`, sorted by `storageSortOrder` (`StorageTable`).
+    func storageRows(_ report: ScanReport) -> [StorageRow] {
+        StorageTable.sorted(StorageTable.rows(report: report, bucket: storageBucketFilter), using: storageSortOrder)
+    }
+
+    /// The Storage chart's bars: every bucket with rows, whatever the filter, so the selected bar stays clickable.
+    func storageBars(_ report: ScanReport) -> [StorageTable.BucketBar] { StorageTable.bucketBars(rows: StorageTable.rows(report: report)) }
+
+    /// A click on the Storage chart at the bar `barID` (nil: outside every bar), as `StorageTable.filter(after:clicked:)`.
+    func clickStorageBar(_ barID: String?) {
+        storageBucketFilter = StorageTable.filter(after: storageBucketFilter, clicked: StorageTable.bucket(forBarID: barID))
+    }
+
+    func clearStorageFilter() { storageBucketFilter = nil }
+
+    /// The bucket menu next to **All** (R2 review M5): the chart's filter for keyboard and VoiceOver users.
+    func chooseStorageFilter(_ bucket: SavingsBucket?) { storageBucketFilter = bucket }
+
+    /// The row selected in one of the Simulators tables, never one in each (`SimulatorSelection`): set by a click on the
+    /// chart (`clickSimulatorBar`) or in a table (`selectRuntimeRow`, `selectDeviceRow`).
+    private(set) var simulatorSelection = SimulatorSelection()
+    /// Counts the chart clicks that selected a row: the page scrolls to the row only for these, never for a click in a
+    /// table, which would move the table under the pointer (R2 review M8).
+    private(set) var simulatorScrollRequests = 0
+
+    /// A click in the runtimes table (R2 review I1): that row, and the devices table's selection cleared.
+    func selectRuntimeRow(_ id: String?) { simulatorSelection = simulatorSelection.selecting(runtimeID: id) }
+
+    /// A click in the devices table: that row, and the runtimes table's selection cleared.
+    func selectDeviceRow(_ id: String?) { simulatorSelection = simulatorSelection.selecting(deviceID: id) }
+    var runtimeSortOrder = SimulatorsTable.defaultRuntimeSortOrder
+    var deviceSortOrder = SimulatorsTable.defaultDeviceSortOrder
+
+    func simulatorRuntimes(_ report: ScanReport) -> [SimulatorRuntime] {
+        SimulatorsTable.sorted(SimulatorsTable.runtimes(report: report), using: runtimeSortOrder)
+    }
+
+    func simulatorDevices(_ report: ScanReport) -> [SimulatorDeviceRow] {
+        SimulatorsTable.sorted(SimulatorsTable.devices(report: report), using: deviceSortOrder)
+    }
+
+    /// A click on the Simulators chart at the bar `barID`: selects its row (`SimulatorSelection.selecting(barID:)`).
+    /// Asks the page to scroll to the row when the click selected one.
+    func clickSimulatorBar(_ barID: String?) {
+        let next = simulatorSelection.selecting(barID: barID)
+        guard next != simulatorSelection || barID != nil else { return }
+        simulatorSelection = next
+        if next.runtimeID != nil || next.deviceID != nil { simulatorScrollRequests += 1 }
+    }
+
+    /// After a scan (R2 review M6): a filter whose bucket has no bar any more is cleared, and so is a selected row that is
+    /// no longer listed.
+    private func revalidateDetailState() {
+        guard let report else {
+            storageBucketFilter = nil
+            simulatorSelection = SimulatorSelection()
+            return
+        }
+        storageBucketFilter = StorageTable.filter(storageBucketFilter, validIn: storageBars(report))
+        let runtimeIDs = Set(report.runtimes.map(\.id)), deviceIDs = Set(report.devices.map(\.id))
+        simulatorSelection = SimulatorSelection(
+            runtimeID: simulatorSelection.runtimeID.flatMap { runtimeIDs.contains($0) ? $0 : nil },
+            deviceID: simulatorSelection.deviceID.flatMap { deviceIDs.contains($0) ? $0 : nil })
+    }
+
+    /// Where the page scrolls after a selection: the table holding the selected row, and the row's place in it
+    /// (`SimulatorsChart.rowAnchor`). Nil when nothing is selected or the row is not in its table.
+    func simulatorScrollTarget(_ report: ScanReport) -> (table: SimulatorBar.Kind, anchor: Double)? {
+        if let id = simulatorSelection.runtimeID {
+            let rows = simulatorRuntimes(report)
+            return SimulatorsChart.rowAnchor(index: rows.firstIndex { $0.id == id }, rowCount: rows.count).map { (.runtime, $0) }
+        }
+        if let id = simulatorSelection.deviceID {
+            let rows = simulatorDevices(report)
+            return SimulatorsChart.rowAnchor(index: rows.firstIndex { $0.id == id }, rowCount: rows.count).map { (.device, $0) }
+        }
+        return nil
+    }
+
+    /// A drive row's bar (`DiskBar.drive`); nil when the volume's size was not measured.
+    func driveBar(_ row: DriveRow, report: ScanReport) -> DiskBar? { DiskBar.drive(row, report: report) }
 
     /// The Delete screen's notes panel (`DeleteNotes.make`); nil until there is a plan and a list.
     var deleteNotes: DeleteNotes? {
