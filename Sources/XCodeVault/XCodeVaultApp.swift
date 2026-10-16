@@ -135,6 +135,13 @@ final class AppModel {
     var findings: [Finding] = []
     var vaultChecks: [VaultVolumeCheck] = []
     var cleanPlan: CleanPlan?
+    /// Xcode's DerivedData and Archives locations as last read with the scan (R7-C): the Plan shows a "runs from the drive"
+    /// item done when Xcode's location is on the vault. Nil when they could not be read.
+    var xcodeLocations: XcodeLocations?
+    /// The runtimes parked on a drive now, from the WHOLE journal the scan read — not History's newest rows (R7-C, F3).
+    var parkedRuntimes: [ParkedRuntime] = []
+    /// Whether the first scan chose the screen the app opens on (`launchSection`); once, and never after the user moved.
+    private var choseLaunchSection = false
     /// Every scan starts through this: never two at once, and one more after the running one when a scan was
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
@@ -241,11 +248,16 @@ final class AppModel {
         guard !isOperationRunning else { return }
         guard scanGate.requestScan() else { return }
         let survey = environment.survey  // nil in the app: the real scan below runs
+        let readLocations = environment.xcodeLocations
         repeat {
             refreshPermissions()
-            let (report, findings, checks, plan, journal) = await Task.detached(priority: .userInitiated) {
-                () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry]) in
-                if let survey { return survey() }
+            let (report, findings, checks, plan, journal, locations) = await Task.detached(priority: .userInitiated) {
+                () -> (ScanReport, [Finding], [VaultVolumeCheck], CleanPlan, [JournalEntry], XcodeLocations?) in
+                let locations = readLocations()
+                if let survey {
+                    let s = survey()
+                    return (s.0, s.1, s.2, s.3, s.4, locations)
+                }
                 // No capability detection: nothing in the app reads it, and it would run the selected Xcode's
                 // `xcodebuild` and `simctl` inside the app's grant for no use (ADR-0009).
                 let report = XCodeVaultCore.Scanner(detectXcodeCapabilities: false).scan()
@@ -254,9 +266,11 @@ final class AppModel {
                 let checks = (try? VaultVerifier().checkAll()) ?? []
                 let plan = CleanPlanner().plan(report: report)
                 let journal = (try? Journal().entries()) ?? []
-                return (report, findings, checks, plan, journal)
+                return (report, findings, checks, plan, journal, locations)
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
+            self.xcodeLocations = locations
+            self.parkedRuntimes = ParkedRuntimes.current(journal, installed: report.runtimes)
             // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
             // records themselves are not kept: the interrupted banner (R3) takes what it needs from them here. An operation
             // the Run sheet is running is in progress, not interrupted.
@@ -272,6 +286,23 @@ final class AppModel {
             revalidateOperationAfterScan()
         } while scanGate.scanEnded()
         await refreshDrives()
+        chooseLaunchSection()
+    }
+
+    /// The screen the app opens on (R7-C fix round): the Plan while any step is next or partly available, the Overview
+    /// otherwise. Nil before the first scan.
+    static func launchSection(_ plan: Plan?) -> SidebarSection? {
+        guard let plan else { return nil }
+        return plan.hasSomethingToDo ? .plan : .overview
+    }
+
+    /// Applied once, after the first scan and drive read, and only while the user has not moved: it never takes the user
+    /// away from a screen they chose, and it leaves no Back entry.
+    private func chooseLaunchSection() {
+        guard !choseLaunchSection, let target = Self.launchSection(plan) else { return }
+        choseLaunchSection = true
+        guard currentSection == .overview, !history.canGoBack else { return }
+        currentSection = target
     }
 
     // MARK: - Run… (R3; the methods are in AppModel+Operations.swift)
@@ -684,10 +715,6 @@ final class AppModel {
         deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
     }
 
-    /// **Copy command**: exactly the row's command, never a variant of it. **Run…** (R3) runs the operation through Core
-    /// instead, never this string.
-    func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
-
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
         // One clean at a time: a second one finishing first would clear `isCleaning` while this one still deletes, and the
         // quit guard and Relaunch would open in the middle of a clean (R5 re-review NEW-1).
@@ -782,8 +809,8 @@ struct PrivilegedActionControlView: View {
     var body: some View {
         // Title case, in the app's own words (HIG review X5); `PrivilegedAction.title` stays the journal's record.
         switch state.actionControl {
-        case .run: Button(AppText.privilegedButton(action), action: perform)
-        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform)
+        case .run: Button(AppText.privilegedButton(action), action: perform).actionButton()
+        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform).actionButton()
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
             if showsGuidance {
@@ -819,8 +846,7 @@ struct HelperRequestSheet: View {
         }
         Text(verbatim: AppText.requirementWhy(model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper))
             .font(.callout).fixedSize(horizontal: false, vertical: true)
-        HStack {
-            Spacer()
+        SheetFooter {
             Button(L10n.tr("app.action.cancel"), role: .cancel) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
             Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
         }
@@ -833,10 +859,10 @@ struct HelperRequestSheet: View {
             ProgressView().controlSize(.small)
             Text(verbatim: progress).font(.callout).fixedSize(horizontal: false, vertical: true)
         }
-        HStack {
-            Spacer()
+        // Open System Settings is the next step, not a default: Return does nothing while waiting; Escape stops waiting.
+        SheetFooter {
             Button(L10n.tr("app.helper.stopWaiting")) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
-            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }
+            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }.actionButton()
         }
     }
 }

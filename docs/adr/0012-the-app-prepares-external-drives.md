@@ -2,7 +2,7 @@
 
 - Status: accepted (the preparation options are **experimental**, CLAUDE.md rule 10)
 - Date: 2026-10-04
-- Related hypothesis: H17 (`diskutil` prepares a disk without `sudo`) — verified on disk images, pending on physical disks
+- Related hypothesis: H17 (`diskutil` prepares a disk without `sudo`) — verified on disk images; on a physical USB disk `apfs addVolume` only (2026-10-04, R7-D), the others pending
 - Brief: `.superpowers/sdd/r6/brief.md`
 
 ## Context
@@ -89,10 +89,20 @@ automatic or presented as harmless.
 
 - The app can now erase a user's disk. The safety argument is the guard (2), the identity re-check (6) and the typed
   name (5), all in Core and tested; the `migration-safety-reviewer` must review this change before merge.
-- Physical-disk behaviour is unmeasured (H17 pending): every preparation option carries the Experimental badge, and the
-  manual procedure is in `HYPOTHESES.md` H17. Whether `diskutil` mounts a new volume under a name other than the one
+- Physical-disk behaviour (H17): `apfs addVolume` was verified without sudo on the user's USB disk on 2026-10-04
+  (macOS 26.7.1 · Intel, through the app); `addPartition`, `eraseVolume` and `eraseDisk` have disk-image evidence only.
+  Every preparation option keeps the Experimental badge, and the manual procedure for the rest is in `HYPOTHESES.md` H17.
+  The new volume came up with ownership ignored: the drive's recommended fix is then **Turn On Ownership** for it (Finder,
+  or the copyable command), never another new volume (R7-D). Whether `diskutil` mounts a new volume under a name other than the one
   chosen ("XCodeVault 1") is not handled specially: the Drives screen re-reads and shows what is there.
 - A blank disk with no mountable volume posts no mount notification; the drives are re-read on every scan and on
   **Check Again**.
 - Finder's Get Info cannot be opened on a specific volume without Apple Events (an Automation prompt); the app reveals
   the volume in Finder and says which menu item to use instead.
+
+## Evidence
+
+- Disk images: E-diskprep, `docs/research/evidence/e-diskprep-macos26.7.1-25G241-xcode26.5-x86_64.txt` — every
+  preparation command works without sudo (`COMPATIBILITY_MATRIX.md` "E-diskprep").
+- Physical USB disk: `apfs addVolume` only, by the user through the app, 2026-10-04 (`COMPATIBILITY_MATRIX.md` "H17
+  physical"). The new volume had Owners: Disabled. `addPartition`, `eraseVolume`, `eraseDisk`: disk images only.

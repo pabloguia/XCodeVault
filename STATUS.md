@@ -79,6 +79,50 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   registration, `vault init` exit 3; I3 fit; I4 decisions out of the views; 11 minors). Report:
   `.superpowers/sdd/r6/fix-round-1-report.md`. Waiting on the scoped safety re-review.
 
+- **R7-A — fixes from the user's real-window check of R6** (branch `feat/r7-polish-plan`, stacked on R6; brief
+  `.superpowers/sdd/r7/brief-a.md`, approved 2026-10-04). The Storage and Simulators charts are laid out by hand: every
+  label in full at body size in a leading column (wrapping, never "…"), every bar's size shown (`BarChartLayout`).
+  Park and Run Externally show each `<dir>` command filled with the vault's standard folder, and **Copy Command** copies
+  it (`SavingsPlanRow.command(filling:)`, `AppModel.commandSuggestion`). The Run sheet says the verdict once (in the
+  picker), puts the chosen drive's fix beside it with a title that says what it does (`destinationFix`,
+  `DriveText.prepareTitle`), shows the folder once, and scrolls with its scroller visible. Drives' options are bordered
+  buttons (the recommended one prominent); every marker is a plain label. The add-volume sheet says where the volume will
+  appear and warns of a taken name (`VolumeConfiguration.mountPreview`); a successful preparation offers **Use This
+  Drive** for the volume it made, as its own review (`DiskPreparationPlan.madeVolume`). Tested with fakes only.
+  Report: `.superpowers/sdd/r7/a-report.md`. **Manual check, open:** the charts, the sheet and the Drives buttons in a
+  real window, light and dark. Next: R7-B (design system).
+
+- **R7-B — the design system applied app-wide** (branch `feat/r7-polish-plan`, on R7-A; brief
+  `.superpowers/sdd/r7/brief-b.md`, spec `docs/design/DESIGN_SYSTEM.md`, rulings `.superpowers/sdd/r7/rulings.md`). The
+  user: "precisa ficar claro o que é botão acionável / desabilitado". Components in `Sources/XCodeVault/DesignSystem/`
+  (tokens, `Tag`, `FilterChipStyle`, `StatusIcon`/`StatusLabel` with the domain-to-kind mappings, `NoticeRow`,
+  `CopyCommandButton`, `SheetFooter`, `actionButton`); all 32 audit rows applied, none skipped. Ruling B-2: a destructive
+  review keeps Cancel as the default and Escape closes it (`onExitCommand`). The chart's label column is the longest
+  label as measured (`ChartLabelMetrics`, `BarChartLayout.labelColumnWidth`). `scripts/ui-invariants.sh` (U1–U10, with a
+  mutation self-test) is a CI gate: preflight is 14 gates. Gallery: `DesignSystemSnapshotTests`. Report:
+  `.superpowers/sdd/r7/b-report.md`. **Manual check, open:** the gallery and every screen in a real window, light, dark
+  and Increase Contrast (the gallery cannot render increased contrast off-screen); a disabled prominent button in dark
+  mode.
+- **R7-C — the guided Plan** (branch `feat/r7-polish-plan`, on R7-B; brief `.superpowers/sdd/r7/brief-c.md`, ADR-0013).
+  The user: a step-by-step to the best solution, with the space recovered and clear about what runs from the drive.
+  `PlanBuilder.plan` (Core, pure, tested from fixtures) and the **Plan** screen, first in Save Space (⌘1): five steps,
+  four item outcomes, a header counted once. Derived every time, never stored; every button opens an existing sheet or
+  screen (`AppModel.planTarget`, tested case by case); never an erase. Snapshots `r7c-plan-{en,ja}-{nodrive,pablo,done}`.
+  Report: `.superpowers/sdd/r7/c-report.md`. **Manual check, open:** the Plan in a real window with a drive plugged in
+  and out; a migration-safety review of the step→sheet mapping.
+  - **Fix round** (`.superpowers/sdd/r7/c-fix-round.md`, report `c-fix-report.md`): F1 simulator devices are "deleted; you
+    recreate it yourself", tagged, out of the headline; F2/I1 DerivedData split (new builds / old DerivedData, deleted);
+    F3/I2 parked runtimes from the whole journal (`ParkedRuntimes`); F4 the unusable vault's reason; F5/F6 no forged or
+    erasing option from the Plan; F7 stale-vault tests; I3 five outcomes and a legend; localized item names; the app
+    opens on the Plan while something can be done. Re-review by migration-safety-reviewer owed.
+- **R7-D — the user's real-window check of R7** (brief `.superpowers/sdd/r7/brief-d.md`, report `d-report.md`). Add
+  Volume worked on the user's physical USB disk (H17: `apfs addVolume` verified physical; the others disk-image only),
+  but the new volume has Owners: Disabled and the app kept recommending another volume. Now: a case-insensitive volume
+  whose only blocker is ownership makes **Turn On Ownership** the recommended fix (`DriveAssessment.ownershipFixVolume`);
+  Plan step 2 shows it in Finder / copies the command; step 3 registers that volume as a second vault; ⌘R re-reads the
+  drives (tested); Copy Command copies the commented template and the filled line. **Manual check, open:** the same
+  disk after turning ownership on — step 3 next, Use This Drive for XCodeVault.
+
 ## Blocked / pending — manual (ask the user)
 
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —

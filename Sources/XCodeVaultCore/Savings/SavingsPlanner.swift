@@ -21,6 +21,25 @@ public struct SavingsPlanRow: Sendable, Codable, Equatable {
 
     /// The command names a single item, so a row of several items is several commands.
     public var isPerItem: Bool { command.contains("<udid>") || command.contains("<identifier>") }
+
+    /// The vault's standard folder `<dir>` stands for in this row's command (R7-A, `VaultLayout`): DerivedData, Archives,
+    /// or Runtimes for the runtime library and offload. Nil for a command that takes no `<dir>`.
+    public var folderPurpose: VaultLayout.Purpose? {
+        guard command.contains("<dir>") else { return nil }
+        switch categoryID {
+        case "derivedData": return .derivedData
+        case "archives": return .archives
+        case "runtimeLibrary", "simulatorRuntimeAssets": return .runtimes
+        default: return nil
+        }
+    }
+
+    /// The command with every `<dir>` replaced by `folder`, quoted for Terminal when it needs it (a volume name with a
+    /// space); the other placeholders stay for the user to fill. Nil when the command takes no `<dir>`.
+    public func command(filling folder: String) -> String? {
+        guard command.contains("<dir>") else { return nil }
+        return command.replacingOccurrences(of: "<dir>", with: DiskPreparation.shellQuoted(folder))
+    }
 }
 
 public enum SavingsPlanner {

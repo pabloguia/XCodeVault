@@ -17,6 +17,33 @@ extension AppModel {
     /// Where the folder panel opens: the usable vault's mount point when there is one.
     var folderPanelStart: String? { usableVaults.first?.currentMountPoint }
 
+    /// What a plan row suggests for its `<dir>` (R7-A, the user's "faltou colocar a sugestão"): the command filled with
+    /// the usable vault's standard folder (`VaultLayout`), or that there is no usable vault yet, so the row points to
+    /// Drives. With several usable vaults, the first one's (the Run sheet's picker chooses among them).
+    enum CommandSuggestion: Equatable {
+        /// The row's command takes no `<dir>`.
+        case none
+        case filled(command: String, folder: String)
+        case noVault
+    }
+
+    func commandSuggestion(_ row: SavingsPlanRow) -> CommandSuggestion {
+        guard let purpose = row.folderPurpose else { return .none }
+        guard let folder = usableVaults.lazy.compactMap({ VaultLayout.path(purpose, in: $0) }).first, let command = row.command(filling: folder)
+        else { return .noVault }
+        return .filled(command: command, folder: folder)
+    }
+
+    /// **Copy Command** on a plan row (R7-D): with a vault, two lines — the template commented with `# `, then the command
+    /// filled with the vault's folder; without one, the template as listed.
+    func copyCommand(_ row: SavingsPlanRow) { environment.copy(copiedCommand(row)) }
+
+    /// What **Copy Command** puts on the pasteboard (tested).
+    func copiedCommand(_ row: SavingsPlanRow) -> String {
+        if case .filled(let command, _) = commandSuggestion(row) { return "# " + row.command + "\n" + command }
+        return row.command
+    }
+
     /// The runtimes the picker offers, largest first. No default: a runtime to delete is always chosen.
     var runtimesForPicker: [SimulatorRuntime] {
         (report?.runtimes ?? []).sorted { ($0.sizeBytes ?? 0, $1.identifier) > ($1.sizeBytes ?? 0, $0.identifier) }
@@ -24,12 +51,14 @@ extension AppModel {
 
     // MARK: - Opening and reviewing
 
-    /// **Run…** on a row: opens the sheet on its review step. Refused while an operation runs (one at a time).
-    func openRun(_ row: SavingsPlanRow) {
+    /// **Run…** on a row: opens the sheet on its review step. Refused while an operation runs (one at a time). `vault`, from
+    /// the Plan (R7-C), starts the destination at that vault when it is usable; otherwise at the only usable vault.
+    func openRun(_ row: SavingsPlanRow, vault: String? = nil) {
         guard let kind = OperationKind.forRow(row), !isOperationRunning else { return }
         var inputs = OperationInputs()
+        let planVault = vault.flatMap { uuid in usableVaults.contains { $0.volume.volumeUUID == uuid } ? uuid : nil }
         // R6: the destination starts at the only usable vault, and a folder at that vault's standard folder (`VaultLayout`).
-        if kind.usesDestination, let uuid = defaultVaultUUID {
+        if kind.usesDestination, let uuid = planVault ?? defaultVaultUUID {
             inputs.vaultUUID = uuid
             if kind.needsFolder { Self.applyStandardFolder(kind, usableVaults.first { $0.volume.volumeUUID == uuid }, to: &inputs) }
         }
@@ -135,6 +164,49 @@ extension AppModel {
     var canConfirmOperation: Bool {
         guard let s = operationSheet, s.phase == .review, !s.isPreviewing, let p = s.preview else { return false }
         return p.blockers.isEmpty && p.prepared != nil && typedNameNeeded == nil
+    }
+
+    /// The footer's leading text (R7-B, §3.7, ruling B-3): while the review cannot be confirmed, why — the first blocker in
+    /// words; while it is still being checked, that it is; and a review with nothing prepared and nothing blocking (A+B
+    /// review M2) says so too. Visible, never only a tooltip. Nil when the primary is enabled.
+    var operationFooterReason: String? {
+        guard let s = operationSheet, s.phase == .review, !canConfirmOperation else { return nil }
+        if let first = operationBlockers.first { return Self.blockerText(first) }
+        if s.isPreviewing || s.preview == nil { return OperationText.stage(.planning) }
+        return L10n.tr("app.run.reason.notReady")
+    }
+
+    /// Why the review's choices — destination, folder, the drives' fixes — are disabled (A+B review M2): they belong to
+    /// the offload this export was started for, and the sheet goes back to them when it is done. Nil when they are not.
+    var operationChoicesLockedReason: String? {
+        guard let s = operationSheet, s.phase == .review, s.offloadToReturnTo != nil else { return nil }
+        return L10n.tr("app.run.lockedForOffload")
+    }
+
+    /// Why **Delete Selected…** is disabled, in visible text (R7-B audit row 30, A+B review M2): a cleanup is running, or
+    /// nothing deletable is selected. Nil when it is enabled.
+    func deleteDisabledReason(selectedDeletable count: Int) -> String? {
+        if isCleaning { return L10n.tr("app.clean.inProgress") }
+        return count == 0 ? L10n.tr("app.clean.selectToDelete") : nil
+    }
+
+    /// **Check Again** in the footer, beside that reason: only while the review is blocked by something the world can
+    /// change (review I3).
+    var offersCheckAgain: Bool {
+        guard let s = operationSheet, s.phase == .review, let p = s.preview else { return false }
+        return !p.blockers.isEmpty
+    }
+
+    /// Why **Remove Original…** is disabled, in visible text (ruling B-3): the confirmation checkbox is not checked. Nil
+    /// when it is enabled, or when it is disabled for a reason the sheet already shows (running, removed).
+    var removeOriginalDisabledReason: String? {
+        guard let s = operationSheet, !canRemoveOriginal, !isOperationRunning, case .copied(let outcome)? = s.result, !outcome.sourceRemoved else {
+            return nil
+        }
+        switch s.secondStep {
+        case .removeOriginal, .removeFailed: return removalNeedsConfirmation && !s.confirmRemoval ? L10n.tr("app.run.removeOriginal.needsConfirm") : nil
+        default: return nil
+        }
     }
 
     /// A blocker as the sheet says it. Core's own sentences are English prose and are shown as given.

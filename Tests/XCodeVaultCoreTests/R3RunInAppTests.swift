@@ -934,6 +934,47 @@ final class R3SheetFitTests: XCTestCase {
             XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) run sheet with drives")
         }
     }
+
+    /// The height the sheet asks for once laid out at its own size: AppKit sizes the sheet on this, so a review longer than
+    /// the sheet must scroll inside it rather than grow it past the window (R7-A).
+    private func heightAsked<V: View>(_ view: V) -> CGFloat {
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: OperationSheetView.idealHeight)
+        host.layoutSubtreeIfNeeded()
+        return host.intrinsicContentSize.height
+    }
+
+    /// R7-A, the user's 19: the DerivedData review with PABLO chosen — its fix beside the picker, the folder once, the
+    /// acknowledgement, and Core's warnings, many of them — and the add-volume review warning that the name is taken. Both
+    /// fit at their minimum and ask for no more than the sheet's own height: the warnings scroll, the buttons stay.
+    func testTheReviewWithItsWarningsFitsAndScrolls() async throws {
+        for language in ["en", "ja"] {
+            L10n.configure(override: language, environment: [:], preferred: [])
+            let ops = ScriptedOperations()
+            ops.preview = { _, _ in
+                OperationPreview(
+                    destination: "/Volumes/Media/XCodeVault/DerivedData",
+                    warnings: (1...12).map { "Warning \($0): a sentence long enough to wrap at the sheet's width, as Core's do." },
+                    prepared: .migration(R3RunInAppTests.plan()), willCreateFolder: "/Volumes/Media/XCodeVault/DerivedData")
+            }
+            let pablo = R6DriveTests.vaultCheck(uuid: R6DriveTests.u(301), mount: "/Volumes/Media")
+            var env = makeR3Model(ops, survey: sampleSurvey(checks: [pablo])).environment
+            env.drives = ScriptedDrives(try R6DriveTests.snapshot()).services
+            let m = AppModel(environment: env)
+            await m.refresh()
+            m.openRun(r3Row(categoryID: "derivedData", bucket: .runFromExternal))
+            await eventually("the review") { m.operationSheet?.preview != nil }
+            XCTAssertNotNil(m.destinationFix, "PABLO's fix is beside the picker")
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) DerivedData review")
+            XCTAssertLessThanOrEqual(heightAsked(OperationSheetView(model: m)), OperationSheetView.idealHeight, "\(language) DerivedData review asks")
+            m.prepareFromDestination(try XCTUnwrap(m.destinationFix))
+            await eventually("the add-volume review") { m.pendingDiskPlan != nil }
+            m.updateVolumeConfiguration { $0.name = "Media" }
+            await eventually("the taken name") { m.newVolumeMountPreview?.isTaken == true }
+            XCTAssertLessThanOrEqual(minimumHeight(OperationSheetView(model: m)), Self.ceiling, "\(language) add-volume, name taken")
+            XCTAssertLessThanOrEqual(heightAsked(OperationSheetView(model: m)), OperationSheetView.idealHeight, "\(language) add-volume asks")
+        }
+    }
 }
 
 @MainActor

@@ -463,7 +463,7 @@ final class Box<T>: @unchecked Sendable {
 
 extension AppModelTests {
     func testTheSidebarHasTheTwoGroupsOfTheSpec() {
-        XCTAssertEqual(SidebarSection.saveSpace, [.overview, .delete, .park, .runExternally])
+        XCTAssertEqual(SidebarSection.saveSpace, [.plan, .overview, .delete, .park, .runExternally], "R7-C: the Plan first")
         XCTAssertEqual(SidebarSection.details, [.storage, .simulators, .drives, .health, .history, .access])
         XCTAssertEqual(SidebarSection.allCases, SidebarSection.saveSpace + SidebarSection.details)
         // The bucket views carry the bucket's own S5 symbol; the others have one each.

@@ -54,19 +54,24 @@ extension AppModel {
     /// **Prepare…** / an option's button: the preparation sheet for `assessment`, on `option` when given, else on the
     /// first option that runs a command (least destructive first). From the Run sheet's review, that sheet is put aside
     /// and comes back when this one closes.
-    func openPreparation(_ assessment: DriveAssessment, option: PreparationOption? = nil) {
+    /// `nonErasingOnly` (the Plan, R7-C F6): the sheet offers only the options that erase nothing, and refuses to switch to
+    /// one that does; erasing stays on the Drives screen.
+    func openPreparation(_ assessment: DriveAssessment, option: PreparationOption? = nil, nonErasingOnly: Bool = false) {
         guard !isOperationRunning else { return }
         guard let chosen = option ?? assessment.recommendedOption ?? assessment.commandOptions.first, let kind = OperationKind.forOption(chosen)
         else { return }
+        if nonErasingOnly && chosen.erases { return }
         var inputs = OperationInputs()
         inputs.diskID = assessment.disk.id
         inputs.driveOption = chosen
         open(kind, inputs: inputs, drive: assessment)
+        operationSheet?.nonErasingOnly = nonErasingOnly
     }
 
-    /// **Use This Drive**: register the drive's qualifying volume and create the standard folders.
-    func openUseDrive(_ assessment: DriveAssessment) {
-        guard !isOperationRunning, let volume = assessment.registrable else { return }
+    /// **Use This Drive**: register the drive's qualifying volume — or `volume`, the one a preparation just made (R7-A) —
+    /// and create the standard folders.
+    func openUseDrive(_ assessment: DriveAssessment, volume chosen: Volume? = nil) {
+        guard !isOperationRunning, let volume = chosen ?? assessment.registrable else { return }
         var inputs = OperationInputs()
         inputs.diskID = assessment.disk.id
         inputs.driveVolumeUUID = volume.volumeUUID
@@ -79,15 +84,25 @@ extension AppModel {
         switch assessment.prepareAction {
         case .useDrive: openUseDrive(assessment)
         case .prepare(let option): openPreparation(assessment, option: option)
+        case .ownership(let mountPoint): showVolumeForOwnership(mountPoint)
         case .nothing: break
         }
     }
 
-    /// The drives listed under the Destination picker: those that can be used or need preparation, and a ready drive
-    /// whose vault is not the destination's but has a recommended fix (a case-sensitive vault, C1). Ready vaults are in
-    /// the picker itself.
+    /// The drives listed under the Destination picker: those that can be used or need preparation, each with its verdict
+    /// and a button saying what it does. A ready vault is never listed (R7-A): it is in the picker, with its verdict, and
+    /// its fix is `destinationFix`, beside the picker.
     var destinationDrives: [DriveAssessment] {
-        driveAssessments.filter { $0.verdict == .canBeUsed || $0.verdict == .needsPreparation || ($0.verdict == .ready && $0.recommendedOption != nil) }
+        driveAssessments.filter { $0.verdict == .canBeUsed || $0.verdict == .needsPreparation }
+    }
+
+    /// The drive of the vault chosen in the Destination picker, when it has something to prepare — a recommended fix,
+    /// like PABLO's case-insensitive volume (C1) — so the button beside the picker appears only then (R7-A).
+    var destinationFix: DriveAssessment? {
+        guard let s = operationSheet, s.kind.usesDestination, let uuid = s.inputs.vaultUUID else { return nil }
+        return driveAssessments.first { a in
+            a.vault?.volume.volumeUUID == uuid && a.recommendedOption != nil
+        }
     }
 
     private func open(_ kind: OperationKind, inputs: OperationInputs, drive: DriveAssessment) {
@@ -100,6 +115,8 @@ extension AppModel {
     /// cleared: it confirmed the previous plan, not this one.
     func choosePreparationOption(_ option: PreparationOption) {
         guard var s = operationSheet, s.phase == .review, let kind = OperationKind.forOption(option) else { return }
+        // Opened from the Plan: no erasing option, whatever asks for one (F6).
+        if s.nonErasingOnly && option.erases { return }
         s.kind = kind
         s.inputs.driveOption = option
         if kind != .addVolume { s.inputs.volume.quotaGigabytes = nil }
@@ -112,7 +129,10 @@ extension AppModel {
     }
 
     /// The options the preparation sheet offers: the drive's options that run a command.
-    var preparationChoices: [PreparationOption] { operationSheet?.drive?.commandOptions ?? [] }
+    var preparationChoices: [PreparationOption] {
+        let all = operationSheet?.drive?.commandOptions ?? []
+        return operationSheet?.nonErasingOnly == true ? all.filter { !$0.erases } : all
+    }
 
     /// What the user types to confirm an erase. Never re-plans.
     func updateConfirmationText(_ text: String) {
@@ -257,6 +277,32 @@ extension AppModel {
     var previewedDiskIsIndistinguishable: Bool {
         guard let plan = pendingDiskPlan, plan.action.erases else { return false }
         return !plan.identity.isDistinguishable
+    }
+
+    /// Where the volume the preparation sheet adds will appear (R7-A): `/Volumes/<name>`, and whether macOS will have to
+    /// mount it elsewhere because that name is mounted already. Only for the two options that erase nothing: an erase
+    /// re-mounts the volume it replaces under the new name.
+    var newVolumeMountPreview: MountPreview? {
+        guard let s = operationSheet, s.phase == .review, s.kind == .addVolume || s.kind == .addPartition, let snapshot = driveSnapshot else { return nil }
+        return s.inputs.volume.mountPreview(mountedAt: snapshot.volumes.compactMap(\.mountPoint))
+    }
+
+    /// The volume a successful preparation made, with its drive, once the disks were read again (R7-A,
+    /// `DiskPreparationPlan.madeVolume`): what **Use This Drive** offers on the result. Nil for anything else.
+    var madeVolume: (drive: DriveAssessment, volume: Volume)? {
+        guard let s = operationSheet, s.isSucceeded, case .drivePrepared(let plan)? = s.result, let snapshot = driveSnapshot,
+            let volume = plan.madeVolume(in: snapshot, registeredVaultUUIDs: Set(vaultChecks.map(\.volume.volumeUUID))),
+            let drive = driveAssessments.first(where: { $0.disk.id == plan.identity.wholeDisk })
+        else { return nil }
+        return (drive, volume)
+    }
+
+    /// **Use This Drive** on a preparation's result: its own review sheet for the volume just made — never run from here,
+    /// and never chained after the preparation (rule 6, ADR-0012). The Run sheet that asked for the preparation, if any,
+    /// still comes back when that review closes.
+    func useMadeVolume() {
+        guard let made = madeVolume else { return }
+        openUseDrive(made.drive, volume: made.volume)
     }
 
     /// I2: the registration succeeded but the standard folders were not created; the reason, with `OwnershipAdvice`.

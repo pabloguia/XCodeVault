@@ -232,6 +232,8 @@ public struct RuntimeOperations: Sendable {
                 // user needs in order to find the file, and the UUID is what `doctor` needs in
                 // order to know the file at that path is the one this operation verified.
                 "installerVolumeUUID": installerVolumeUUID ?? "",
+                // R7-C (F3): what the Plan counts as already off this Mac for a runtime parked by this offload.
+                "installerSizeBytes": String(installerSizeBytes),
             ].filter { !$0.value.isEmpty }
         }
     }
@@ -487,19 +489,22 @@ public struct RuntimeOperations: Sendable {
         // away from the one operation that is nearly free, which is also the one that frees the most
         // space (export the installer to a vault, then `runtime offload`).
         let downloadWarning =
-            "Observed on Xcode 26.5 (E11): for a runtime that is NOT already installed, `-downloadPlatform -exportPath` downloads, INSTALLS it on the internal volume, then exports a copy. "
+            "Observed on Xcode 26.5: for a runtime that is NOT already installed, `-downloadPlatform -exportPath` downloads, INSTALLS it on the internal "
+            + "volume, then exports a copy. "
             + "Peak internal use was ~7 GB for a 5 GB image, and the installed runtime stays until `runtime delete`/`runtime offload`."
         func warnIfTight(_ why: String) {
             if host.dataVolumeFreeBytes < 15_000_000_000 {
-                w.append("Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume, and \(why) (E11). Watch for ENOSPC.")
+                w.append("Only \(ByteCount.english(host.dataVolumeFreeBytes)) free on the internal volume, and \(why). Watch for ENOSPC.")
             }
         }
         switch exportCost(req, among: installedRuntimes) {
         case .copyOut:
             w.append(
-                "This exact runtime is already installed, so `-exportPath` should copy the sealed image out rather than downloading and installing it: internal use stays flat. "
-                    + "Budget the space at the DESTINATION, not internally. Both measurements behind this — 1 MB peak for iOS 26.5 (E11) and a 10.6 GB export on 2026-09-08 "
-                    + "with internal free unchanged (F11) — were run WITHOUT -buildVersion, i.e. in the case where the latest happened to be the installed build. "
+                "This exact runtime is already installed, so `-exportPath` should copy the sealed image out rather than downloading and installing it: "
+                    + "internal use stays flat. "
+                    + "Budget the space at the DESTINATION, not internally. Both measurements behind this — 1 MB peak for iOS 26.5 and a 10.6 GB export on "
+                    + "2026-09-08 "
+                    + "with internal free unchanged — were run WITHOUT -buildVersion, i.e. in the case where the latest happened to be the installed build. "
                     + "The pinned-build path is inferred from those, not separately measured.")
         case .unknownDependsOnWhatIsLatest:
             // Never the cheap story on its own: without -buildVersion, `-downloadPlatform` fetches the
@@ -512,7 +517,8 @@ public struct RuntimeOperations: Sendable {
                 } ?? "\(req.platform) is installed, but no -buildVersion was given and `-downloadPlatform` fetches the LATEST"
             w.append(
                 "\(why). If what Xcode fetches is the image you already have, this is a copy-out and internal use stays flat; otherwise it is a full download "
-                    + "that installs internally first. Nothing local can tell the two apart — measured behaviour exists only for the case where they coincided (F11)."
+                    + "that installs internally first. Nothing local can tell the two apart — measured behaviour exists only for the case where they "
+                    + "coincided (F11)."
             )
             warnIfTight("this may turn out to be a download that stages through an install first")
         case .download:
@@ -609,12 +615,14 @@ public struct RuntimeOperations: Sendable {
         let need = size * 3 / 2 + 2_000_000_000
         if host.dataVolumeFreeBytes < need {
             throw RuntimeOperationError(
-                "Installing needs internal staging space: image is \(ByteCount.english(size)), only \(ByteCount.english(host.dataVolumeFreeBytes)) free (want ≥ \(ByteCount.english(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
+                "Installing needs internal staging space: image is \(ByteCount.english(size)), only \(ByteCount.english(host.dataVolumeFreeBytes)) free (want "
+                    + "≥ \(ByteCount.english(need))). Free space first (`xcodevaultctl clean`, `doctor` for stranded downloads)."
             )
         }
         if host.dataVolumeFreeBytes < size * 2 + 2_000_000_000 {
             w.append(
-                "Internal free space is tight: the import copies the whole image internally before installing (measured 1.0–1.2× the image across two runs), and CoreSimulator refuses when the disk is 'almost full'."
+                "Internal free space is tight: the import copies the whole image internally before installing (measured 1.0–1.2× the image across two runs), "
+                    + "and CoreSimulator refuses when the disk is 'almost full'."
             )
         }
         return w

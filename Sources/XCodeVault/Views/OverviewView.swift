@@ -38,11 +38,7 @@ struct OverviewView: View {
                         VStack(alignment: .leading) {
                             // Primary text; only the symbol is tinted (HIG review O3).
                             ForEach(report.warnings, id: \.self) { warning in
-                                Label {
-                                    Text(verbatim: warning).fixedSize(horizontal: false, vertical: true)
-                                } icon: {
-                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                                }
+                                StatusLabel(.warning, warning)
                             }
                         }
                     }
@@ -53,14 +49,13 @@ struct OverviewView: View {
                     GroupBox(L10n.plural("app.overview.doctor.issues", count: critical.count)) {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(critical) { finding in
-                                Label {
-                                    Text(verbatim: finding.title).fixedSize(horizontal: false, vertical: true)
-                                } icon: {
-                                    Image(systemName: finding.severity.symbolName).foregroundStyle(HealthCardView.tint(finding.severity))
-                                        .accessibilityLabel(Text(verbatim: AppText.severity(finding.severity)))
-                                }
+                                // The severity's word is not shown beside the title: VoiceOver hears it with the title.
+                                StatusLabel(.severity(finding.severity), finding.title)
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityLabel(Text(verbatim: AppText.severity(finding.severity) + ", " + finding.title))
                             }
-                            Button(L10n.tr("app.overview.showInHealth"), action: showHealth)
+                            // Navigation inside a notice: a link (R7-B, §3.1).
+                            Button(L10n.tr("app.overview.showInHealth"), action: showHealth).buttonStyle(.link)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -128,25 +123,23 @@ struct OverviewCardView: View {
             }
             if let lossy = card.losesUserDataBytes {
                 // The Temporary headline is not all recoverable (S3 review): what deleting loses for good, on the card.
-                Label {
-                    Text.l10n(L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                }
+                StatusLabel(.warning, L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout)
             }
             Spacer(minLength: 0)
-            Button(L10n.tr("app.overview.card.review"), action: review)
+            // Three cards, three secondary buttons: no card's Review is the screen's one primary (R7-B, §1.2).
+            Button(L10n.tr("app.overview.card.review"), action: review).actionButton()
                 // Three cards, three buttons: VoiceOver hears which bucket each one reviews.
                 .accessibilityLabel(Text(verbatim: L10n.tr("app.overview.card.review.a11y", card.bucket.localizedTitle)))
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+        .background(Tokens.surfaceCard, in: RoundedRectangle(cornerRadius: Radius.card))
         .overlay(alignment: .top) {
             // The bucket color as a fill, never as text.
-            UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(card.bucket.color).frame(height: contrast == .increased ? 6 : 4)
+            UnevenRoundedRectangle(topLeadingRadius: Radius.card, topTrailingRadius: Radius.card).fill(card.bucket.color)
+                .frame(height: contrast == .increased ? 6 : 4)
         }
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor)))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(Tokens.strokeHairline))
     }
 }
 
@@ -168,15 +161,15 @@ struct DiskBarView: View {
                 HStack(spacing: 1) {
                     ForEach(Array(bar.segments.enumerated()), id: \.offset) { _, segment in
                         Rectangle().fill(Self.fill(segment.kind))
-                            .overlay { if contrast == .increased { Rectangle().strokeBorder(Color(nsColor: .separatorColor)) } }
+                            .overlay { if contrast == .increased { Rectangle().strokeBorder(Tokens.strokeHairline) } }
                             .frame(width: max(geometry.size.width * Double(segment.bytes) / Double(total) - 1, 0))
                     }
                 }
             }
             .frame(height: barHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.bar))
             // A hairline around the bar, so the Free part never disappears into a dark window (HIG review O6).
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
+            .overlay(RoundedRectangle(cornerRadius: Radius.bar).strokeBorder(Tokens.strokeHairline))
             // The legend says the same thing in words.
             .accessibilityHidden(true)
             // The bar counts each item once, the cards every option: say so, or the same title shows two numbers.
@@ -189,7 +182,7 @@ struct DiskBarView: View {
             }
             .font(.caption)
             if bar.isClamped {
-                Text.l10n(L10n.tr("app.overview.bar.clamped")).font(.caption2).foregroundStyle(.secondary)
+                Text.l10n(L10n.tr("app.overview.bar.clamped")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .contain)
@@ -198,8 +191,8 @@ struct DiskBarView: View {
 
     private func legendItem(_ segment: DiskBar.Segment) -> some View {
         HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10)
-                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color(nsColor: .separatorColor)))
+            RoundedRectangle(cornerRadius: Radius.swatch).fill(Self.fill(segment.kind)).frame(width: 10, height: 10)
+                .overlay(RoundedRectangle(cornerRadius: Radius.swatch).strokeBorder(Tokens.strokeHairline))
                 .accessibilityHidden(true)
             switch segment.kind {
             case .bucket(let bucket): BucketSymbol(bucket: bucket, decorative: true)
@@ -224,8 +217,8 @@ struct DiskBarView: View {
     static func fill(_ kind: DiskBar.Kind) -> Color {
         switch kind {
         case .bucket(let bucket): bucket.color
-        case .otherData: Color(nsColor: .systemGray).opacity(0.55)
-        case .free: Color(nsColor: .tertiarySystemFill)
+        case .otherData: Tokens.otherDataFill
+        case .free: Tokens.freeFill
         }
     }
 }

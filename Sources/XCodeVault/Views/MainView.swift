@@ -6,10 +6,11 @@ import XCodeVaultCore
 /// The sidebar (spec 2026-10-03 §6.1): **Save space** — the Overview and one view per way of reclaiming — then
 /// **Details**.
 enum SidebarSection: String, CaseIterable, Identifiable {
-    case overview, delete, park, runExternally
+    case plan, overview, delete, park, runExternally
     case storage, simulators, drives, health, history, access
 
-    static let saveSpace: [SidebarSection] = [.overview, .delete, .park, .runExternally]
+    /// The guided Plan first (R7-C): the path through the other views, in order.
+    static let saveSpace: [SidebarSection] = [.plan, .overview, .delete, .park, .runExternally]
     static let details: [SidebarSection] = [.storage, .simulators, .drives, .health, .history, .access]
     static var saveSpaceTitle: String { L10n.tr("app.sidebar.saveSpace") }
     static var detailsTitle: String { L10n.tr("app.sidebar.details") }
@@ -38,6 +39,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .plan: L10n.tr("app.section.plan")
         case .overview: L10n.tr("app.section.overview")
         case .delete: L10n.tr("app.section.delete")
         case .park: L10n.tr("app.section.park")
@@ -58,6 +60,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         if self == .delete { return "trash" }
         if let bucket { return bucket.symbolName }
         return switch self {
+        case .plan: "list.number"
         case .overview: "square.grid.2x2"
         case .storage: "chart.pie"
         case .simulators: "iphone"
@@ -167,6 +170,8 @@ struct MainView: View {
     @ViewBuilder
     func detail(_ r: ScanReport) -> some View {
         switch model.section {
+        case .plan:
+            if let plan = model.plan { GuidedPlanView(plan: plan) { model.performPlanAction($0) } }
         case .overview:
             OverviewView(
                 report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) },
@@ -177,7 +182,7 @@ struct MainView: View {
             PlanView(
                 bucket: bucket, rows: model.rows(for: bucket), vault: model.section == .park ? model.vaultStatus : nil, copy: { model.copyCommand($0) },
                 canRun: { model.canRun($0) }, run: { model.openRun($0) }, interrupted: model.interruptedMigrations,
-                copyCommand: { model.environment.copy($0) })
+                copyCommand: { model.environment.copy($0) }, suggestion: { model.commandSuggestion($0) }, showDrives: { model.section = .drives })
         case .storage: StorageView(model: model, report: r)
         case .simulators: SimulatorsView(model: model, report: r)
         case .drives:
@@ -213,9 +218,7 @@ struct FeedbackBanner: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: feedback.kind == .success ? "checkmark.circle.fill" : "info.circle.fill")
-                .foregroundStyle(feedback.kind == .success ? Color.green : Color.accentColor)
-                .accessibilityHidden(true)
+            StatusIcon(.feedback(feedback.kind))
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: feedback.title).font(.callout).bold()
                 ForEach(Array(feedback.detail.enumerated()), id: \.offset) { _, line in
@@ -225,7 +228,7 @@ struct FeedbackBanner: View {
             }
             Spacer(minLength: 8)
             Button(action: dismiss) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).minimumTarget()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: L10n.tr("app.feedback.dismiss")))

@@ -89,8 +89,21 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 The app is a projection of Core: every number and every decision a screen shows is a Core function with a test, or an
 `AppModel` method tested through `AppEnvironment` fakes. Views decide nothing.
 
-- **Sidebar.** *Save Space*: Overview, Delete, Park, Run Externally. *Details*: Storage, Simulators, Drives (volumes
+- **Sidebar.** *Save Space*: Plan (R7-C), Overview, Delete, Park, Run Externally. *Details*: Storage, Simulators, Drives (volumes
   and vaults), Health (the doctor), History (the journal), Permissions (named Access until R5).
+- **Plan (R7-C, ADR-0013).** The best path for this Mac as five ordered steps — choose a drive, prepare it, use it as
+  the vault, move what can move, check health — from `PlanBuilder.plan`, a pure Core function of the scan, the assessed
+  drives, the vault checks, Xcode's locations, the journal's History rows and the findings. Derived every time, never
+  stored. Each step has a state (done, next, blocked with a reason, not needed), a one-line explanation and at most one
+  action; the move step lists items with their size and outcome (runs from the drive, moved to the drive, parked on the
+  drive, deleted and rebuilt on demand, deleted and lost — simulator devices, out of the headline), counted once;
+  DerivedData is split into new builds (its location) and the old DerivedData here (deleted). Parked runtimes come from
+  the whole journal (`ParkedRuntimes`). Every action is a `PlanAction` that
+  `AppModel.planTarget` maps to an existing opener (Drives, the preparation sheet, Use This Drive, the Run sheet on the
+  plan's vault, a Save Space view, Health); a drive, volume or row that is gone falls back to its screen, and an erasing
+  option, or any option the drive does not recommend, is refused; a preparation sheet opened from the Plan offers no
+  erasing option. The Plan never runs anything and chains nothing; it never proposes an erase. The app opens on the Plan
+  while a step is next or partly available (`AppModel.launchSection`).
 - **Overview.** The internal-disk bar (`DiskBar`: other data, developer data by primary bucket, free), three cards
   (`OverviewCards`: an "up to" amount, the verified share, the promise, the cost to undo, **Review**), the note that
   the cards are alternatives with the union total, the runtime images `simctl` measured outside the catalog on their

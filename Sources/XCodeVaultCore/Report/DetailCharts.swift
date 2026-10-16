@@ -128,7 +128,7 @@ extension StorageTable {
 
 // MARK: - Chart emphasis
 
-/// How a chart draws its bars and axis (R5 review m4), decided here so the views only apply it.
+/// How a chart draws its bars (R5 review m4), decided here so the views only apply it.
 public enum ChartEmphasis {
     /// A bar's opacity: the bar under the pointer solid; the others a little lighter while one is hovered; those outside
     /// the filter or the selection faded.
@@ -137,20 +137,39 @@ public enum ChartEmphasis {
         if isFilteredOut { return 0.35 }
         return isAnyHovered ? 0.7 : 1
     }
-
-    /// A size axis label: "0" at the origin rather than "0 bytes" (HIG review C2), else the size.
-    public static func axisLabel(_ bytes: Double) -> String { bytes <= 0 ? "0" : ByteCount.format(UInt64(bytes)) }
 }
 
-// MARK: - Chart clicks
+// MARK: - Bar lists
 
-/// Where a click lands on a chart (R2 review M1), decided here so the view only reads the chart's value at it.
-public enum ChartHit {
-    /// The click's y inside the plot, measured from the plot's top — what `ChartProxy.value(atY:)` takes — or nil when
-    /// the click is above or below the plot. Its edges count as inside.
-    public static func plotY(clickY: Double, plotMinY: Double, plotMaxY: Double) -> Double? {
-        guard plotMinY <= plotMaxY, clickY >= plotMinY, clickY <= plotMaxY else { return nil }
-        return clickY - plotMinY
+/// How the Details screens' charts lay out (R7-A, the user's check of R6: "Pa…", "Ke…", "iOS 26…"): one row per bar, its
+/// label spelled out in full at body size in a leading column sized to the longest label, the bar to its right scaled to
+/// the largest, and the bar's size after it — every bar's, never clipped by the box. A label longer than the column wraps
+/// (Japanese, German); it is never truncated.
+public enum BarChartLayout {
+    /// One row's height with a one-line label, the gap below it included. A label that wraps makes its row taller.
+    public static let rowHeight: Double = 28
+    /// The label column's widest; a longer label wraps inside it.
+    public static let labelColumnMaxWidth: Double = 260
+    /// The room kept after the longest bar for its size, so the size is never pushed out of the row.
+    public static let sizeLabelWidth: Double = 84
+
+    /// The label column's width (R7-B): the longest label as measured on one line, never wider than `maximum` — a longer
+    /// one wraps inside it — and never narrower than `minimum`.
+    public static func labelColumnWidth(_ measured: [Double], minimum: Double = 40, maximum: Double = labelColumnMaxWidth) -> Double {
+        min(maximum, max(minimum, measured.max() ?? minimum))
+    }
+
+    /// A bar's length as a fraction of the longest bar's: 0 for nothing measured, otherwise at least `minimum` so a bar
+    /// of a few kilobytes beside one of tens of gigabytes is still seen. Never more than 1.
+    public static func fraction(_ bytes: UInt64, largest: UInt64, minimum: Double = 0.01) -> Double {
+        guard bytes > 0, largest > 0 else { return 0 }
+        return max(minimum, min(1, Double(bytes) / Double(largest)))
+    }
+
+    /// The box that shows `barCount` rows: one row's height each, at most `maximum`; more rows scroll inside the box, so
+    /// the screen keeps fitting the window (R1, `ScreenFitTests`).
+    public static func boxHeight(barCount: Int, maximum: Double) -> Double {
+        min(maximum, Double(max(barCount, 1)) * rowHeight)
     }
 }
 
@@ -207,12 +226,6 @@ public enum SimulatorsChart {
     /// The runtimes and devices with no size: listed in the tables as "not measured", left out of the chart.
     public static func unmeasuredCount(report: ScanReport) -> Int {
         report.runtimes.filter { $0.sizeBytes == nil }.count + report.devices.filter { $0.dataPathSize == nil }.count
-    }
-
-    /// The chart's height in points: one bar's band per bar plus the axis, at least `minimum`. The screen scrolls as a
-    /// whole, so a long chart lengthens the page and never asks the window for more height.
-    public static func height(barCount: Int, band: Double = 34, axis: Double = 34, minimum: Double = 120) -> Double {
-        max(minimum, Double(barCount) * band + axis)
     }
 
     /// The selection after a click on the chart (R5): the clicked bar's row — a bar's id is its row's id in the one table

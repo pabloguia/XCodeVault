@@ -70,6 +70,15 @@ enum OperationKind: String, Sendable, Equatable, CaseIterable {
     var asksTestsAcknowledgement: Bool { self == .setDerivedData }
     /// Deletes data on this Mac when it runs: the confirm button is destructive and not the default (HIG).
     var deletesData: Bool { [.offloadRuntime, .deleteRuntime, .eraseVolume, .eraseDisk].contains(self) }
+    /// The symbol the destructive confirm button leads with (A+B review M3): an eraser for an erase, a bin for a deletion;
+    /// nil for a kind that deletes nothing.
+    var destructiveSymbol: String? {
+        switch self {
+        case .eraseVolume, .eraseDisk: DestructiveSymbol.erase
+        case .offloadRuntime, .deleteRuntime: DestructiveSymbol.delete
+        default: nil
+        }
+    }
     /// Whether **Stop and Quit** may terminate this operation's command: the one rule behind `AppModel.quitChoice` and
     /// `LiveOperations.stoppableChildren`. A copy (`ditto`) and an export (`xcodebuild`) are never stopped, and neither is
     /// an offload: its `simctl` only asks CoreSimulatorService to delete, so a stopped client can leave the runtime gone while
@@ -264,9 +273,18 @@ struct OperationSheetState: Sendable {
     var previewedPlan: DiskPreparationPlan?
     /// R6 (H1): the disk changed under the open sheet. Sticky: "Close this and preview again."
     var diskChanged = false
+    /// R7-C (F6): opened from the Plan — the preparation choices erase nothing; erasing is offered on the Drives screen only.
+    var nonErasingOnly = false
 
     /// The experimental badge in the title (rule 10): the plan row's strategy, or any drive preparation.
     var showsExperimentalBadge: Bool { row?.option.isExperimental == true || kind.isExperimental }
+
+    /// Whether the review's facts repeat the destination as "To" (R7-A): not when it is the folder the Folder row already
+    /// shows, so a path is shown once.
+    func showsDestinationFact(_ preview: OperationPreview) -> Bool {
+        guard let destination = preview.destination else { return false }
+        return !(kind.needsFolder && destination == inputs.folder)
+    }
     var kind: OperationKind
     var inputs: OperationInputs
     var preview: OperationPreview?

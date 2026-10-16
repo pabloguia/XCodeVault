@@ -2017,7 +2017,7 @@ isn't there, add it with +."
 4. Record macOS version and build, the signing, and the result in `COMPATIBILITY_MATRIX.md` and here. A
    negative result removes the "should now be in the list" sentence and the attempt (ADR-0007 note).
 
-## H17 — `diskutil` prepares an external disk without `sudo` *(new, 2026-10-04; **VERIFIED on disk images only**, macOS 26.7.1 · Intel; a physical disk is **unmeasured**)*
+## H17 — `diskutil` prepares an external disk without `sudo` *(new, 2026-10-04; **VERIFIED on disk images**; on a physical USB disk **`apfs addVolume` only**, verified by the user 2026-10-04; macOS 26.7.1 · Intel)*
 
 **Claim.** As the logged-in user, with no `sudo`, `diskutil apfs addVolume` (case-insensitive, case-sensitive, and with
 `-quota`), `diskutil addPartition … APFS` into free space after an existing partition, `diskutil eraseVolume APFS` (on an
@@ -2056,7 +2056,17 @@ that is unmeasured, and the product treats it so: when a command fails on a real
 to copy into Terminal (ADR-0012) and changes nothing else. `sudo diskutil enableOwnership` is known to need root and is
 only ever shown as a copyable command; the app never asks for a password.
 
+**Physical disk, `apfs addVolume` (R7-D, 2026-10-04).** The user ran **Add a Case-insensitive Volume…** from the app on
+their own external USB disk (XS2000, APFS container `disk3`, macOS 26.7.1 · Intel, no sudo). The journal shows
+`diskutil apfs addVolume disk3 APFS XCodeVault` planned, started and completed; `/Volumes/XCodeVault` (`disk3s2`, APFS,
+case-insensitive) mounted. **The new volume had Owners: Disabled** — external volumes are created with ownership
+ignored — so it does not qualify as a vault until ownership is turned on (Finder's Get Info, or `sudo diskutil
+enableOwnership`, which the app only shows). The app now recommends exactly that step instead of another new volume
+(R7-D). Evidence: the user's real-window check and journal, reported in `.superpowers/sdd/r7/brief-d.md`; no evidence
+file was captured by a script.
+
 **Status: VERIFIED for disk images, one combination (macOS 26.7.1 25G241 · x86_64), 2026-10-04. Physical external
-disks: PENDING.** Manual procedure for the physical case: in the app, on a spare external disk whose data you do not
-need, run **Add Volume** on its APFS container, then **Erase Volume** on that new volume; record the outcome and the
+disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10-04, by the user through the app);
+`addPartition`, `eraseVolume` and `eraseDisk` PENDING — disk-image evidence only.** Manual procedure for the remaining physical cases: in the app, on a spare external disk whose data you do not
+need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.

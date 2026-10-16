@@ -1,5 +1,8 @@
 # XCodeVault brand guide
 
+Controls and status markers — what is a button, what is a tag, how a state is shown — are in
+[`docs/design/DESIGN_SYSTEM.md`](../design/DESIGN_SYSTEM.md), which builds on the palette and tokens here.
+
 ## Concept
 
 A vault door seen front-on. The dial's handle leaves the door as an outward teal arrow: "storage,
