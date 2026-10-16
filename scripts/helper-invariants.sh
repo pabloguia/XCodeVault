@@ -53,6 +53,9 @@
 # necessarily contains the strings it searches for, and a raw text match cannot tell a pattern from
 # a use.
 set -uo pipefail
+# A fixed collation: `sort -u` orders names by the locale, and the allowlists below are in byte order. A runner with
+# an en_US locale put "diskIdentifier" before "DiskIdentifier" and failed an unchanged tree (CI, macos-26-intel).
+export LC_ALL=C
 cd "$(cd "$(dirname "$0")/.." && pwd)" || { echo "helper invariants: cannot reach the repository root" >&2; exit 2; }
 
 PROTOCOL=Sources/XCodeVaultHelperProtocol/HelperProtocol.swift
