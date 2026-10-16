@@ -206,6 +206,7 @@ struct OperationSheetView: View {
                         Text(verbatim: s.inputs.productsFolder ?? L10n.tr("app.run.choose.none"))
                             .font(.system(.body, design: .monospaced)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                             .foregroundStyle(s.inputs.productsFolder == nil ? .secondary : .primary)
+                            .help(s.inputs.productsFolder ?? "")
                         Spacer(minLength: 0)
                         Button(L10n.tr("app.run.destination.chooseFolder")) { Task { await model.chooseProductsFolder() } }.actionButton()
                     }
@@ -606,9 +607,7 @@ struct OperationSheetView: View {
         Binding(
             get: { model.operationSheet?.inputs.keepProductsOnThisMac ?? false },
             set: { keep in
-                model.updateOperationInputs {
-                    $0.keepProductsOnThisMac = keep; $0.acknowledgeTests = false
-                }
+                model.updateOperationInputs { AppModel.applyDerivedDataMode(keep, to: &$0) }
             })
     }
 

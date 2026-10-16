@@ -80,7 +80,7 @@ struct Locations: ParsableCommand {
                 "Acknowledge that this split is experimental: measured once with xcodebuild, and saving it in Locations was not part of that measurement."
         ) var acknowledge = false
         func run() throws {
-            let productsPath = try products ?? XcodeLocations.ensureProductsDirectory()
+            let productsPath = try XcodeLocations.productsDirectory(chosen: products, createIfMissing: true)
             let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
             let warnings = try XcodeLocations.preflightDerivedDataSplit(
                 bulk: bulk, products: productsPath, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExperimental: acknowledge)

@@ -338,10 +338,15 @@ enum LiveOperations {
             try XcodeLocations.apply(change, runner: runner)
             return .locationApplied(change.key, previous: previous)
         case .derivedDataSplit(let split, let ack):
+            // The usual products folder is created here, at Run, and only when it is missing and on this Mac.
+            // The sheet offered the path without creating it. A folder the user chose is not created.
+            let products = try XcodeLocations.productsDirectory(chosen: split.products, createIfMissing: true)
+            let ready = XcodeLocations.DerivedDataSplit(bulk: split.bulk, products: products)
             let volumes = (try? VolumeDiscovery.mountedVolumes()) ?? []
             _ = try XcodeLocations.preflightDerivedDataSplit(
-                bulk: split.bulk, products: split.products, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(), acknowledgeExperimental: ack)
-            return .splitApplied(try XcodeLocations.apply(split, runner: runner))
+                bulk: ready.bulk, products: ready.products, volumes: volumes, xcodeRunning: CleanExecutor.xcodeIsRunning(),
+                acknowledgeExperimental: ack)
+            return .splitApplied(try XcodeLocations.apply(ready, runner: runner))
         case .export(let req, let x, let h):
             let ops = RuntimeOperations(runner: runner, xcode: x, host: h)
             _ = try ops.preflightExport(req, freeBytesAtDestination: MountStatus.space(at: req.destination)?.free)

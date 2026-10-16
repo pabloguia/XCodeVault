@@ -18,7 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
+        # Standard (free for public repositories) runners only: arm64 on 15 and 26, and x64 on 26. The -large and -xlarge
+        # labels are billed and are not used. A runner is a VM: no physical USB, no TCC on removable media (E2).
+        os: [macos-15, macos-26, macos-26-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -137,6 +139,8 @@ jobs:
         run: |
           scripts/experiments/e1-mountability.sh
           scripts/experiments/e8-feature-detect.sh
+      - name: Vault flow on a disk image (ADR-0015; not a physical drive)
+        run: bash scripts/ci-vault-flow.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: evidence-${{ matrix.os }}

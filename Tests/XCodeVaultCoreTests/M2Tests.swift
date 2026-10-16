@@ -993,6 +993,56 @@ final class XcodeLocationsTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: products))
         XCTAssertEqual(try XcodeLocations.ensureProductsDirectory(home: t.path), products)
     }
+
+    /// The sheet offers this path before it exists. Run, and only Run, creates it — and only on this Mac.
+    func testAMissingSuggestedProductsFolderIsOfferedAndCreatedOnlyOnUse() throws {
+        let t = TempDir()
+        let suggested = XcodeLocations.suggestedProductsDirectory(home: t.path)
+        XCTAssertThrowsError(try XcodeLocations.productsDirectory(chosen: nil, createIfMissing: false, home: t.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: suggested))
+        t.dir("Library/Developer/Xcode")
+        let offered = try XcodeLocations.productsDirectory(chosen: nil, createIfMissing: false, home: t.path)
+        XCTAssertEqual(offered, suggested)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: offered), "offering the folder does not create it")
+        let bulk = t.dir("bulk")
+        let externalBulk: (String) -> Bool = { $0.hasSuffix("/bulk") }
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: offered, volumes: [], xcodeRunning: false, acknowledgeExperimental: false, pathIsExternal: externalBulk,
+                home: t.path)
+        ) { error in
+            let text = "\(error)"
+            XCTAssertTrue(text.contains(XcodeLocations.splitAcknowledgementFlag), text)
+            XCTAssertFalse(text.contains("not an existing directory"), text)
+        }
+        _ = try XcodeLocations.preflightDerivedDataSplit(
+            bulk: bulk, products: offered, volumes: [], xcodeRunning: false, acknowledgeExperimental: true, pathIsExternal: externalBulk, home: t.path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: offered), "preflight does not create the products folder")
+        let missingCustom = t.path + "/nope"
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: missingCustom, volumes: [], xcodeRunning: false, acknowledgeExperimental: true, pathIsExternal: externalBulk,
+                home: t.path)
+        ) { error in
+            XCTAssertTrue("\(error)".contains("not an existing directory"), "\(error)")
+        }
+        XCTAssertEqual(try XcodeLocations.productsDirectory(chosen: missingCustom, createIfMissing: true, home: t.path), missingCustom)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingCustom), "a folder the user named is not created")
+        let productsExternal: (String) -> Bool = { $0.hasSuffix("/bulk") || $0.hasSuffix("/Products") }
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightDerivedDataSplit(
+                bulk: bulk, products: offered, volumes: [], xcodeRunning: false, acknowledgeExperimental: true, pathIsExternal: productsExternal,
+                home: t.path)
+        ) { error in
+            XCTAssertTrue("\(error)".contains("stay on this Mac"), "\(error)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: offered), "an external products path is not created")
+        let created = try XcodeLocations.productsDirectory(chosen: offered, createIfMissing: true, home: t.path)
+        XCTAssertEqual(created, offered)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: created))
+        let custom = t.dir("custom")
+        XCTAssertEqual(try XcodeLocations.productsDirectory(chosen: custom, createIfMissing: true, home: t.path), custom)
+    }
 }
 
 /// Fails the products-path write and records the deletes a rollback issues. Reads look unset.

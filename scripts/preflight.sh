@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the CI gates that can be run here, in CI's order, on this machine.
 #
-# Fourteen of CI's sixteen steps. The two it leaves out are named rather than silently missing:
+# Fifteen of CI's seventeen steps. The two it leaves out are named rather than silently missing:
 # "Toolchain" only prints versions, and the read-only gating experiments (E1/E8) **write evidence
 # files into `docs/research/evidence/`** — running them before every push would dirty the working
 # tree as a side effect of checking it, which is a worse habit than the coverage is worth. Run
@@ -37,6 +37,7 @@ GATES=(
     "public-surface:bash scripts/public-surface.sh"
     "redaction:bash scripts/experiments/test-common.sh"
     "e6c-dryrun:bash scripts/experiments/test-e6c-dryrun.sh"
+    "vault-flow:bash scripts/ci-vault-flow.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
     "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl permissions --json && .build/debug/xcodevaultctl report --json && .build/debug/xcodevaultctl plan delete --json >/dev/null && .build/debug/xcodevaultctl --lang pt-BR status >/dev/null"
 )
@@ -56,7 +57,7 @@ fast=0
 # would make this script's central claim false for one step while this very guard reported
 # everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=16
+expected_steps=17
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2

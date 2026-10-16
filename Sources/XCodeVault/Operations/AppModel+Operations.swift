@@ -76,6 +76,16 @@ extension AppModel {
         return out
     }
 
+    /// Split mode offers the usual products folder (`XcodeLocations.suggestedProductsDirectory`), expanded, without
+    /// creating it. A folder already chosen stays. Whole-folder mode does not use a products path.
+    static func applyDerivedDataMode(_ keepProductsOnThisMac: Bool, to inputs: inout OperationInputs) {
+        inputs.keepProductsOnThisMac = keepProductsOnThisMac
+        inputs.acknowledgeTests = false
+        if keepProductsOnThisMac, inputs.productsFolder == nil {
+            inputs.productsFolder = XcodeLocations.suggestedProductsDirectory()
+        }
+    }
+
     /// Runs the review step for the sheet's current choices, off the cooperative pool. A preview for choices that changed
     /// while it ran is dropped: the next one is coming.
     func previewOperation() async {

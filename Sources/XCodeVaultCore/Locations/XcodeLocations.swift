@@ -267,10 +267,25 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         }
     }
 
-    /// The usual products folder on this Mac. Created only by `ensureProductsDirectory`, and only when its parent
-    /// already exists and is not on an external volume.
+    /// The usual products folder on this Mac: `~/Library/Developer/Xcode/Products`, expanded. The CLI and the Run
+    /// sheet both offer this path. Nothing creates it except `productsDirectory(createIfMissing: true)`, and only
+    /// when its parent already exists and is not on an external volume.
     public static func suggestedProductsDirectory(home: String = FileManager.default.homeDirectoryForCurrentUser.path) -> String {
         (home as NSString).appendingPathComponent("Library/Developer/Xcode/Products")
+    }
+
+    /// The products folder a split uses. `chosen` nil means `suggestedProductsDirectory`. That folder is created
+    /// only when `createIfMissing` is true — the CLI command and the app's Run. The sheet reads
+    /// `suggestedProductsDirectory` and passes false here, so opening it does not create the directory. A folder
+    /// the user chose is never created. The usual folder is refused when its parent is on an external volume.
+    public static func productsDirectory(
+        chosen: String?, createIfMissing: Bool, home: String = FileManager.default.homeDirectoryForCurrentUser.path
+    ) throws -> String {
+        let suggested = suggestedProductsDirectory(home: home)
+        if let chosen, !sameDirectory(chosen, suggested) { return chosen }
+        if createIfMissing { return try ensureProductsDirectory(home: home) }
+        try validateSuggestedProductsParent(home: home)
+        return suggested
     }
 
     /// Makes the usual products folder when the user did not pass one. Refuses to create it on an external volume
@@ -282,7 +297,16 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
             guard isDir.boolValue else { throw RuntimeOperationError("\(products) exists and is not a folder.") }
             return products
         }
+        try validateSuggestedProductsParent(home: home)
+        try FileManager.default.createDirectory(atPath: products, withIntermediateDirectories: false)
+        return products
+    }
+
+    /// The usual products folder may be missing until Run. Its parent has to exist, be writable, and sit on this Mac.
+    private static func validateSuggestedProductsParent(home: String) throws {
+        let products = suggestedProductsDirectory(home: home)
         let parent = (products as NSString).deletingLastPathComponent
+        var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: parent, isDirectory: &isDir), isDir.boolValue, FileManager.default.isWritableFile(atPath: parent) else {
             throw RuntimeOperationError(
                 "Choose a folder on this Mac with --products. \(products) is not there, and \(parent) is missing or not writable.")
@@ -291,8 +315,6 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         if pathIsExternal(resolved: resolvedParent, volumes: []) {
             throw RuntimeOperationError("\(products) would be on an external volume. Built test products have to stay on this Mac. Pass --products.")
         }
-        try FileManager.default.createDirectory(atPath: products, withIntermediateDirectories: false)
-        return products
     }
 
     /// Preflight for the split. Returns the warnings the user has to see; throws on a blocker.
@@ -301,13 +323,13 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
     /// The placement rule itself is `splitPlacementProblem`, which does not touch the disk.
     public static func preflightDerivedDataSplit(
         bulk: String, products: String, volumes: [Volume], xcodeRunning: Bool, acknowledgeExperimental: Bool,
-        pathIsExternal decide: ((String) -> Bool)? = nil
+        pathIsExternal decide: ((String) -> Bool)? = nil, home: String = FileManager.default.homeDirectoryForCurrentUser.path
     ) throws -> [String] {
         if xcodeRunning { throw RuntimeOperationError("Xcode.app is running; it caches Locations and may overwrite the change. Quit Xcode first.") }
         try requireDirectory(bulk)
-        try requireDirectory(products)
+        try acceptProductsDirectory(products, home: home)
         let bulkResolved = resolve(bulk)
-        let productsResolved = resolve(products)
+        let productsResolved = resolveForPlacement(products)
         try shadowDataRefusal(resolved: bulkResolved)
         try shadowDataRefusal(resolved: productsResolved)
         let external = decide ?? { pathIsExternal(resolved: $0, volumes: volumes) }
@@ -484,6 +506,32 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
             throw RuntimeOperationError("\(path) is not an existing directory.")
         }
         guard FileManager.default.isWritableFile(atPath: path) else { throw RuntimeOperationError("\(path) is not writable.") }
+    }
+
+    /// An existing products folder has to be a writable directory. The usual folder may still be missing: Run creates
+    /// it, and only on the internal volume. Any other missing folder is refused.
+    private static func acceptProductsDirectory(_ products: String, home: String) throws {
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: products, isDirectory: &isDir) {
+            try requireDirectory(products)
+            return
+        }
+        guard sameDirectory(products, suggestedProductsDirectory(home: home)) else {
+            throw RuntimeOperationError("\(products) is not an existing directory.")
+        }
+        try validateSuggestedProductsParent(home: home)
+    }
+
+    /// A products folder that does not exist yet is placed by its parent, so an external parent is still refused.
+    private static func resolveForPlacement(_ path: String) -> String {
+        if FileManager.default.fileExists(atPath: path) { return resolve(path) }
+        let parent = (path as NSString).deletingLastPathComponent
+        guard parent != path, FileManager.default.fileExists(atPath: parent) else { return path }
+        return (resolve(parent) as NSString).appendingPathComponent((path as NSString).lastPathComponent)
+    }
+
+    private static func sameDirectory(_ a: String, _ b: String) -> Bool {
+        URL(fileURLWithPath: a, isDirectory: true).standardizedFileURL.path == URL(fileURLWithPath: b, isDirectory: true).standardizedFileURL.path
     }
 
     private static func resolve(_ path: String) -> String {
