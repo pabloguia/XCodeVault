@@ -7,7 +7,10 @@ import XCodeVaultCore
 /// Scanner / Doctor / CleanPlanner / VaultVerifier the CLI uses (ADR-0003).
 @main
 struct XCodeVaultApp: App {
-    @State private var model = AppModel()
+    /// Owns the model, so the quit guard can ask it whether an operation runs (R3), and so an operation outlives its
+    /// window being closed.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    private var model: AppModel { appDelegate.model }
 
     /// Before any tool runs: once the user grants Full Disk Access, every tool the app starts works inside
     /// that grant, so what `xcrun` resolves must not come from this process's inherited environment.
@@ -32,8 +35,54 @@ struct XCodeVaultApp: App {
                 // removed. XCodeVault has no document model, so "New" would have nothing to make.
             }
             CommandMenu(L10n.tr("app.menu.scan")) {
-                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r").disabled(model.isOperationRunning)
             }
+        }
+    }
+}
+
+/// The quit guard (R3 §9): while an operation runs, quitting asks first. Closing the window does not interrupt it — the
+/// model lives here, not in the window — so only quitting is guarded.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+
+    /// The decision is `AppModel.quitChoice` (review M1, `OperationKind.canBeStopped`): copy, verify, remove, export and
+    /// offload only keep running; a runtime deletion from Delete or a folder change can be stopped — its command terminated
+    /// and waited for — before quitting.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.tr("app.quit.title")
+        // The safe choice is the default (HIG): Return keeps the operation running.
+        alert.addButton(withTitle: L10n.tr("app.quit.keepRunning"))
+        switch model.quitChoice {
+        case .quitNow:
+            return .terminateNow
+        case .keepRunningOnly(let reason):
+            switch reason {
+            case .migration: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.migration")
+            case .export: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.export")
+            case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
+            }
+            alert.runModal()
+            return .terminateCancel
+        case .stopThenQuit:
+            alert.informativeText = L10n.tr("app.quit.message")
+            alert.addButton(withTitle: L10n.tr("app.quit.stopAndQuit")).hasDestructiveAction = true
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            Task { @MainActor in
+                let stopped = await model.stopOperationForQuit()
+                sender.reply(toApplicationShouldTerminate: stopped)
+                guard !stopped else { return }
+                // Never quit with a command still alive: say so, and stay.
+                let failed = NSAlert()
+                failed.alertStyle = .critical
+                failed.messageText = L10n.tr("app.quit.couldNotStop.title")
+                failed.informativeText = L10n.tr("app.quit.couldNotStop.message")
+                failed.runModal()
+            }
+            return .terminateLater
         }
     }
 }
@@ -106,6 +155,9 @@ final class AppModel {
     /// Does not clear `lastError`: the alert clears it when dismissed, and `perform(_:)` reports an outcome and
     /// then asks for a rescan, which would otherwise erase the error before it was seen.
     func refresh() async {
+        // No scan while an operation runs (review M3): it would walk the trees a copy is writing, on the same disk, and
+        // read a half-done journal. Every operation rescans when it ends.
+        guard !isOperationRunning else { return }
         guard scanGate.requestScan() else { return }
         let survey = environment.survey  // nil in the app: the real scan below runs
         repeat {
@@ -125,16 +177,34 @@ final class AppModel {
             }.value
             self.report = report; self.findings = findings; self.vaultChecks = checks; self.cleanPlan = plan
             // One row per operation (R4), the newest 100; merged before the cut, so no operation loses its start. The
-            // records themselves are not kept: nothing else reads them (R4 review M6).
-            self.historyRows = Array(JournalTimeline.rows(journal).prefix(Self.historyLimit))
+            // records themselves are not kept: the interrupted banner (R3) takes what it needs from them here. An operation
+            // the Run sheet is running is in progress, not interrupted.
+            let running = runningJournalIDs
+            self.historyRows = Array(JournalTimeline.rows(journal, running: running).prefix(Self.historyLimit))
+            self.interruptedMigrations = Self.interruptedBanner(journal, running: running)
             // A kind the new rows no longer have cannot stay hidden: the menu would not offer it (R4 review M8).
             self.historyHiddenKinds.formIntersection(JournalTimeline.kinds(in: self.historyRows))
             // The bucket views first: the Delete view's access row reads their list.
             updateBucketViews()
             revalidateDetailState()
             updateAccessBanner()
+            revalidateOperationAfterScan()
         } while scanGate.scanEnded()
     }
+
+    // MARK: - Run… (R3; the methods are in AppModel+Operations.swift)
+
+    /// The Run sheet, presented while non-nil. One at a time: there is one sheet, and **Run…** is refused while it runs.
+    var operationSheet: OperationSheetState?
+    /// The migrations the journal shows interrupted, with their recovery commands: the banner on Park, Run externally and
+    /// History.
+    var interruptedMigrations: [InterruptedMigration] = []
+    /// Held while an operation runs, so idle sleep does not interrupt a copy (HIG review §4).
+    var awakeActivity: (any NSObjectProtocol)?
+    /// The running operation's full log, when the environment keeps one.
+    var operationLogFile: OperationLogFile?
+    /// The running operation's child processes, which **Stop and Quit** stops (review M1).
+    var activeChildren: ChildProcesses?
 
     // MARK: - Root actions through the privileged helper (deliverable 4 of the 2026-09-27 permissions plan)
 
@@ -451,7 +521,8 @@ final class AppModel {
         deleteList = cleanPlan.map { DeleteList.make(plan: $0, report: report) }
     }
 
-    /// **Copy command**: exactly the row's command, never a variant of it. The app runs none of these (spec §6.4).
+    /// **Copy command**: exactly the row's command, never a variant of it. **Run…** (R3) runs the operation through Core
+    /// instead, never this string.
     func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {

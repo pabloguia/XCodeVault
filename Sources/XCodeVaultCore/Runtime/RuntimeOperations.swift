@@ -70,7 +70,14 @@ public struct RuntimeOperations: Sendable {
         if !dryRun {
             try journal.record(id: op, kind: .runtimeDelete, state: .started, summary: "simctl runtime delete \(identifier)\(keepAsset ? " --keep-asset" : "")")
         }
-        let r = try runner.run(Tools.xcrun, args, environment: env)
+        let r: CommandResult
+        do {
+            r = try runner.run(Tools.xcrun, args, environment: env)
+        } catch {
+            // A delete that could not start is a failure, not an operation left `started` (R3 review, as `offload` does).
+            if !dryRun { try journal.record(id: op, kind: .runtimeDelete, state: .failed, summary: "failed: \(error)") }
+            throw error
+        }
         if !dryRun {
             try journal.record(
                 id: op, kind: .runtimeDelete, state: r.succeeded ? .completed : .failed,

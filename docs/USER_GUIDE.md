@@ -65,17 +65,56 @@ What each way costs to undo:
 | Way | What it frees | Cost to undo | In the app |
 |---|---|---|---|
 | **Delete — comes back on demand** (Temporary) | Space now; it grows back as Xcode rebuilds or downloads it again | Rebuild or re-download time. Simulator devices are the exception: deleting one deletes its apps and their data, and they do not come back | **Delete** deletes the rows you select (see below) |
-| **Park on an external drive** (Temporary) | Space until you bring it back: a verified copy waits on your vault drive | Copy it back when you need it — no download | **Park** shows the commands; the app runs none of them |
-| **Run from an external drive** (Permanent) | Space for good: the data lives on the external drive and stops growing on this Mac | Nothing to download, but the drive must be connected while you work | **Run externally** shows the commands; the app runs none of them |
+| **Park on an external drive** (Temporary) | Space until you bring it back: a verified copy waits on your vault drive | Copy it back when you need it — no download | **Park** shows the commands; **Run…** runs them in the app (see [Running a command from the app](#running-a-command-from-the-app)) |
+| **Run from an external drive** (Permanent) | Space for good: the data lives on the external drive and stops growing on this Mac | Nothing to download, but the drive must be connected while you work | **Run externally** shows the commands; **Run…** runs them in the app |
 
 Everything that stays on this Mac — Archives among it, which nothing here ever offers to delete — is counted in the
 bar, never in a card.
 
 | View | What it shows | What it changes | How to undo |
 |---|---|---|---|
-| Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its markers (*experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…**; the confirmation shows the exact count. Above the table, the helper's row when a row needs root. Below it, in one panel folded by default (open when the table is empty): the planner's warnings, the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command**, and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted from the app: **Copy Command** puts the command on the clipboard, and you run it | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
-| Park | The categories that can be parked, each with its size, markers, the command and **Copy Command**, and the vault drive's state: none registered, not connected, connected but not usable, or ready | Nothing. **Copy Command** copies the command; you run it in Terminal, where it shows what it would do before doing it unless it is marked *acts immediately* | — |
-| Run externally | The categories that can run from an external drive, with the same rows | Nothing; as Park | — |
+| Delete | The cleanup plan — regenerable data only, grouped by category, with the cost to undo each row and its markers (*experimental*, and what a row lacks when it needs root). Select rows, then **Delete Selected…**; the confirmation shows the exact count. Above the table, the helper's row when a row needs root. Below it, in one panel folded by default (open when the table is empty): the planner's warnings, the CoreSimulator dyld cache (*experimental*) with its own control, the rows another tool deletes (simulator devices and runtimes) with **Copy Command** — and, for runtimes, **Run…** — and what the planner skipped, and why | Deletes the selected rows, or moves them to the Trash (the default). Simulator device sets (XCTest devices, Playground devices, SwiftUI Preview data) are first emptied with `simctl --set … delete all`, so only their emptied folder reaches the Trash. Rows that need root are never deleted by **Delete Selected…**. The dyld cache needs the privileged helper and its own confirmation. The rows another tool deletes are never deleted by **Delete Selected…**: **Copy Command** puts the command on the clipboard, and you run it — or, for a runtime, **Run…** runs `runtime delete` in the Run sheet | From the Trash, before you empty it — except those simulator devices, which are gone once `simctl` deletes them, and the dyld cache, which the helper deletes outright. Otherwise Xcode regenerates the data — see [Why did the space come back?](#why-did-the-space-come-back) |
+| Park | The categories that can be parked, each with its size, markers, the command, **Copy Command** and **Run…**, and the vault drive's state: none registered, not connected, connected but not usable, or ready. A migration that was interrupted shows a banner with the commands that recover it | **Copy Command** copies the command for Terminal. **Run…** opens the Run sheet (below): Archives are copied to the vault and verified, the originals kept; a runtime is offloaded (deleted here, its installer kept on the drive) | Archives: nothing to undo until you remove the originals, a separate step. Runtime: import its installer again |
+| Run externally | The categories that can run from an external drive, with the same rows | DerivedData and Archives: Xcode's folder setting, with **Undo**. Runtime Library: exports an installer | **Undo** in the sheet resets Xcode to its default folder; an exported installer is a file you can delete |
+
+### Running a command from the app
+
+**Run…** opens a sheet in three steps. Every step goes through the same Core code as the command line, and everything
+it changes is journaled and shows in History.
+
+1. **Review.** The choices the command line took as flags are controls: the vault (the only ready one is chosen for
+   you), a folder (always chosen in a folder panel), the runtime, the platform, and for DerivedData the checkbox "I
+   understand that unit tests may fail for projects built there" (`--i-understand-tests-may-fail`). The sheet shows
+   where the data comes from and goes, its size, what undoing it costs, Core's warnings, and the experimental badge
+   where the strategy is experimental. Anything that stops it — Xcode running, the vault offline, too little space, no
+   installer in the library yet, and for an offload or a runtime deletion a simulator, `simctl` or a test run still
+   running — disables the button and says why; **Check Again** reviews it again once that has changed. For an offload
+   whose library has no installer,
+   **Export Installer First** runs the export in the same sheet and comes back to the offload.
+2. **Confirm.** One button whose title is the exact action, such as "Copy 18 GB of Archives to the vault PABLO". When
+   it deletes something on this Mac it is styled as destructive and is not the default: Return cancels.
+3. **Running.** The stage (checking, copying, verifying, deleting, exporting, applying), a progress bar — measured
+   while copying to the vault, otherwise moving without a measure (an export shows only the time elapsed: whether its
+   folder grows during the download has not been measured) — and the time elapsed. **Show Details** opens the live
+   log: each command as it runs and everything it prints, following the newest line while **Follow output** is on.
+   **Copy Log** copies it; the whole log is also kept in a file whose path the sheet shows, also after it ends. It
+   cannot be stopped from the app once it starts, and there is no rescan while it runs. Quitting depends on what it is
+   doing: while it copies, verifies or removes an original, exports an installer or offloads a runtime, the app offers
+   only **Keep Running** — stopping there would leave a half-written copy, an export nobody has tested stopping, or an
+   offload whose runtime may already be gone while its record says it failed. While it deletes a runtime (Delete) or
+   changes a folder, **Stop and Quit** stops the command, waits for it to end, records the
+   operation as failed, and then quits.
+
+When it ends the sheet says what happened, with **Show in History**. After Archives are copied and verified, **Remove
+Original…** frees their space on this Mac: it needs the checkbox "I confirm deleting non-regenerable data (Archives)"
+and a confirmation, compares the original with the vault copy again, and deletes nothing if they differ. **Remove
+Original…** is offered only in this sheet: once you close it, the originals stay where they are, and neither the app
+nor `externalize` removes them later (`externalize` refuses because the vault copy already exists) — delete them
+yourself once you have checked the vault copy, or keep both. After a folder change, **Undo** puts back the folder Xcode used before, or resets it to the default when it
+used the default; the button says which. If a copy fails, the originals are untouched; when part of the copy may still
+be on the vault, the sheet and the banner give the `migration abort <id>` command that removes it. One operation runs
+at a time. Restoring from the vault, and resuming or aborting an interrupted migration, are still command-line only:
+the banner gives the commands.
 
 ### Details
 

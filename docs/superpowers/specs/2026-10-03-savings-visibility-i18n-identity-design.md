@@ -263,6 +263,10 @@ Sidebar, two groups:
   execution of `externalize` / `runtime offload` / `locations set-*` is a follow-up that needs its own
   spec and the migration-safety review; this design does not add a GUI writer.
 
+  > **Superseded 2026-10-04 (R3, ADR-0011):** at the user's request the app now runs these commands from a **Run…**
+  > button beside **Copy command**, with a review, a progress bar and the live log. Removing an original stays a
+  > separate step, and the migration-safety review is required before merge.
+
 ## 7. S5 — Visual identity
 
 - Concept: a rounded-square vault door seen front-on, its dial's handle leaving the door as an outward arrow —
