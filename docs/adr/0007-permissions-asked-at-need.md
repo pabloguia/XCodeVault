@@ -47,6 +47,12 @@ since OS X 10.7.
    pane, detect the grant with H15's indicator (can this process open `TCC.db`, reading nothing),
    and continue when the user comes back.
 
+**Note (2026-10-04, R4).** Point 3 gained one step before the pane opens: one read-only `open(2)` of
+`~/Library/Safari` (`FullDiskAccessRegistration`), meant to make macOS list the app in the pane so the user
+only turns its switch on. This is H16 and it is **unverified**: the copy next to the button is hedged ("should
+now be in the list … If it isn't there, add it with +"), and a negative manual check removes the step. It
+reads nothing and grants nothing; the switch stays the user's.
+
 ## Consequences
 
 - A first run that needs no trust, and one privileged surface to review.

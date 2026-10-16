@@ -70,3 +70,17 @@ extension SavingsBucket {
 
     var color: Color { Color(nsColor: nsColor) }
 }
+
+/// History's kind badges (R4), drawn like the bucket tokens: appearance-aware, from `JournalTimeline.Kind`'s light and
+/// dark hexes, each clearing 3:1 on the window and control backgrounds (`HistoryKindPaletteTests`). A symbol tint and a
+/// fill only — the kind's name is `.primary` text, and the symbol and the name always come with the color.
+extension JournalTimeline.Kind {
+    var nsColor: NSColor {
+        let light = lightColorHex, dark = darkColorHex
+        return NSColor(name: NSColor.Name("XCodeVault.historyKind." + rawValue)) { appearance in
+            NSColor(hex: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
+        }
+    }
+
+    var color: Color { Color(nsColor: nsColor) }
+}

@@ -27,6 +27,30 @@ func screenFitStressSurvey() -> AppModel.Survey {
             filesystemPersonality: "Case-sensitive APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: true, isEjectable: true,
             busProtocol: "USB", isSolidState: false, isWritable: true, ownersEnabled: true, totalBytes: 64 * gb, freeBytes: 1 * gb, isBootVolume: false)
     }
+    // R4: Health's cards with long folded text and per-device lines, and a History of operations over many days.
+    survey.1 += (1...25).map { i in
+        Finding(
+            id: "stress-\(i)", severity: [.info, .warning, .error, .critical][i % 4], title: "Stress finding \(i) with a title long enough to wrap",
+            detail: String(repeating: "A sentence of explanation that goes on for a while. ", count: 8), path: "/Users/tester/Library/Developer/x\(i)",
+            remediation: "Do the first thing. Then the second, which takes longer to say.", evidence: "fixture", bytes: UInt64(i) * gb,
+            parts: Finding.Parts(
+                explanation: "The explanation alone. More of it.", lines: (1...6).map { Finding.Line(label: "UDID-\(i)-\($0)", bytes: UInt64($0) * gb) },
+                notOfferedByClean: "reported for accounting only."))
+    }
+    let kinds: [JournalEntry.Kind] = [.clean, .runtimeDelete, .runtimeOffload, .migration, .xcodeLocationChange]
+    survey.4 += (1...120).flatMap { i -> [JournalEntry] in
+        let at = Date(timeIntervalSince1970: 1_800_000_000 - Double(i) * 30_000)
+        let kind = kinds[i % kinds.count]
+        return [
+            JournalEntry(
+                id: "stress-op\(i)", sequence: 1000 + 2 * i, timestamp: at, kind: kind, state: .started,
+                summary: "Stress operation \(i) with a summary long enough to be cut in its row and given whole in the tooltip", paths: [], bytes: nil,
+                detail: kind == .migration ? ["direction": "externalize"] : [:], toolVersion: "t"),
+            JournalEntry(
+                id: "stress-op\(i)", sequence: 1001 + 2 * i, timestamp: at, kind: kind, state: i % 7 == 0 ? .failed : .completed, summary: "done",
+                paths: [], bytes: UInt64(i) * 1_000_000, detail: [:], toolVersion: "t"),
+        ]
+    }
     return survey
 }
 

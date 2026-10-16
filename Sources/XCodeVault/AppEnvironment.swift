@@ -15,6 +15,9 @@ struct AppEnvironment: Sendable {
     var open: @MainActor @Sendable (URL) -> Void
     /// **Copy command** in the Park, Run externally and Delete views: the string goes to the pasteboard as is.
     var copy: @MainActor @Sendable (String) -> Void
+    /// Just before the Full Disk Access pane opens: one attempt at a folder Full Disk Access guards, so macOS lists the
+    /// app in the pane (`FullDiskAccessRegistration`, R4). A no-op unless set: a test never touches TCC.
+    var registerForFullDiskAccess: @Sendable () -> Void = {}
 
     static let live = AppEnvironment(
         survey: nil, fullDiskAccess: { FullDiskAccessProbe().state() }, helper: LiveHelper(),
@@ -24,5 +27,6 @@ struct AppEnvironment: Sendable {
         copy: { text in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
-        })
+        },
+        registerForFullDiskAccess: { _ = FullDiskAccessRegistration().attempt() })
 }

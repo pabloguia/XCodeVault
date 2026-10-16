@@ -1972,3 +1972,29 @@ still 0 entries with its mtime at 2026-09-25 19:19. Two instruments, read separa
 
 Limits: the tracker says a runtime was used, not by whom or how, so this cannot be counted as
 interactive use. These are the agent's own commands and are not in an evidence file.
+
+## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **UNVERIFIED**, evidence pending)*
+
+**Claim.** One `open(2)` of a directory that TCC guards under Full Disk Access (`SystemPolicyAllFiles`) —
+`~/Library/Safari`, reading nothing — makes macOS list the calling app in System Settings ▸ Privacy &
+Security ▸ Full Disk Access, switched off, so the user only turns its switch on instead of adding the app
+with **+**. R4 ships it as `FullDiskAccessRegistration`, called just before the app opens the pane.
+
+**Why it is plausible.** It is the common technique for this; TCC records clients that ask for a guarded
+resource. **Counter-data-point:** the app already opens H15's indicator (`/Library/Application
+Support/com.apple.TCC/TCC.db`) on every check, and the user still found it missing from the list. That
+path is also protected by System Integrity Protection, which may refuse before TCC is asked, so it does not
+falsify the Safari variant — but it shows that "the app touched something guarded" is not enough.
+
+**Status: UNVERIFIED.** No API reports the list; tests replace the attempt with a closure and never touch
+TCC. Until the check below is recorded, the app's copy is hedged: "XCodeVault should now be in the list —
+turn its switch on. If it isn't there, add it with +."
+
+**Manual procedure (one macOS version is enough to start).**
+1. Use a build whose app is **not** yet in the Full Disk Access list (`tccutil reset SystemPolicyAllFiles
+   <bundle id>` is the user's call, not the agent's), and note how it is signed (ad hoc or Developer ID).
+2. In XCodeVault, click **Open Full Disk Access Settings**.
+3. In the pane that opens, note whether XCodeVault is listed (name, or a path for an ad hoc build) and
+   whether its switch is off.
+4. Record macOS version and build, the signing, and the result in `COMPATIBILITY_MATRIX.md` and here. A
+   negative result removes the "should now be in the list" sentence and the attempt (ADR-0007 note).
