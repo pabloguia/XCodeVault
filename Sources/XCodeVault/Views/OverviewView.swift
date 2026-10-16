@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import XCodeVaultCore
 
-/// The Overview (spec 2026-10-03 §6.2): the disk bar, three cards — Temporary (delete), Temporary (park), Permanent
-/// (run externally) — the note that they are alternatives with the union total, at most one access banner and the
+/// The Overview (spec 2026-10-03 §6.2): the disk bar, three cards — Delete and Park (the space comes back), Run
+/// Externally (the space stays free) — the note that they are alternatives with the union total, at most one access banner and the
 /// critical findings. Every number comes from Core (`OverviewCards`, `DiskBar`, `AccessChecklist.banner`); this only
 /// draws them.
 struct OverviewView: View {
@@ -13,15 +13,13 @@ struct OverviewView: View {
     let access: AccessChecklist.Row?
     var act: @MainActor (AccessChecklist.Action) -> Void = { _ in }
     var review: @MainActor (SavingsBucket) -> Void = { _ in }
+    /// **Show in Health** beside the critical findings (R5, HIG review O4).
+    var showHealth: @MainActor () -> Void = {}
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text.l10n(
-                    L10n.tr(
-                        "app.overview.host", report.host.macOSVersion, report.host.architecture, ByteCount.format(report.host.dataVolumeFreeBytes),
-                        ByteCount.format(report.host.dataVolumeTotalBytes))
-                ).font(.headline)
+                // The host line is the window's subtitle (HIG review N2): what can be reclaimed comes first.
                 if let access { GroupBox { AccessRowView(row: access, act: act) } }
                 if report.sizesMeasured {
                     DiskBarView(bar: DiskBar(host: report.host, savings: report.savings))
@@ -38,16 +36,33 @@ struct OverviewView: View {
                 if !report.warnings.isEmpty {
                     GroupBox(L10n.tr("app.overview.warnings.title")) {
                         VStack(alignment: .leading) {
-                            ForEach(report.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+                            // Primary text; only the symbol is tinted (HIG review O3).
+                            ForEach(report.warnings, id: \.self) { warning in
+                                Label {
+                                    Text(verbatim: warning).fixedSize(horizontal: false, vertical: true)
+                                } icon: {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                }
+                            }
                         }
                     }
                 }
                 let critical = findings.filter { $0.severity >= .error }
                 if !critical.isEmpty {
+                    // Health, as the sidebar calls it, with a way to go there; each severity as its symbol (HIG review O4).
                     GroupBox(L10n.plural("app.overview.doctor.issues", count: critical.count)) {
-                        VStack(alignment: .leading) {
-                            ForEach(critical) { Text.l10n(L10n.tr("app.overview.doctor.issue", AppText.severity($0.severity), $0.title)) }
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(critical) { finding in
+                                Label {
+                                    Text(verbatim: finding.title).fixedSize(horizontal: false, vertical: true)
+                                } icon: {
+                                    Image(systemName: finding.severity.symbolName).foregroundStyle(HealthCardView.tint(finding.severity))
+                                        .accessibilityLabel(Text(verbatim: AppText.severity(finding.severity)))
+                                }
+                            }
+                            Button(L10n.tr("app.overview.showInHealth"), action: showHealth)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 Text.l10n(L10n.tr("app.overview.footer")).font(.footnote).foregroundStyle(.secondary)
@@ -91,15 +106,17 @@ struct OverviewView: View {
 struct OverviewCardView: View {
     let card: OverviewCards.Card
     let review: @MainActor () -> Void
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 BucketSymbol(bucket: card.bucket, decorative: true).font(.title3)
-                Text.l10n(card.isPermanent ? L10n.tr("savings.permanent.title") : L10n.tr("savings.temporary.title"))
-                    .font(.caption).bold().foregroundStyle(.secondary)
+                Text.l10n(AppText.cardEyebrow(permanent: card.isPermanent)).font(.caption).bold().foregroundStyle(.secondary)
             }
+            // What it promises and what undoing it costs are the title's tooltip and the bucket view's header (HIG review O2).
             Text(verbatim: card.bucket.localizedTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
+                .help(card.bucket.localizedPromise + "\n" + card.bucket.localizedUndoCost)
             switch card.amount {
             case .none: Text(verbatim: OverviewView.text(card.amount)).font(.title3).foregroundStyle(.secondary)
             case .upTo, .atLeast: Text(verbatim: OverviewView.text(card.amount)).font(.title2).bold().monospacedDigit()
@@ -112,13 +129,11 @@ struct OverviewCardView: View {
             if let lossy = card.losesUserDataBytes {
                 // The Temporary headline is not all recoverable (S3 review): what deleting loses for good, on the card.
                 Label {
-                    Text.l10n(L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout)
+                    Text.l10n(L10n.tr("app.overview.card.losesUserData", ByteCount.format(lossy))).font(.callout).fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
             }
-            Text(verbatim: card.bucket.localizedPromise).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: card.bucket.localizedUndoCost).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(L10n.tr("app.overview.card.review"), action: review)
                 // Three cards, three buttons: VoiceOver hears which bucket each one reviews.
@@ -129,7 +144,7 @@ struct OverviewCardView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
         .overlay(alignment: .top) {
             // The bucket color as a fill, never as text.
-            UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(card.bucket.color).frame(height: 4)
+            UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10).fill(card.bucket.color).frame(height: contrast == .increased ? 6 : 4)
         }
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor)))
     }
@@ -139,6 +154,8 @@ struct OverviewCardView: View {
 /// names every segment with a symbol, a title and a size, so no segment is told by color alone.
 struct DiskBarView: View {
     let bar: DiskBar
+    /// Increase Contrast outlines every segment and chip (R5, HIG review X9).
+    @Environment(\.colorSchemeContrast) private var contrast
     /// Under the bar; the Overview's says the bar counts each item once. Nil for none.
     var caption: String? = L10n.tr("app.overview.bar.caption")
     var accessibilityTitle: String = L10n.tr("app.overview.bar.a11y")
@@ -151,12 +168,15 @@ struct DiskBarView: View {
                 HStack(spacing: 1) {
                     ForEach(Array(bar.segments.enumerated()), id: \.offset) { _, segment in
                         Rectangle().fill(Self.fill(segment.kind))
+                            .overlay { if contrast == .increased { Rectangle().strokeBorder(Color(nsColor: .separatorColor)) } }
                             .frame(width: max(geometry.size.width * Double(segment.bytes) / Double(total) - 1, 0))
                     }
                 }
             }
             .frame(height: barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 5))
+            // A hairline around the bar, so the Free part never disappears into a dark window (HIG review O6).
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
             // The legend says the same thing in words.
             .accessibilityHidden(true)
             // The bar counts each item once, the cards every option: say so, or the same title shows two numbers.
@@ -178,7 +198,9 @@ struct DiskBarView: View {
 
     private func legendItem(_ segment: DiskBar.Segment) -> some View {
         HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10).accessibilityHidden(true)
+            RoundedRectangle(cornerRadius: 2).fill(Self.fill(segment.kind)).frame(width: 10, height: 10)
+                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color(nsColor: .separatorColor)))
+                .accessibilityHidden(true)
             switch segment.kind {
             case .bucket(let bucket): BucketSymbol(bucket: bucket, decorative: true)
             case .otherData: Image(systemName: "doc.on.doc").foregroundStyle(.secondary).accessibilityHidden(true)
@@ -203,7 +225,7 @@ struct DiskBarView: View {
         switch kind {
         case .bucket(let bucket): bucket.color
         case .otherData: Color(nsColor: .systemGray).opacity(0.55)
-        case .free: Color(nsColor: .quaternaryLabelColor)
+        case .free: Color(nsColor: .tertiarySystemFill)
         }
     }
 }

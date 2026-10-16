@@ -11,17 +11,37 @@ public struct NavigationHistory<Place: Equatable & Sendable>: Sendable, Equatabl
         self.limit = max(1, limit)
     }
 
-    public var canGoBack: Bool { !places.isEmpty }
+    /// The places **Back** left, newest last, for **Forward** (R5, HIG review N1). A new move clears them, as a browser does.
+    public private(set) var forwardPlaces: [Place] = []
 
-    /// Records leaving `from` for `to`. Nothing when they are the same place.
+    public var canGoBack: Bool { !places.isEmpty }
+    public var canGoForward: Bool { !forwardPlaces.isEmpty }
+
+    /// Records leaving `from` for `to`. Nothing when they are the same place. A new move forgets what Forward offered.
     public mutating func moved(from: Place, to: Place) {
         guard from != to else { return }
         places.append(from)
         if places.count > limit { places.removeFirst(places.count - limit) }
+        forwardPlaces = []
     }
 
     /// The place to go back to, removed from the history; nil when there is none.
     public mutating func back() -> Place? {
         places.popLast()
+    }
+
+    /// **Back** from `current`: the place to go back to, with `current` kept for **Forward**; nil when there is none.
+    public mutating func back(from current: Place) -> Place? {
+        guard let previous = places.popLast() else { return nil }
+        forwardPlaces.append(current)
+        return previous
+    }
+
+    /// **Forward** from `current`: the place Back left, with `current` back in the history; nil when there is none.
+    public mutating func forward(from current: Place) -> Place? {
+        guard let next = forwardPlaces.popLast() else { return nil }
+        places.append(current)
+        if places.count > limit { places.removeFirst(places.count - limit) }
+        return next
     }
 }

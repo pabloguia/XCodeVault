@@ -183,6 +183,9 @@ extension AppModel {
         /// Offload's `simctl runtime delete`: the service may finish the delete after the client is stopped, and the journal
         /// would then say `failed` for a runtime that is gone — Doctor would no longer offer the offload's way back.
         case offload
+        /// A Delete view clean (`CleanExecutor`), which deletes or trashes item by item: stopping it part-way is untested
+        /// (R5 safety review, pre-existing gap).
+        case clean
     }
 
     /// The decision per stage and kind. Copying, verifying and removing an original keep running; so do an export and an
@@ -206,8 +209,17 @@ extension AppModel {
 
     var quitChoice: QuitChoice {
         // Running implies a sheet (`isOperationRunning`), so a kind always reaches the rule; without one, nothing runs.
-        guard let sheet = operationSheet else { return .quitNow }
-        return Self.quitChoice(running: isOperationRunning, stage: sheet.stage, kind: sheet.kind)
+        let operation = operationSheet.map { Self.quitChoice(running: isOperationRunning, stage: $0.stage, kind: $0.kind) } ?? .quitNow
+        // A clean running beside it keeps the app open whatever the operation allows: it cannot be stopped (R5).
+        return Self.quitChoice(operation: operation, cleaning: isCleaning)
+    }
+
+    /// The operation's choice, with a running clean on top (R5): a clean only ever keeps running, so it overrides quitting
+    /// now and Stop and Quit, which would leave the clean half done; an operation that keeps running keeps its own reason.
+    static func quitChoice(operation: QuitChoice, cleaning: Bool) -> QuitChoice {
+        guard cleaning else { return operation }
+        if case .keepRunningOnly = operation { return operation }
+        return .keepRunningOnly(.clean)
     }
 
     /// Kept for the guard's callers: whether quitting asks first.

@@ -47,19 +47,30 @@ public enum AccessChecklist {
         public let blocksFolders: Int?
 
         /// What to do once the button has done its part, said next to it: the Full Disk Access button tries to register
-        /// the app and opens the pane (`FullDiskAccessRegistration`). The registration is unverified (H16), so the text
-        /// is hedged — the app *should* be in the list, and if not, **+** adds it. Nil for every other row. It never
-        /// claims the app turns the switch on: only the user can.
+        /// the app and opens the pane (`FullDiskAccessRegistration`). H16 is verified on macOS 26.7.1 (the user's check,
+        /// 2026-10-04), so the text says the app is in the list; other versions are unmeasured, so it keeps the **+**
+        /// fallback. Nil for every other row. It never claims the app turns the switch on: only the user can.
         public var hintKey: String? { action == .openFullDiskAccessSettings ? Key.fdaHintInList : nil }
+
+        /// The tooltip beside a row's guidance (R5, HIG review X6): the guidance itself is one line, and the manual route
+        /// — the commands that print the step to run — is here. Nil for every row with a button.
+        public var helpKey: String? { action == .guidanceOnly ? Key.helperManualRoute : nil }
 
         /// The need's name: the titles `xcodevaultctl permissions` prints.
         public var titleKey: String { need == .fullDiskAccess ? Key.fdaTitle : Key.helperTitle }
+
+        /// Whether the missing access holds anything back (R5, HIG review A1). Full Disk Access that is off while every
+        /// folder the scan reached was read (`fdaWhyProtected`) is optional: the row says "Off" with a neutral symbol, not
+        /// a failure. Every other row is needed or met.
+        public var isNeeded: Bool { !(need == .fullDiskAccess && state == .missing && whyKey == Key.fdaWhyProtected) }
 
         /// The row's status word, shown beside a symbol (never color alone).
         public var statusKey: String {
             switch (need, state) {
             case (.fullDiskAccess, .granted): Key.fdaStatusGranted
             case (.fullDiskAccess, .unknown): Key.fdaStatusUnknown
+            // Optional, not missing: nothing the scan reached was refused (`isNeeded`).
+            case (.fullDiskAccess, .missing) where whyKey == Key.fdaWhyProtected: Key.fdaStatusOff
             // Full Disk Access has no approval step and is in every build: only "missing" is left.
             case (.fullDiskAccess, _): Key.fdaStatusMissing
             case (.privilegedHelper, .granted): Key.helperStatusEnabled
@@ -77,6 +88,8 @@ public enum AccessChecklist {
         public static let fdaStatusGranted = "app.access.status.fda.granted"
         public static let fdaStatusMissing = "app.access.status.fda.missing"
         public static let fdaStatusUnknown = "app.access.status.fda.unknown"
+        /// Full Disk Access off while nothing needs it (`Row.isNeeded`).
+        public static let fdaStatusOff = "app.access.status.fda.off"
         public static let helperStatusEnabled = "app.access.status.helper.enabled"
         public static let helperStatusMissing = "app.access.status.helper.missing"
         public static let helperStatusAwaitingApproval = "app.access.status.helper.awaitingApproval"
@@ -99,6 +112,11 @@ public enum AccessChecklist {
         /// What to do instead in a build without the helper. A condition, not an instruction: the helper needs a signed build
         /// that includes it, and none is released yet (#30); where there is a manual route, `doctor` or `vault init` prints it.
         public static let helperActionSignedReleaseOrCLI = "app.access.helper.action.signedReleaseOrCLI"
+        /// The guidance's manual route, in its tooltip (`Row.helpKey`).
+        public static let helperManualRoute = "app.access.helper.action.manualRoute"
+        /// **Relaunch XCodeVault** and what it is for (`offersRelaunch`).
+        public static let fdaActionRelaunch = "app.access.fda.action.relaunch"
+        public static let fdaHintRelaunch = "app.access.fda.hint.relaunch"
     }
 
     /// Every key a row can return.
@@ -107,8 +125,21 @@ public enum AccessChecklist {
         Key.fdaActionOpenSettings, Key.fdaActionRecheck, Key.helperWhyEnabled, Key.helperWhyRootOnlyBytes, Key.helperWhyRootActions,
         Key.helperActionInstall, Key.helperActionApprove, Key.helperActionSignedReleaseOrCLI, Key.fdaTitle, Key.helperTitle, Key.fdaStatusGranted,
         Key.fdaStatusMissing, Key.fdaStatusUnknown, Key.helperStatusEnabled, Key.helperStatusMissing, Key.helperStatusAwaitingApproval,
-        Key.helperStatusUnavailable, Key.fdaHintInList,
+        Key.helperStatusUnavailable, Key.fdaHintInList, Key.fdaStatusOff, Key.helperManualRoute, Key.fdaActionRelaunch, Key.fdaHintRelaunch,
     ]
+
+    /// Whether the hint next to the Full Disk Access button shows (R5, HIG review A2): only once the user has opened the
+    /// pane from the app, when the next step is theirs. Before that the button says enough.
+    public static func showsHint(_ row: Row, openedSettings: Bool) -> Bool { row.hintKey != nil && openedSettings }
+
+    /// Whether the Full Disk Access row offers **Relaunch XCodeVault** (R5, the user's check of H16 on 2026-10-04: after
+    /// the switch was turned on, macOS recommended relaunching). Once the user has opened the pane from the app and this
+    /// process still cannot open the indicator: a grant the running process does not see yet looks exactly like no
+    /// grant, so the button comes with "if you turned it on". Never for a granted or undetermined state, and never while
+    /// something runs that the quit guard would keep (`busy`, R5 review I1): a relaunch then would leave two instances.
+    public static func offersRelaunch(_ row: Row, openedSettings: Bool, busy: Bool) -> Bool {
+        row.need == .fullDiskAccess && row.state == .missing && openedSettings && !busy
+    }
 
     /// - Parameters:
     ///   - savings: `ScanReport.savings`; its `isLowerBound` says some counted item could not be fully read.

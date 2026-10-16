@@ -37,6 +37,35 @@ public struct DriveRow: Sendable, Equatable, Identifiable {
 
     /// Long warnings (IOPS, case-sensitivity) start folded behind a one-line count; blockers are always shown.
     public var warningsStartCollapsed: Bool { !qualification.warnings.isEmpty }
+
+    /// Whether the row shows whether the drive can be a vault, and why not (R5, HIG review DR1). Not for the boot volume:
+    /// the disk being freed is never a vault candidate, and that is expected, not an error. The row says "Boot volume".
+    public var showsQualificationDetail: Bool { !(isBootGroup || volume.isBootVolume) }
+
+    /// A vault's one verdict (R5, HIG review DR3), combining the vault check and the drive's qualification so the row
+    /// never shows "verified" beside "unsuitable" without saying which wins. Nil without a vault. The vault check decides
+    /// whether it can be used — Park uses a vault the check finds usable — and the qualification whether something on
+    /// the drive needs attention.
+    public enum VaultVerdict: String, Sendable, CaseIterable {
+        /// Usable, on a drive that qualifies.
+        case ready
+        /// Usable, on a drive that qualifies with warnings.
+        case readyWithWarnings
+        /// Usable, but the drive no longer qualifies (its blockers say why): fix it before relying on it.
+        case needsAttention
+        /// The vault check says it cannot be used (`VaultVolumeCheck.isUsable` is false); its detail says why.
+        case notUsable
+    }
+
+    public var vaultVerdict: VaultVerdict? {
+        guard let vault else { return nil }
+        guard vault.isUsable else { return .notUsable }
+        return switch qualification.verdict {
+        case .suitable: .ready
+        case .suitableWithWarnings: .readyWithWarnings
+        case .unsuitable: .needsAttention
+        }
+    }
 }
 
 public struct DrivesList: Sendable, Equatable {

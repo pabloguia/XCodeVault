@@ -3,20 +3,19 @@ import AppKit
 import SwiftUI
 import XCodeVaultCore
 
-/// The top of a bucket view: the bucket's symbol, title and color band, what it promises and what undoing it costs.
-/// Never color alone: the symbol and the title say which bucket this is, and the color is a fill.
+/// The top of a bucket view (R5, HIG review D6, X4): one line — the bucket's symbol and what it promises — beside the color
+/// band; the window title already names the view. The bucket's full title and what undoing it costs are its tooltip.
+/// Never color alone: the symbol and the words say which bucket this is, and the color is a fill.
 struct BucketHeaderView: View {
     let bucket: SavingsBucket
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                BucketSymbol(bucket: bucket, decorative: true).font(.title2)
-                Text(verbatim: bucket.localizedTitle).font(.title3).bold()
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            BucketSymbol(bucket: bucket, decorative: true).font(.title3)
             Text(verbatim: bucket.localizedPromise).font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text(verbatim: bucket.localizedUndoCost).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.vertical, 2)
         .padding(.leading, 10)
+        .help(bucket.localizedTitle + "\n" + bucket.localizedUndoCost)
         .overlay(alignment: .leading) {
             // The bucket color as a fill, never as text.
             RoundedRectangle(cornerRadius: 2).fill(bucket.color).frame(width: 4).accessibilityHidden(true)
@@ -32,7 +31,7 @@ struct MarkerBadges: View {
         HStack(spacing: 4) {
             ForEach(Array(markers.enumerated()), id: \.offset) { _, marker in
                 Label {
-                    Text(verbatim: marker.localizedText)
+                    Text(verbatim: AppText.marker(marker))
                 } icon: {
                     Image(systemName: Self.symbol(marker))
                 }
@@ -40,6 +39,7 @@ struct MarkerBadges: View {
                 .font(.caption)
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(Color(nsColor: .quaternaryLabelColor), in: Capsule())
+                .help(AppText.marker(marker))
             }
         }
     }
@@ -106,10 +106,10 @@ struct PlanRowView: View {
                     copies += 1
                     AccessibilityNotification.Announcement(L10n.tr("app.plan.copied")).post()
                 } label: {
-                    Label(
-                        copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copyCommand"),
-                        systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? L10n.tr("app.plan.copied") : L10n.tr("app.plan.copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
+                // Secondary to the command beside it (HIG review P4).
+                .buttonStyle(.bordered).controlSize(.small)
                 // Several rows, several buttons: VoiceOver hears whose command each one copies.
                 .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.copyCommand.a11y", row.categoryName)))
                 .task(id: copies) {
@@ -153,13 +153,7 @@ struct PlanView: View {
             VStack(alignment: .leading, spacing: 14) {
                 BucketHeaderView(bucket: bucket)
                 InterruptedMigrationsBanner(items: interrupted, copy: copyCommand)
-                if let vault {
-                    Label {
-                        InlineCodeText(AppText.vaultStatus(vault)).font(.callout)
-                    } icon: {
-                        Image(systemName: Self.vaultSymbol(vault))
-                    }
-                }
+                if let vault { VaultStatusRow(status: vault, copy: copyCommand) }
                 InlineCodeText(L10n.tr("app.plan.intro")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if rows.isEmpty {
                     Text.l10n(L10n.tr("cli.plan.empty")).foregroundStyle(.secondary)
@@ -190,6 +184,47 @@ struct PlanView: View {
     }
 }
 
+/// Park's vault line as a status row (R5, HIG review P2): the state's symbol, tinted only where it means something — ready,
+/// needs attention — beside its words; with no vault, the command that sets one up and a **Copy** button instead of a
+/// command in a sentence.
+struct VaultStatusRow: View {
+    let status: VaultStatus
+    let copy: @MainActor (String) -> Void
+    /// The command `vault init` takes, with the drive's name to fill in. A command is never translated.
+    static let initCommand = "xcodevaultctl vault init /Volumes/<name>"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label {
+                Text(verbatim: AppText.vaultStatus(status)).font(.callout).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: PlanView.vaultSymbol(status)).foregroundStyle(Self.tint(status)).accessibilityHidden(true)
+            }
+            if status == .noVault {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(verbatim: Self.initCommand).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    Button {
+                        copy(Self.initCommand)
+                    } label: {
+                        Label(L10n.tr("app.plan.copy"), systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                }
+                .padding(.leading, 28)
+            }
+        }
+    }
+
+    /// The symbol's tint; the words say the same.
+    static func tint(_ status: VaultStatus) -> Color {
+        switch status {
+        case .ready: .green
+        case .needsAttention: .orange
+        case .noVault, .offline: .secondary
+        }
+    }
+}
+
 /// Delete (spec §6.4): today's Clean view, grouped by category with a cost-to-undo column and markers; the same Trash
 /// toggle, exact-count confirmation and journaling (`CleanExecutor` through `AppModel.applyClean`). The rows another tool
 /// deletes (simulator devices, runtimes) are listed with their command and are not selectable here.
@@ -202,6 +237,8 @@ struct DeleteView: View {
     @State private var confirmPrivileged: CleanAction?
     /// The notes panel's state once the user opened or closed it; until then `DeleteNotes.startsExpanded` decides.
     @State private var notesExpanded: Bool?
+    /// The table has the keyboard on arrival, so the arrow keys and ⌘⌫ work at once (HIG review X7).
+    @FocusState private var tableFocused: Bool
 
     /// `notesInitiallyExpanded` is for `ScreenFitTests`, which measures the panel opened while the table has rows; the app
     /// passes nil and `DeleteNotes.startsExpanded` decides.
@@ -230,6 +267,7 @@ struct DeleteView: View {
                 // A rescan keeps only the rows still listed selected (`DeleteList.retained`).
                 if let newList { selection = newList.retained(selection) } else { selection = [] }
             }
+            .defaultFocus($tableFocused, true)
             .confirmationDialog(
                 useTrash
                     ? L10n.plural("app.clean.confirm.trash", count: list.deletable(selected: selection).count)
@@ -243,10 +281,11 @@ struct DeleteView: View {
                     }
                 }
             } message: {
-                Text.l10n(L10n.tr("app.clean.confirm.message"))
+                // What undoing costs for exactly these rows (HIG review D3), never a claim about the whole list.
+                Text.l10n(AppText.deleteConfirmation(costs: list.undoCosts(selected: selection), useTrash: useTrash))
             }
             .confirmationDialog(
-                confirmPrivileged?.privilegedAction?.title(in: L10n.locale) ?? "",
+                confirmPrivileged?.privilegedAction.map(AppText.privilegedConfirmTitle) ?? "",
                 isPresented: Binding(get: { confirmPrivileged != nil }, set: { if !$0 { confirmPrivileged = nil } }),
                 presenting: confirmPrivileged
             ) { a in
@@ -256,8 +295,18 @@ struct DeleteView: View {
             } message: { _ in
                 Text.l10n(L10n.tr("app.clean.privileged.message"))
             }
+        } else if model.isScanning {
+            // A labelled progress while the plan is being made (HIG review N8), never a bare spinner.
+            ScanningView()
         } else {
-            ProgressView()
+            // No plan and no scan running (a scan that failed): say so, and offer the scan again.
+            ContentUnavailableView {
+                Label(L10n.tr("app.delete.unavailable.title"), systemImage: "arrow.clockwise")
+            } description: {
+                Text.l10n(L10n.tr("app.delete.unavailable.detail"))
+            } actions: {
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }
+            }
         }
     }
 
@@ -281,10 +330,32 @@ struct DeleteView: View {
                 Section {
                     ForEach(group.actions) { TableRow($0) }
                 } header: {
-                    Text.l10n(L10n.tr("app.delete.group.header", group.categoryName, ByteCount.format(group.bytes)))
+                    // The name, and the size trailing in secondary (HIG review D8).
+                    HStack {
+                        Text(verbatim: group.categoryName)
+                        Spacer()
+                        Text(verbatim: ByteCount.format(group.bytes)).monospacedDigit().foregroundStyle(.secondary)
+                    }
                 }
             }
         }
+        // Right-click and ⌘⌫ (HIG review D1): the same confirmation as the footer's button, for the rows clicked or selected.
+        .contextMenu(forSelectionType: String.self) { paths in
+            Button(L10n.tr("app.action.showInFinder")) { model.showInFinder(paths) }
+            Button(L10n.tr("app.action.copyPath")) { model.copyPaths(paths) }
+            Divider()
+            Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) {
+                if let confirmed = model.deletionToConfirm(paths) {
+                    selection = confirmed
+                    confirm = true
+                }
+            }
+            .disabled(model.deletionToConfirm(paths) == nil)
+        }
+        .onDeleteCommand {
+            if model.deletionToConfirm(selection) != nil { confirm = true }
+        }
+        .focused($tableFocused)
     }
 
     /// Everything below the table, in one panel folded by default (R1): the planner's warnings, the root rows, the rows
@@ -388,9 +459,12 @@ struct DeleteView: View {
             Text.l10n(L10n.plural("app.clean.selected", count: chosen.count, ByteCount.format(chosen.reduce(0) { $0 + $1.bytes })))
             // The CLI has --trash; without this the GUI was strictly more destructive than
             // the CLI with no way to say so, because CleanExecutor() defaults to useTrash: false.
-            Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash)
+            Toggle(L10n.tr("app.clean.useTrash"), isOn: $useTrash).help(L10n.tr("app.clean.useTrash.help"))
             Spacer()
-            Button(L10n.tr("app.clean.deleteSelected")) { confirm = true }.disabled(chosen.isEmpty)
+            // A destructive verb with ⌘⌫ (HIG review D1); it only opens the confirmation.
+            Button(L10n.tr("app.clean.deleteSelected"), role: .destructive) { confirm = true }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(chosen.isEmpty || model.isCleaning)
         }
         .padding()
     }

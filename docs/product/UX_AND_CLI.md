@@ -89,8 +89,8 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
 The app is a projection of Core: every number and every decision a screen shows is a Core function with a test, or an
 `AppModel` method tested through `AppEnvironment` fakes. Views decide nothing.
 
-- **Sidebar.** *Save space*: Overview, Delete, Park, Run externally. *Details*: Storage, Simulators, Drives (volumes
-  and vaults), Health (the doctor), History (the journal), Access.
+- **Sidebar.** *Save Space*: Overview, Delete, Park, Run Externally. *Details*: Storage, Simulators, Drives (volumes
+  and vaults), Health (the doctor), History (the journal), Permissions (named Access until R5).
 - **Overview.** The internal-disk bar (`DiskBar`: other data, developer data by primary bucket, free), three cards
   (`OverviewCards`: an "up to" amount, the verified share, the promise, the cost to undo, **Review**), the note that
   the cards are alternatives with the union total, the runtime images `simctl` measured outside the catalog on their
@@ -124,6 +124,19 @@ The app is a projection of Core: every number and every decision a screen shows 
   text color. Every state has a word next to its symbol.
 - **Language.** Every string is a catalog key (`docs/process/LOCALIZATION.md`); bytes go through `ByteCount.format`
   in the app's language.
+- **R5 — the HIG review (2026-10-04).** Every finding of the independent HIG review is mapped in `STATUS.md` (R5).
+  The decisions it added are Core's or the model's, with tests: an error alert's title says what failed (`AppError`);
+  success is an inline result, not an alert (`AppModel.feedback`); the helper sheet holds the wait for approval; Delete's
+  table has a context menu, ⌘⌫ and a confirmation that names the undo cost of exactly the selected rows
+  (`DeleteList.undoCosts`); a vault has one verdict (`DriveRow.vaultVerdict`) and the boot volume no blockers
+  (`DriveRow.showsQualificationDetail`); Full Disk Access that nothing needs reads "Off" (`Row.isNeeded`); the hint
+  shows after the trip to the pane (`AccessChecklist.showsHint`) and **Relaunch XCodeVault** while this process still
+  lacks the grant (`AccessChecklist.offersRelaunch`, H16 verified on macOS 26.7.1). Storage's filter is one set of
+  options — bars (⌘-click adds), toggle chips, a summary with **Show All** — combined with a search by name or path
+  (`StorageTable.rows(report:buckets:query:)`); Simulators is one table with two sections, searchable, with a selection
+  a chart click sets and **Clear Selection** clears (`SimulatorsTable.listRows`); History is a table by day. Back and
+  Forward are chevrons (`NavigationHistory.forward`); the host line is the window's subtitle. No ALL CAPS, no hypothesis
+  or issue ids, title case for buttons, menus, headers and sidebar labels; strategies show names, not identifiers.
 
 ## Permissions — asked at the moment of need (spec 2026-09-27, ADR-0007)
 
@@ -143,8 +156,8 @@ are the only privileged path.
   `clean`'s tag for a root row points to it.
 - **GUI Access screen** (shipped 2026-09-28 as "Permissions", renamed and rebuilt as a checklist in S4 2026-10-03; not
   yet exercised on screen): two rows — Full Disk Access and the helper — each with its state as a symbol and a word,
-  one sentence of why in terms of what it holds back, and one button: **Open Full Disk Access Settings** (or **Check
-  again** when the probe could not tell) for Full Disk Access; **Install the Helper…** or **Approve in System
+  one sentence of why in terms of what it holds back, and one button: **Open System Settings** (or **Check
+  Again** when the probe could not tell) for Full Disk Access; **Install Helper…** or **Approve in System
   Settings…** for the helper, and **Uninstall…** (with a confirmation) once it is enabled. When the app becomes active
   after the user returns from System Settings, it re-checks and rescans. The rows are `AccessChecklist` in Core.
 - **Full Disk Access at need** (shipped 2026-09-28, not yet exercised on screen): the Overview shows the Full Disk

@@ -129,6 +129,23 @@ final class BrandTokenTests: XCTestCase {
         }
     }
 
+    /// R5 (HIG review X9): Increase Contrast has its own variants — darker in light, lighter in dark — each clearing more than
+    /// the base against white and the dark background. Off a window, `NSAppearance(named:)` gives a high-contrast name its
+    /// base appearance (the test below), so the mapping is checked here directly; in a real window it needs Increase
+    /// Contrast switched on to see.
+    func testIncreaseContrastHasItsOwnStrongerVariants() {
+        for bucket in SavingsBucket.allCases {
+            XCTAssertEqual(bucket.colorHex(for: .aqua), bucket.lightColorHex)
+            XCTAssertEqual(bucket.colorHex(for: .darkAqua), bucket.darkColorHex)
+            XCTAssertEqual(bucket.colorHex(for: .accessibilityHighContrastAqua), bucket.highContrastLightColorHex)
+            XCTAssertEqual(bucket.colorHex(for: .accessibilityHighContrastDarkAqua), bucket.highContrastDarkColorHex)
+            XCTAssertGreaterThan(contrast(bucket.highContrastLightColorHex, "#FFFFFF"), contrast(bucket.lightColorHex, "#FFFFFF"), bucket.rawValue)
+            XCTAssertGreaterThanOrEqual(contrast(bucket.highContrastLightColorHex, "#FFFFFF"), 4.5, bucket.rawValue)
+            XCTAssertGreaterThan(contrast(bucket.highContrastDarkColorHex, "#1E1E1E"), contrast(bucket.darkColorHex, "#1E1E1E"), bucket.rawValue)
+            XCTAssertGreaterThanOrEqual(contrast(bucket.highContrastDarkColorHex, "#1E1E1E"), 4.5, bucket.rawValue)
+        }
+    }
+
     /// Review M8: Increase Contrast's appearances follow their base — the light variant in high-contrast light, the token in
     /// high-contrast dark — and still clear 3:1 on the surfaces those appearances resolve.
     func testTheHighContrastAppearancesResolveToTheirBaseAndClearThreeToOne() throws {

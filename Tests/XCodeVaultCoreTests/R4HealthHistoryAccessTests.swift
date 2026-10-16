@@ -324,8 +324,12 @@ final class FullDiskAccessRegistrationTests: XCTestCase {
         }
         L10n.configure(override: "en", environment: [:], preferred: [])
         let hint = AppText.access(AccessChecklist.Key.fdaHintInList, bytes: nil, folders: nil)
-        // Hedged until H16 is verified: "should", and what to do if it is not there.
-        XCTAssertEqual(hint, "XCodeVault should now be in the list — turn its switch on. If it isn't there, add it with +.")
+        // H16 verified on macOS 26.7.1 (the user's check, 2026-10-04): no hedge; the + fallback stays for other versions.
+        // R5 review round, the user's real-window feedback: where to look in the alphabetical list.
+        XCTAssertEqual(
+            hint,
+            "Scroll to the end of the list — XCodeVault is listed alphabetically, near the bottom — and turn its switch on. "
+                + "If it isn’t there, click + and choose XCodeVault.")
         XCTAssertFalse(hint.contains("already"), "never states the unverified registration as fact")
         XCTAssertFalse(hint.lowercased().contains("turned on") || hint.lowercased().contains("will turn"), "never claims the app turns it on")
     }
@@ -444,17 +448,18 @@ final class R4AppModelTests: XCTestCase {
         XCTAssertEqual(model.healthCounts.map(\.count), [1, 2])
     }
 
-    /// R2 review N1: the Bucket menu has nothing to offer without bars, so it is disabled.
-    func testTheBucketMenuIsEnabledOnlyWithBars() async throws {
+    /// R5 (HIG review HI3): the kinds menu's title says the filter's state.
+    func testTheKindsMenuSaysTheFiltersState() async {
         let t = TempDir()
-        let empty = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: sampleSurvey())
-        await empty.refresh()
-        let emptyReport = try XCTUnwrap(empty.report)
-        XCTAssertTrue(empty.storageBars(emptyReport).isEmpty, "the fixture has no bars")
-        XCTAssertFalse(empty.storageFilterMenuEnabled(emptyReport))
-        let full = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: detailSampleSurvey())
-        await full.refresh()
-        XCTAssertTrue(full.storageFilterMenuEnabled(try XCTUnwrap(full.report)))
+        var survey = detailSampleSurvey()
+        survey.4 = [entry("op1", 1, .clean, .completed), entry("op2", 2, .runtimeDelete, .completed)]
+        let model = makeModel(SwitchableHelper(.unavailableInThisBuild), journal: t, survey: survey)
+        await model.refresh()
+        XCTAssertEqual(model.historyFilterTitle, "All Kinds")
+        model.toggleHistoryKind(.clean)
+        XCTAssertEqual(model.historyFilterTitle, "1 of 2 Kinds")
+        model.showAllHistoryKinds()
+        XCTAssertEqual(model.historyFilterTitle, "All Kinds")
     }
 
     /// Every new label renders as text, not as its key, in every language.
@@ -465,7 +470,8 @@ final class R4AppModelTests: XCTestCase {
             texts += [Finding.Severity.critical, .error, .warning, .info].map { AppText.healthCount($0, 2) }
             texts += [AppText.historyDay(.today), AppText.historyDay(.yesterday), AppText.access(AccessChecklist.Key.fdaHintInList, bytes: nil, folders: nil)]
             texts += [
-                "app.health.details", "app.health.fix", "app.health.notOffered", "app.history.filter.menu", "app.history.filter.all", "app.history.filter.none",
+                "app.health.details", "app.health.fix", "app.health.notOffered", "app.history.filter.allKinds", "app.history.filter.all",
+                "app.history.filter.none",
             ]
             .map { L10n.tr($0) }
             for text in texts {
@@ -493,11 +499,18 @@ final class R4AppModelTests: XCTestCase {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let tag = appearance == .aqua ? "light" : "dark"
                 written.append(try SnapshotWriter.write(HealthView(model: model), name: "r4-health-\(locale)-\(tag)", appearance: appearance))
-                // A `List` draws no rows off-screen: the rows themselves, under their day headers.
+                // A `Table` draws no rows off-screen: the rows' cells themselves, under their day headers.
                 let rows = VStack(alignment: .leading, spacing: 8) {
                     ForEach(model.historySections()) { section in
                         Text(verbatim: AppText.historyDay(section.day)).font(.headline)
-                        ForEach(section.rows) { HistoryRowView(row: $0) }
+                        ForEach(section.rows) { row in
+                            HStack(spacing: 10) {
+                                Text(verbatim: AppText.time(row.started)).monospacedDigit()
+                                HistoryKindBadge(kind: row.kind)
+                                HistoryOutcomeLabel(outcome: row.outcome)
+                                HistorySummaryCell(row: row)
+                            }
+                        }
                     }
                 }
                 .padding()

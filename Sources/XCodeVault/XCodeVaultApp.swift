@@ -24,18 +24,31 @@ struct XCodeVaultApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(AppText.productName) {
+        // One window (R5, HIG review N3): one model, so `Window`, not a group that could open a second. Its minimum is the
+        // one `ScreenFitTests` proves every screen fits; it opens larger.
+        Window(AppText.productName, id: "main") {
             MainView(model: model)
                 .frame(minWidth: 960, minHeight: 620)
                 .task { await model.refresh() }
         }
+        .defaultSize(width: 1100, height: 720)
         .commands {
             CommandGroup(replacing: .newItem) {
                 // Deliberately empty — an empty replacement is how AppKit's File > New item is
                 // removed. XCodeVault has no document model, so "New" would have nothing to make.
             }
-            CommandMenu(L10n.tr("app.menu.scan")) {
-                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r").disabled(model.isOperationRunning)
+            // View ▸ Show/Hide Sidebar and the toolbar's commands, where Mac apps have them (HIG review N4).
+            SidebarCommands()
+            ToolbarCommands()
+            CommandGroup(after: .sidebar) {
+                Divider()
+                Button(L10n.tr("app.action.rescan")) { Task { await model.refresh() } }.keyboardShortcut("r")
+                    .disabled(model.isScanning || model.isOperationRunning)
+                Divider()
+                // ⌘1…⌘4 for the Save Space views, as Mail and Music number their sidebars.
+                ForEach(Array(SidebarSection.saveSpace.enumerated()), id: \.offset) { index, section in
+                    Button(section.title) { model.section = section }.keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
+                }
             }
         }
     }
@@ -64,17 +77,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .migration: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.migration")
             case .export: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.export")
             case .offload: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.offload")
+            case .clean: alert.informativeText = L10n.tr("app.quit.keepRunningOnly.clean")
             }
             alert.runModal()
+            model.relaunchRequested = false
             return .terminateCancel
         case .stopThenQuit:
             alert.informativeText = L10n.tr("app.quit.message")
             alert.addButton(withTitle: L10n.tr("app.quit.stopAndQuit")).hasDestructiveAction = true
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            guard alert.runModal() == .alertSecondButtonReturn else {
+                model.relaunchRequested = false
+                return .terminateCancel
+            }
             Task { @MainActor in
                 let stopped = await model.stopOperationForQuit()
                 sender.reply(toApplicationShouldTerminate: stopped)
                 guard !stopped else { return }
+                model.relaunchRequested = false
                 // Never quit with a command still alive: say so, and stay.
                 let failed = NSAlert()
                 failed.alertStyle = .critical
@@ -84,6 +103,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return .terminateLater
         }
+    }
+
+    /// **Relaunch XCodeVault** (R5 review I1): the new instance starts only here, once quitting was approved, so two
+    /// instances never run side by side.
+    func applicationWillTerminate(_ notification: Notification) {
+        if model.relaunchRequested { model.environment.launchNewInstance() }
     }
 }
 
@@ -109,8 +134,12 @@ final class AppModel {
     /// asked for meanwhile (`ScanGate`, in Core and tested; carried note 7 of the 2026-09-27 permissions plan).
     private var scanGate = ScanGate()
     var isScanning: Bool { scanGate.isScanning }
-    var lastError: String?
+    /// The error alert's content (R5, HIG review N10): what failed as the title, why and what to do as the message.
+    var lastError: AppError?
     var lastCleanResult: CleanResult?
+    /// The last action's result, shown inline above the screen until the next action or its × (R5, HIG review N11),
+    /// instead of a modal "Done" alert.
+    var feedback: AppFeedback?
     var fullDiskAccess: FullDiskAccessState = .unknown
     var helperState: HelperState = .unavailableInThisBuild
     /// Set when the app sends the user to System Settings, so coming back can rescan once if Full Disk Access was
@@ -131,9 +160,55 @@ final class AppModel {
     func openFullDiskAccessSettings() {
         guard let url = URL(string: FullDiskAccessProbe.settingsURL) else { return }
         returningFromSettings = true
+        openedFullDiskAccessSettings = true
         environment.registerForFullDiskAccess()
         environment.open(url)
+        // The guide beside the pane (R5, the user's real-window feedback): where XCodeVault is in the list, and its icon
+        // to drag in if it is not.
+        if !showsAccessGuide {
+            showsAccessGuide = true
+            environment.showAccessGuide { [weak self] in self?.closeAccessGuide() }
+        }
     }
+
+    /// Whether the Full Disk Access guide panel is up: shown when the pane opens, closed by its Done or once the grant is seen.
+    private(set) var showsAccessGuide = false
+
+    /// The guide's **Done**, and the grant seen on coming back.
+    func closeAccessGuide() {
+        guard showsAccessGuide else { return }
+        showsAccessGuide = false
+        environment.closeAccessGuide()
+    }
+
+    /// Set once the user opened the Full Disk Access pane from the app; it stays set, unlike `returningFromSettings`,
+    /// which one activation consumes. The hint next to the button shows only after it (R5, HIG review A2).
+    private(set) var openedFullDiskAccessSettings = false
+
+    /// Whether `row` offers **Relaunch XCodeVault** (`AccessChecklist.offersRelaunch`): never while something runs that
+    /// the quit guard would keep (R5 review I1).
+    func offersRelaunch(_ row: AccessChecklist.Row) -> Bool {
+        AccessChecklist.offersRelaunch(row, openedSettings: openedFullDiskAccessSettings, busy: quitNeedsConfirmation)
+    }
+
+    /// Set by **Relaunch XCodeVault** once quitting needs no confirmation; the app delegate starts the new instance in
+    /// `applicationWillTerminate`, after the quit was approved, and a cancelled quit clears it.
+    var relaunchRequested = false
+
+    /// **Relaunch XCodeVault** (R5 review I1, safety LOW-2): quits only when the quit guard would not ask — nothing runs —
+    /// and the new instance starts after the quit was approved. While something runs it opens and quits nothing, and says
+    /// why.
+    func relaunch() {
+        guard !quitNeedsConfirmation else {
+            lastError = AppError(title: L10n.tr("app.error.relaunch.title"), message: L10n.tr("app.error.relaunch.message"))
+            return
+        }
+        relaunchRequested = true
+        environment.terminate()
+    }
+
+    /// Whether `row` shows its hint (`AccessChecklist.showsHint`).
+    func showsAccessHint(_ row: AccessChecklist.Row) -> Bool { AccessChecklist.showsHint(row, openedSettings: openedFullDiskAccessSettings) }
 
     /// Every activation re-checks the permissions, so the Access row, the banner and the Overview follow what the user did
     /// in System Settings. A rescan follows only when Full Disk Access became granted, and only after a scan or a trip to
@@ -144,6 +219,7 @@ final class AppModel {
         let returning = returningFromSettings
         returningFromSettings = false
         refreshPermissions()
+        if fullDiskAccess == .granted { closeAccessGuide() }
         guard
             AccessChecklist.rescansOnActivation(
                 // A scan in flight counts as one: it ran without the grant, and `ScanGate` queues the follow-up (review M9).
@@ -220,6 +296,7 @@ final class AppModel {
     /// Every button that runs a root action comes through here and decides by `helperState.actionControl`, the
     /// tested function, never on its own.
     func request(_ action: PrivilegedAction) {
+        feedback = nil
         switch helperState.actionControl {
         case .run:
             Task { await perform(action) }
@@ -247,17 +324,18 @@ final class AppModel {
             helperProgress = nil
             approvalTask = nil
             refreshPermissions()
+            let title = L10n.tr("app.error.helper.title")
             switch outcome {
             case .enabled:
                 if let action { await perform(action) }
             case .notAvailableInThisBuild:
-                lastError = HelperState.unavailableInThisBuild.why(in: L10n.locale)
+                lastError = AppError(title: title, message: L10n.tr("app.error.helper.unavailable"))
             case .timedOut:
-                lastError = L10n.tr("app.helper.error.timedOut")
+                lastError = AppError(title: title, message: L10n.tr("app.helper.error.timedOut"))
             case .cancelled:
                 break
             case .failed(let why):
-                lastError = why
+                lastError = AppError(title: title, message: why)
             }
         }
     }
@@ -270,16 +348,39 @@ final class AppModel {
         refreshPermissions()
     }
 
+    /// **Open System Settings** in the helper sheet's waiting state: the Login Items & Extensions pane again, where the
+    /// switch is (`PrivilegedHelper.openApprovalSettings`).
+    func openHelperApprovalSettings() { environment.helper.openApprovalSettings() }
+
+    /// The helper sheet is up while a root action waits for the user's choice (`showsHelperSheet`) and, after **Install
+    /// Helper…**, while the approval is awaited (`helperProgress`): the wait is the sheet's second state, never a floating
+    /// overlay (R5, HIG review N12).
+    var helperSheetIsPresented: Bool { showsHelperSheet || helperProgress != nil }
+
+    /// The sheet closed by **Cancel**, **Stop Waiting** or Escape: no action stays pending, and a wait stops.
+    func dismissHelperSheet() {
+        showsHelperSheet = false
+        pendingPrivilegedAction = nil
+        if helperProgress != nil { stopWaitingForApproval() }
+    }
+
     func perform(_ action: PrivilegedAction) async {
+        feedback = nil
         switch await environment.runner(environment.helper).run(action) {
-        case .done(let reply): lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
-        case .refused(let why), .failed(let why): lastError = why
+        case .done(let reply):
+            lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
+            // A step left to the user (the vault folder's `vault init`) makes it a notice, not a plain success.
+            let next = action.afterSuccess(in: L10n.locale)
+            feedback = AppFeedback(
+                kind: next == nil ? .success : .notice, title: AppText.privilegedDone(action), detail: [reply.message, next].compactMap { $0 })
+        case .refused(let why), .failed(let why):
+            lastError = AppError(title: AppText.privilegedFailed(action), message: why)
         }
         await refresh()
     }
 
     func uninstallHelper() async {
-        do { try await environment.helper.unregister() } catch { lastError = "\(error)" }
+        do { try await environment.helper.unregister() } catch { lastError = AppError(title: L10n.tr("app.error.uninstall.title"), error: error) }
         refreshPermissions()
     }
 
@@ -298,13 +399,31 @@ final class AppModel {
     /// The sections left behind, newest last (`NavigationHistory`, in Core and tested).
     private(set) var history = NavigationHistory<SidebarSection>()
 
-    /// Whether the toolbar shows **Back**.
+    /// Whether **Back** is enabled; it is always shown, disabled when there is nowhere to go (R5, HIG review N1).
     var canGoBack: Bool { history.canGoBack }
+    /// Whether **Forward** is enabled.
+    var canGoForward: Bool { history.canGoForward }
 
-    /// **Back** (⌘[): the section shown before this one. Going back records nothing, so Back again goes further back.
+    /// **Back** (⌘[): the section shown before this one. Going back records nothing, so Back again goes further back;
+    /// the section left is kept for **Forward**.
     func goBack() {
-        guard let previous = history.back() else { return }
+        guard let previous = history.back(from: currentSection) else { return }
         currentSection = previous
+    }
+
+    /// **Forward** (⌘]): the section **Back** left. A new move forgets it, as in a browser.
+    func goForward() {
+        guard let next = history.forward(from: currentSection) else { return }
+        currentSection = next
+    }
+
+    /// The window's subtitle (R5, HIG review N2): the scan in progress, else the Mac and its internal disk. Quiet, on every
+    /// screen, instead of a headline on the Overview.
+    var windowSubtitle: String {
+        if isScanning { return L10n.tr("app.scanning.title") }
+        guard let host = report?.host else { return "" }
+        return L10n.tr(
+            "app.overview.host", host.macOSVersion, host.architecture, ByteCount.format(host.dataVolumeFreeBytes), ByteCount.format(host.dataVolumeTotalBytes))
     }
 
     /// **Review** on an Overview card: that bucket's view. Keeping has no view, so it changes nothing.
@@ -316,95 +435,105 @@ final class AppModel {
     /// its own volume's row, and a section only for the vaults that are not connected.
     func drivesList(_ report: ScanReport) -> DrivesList { DrivesList.make(volumes: report.volumes, checks: vaultChecks) }
 
-    // MARK: - The Details charts (R2)
+    // MARK: - The Details charts (R2; one filter model, search and selection since R5)
 
-    /// The Storage chart's filter: the bucket whose rows the table shows, nil for all of them. Set by a click on a bar
-    /// (`clickStorageBar`), cleared by the chip's × or **All** (`clearStorageFilter`).
-    var storageBucketFilter: SavingsBucket?
+    /// The Storage filter: the buckets whose rows the table shows, every bucket when empty (R5: several at once). A bar
+    /// click shows only its bucket and ⌘-click adds or removes it (`clickStorageBar`); a legend chip toggles its bucket
+    /// (`toggleStorageBucket`); **Show All** clears it and the search (`clearStorageFilter`).
+    var storageBucketFilter: Set<SavingsBucket> = []
+    /// The Storage search: a category name or a path (`StorageTable.matches`).
+    var storageQuery = ""
+    /// The Storage table's selection, by row id: Show in Finder and Copy Path act on it.
+    var storageSelection = Set<String>()
     /// The Storage table's sort order; largest first until the user clicks a column header.
     var storageSortOrder = StorageTable.defaultSortOrder
 
-    /// The Storage table's rows: filtered by `storageBucketFilter`, sorted by `storageSortOrder` (`StorageTable`).
+    /// The Storage table's rows: filtered by the buckets and the search, sorted by `storageSortOrder` (`StorageTable`).
     func storageRows(_ report: ScanReport) -> [StorageRow] {
-        StorageTable.sorted(StorageTable.rows(report: report, bucket: storageBucketFilter), using: storageSortOrder)
+        StorageTable.sorted(StorageTable.rows(report: report, buckets: storageBucketFilter, query: storageQuery), using: storageSortOrder)
     }
 
-    /// The Storage chart's bars: every bucket with rows, whatever the filter, so the selected bar stays clickable.
+    /// The Storage chart's bars: every bucket with rows, whatever the filter, so every bar stays clickable.
     func storageBars(_ report: ScanReport) -> [StorageTable.BucketBar] { StorageTable.bucketBars(rows: StorageTable.rows(report: report)) }
 
-    /// A click on the Storage chart at the bar `barID` (nil: outside every bar), as `StorageTable.filter(after:clicked:)`.
-    func clickStorageBar(_ barID: String?) {
-        storageBucketFilter = StorageTable.filter(after: storageBucketFilter, clicked: StorageTable.bucket(forBarID: barID))
+    /// A click on the Storage chart at the bar `barID` (nil: outside every bar); `extending` when ⌘ was held
+    /// (`StorageTable.filter(after:clicked:extending:)`).
+    func clickStorageBar(_ barID: String?, extending: Bool = false) {
+        storageBucketFilter = StorageTable.filter(after: storageBucketFilter, clicked: StorageTable.bucket(forBarID: barID), extending: extending)
     }
 
-    func clearStorageFilter() { storageBucketFilter = nil }
+    /// A legend chip: its bucket in or out of the filter.
+    func toggleStorageBucket(_ bucket: SavingsBucket) { storageBucketFilter = StorageTable.toggled(storageBucketFilter, bucket) }
 
-    /// The bucket menu next to **All** (R2 review M5): the chart's filter for keyboard and VoiceOver users.
-    func chooseStorageFilter(_ bucket: SavingsBucket?) { storageBucketFilter = bucket }
+    /// **Show All** and the summary's ×: every bucket, no search.
+    func clearStorageFilter() {
+        storageBucketFilter = []
+        storageQuery = ""
+    }
 
-    /// The row selected in one of the Simulators tables, never one in each (`SimulatorSelection`): set by a click on the
-    /// chart (`clickSimulatorBar`) or in a table (`selectRuntimeRow`, `selectDeviceRow`).
-    private(set) var simulatorSelection = SimulatorSelection()
-    /// Counts the chart clicks that selected a row: the page scrolls to the row only for these, never for a click in a
+    /// Whether the Storage table is narrowed: **Show All** and the summary show exactly then.
+    var storageIsFiltered: Bool { StorageTable.isFiltered(buckets: storageBucketFilter, query: storageQuery) }
+
+    /// The filter's buckets in the chart's order, for the summary "Filtering: Delete, Park".
+    var storageFilterBuckets: [SavingsBucket] { DiskBar.bucketOrder.filter(storageBucketFilter.contains) }
+
+    /// The paths of the selected Storage rows, for Show in Finder and Copy Path (a row's id is not its path).
+    func storagePaths(_ ids: Set<String>, report: ScanReport) -> Set<String> {
+        Set(StorageTable.rows(report: report).filter { ids.contains($0.id) }.map(\.item.path))
+    }
+
+    /// The Simulators table's selection, by row id (`SimulatorListRow.id`, the same as its bar's). Cleared by
+    /// **Clear Selection**, by a click in an empty part of the table, or by a rescan that no longer lists the row.
+    var simulatorSelection = Set<String>()
+    /// The Simulators search: a name, a runtime or a path.
+    var simulatorQuery = ""
+    /// Counts the chart clicks that selected a row: the table scrolls to it only for these, never for a click in the
     /// table, which would move the table under the pointer (R2 review M8).
     private(set) var simulatorScrollRequests = 0
+    var simulatorSortOrder = SimulatorsTable.defaultListSortOrder
 
-    /// A click in the runtimes table (R2 review I1): that row, and the devices table's selection cleared.
-    func selectRuntimeRow(_ id: String?) { simulatorSelection = simulatorSelection.selecting(runtimeID: id) }
-
-    /// A click in the devices table: that row, and the runtimes table's selection cleared.
-    func selectDeviceRow(_ id: String?) { simulatorSelection = simulatorSelection.selecting(deviceID: id) }
-    var runtimeSortOrder = SimulatorsTable.defaultRuntimeSortOrder
-    var deviceSortOrder = SimulatorsTable.defaultDeviceSortOrder
-
-    func simulatorRuntimes(_ report: ScanReport) -> [SimulatorRuntime] {
-        SimulatorsTable.sorted(SimulatorsTable.runtimes(report: report), using: runtimeSortOrder)
+    /// One section of the Simulators table: the runtimes or the devices, searched and sorted.
+    func simulatorRows(_ report: ScanReport, kind: SimulatorBar.Kind) -> [SimulatorListRow] {
+        SimulatorsTable.listRows(report: report, kind: kind, query: simulatorQuery, using: simulatorSortOrder)
     }
 
-    func simulatorDevices(_ report: ScanReport) -> [SimulatorDeviceRow] {
-        SimulatorsTable.sorted(SimulatorsTable.devices(report: report), using: deviceSortOrder)
-    }
-
-    /// A click on the Simulators chart at the bar `barID`: selects its row (`SimulatorSelection.selecting(barID:)`).
-    /// Asks the page to scroll to the row when the click selected one.
+    /// A click on the Simulators chart at the bar `barID`: selects its row (`SimulatorsChart.selection`), and asks the
+    /// table to scroll to it.
     func clickSimulatorBar(_ barID: String?) {
-        let next = simulatorSelection.selecting(barID: barID)
-        guard next != simulatorSelection || barID != nil else { return }
-        simulatorSelection = next
-        if next.runtimeID != nil || next.deviceID != nil { simulatorScrollRequests += 1 }
+        guard barID != nil else { return }
+        simulatorSelection = SimulatorsChart.selection(after: simulatorSelection, clicked: barID)
+        // The row must be in the table to scroll to: a search that hides it is cleared.
+        if let report, let id = simulatorSelection.first,
+            !SimulatorBar.Kind.allCases.flatMap({ simulatorRows(report, kind: $0) }).contains(where: { $0.id == id })
+        {
+            simulatorQuery = ""
+        }
+        simulatorScrollRequests += 1
     }
 
-    /// After a scan (R2 review M6): a filter whose bucket has no bar any more is cleared, and so is a selected row that is
-    /// no longer listed.
+    /// **Clear Selection** under the Simulators chart.
+    func clearSimulatorSelection() { simulatorSelection = [] }
+
+    /// The row the table scrolls to after a chart click: the selected one, when it is listed.
+    func simulatorScrollTarget(_ report: ScanReport) -> String? {
+        guard simulatorSelection.count == 1, let id = simulatorSelection.first else { return nil }
+        return SimulatorBar.Kind.allCases.flatMap { simulatorRows(report, kind: $0) }.contains { $0.id == id } ? id : nil
+    }
+
+    /// After a scan (R2 review M6): buckets with no bar any more leave the filter, and rows no longer listed leave the
+    /// selections.
     private func revalidateDetailState() {
         guard let report else {
-            storageBucketFilter = nil
-            simulatorSelection = SimulatorSelection()
+            storageBucketFilter = []
+            storageSelection = []
+            simulatorSelection = []
             return
         }
         storageBucketFilter = StorageTable.filter(storageBucketFilter, validIn: storageBars(report))
-        let runtimeIDs = Set(report.runtimes.map(\.id)), deviceIDs = Set(report.devices.map(\.id))
-        simulatorSelection = SimulatorSelection(
-            runtimeID: simulatorSelection.runtimeID.flatMap { runtimeIDs.contains($0) ? $0 : nil },
-            deviceID: simulatorSelection.deviceID.flatMap { deviceIDs.contains($0) ? $0 : nil })
+        storageSelection.formIntersection(StorageTable.rows(report: report).map(\.id))
+        let listed = SimulatorBar.Kind.allCases.flatMap { SimulatorsTable.listRows(report: report, kind: $0) }.map(\.id)
+        simulatorSelection.formIntersection(listed)
     }
-
-    /// Where the page scrolls after a selection: the table holding the selected row, and the row's place in it
-    /// (`SimulatorsChart.rowAnchor`). Nil when nothing is selected or the row is not in its table.
-    func simulatorScrollTarget(_ report: ScanReport) -> (table: SimulatorBar.Kind, anchor: Double)? {
-        if let id = simulatorSelection.runtimeID {
-            let rows = simulatorRuntimes(report)
-            return SimulatorsChart.rowAnchor(index: rows.firstIndex { $0.id == id }, rowCount: rows.count).map { (.runtime, $0) }
-        }
-        if let id = simulatorSelection.deviceID {
-            let rows = simulatorDevices(report)
-            return SimulatorsChart.rowAnchor(index: rows.firstIndex { $0.id == id }, rowCount: rows.count).map { (.device, $0) }
-        }
-        return nil
-    }
-
-    /// Whether the Bucket menu next to **All** is enabled: only when the chart has bars to choose from (R2 review N1).
-    func storageFilterMenuEnabled(_ report: ScanReport) -> Bool { !storageBars(report).isEmpty }
 
     // MARK: - Health and History (R4)
 
@@ -432,8 +561,22 @@ final class AppModel {
         if historyHiddenKinds.contains(kind) { historyHiddenKinds.remove(kind) } else { historyHiddenKinds.insert(kind) }
     }
 
-    /// **Show all** in the filter.
+    /// **Show All** in the filter.
     func showAllHistoryKinds() { historyHiddenKinds = [] }
+
+    /// **Copy Summary** on History's selection: each operation's summary, and how it ended, in the table's order.
+    func copyHistorySummaries(_ ids: Set<String>) {
+        let lines = historyRows.filter { ids.contains($0.id) }.map { [$0.summary, $0.endSummary].compactMap { $0 }.joined(separator: " — ") }
+        guard !lines.isEmpty else { return }
+        environment.copy(lines.joined(separator: "\n"))
+    }
+
+    /// The kinds menu's title says the filter's state (R5, HIG review HI3): "All Kinds", or how many are shown.
+    var historyFilterTitle: String {
+        let kinds = historyKinds
+        let shown = kinds.filter(historyShows).count
+        return shown == kinds.count ? L10n.tr("app.history.filter.allKinds") : L10n.tr("app.history.filter.someKinds", shown, kinds.count)
+    }
 
     /// History's sections: the shown operations by the day they started (`JournalTimeline.sections`), as of `now`.
     /// The view formats the headers with the same `calendar` (`AppText.historyDay`), so the day grouped is the day shown.
@@ -526,15 +669,86 @@ final class AppModel {
     func copyCommand(_ row: SavingsPlanRow) { environment.copy(row.command) }
 
     func applyClean(actions: [CleanAction], useTrash: Bool) async {
-        guard let plan = cleanPlan else { return }
+        // One clean at a time: a second one finishing first would clear `isCleaning` while this one still deletes, and the
+        // quit guard and Relaunch would open in the middle of a clean (R5 re-review NEW-1).
+        guard !isCleaning, let plan = cleanPlan else { return }
+        feedback = nil
         let selected = CleanPlan(actions: actions, skipped: plan.skipped, warnings: plan.warnings)
         let clean = environment.clean
+        // The quit guard keeps the app open while it runs (`quitChoice`), and Relaunch is not offered.
+        isCleaning = true
+        defer { isCleaning = false }
         do {
             let result = try await Task.detached { try clean(selected, useTrash) }.value
             lastCleanResult = result
+            feedback = AppText.cleanFeedback(result, useTrash: useTrash)
+            if let failure = AppText.cleanFailures(result) { lastError = failure }
             await refresh()
-        } catch { lastError = "\(error)" }
+        } catch {
+            lastError = AppError(title: useTrash ? L10n.tr("app.error.clean.trash.title") : L10n.tr("app.error.clean.delete.title"), error: error)
+        }
     }
+
+    /// Whether a Delete view clean runs: the quit guard offers only Keep Running (R5, safety review's pre-existing gap).
+    private(set) var isCleaning = false
+
+    /// What the Delete view's context menu and ⌘⌫ confirm (R5 safety LOW-3): the rows they act on when **Delete
+    /// Selected…** would delete any of them (`DeleteList.deletable`), nil when it would delete none and no confirmation
+    /// opens. The confirmation's count is still `deletable(selected:)` of the selection this returns.
+    func deletionToConfirm(_ paths: Set<String>) -> Set<String>? {
+        guard !isCleaning, let list = deleteList, !list.deletable(selected: paths).isEmpty else { return nil }
+        return paths
+    }
+
+    /// The inline result's ×.
+    func dismissFeedback() { feedback = nil }
+
+    /// **Show in Finder** on a table's selection (R5, HIG review D1, ST3): the paths selected in Finder. Reads nothing.
+    func showInFinder(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        environment.reveal(paths.sorted())
+    }
+
+    /// **Copy Path**: the selected paths, one per line, in path order.
+    func copyPaths(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        environment.copy(paths.sorted().joined(separator: "\n"))
+    }
+}
+
+/// An alert's content (R5, HIG review N10): the title says what failed, the message why and what to do. The raw text of
+/// an error that has no description of its own is the message's last resort, never the title.
+struct AppError: Equatable {
+    let title: String
+    let message: String
+
+    init(title: String, message: String) {
+        self.title = title
+        self.message = message
+    }
+
+    /// A thrown error under `title`: its description and recovery suggestion when it is a `LocalizedError`, else its text.
+    init(title: String, error: any Error) {
+        self.title = title
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            message = [description, localized.recoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
+        } else {
+            message = "\(error)"
+        }
+    }
+}
+
+/// An action's result shown inline (R5, HIG review N11): a symbol, one line, and its details under it.
+struct AppFeedback: Equatable {
+    enum Kind: Equatable {
+        case success
+        /// Done, with something the user should read (part of it failed, or a step is left).
+        case notice
+    }
+
+    let kind: Kind
+    let title: String
+    var detail: [String] = []
 }
 
 /// What stands next to a root action. `HelperState.actionControl` decides; this only renders it, and never
@@ -546,35 +760,63 @@ struct PrivilegedActionControlView: View {
     var showsGuidance = true
     let perform: @MainActor () -> Void
     var body: some View {
+        // Title case, in the app's own words (HIG review X5); `PrivilegedAction.title` stays the journal's record.
         switch state.actionControl {
-        case .run: Button(action.title(in: L10n.locale), action: perform)
-        case .requestHelper: Button(action.title(in: L10n.locale) + "…", action: perform)
+        case .run: Button(AppText.privilegedButton(action), action: perform)
+        case .requestHelper: Button(AppText.privilegedButton(action) + "…", action: perform)
         // What to do instead, never a bare "not available" (spec §6.3): the same guidance as the Access checklist.
         case .notAvailableInThisBuild:
             if showsGuidance {
+                // One line; the manual route is its tooltip (HIG review X6).
                 InlineCodeText(L10n.tr("app.access.helper.action.signedReleaseOrCLI")).font(.caption).foregroundStyle(.secondary)
+                    .help(L10n.tr("app.access.helper.action.manualRoute"))
             }
         }
     }
 }
 
-/// Spec §3: one sentence of why, and **Allow**.
+/// Spec §3, with the HIG review's S1, S2 and N12 (R5): the request — what will happen, one sentence of why, **Cancel**
+/// (Escape) and **Install Helper…** (Return) — and then, in the same sheet, the wait for the user's approval in System
+/// Settings, with **Open System Settings** and **Stop Waiting** (Escape).
 struct HelperRequestSheet: View {
     @Bindable var model: AppModel
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: model.pendingPrivilegedAction?.title(in: L10n.locale) ?? L10n.tr("app.helper.sheet.installTitle")).font(.headline)
-            Text(verbatim: (model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper).why(in: L10n.locale))
-            HStack {
-                Spacer()
-                Button(L10n.tr("app.action.cancel")) {
-                    model.showsHelperSheet = false
-                    model.pendingPrivilegedAction = nil
-                }
-                Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: "lock.shield").font(.system(size: 40)).foregroundStyle(.secondary).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 10) {
+                if let progress = model.helperProgress { waiting(progress) } else { request }
             }
         }
-        .padding()
-        .frame(width: 460)
+        .padding(20)
+        .frame(minWidth: 420, idealWidth: 480, maxWidth: 560)
+    }
+
+    @ViewBuilder
+    private var request: some View {
+        Text(verbatim: L10n.tr("app.helper.sheet.installTitle")).font(.headline)
+        if let action = model.pendingPrivilegedAction {
+            Text(verbatim: action.title(in: L10n.locale)).font(.callout).foregroundStyle(.secondary)
+        }
+        Text(verbatim: AppText.requirementWhy(model.pendingPrivilegedAction?.requirement ?? PrivilegeRequirement.helper))
+            .font(.callout).fixedSize(horizontal: false, vertical: true)
+        HStack {
+            Spacer()
+            Button(L10n.tr("app.action.cancel"), role: .cancel) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
+            Button(L10n.tr("app.helper.sheet.allow")) { model.installHelper(then: model.pendingPrivilegedAction) }.keyboardShortcut(.defaultAction)
+        }
+    }
+
+    @ViewBuilder
+    private func waiting(_ progress: String) -> some View {
+        Text(verbatim: L10n.tr("app.helper.sheet.waitingTitle")).font(.headline)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(verbatim: progress).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
+        HStack {
+            Spacer()
+            Button(L10n.tr("app.helper.stopWaiting")) { model.dismissHelperSheet() }.keyboardShortcut(.cancelAction)
+            Button(L10n.tr("app.helper.openSettings")) { model.openHelperApprovalSettings() }
+        }
     }
 }

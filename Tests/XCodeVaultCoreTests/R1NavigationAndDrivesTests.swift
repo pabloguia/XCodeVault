@@ -18,6 +18,26 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertFalse(h.canGoBack)
     }
 
+    /// R5 (HIG review N1): Forward returns to where Back left, and a new move forgets it, as in a browser.
+    func testForwardReturnsWhereBackLeftUntilANewMove() {
+        var h = NavigationHistory<String>()
+        h.moved(from: "a", to: "b")
+        h.moved(from: "b", to: "c")
+        XCTAssertFalse(h.canGoForward)
+        XCTAssertEqual(h.back(from: "c"), "b")
+        XCTAssertEqual(h.back(from: "b"), "a")
+        XCTAssertTrue(h.canGoForward)
+        XCTAssertEqual(h.forward(from: "a"), "b")
+        XCTAssertEqual(h.places, ["a"])
+        XCTAssertEqual(h.forward(from: "b"), "c")
+        XCTAssertNil(h.forward(from: "c"), "nothing further")
+        XCTAssertEqual(h.back(from: "c"), "b")
+        h.moved(from: "b", to: "d")
+        XCTAssertFalse(h.canGoForward, "a new move forgets Forward")
+        var empty = NavigationHistory<String>()
+        XCTAssertNil(empty.back(from: "x"))
+    }
+
     func testMovingToThePlaceShownRecordsNothing() {
         var h = NavigationHistory<String>()
         h.moved(from: "a", to: "a")
@@ -46,6 +66,10 @@ final class AppModelBackTests: XCTestCase {
         model.goBack()
         XCTAssertEqual(model.section, .overview)
         XCTAssertFalse(model.canGoBack, "going back records nothing")
+        XCTAssertTrue(model.canGoForward)
+        model.goForward()
+        XCTAssertEqual(model.section, .delete, "Forward returns to the view Back left")
+        XCTAssertFalse(model.canGoForward)
     }
 
     func testSidebarChangesAreRecordedLikeABrowserAndRepeatsAreNot() {
@@ -252,13 +276,6 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         XCTAssertTrue(open.startsExpanded)
         XCTAssertEqual(open.title, .warnings(1), "only warnings: no \"more notes\"")
         XCTAssertEqual(none.title, .notes(0))
-    }
-
-    func testASimulatorsTableIsAsTallAsItsHeaderAndRows() {
-        XCTAssertEqual(SimulatorsTable.fittedTableHeight(rowCount: 3), 28 + 3 * 24 + 2)
-        XCTAssertEqual(SimulatorsTable.fittedTableHeight(rowCount: 0), SimulatorsTable.fittedTableHeight(rowCount: 1), "at least one row")
-        XCTAssertEqual(SimulatorsTable.fittedTableHeight(rowCount: 2, rowHeight: 10, headerHeight: 5), 27)
-        XCTAssertLessThan(SimulatorsTable.fittedTableHeight(rowCount: 60), SimulatorsTable.fittedTableHeight(rowCount: 61))
     }
 
     @MainActor
