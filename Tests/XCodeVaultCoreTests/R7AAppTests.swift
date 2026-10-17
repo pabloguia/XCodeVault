@@ -142,7 +142,7 @@ final class R7AAppTests: XCTestCase {
         m.openPreparation(try assessment(m, "disk2"), option: .addVolume(container: "disk3"))
         await eventually("the review") { m.canConfirmOperation }
         XCTAssertNil(m.madeVolume, "nothing before the run")
-        drives.snapshot = try R7ACoreTests.snapshotWithMadeVolume()
+        drives.snapshot = try R7ACoreTests.snapshotWithMadeVolume(mount: NSTemporaryDirectory() + "xcv-r7a-no-such-mount-\(UUID().uuidString)")
         await m.runOperation()
         XCTAssertTrue(m.operationSheet?.isSucceeded ?? false)
         XCTAssertEqual(m.madeVolume?.volume.volumeUUID, R6DriveTests.u(302))

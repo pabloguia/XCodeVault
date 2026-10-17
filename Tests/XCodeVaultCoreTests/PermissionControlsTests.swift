@@ -106,7 +106,9 @@ final class PrivilegedActionControlTests: XCTestCase {
         func action(_ path: String, root: Bool) -> CleanAction {
             CleanAction(categoryID: "x", categoryName: "X", path: path, bytes: 1, isExperimental: true, risk: .low, requiresRoot: root, notes: [])
         }
-        XCTAssertEqual(action(PrivilegeRequirement.coreSimulatorDyldCachePath, root: true).privilegedAction, .emptyCoreSimulatorDyldCache)
+        // Not offered by this helper release (ADR-0016): the whole cache maps to no verb either, so the manual route shows.
+        XCTAssertFalse(CleanAction.helperCleanupOffered)
+        XCTAssertNil(action(PrivilegeRequirement.coreSimulatorDyldCachePath, root: true).privilegedAction)
         // The verb empties the whole cache; a path inside it must not borrow that.
         XCTAssertNil(action(PrivilegeRequirement.coreSimulatorDyldCachePath + "/25G229", root: true).privilegedAction)
         XCTAssertNil(action("/Library/Developer/CommandLineTools", root: true).privilegedAction)

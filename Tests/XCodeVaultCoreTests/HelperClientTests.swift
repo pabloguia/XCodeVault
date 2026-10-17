@@ -297,8 +297,8 @@ final class HelperClientTests: XCTestCase {
         let connection = ProxyConnection(proxy: daemon)
         let result = try await HelperClient(team: goodTeam, makeConnection: { _ in connection }).createVaultDirectory(volumeUUID: "U-1")
         XCTAssertTrue(result.ok)
-        XCTAssertEqual(daemon.calls, ["vault:U-1"])
-        XCTAssertEqual(connection.events, ["requirement", "resume", "proxy", "invalidate"])
+        XCTAssertEqual(daemon.calls, ["version", "begin:\(HelperIdentity.version)", "vault:U-1"], "the opening round trip first, on the same connection (M5)")
+        XCTAssertEqual(connection.events, ["requirement", "resume", "proxy", "proxy", "proxy", "invalidate"])
     }
 
     func testAReplyFollowedByTheInvalidationErrorResumesOnce() async throws {
@@ -308,7 +308,8 @@ final class HelperClientTests: XCTestCase {
         let result = try await HelperClient(team: goodTeam, makeConnection: { _ in ProxyConnection(proxy: daemon) })
             .removeRegenerableSystemDirectoryContents(target: .coreSimulatorDyldCache)
         XCTAssertEqual(result.message, "done")
-        XCTAssertEqual(daemon.calls, ["clean:coreSimulatorDyldCache"], "the enum's raw value crosses the wire, never a path")
+        XCTAssertEqual(
+            daemon.calls, ["version", "begin:\(HelperIdentity.version)", "clean:coreSimulatorDyldCache"], "the enum's raw value crosses the wire, never a path")
     }
 
     /// Not "and the daemon is never called", as this test was first named: its fake's proxy is not a daemon, so it

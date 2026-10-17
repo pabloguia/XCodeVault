@@ -748,6 +748,29 @@ for v in $verbs; do
     fi
     printf '%s' "$impl_body" | grep -qE 'authorize\(\)' \
         || violation "$impl_file — $impls (the implementation of $v) does not reach authorize()" "every state-changing verb must check the caller"
+
+    # M5 (ADR-0016; helper-security review R2): every verb but `begin` reaches its implementation only through the
+    # not-begun refusal, written immediately before the call, so a connection that did not complete `begin` with this
+    # helper's version reaches nothing. `begin` itself opens the connection only after the administrator gate.
+    if [ "$v" = begin ]; then
+        gate_line=$(printf '%s\n' "$impl_body" | grep -nE 'authorize\(\)' | head -1 | cut -d: -f1)
+        open_line=$(printf '%s\n' "$impl_body" | grep -nE '^[[:space:]]*begun = true' | head -1 | cut -d: -f1)
+        { [ -n "$gate_line" ] && [ -n "$open_line" ] && [ "$open_line" -gt "$gate_line" ]; } \
+            || violation "$impl_file — $impls sets begun before authorize(), or never" "a connection must be opened only for an administrator"
+        # …and nowhere else: one assignment in the file, and the flag starts shut (review round 2, N5). Read into a
+        # variable first: `grep -q` on a pipe exits early, and under pipefail that reads as "no match".
+        service_code=$(code_of "$impl_file")
+        [ "$(printf '%s\n' "$service_code" | grep -vE 'var begun' | grep -cE '(^|[^a-zA-Z0-9_.])(self\.)?begun[[:space:]]*=[^=]')" = 1 ] \
+            || violation "$impl_file — begun is assigned outside doBegin" "only a successful begin may open a connection"
+        [ "$(printf '%s\n' "$service_code" | grep -cE '^[[:space:]]*private var begun = false$')" = 1 ] \
+            || violation "$impl_file — begun does not start false" "a new connection must start shut"
+        # While ADR-0016 holds, the cleanup verb is not offered.
+        [ "$(printf '%s\n' "$service_code" | grep -cE '^[[:space:]]*static let cleanupOffered = false$')" = 1 ] \
+            || violation "$impl_file — the cleanup verb is offered" "ADR-0016: it has no in-use check of its own"
+    else
+        printf '%s' "$verb_body" | grep -qE "self\.notBegunRefusal \?\? self\.$impls\(" \
+            || violation "$impl_file — $v reaches $impls without self.notBegunRefusal ?? in front of it" "every verb must be refused on a connection that has not begun"
+    fi
 done
 
 # ---- the audit trail's own file (issue #4) -----------------------------------------------------------

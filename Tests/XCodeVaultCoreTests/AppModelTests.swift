@@ -196,7 +196,10 @@ final class LiveHelperTests: XCTestCase {
             client: HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, daemon: RecordingLaunchd(status: .enabled).daemon))
         let vault = try await helper.perform(.createVaultDirectory(volumeUUID: "U-1"))
         let cache = try await helper.perform(.emptyCoreSimulatorDyldCache)
-        XCTAssertEqual(daemon.calls, ["vault:U-1", "clean:coreSimulatorDyldCache"], "the enum's raw value and a UUID cross the wire, never a path")
+        XCTAssertEqual(
+            daemon.calls,
+            ["version", "begin:\(HelperIdentity.version)", "vault:U-1", "version", "begin:\(HelperIdentity.version)", "clean:coreSimulatorDyldCache"],
+            "the enum's raw value and a UUID cross the wire, never a path")
         XCTAssertEqual(vault, PrivilegedActionReply(ok: true, message: "done", bytesFreed: 4096))
         XCTAssertEqual(cache, PrivilegedActionReply(ok: true, message: "done", bytesFreed: 4096))
     }

@@ -89,7 +89,9 @@ run_case "HYG7 default permissions"                       HYG7 "swap $R 'permiss
 run_case "HYG7 review: a job granted more"                HYG7 "swap $R '    permissions:${NL}      contents: read' '    permissions:${NL}      contents: write${NL}      actions: write'"
 run_case "HYG7 a fourth job"                              HYG7 "printf '  extra:\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps: [{run: echo}]\n' >>$R"
 run_case "HYG7 a reusable workflow call"                  HYG7 "swap $R '    runs-on: ubuntu-latest' '    uses: ./.github/workflows/ci.yml${NL}    runs-on: ubuntu-latest'"
-run_case "HYG8 --with-helper"                             HYG8 "swap $R '--release --team' '--release --with-helper --team'"
+run_case "HYG8 the helper left out"                       HYG8 "swap $R ' --with-helper --for-ci-signing' ''"
+run_case "HYG8 the helper without the CI signing flag"     HYG8 "swap $R ' --for-ci-signing' ''"
+run_case "HYG8 a second bundle-app.sh line"                HYG8 "swap $R '          git diff --exit-code' '          bash scripts/bundle-app.sh --release${NL}          git diff --exit-code'"
 run_case "HYG9 a signing secret in the build job"         HYG9 "insert $R '$B_STEP' '      - name: x${NL}        env: {X: \"\${{ secrets.NOTARY_KEY_ID }}\"}${NL}        run: echo${NL}'"
 # In a plain scalar ` #` really is a comment, to YAML and so to Actions; in a block scalar it is text.
 run_case "HYG9 review: toJSON after a # in a run block"   HYG9 "insert $R '$B_STEP' '      - name: x${NL}        run: |${NL}          echo \" #\${{ toJSON(secrets) }}\"${NL}'"
@@ -103,25 +105,36 @@ run_case "HYG9 the sign job's environment renamed"        HYG9 "swap $R '    env
 # Mach-O check has real Mach-O files to classify. Each case must exit with the expected status, and a refusal
 # must not print what it found (its output is a public log on CI).
 SCAN="$REPO/scripts/release-artifact-scan.sh"
-scan_case() {   # name, expected exit, edit run inside the bundle's parent
-    local name="$1" want="$2" edit="$3" out status
+PLIST="$REPO/Resources/LaunchDaemons/com.xcodevault.helper.plist"
+# The bundle's helper parts: a stand-in binary and the tracked plist, as bundle-app.sh --with-helper lays them out.
+WITH_HELPER="cp /bin/echo X.app/Contents/MacOS/xcodevault-helper && mkdir -p X.app/Contents/Library/LaunchDaemons && cp '$PLIST' X.app/Contents/Library/LaunchDaemons/"
+scan_case() {   # name, expected refusal ("" for a control), edit run inside the bundle's parent, [expected plist, default none]
+    # A refusal is pinned by its message, as the unpack cases below are: several of these bundles trip more than one rule.
+    local name="$1" want="$2" edit="$3" expected="${4-}" out status
     rm -rf "$WORK/b"; mkdir -p "$WORK/b/X.app/Contents/MacOS" "$WORK/b/X.app/Contents/Resources"
     cp /bin/echo "$WORK/b/X.app/Contents/MacOS/XCodeVault"; cp /bin/echo "$WORK/b/X.app/Contents/MacOS/xcodevaultctl"
     printf '<plist/>\n' >"$WORK/b/X.app/Contents/Info.plist"
     (cd "$WORK/b" && eval "$edit")
-    out=$(bash "$SCAN" "$WORK/b/X.app" 2>&1); status=$?
-    if [ "$status" != "$want" ]; then echo "FAIL  scan: $name: exit $status: $out"; failed=$((failed + 1))
+    out=$(bash "$SCAN" "$WORK/b/X.app" $expected 2>&1); status=$?
+    if [ -z "$want" ] && [ "$status" != 0 ]; then echo "FAIL  scan: $name: exit $status: $out"; failed=$((failed + 1))
+    elif [ -n "$want" ] && { [ "$status" != 1 ] || ! printf '%s' "$out" | grep -qF "$want"; }; then
+        echo "FAIL  scan: $name: wanted '$want', exit $status: $out"; failed=$((failed + 1))
     elif printf '%s' "$out" | grep -qE 'someone|jane@'; then echo "FAIL  scan: $name: printed what it found"; failed=$((failed + 1))
     else echo "ok    scan: $name"; passed=$((passed + 1)); fi
 }
-scan_case "control: a clean bundle"              0 ""
-scan_case "control: the runner's home"           0 "printf '/Users/runner/work/x\n' >X.app/Contents/Resources/r.txt"
-scan_case "a person's home path"                 1 "printf '/Users/someone/projects\n' >X.app/Contents/Resources/r.txt"
-scan_case "an e-mail address"                    1 "printf 'by jane@example.com\n' >X.app/Contents/Resources/r.txt"
-scan_case "the helper"                           1 "cp /bin/echo X.app/Contents/MacOS/xcodevault-helper"
-scan_case "a LaunchDaemons folder"               1 "mkdir -p X.app/Contents/Library/LaunchDaemons"
-scan_case "a stray Mach-O"                       1 "cp /bin/echo X.app/Contents/Resources/tool"
-scan_case "a symbolic link"                      1 "ln -s /etc/hosts X.app/Contents/Resources/l"
+scan_case "control: a clean bundle"                ""  ""
+scan_case "control: the runner's home"             ""  "printf '/Users/runner/work/x\n' >X.app/Contents/Resources/r.txt"
+scan_case "control: the helper and the tracked plist" "" "$WITH_HELPER" "$PLIST"
+scan_case "a person's home path"                   "names a home directory" "printf '/Users/someone/projects\n' >X.app/Contents/Resources/r.txt"
+scan_case "an e-mail address"                      "shaped like an e-mail" "printf 'by jane@example.com\n' >X.app/Contents/Resources/r.txt"
+scan_case "the helper without its plist"           "without its LaunchDaemons plist" "cp /bin/echo X.app/Contents/MacOS/xcodevault-helper"
+scan_case "a LaunchDaemons folder without the helper" "without the helper" "mkdir -p X.app/Contents/Library/LaunchDaemons"
+scan_case "a plist that is not the tracked one"    "differs from the tracked one" "$WITH_HELPER && printf ' ' >>X.app/Contents/Library/LaunchDaemons/com.xcodevault.helper.plist" "$PLIST"
+scan_case "a second file beside the plist"         "something other than" "$WITH_HELPER && printf 'x' >X.app/Contents/Library/LaunchDaemons/other.plist" "$PLIST"
+scan_case "the helper and no plist to compare with" "no expected plist" "$WITH_HELPER"
+scan_case "a plist expected and no helper"           "carries no helper" "" "$PLIST"
+scan_case "a stray Mach-O"                         "unexpected Mach-O" "cp /bin/echo X.app/Contents/Resources/tool"
+scan_case "a symbolic link"                        "symbolic link" "ln -s /etc/hosts X.app/Contents/Resources/l"
 
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.
