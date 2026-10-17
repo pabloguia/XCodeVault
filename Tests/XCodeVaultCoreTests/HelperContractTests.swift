@@ -81,7 +81,7 @@ final class HelperContractTests: XCTestCase {
     /// before `0.2.2`, so the client reports it outdated and reinstalls it.
     /// M5 (ADR-0016) bumped it to 0.3.0: a new verb, `begin`, every other verb refused without it, and two new codes.
     func testTheContractVersionMovedWithEnableOwnership() {
-        XCTAssertEqual(HelperIdentity.version, "0.3.0-dev")
+        XCTAssertEqual(HelperIdentity.version, "0.3.0-rc.1")
         XCTAssertTrue(HelperResultCode.allCases.contains(.enabled))
     }
 }
