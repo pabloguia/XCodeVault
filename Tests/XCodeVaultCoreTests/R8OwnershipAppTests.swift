@@ -61,8 +61,8 @@ final class R8OwnershipAppTests: XCTestCase {
     func testOnlyAnOlderHelperIsReportedOutdatedAndANewerOneIsLeftAlone() async {
         for (reply, expected) in [
             ("0.2.0", HelperResultCode.helperOutdated), ("0.2.1-dev", .helperOutdated), ("0.2.1", .helperOutdated),
-            ("0.2.2-alpha", .helperOutdated), ("0.1.9", .helperOutdated),
-            ("0.2.2", .helperNewer), ("0.2.3-dev", .helperNewer), ("0.3.0", .helperNewer), ("1.0.0", .helperNewer),
+            ("0.2.2-alpha", .helperOutdated), ("0.2.2-dev", .helperOutdated), ("0.1.9", .helperOutdated),
+            ("0.2.3", .helperNewer), ("0.2.3-dev", .helperNewer), ("0.3.0", .helperNewer), ("1.0.0", .helperNewer),
             ("not-a-version", .helperNewer), ("", .helperNewer),
         ] {
             let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: reply)

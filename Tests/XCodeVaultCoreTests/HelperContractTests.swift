@@ -77,8 +77,10 @@ final class HelperContractTests: XCTestCase {
     /// Bump this again with the next change to `XCodeVaultHelperXPC` or `HelperResult`. Round 4 bumped it to 0.2.1 for the
     /// right's new definition: a 0.2.0 daemon still running checks the old one, and the client's handshake has to see it.
     /// Round 7 bumped it to 0.2.2: the 0.2.1 daemon reads the volume's files, which TCC refuses it (H18), and must be replaced.
+    /// The v0.2.2 release dropped `-dev` with the product (test above), the contract unchanged: a `0.2.2-dev` daemon orders
+    /// before `0.2.2`, so the client reports it outdated and reinstalls it.
     func testTheContractVersionMovedWithEnableOwnership() {
-        XCTAssertEqual(HelperIdentity.version, "0.2.2-dev")
+        XCTAssertEqual(HelperIdentity.version, "0.2.2")
         XCTAssertTrue(HelperResultCode.allCases.contains(.enabled))
     }
 }
