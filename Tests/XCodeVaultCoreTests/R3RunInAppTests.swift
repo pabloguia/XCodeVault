@@ -223,6 +223,30 @@ final class R3RunInAppTests: XCTestCase {
         XCTAssertEqual(AppModel.inputBlockers(.offloadRuntime, OperationInputs()), [.chooseRuntime, .chooseFolder])
         XCTAssertEqual(AppModel.inputBlockers(.deleteRuntime, OperationInputs(runtimeID: "R")), [])
         XCTAssertEqual(AppModel.inputBlockers(.setDerivedData, OperationInputs(folder: "/x")), [])
+        XCTAssertEqual(
+            AppModel.inputBlockers(.setDerivedData, OperationInputs(folder: "/x", keepProductsOnThisMac: true)), [.chooseProductsFolder],
+            "a split that skipped the usual folder still has to name one")
+    }
+
+    func testTheSplitOffersTheUsualProductsFolderWithoutCreatingIt() {
+        let offered = XcodeLocations.suggestedProductsDirectory()
+        let existed = FileManager.default.fileExists(atPath: offered)
+        var inputs = OperationInputs(folder: "/Volumes/Fast/DerivedData")
+        AppModel.applyDerivedDataMode(true, to: &inputs)
+        XCTAssertEqual(inputs.productsFolder, offered)
+        XCTAssertTrue(inputs.productsFolder?.hasPrefix("/") == true, "the sheet shows the expanded path")
+        XCTAssertTrue(inputs.keepProductsOnThisMac)
+        XCTAssertFalse(inputs.acknowledgeTests, "the acknowledgement is still required")
+        XCTAssertEqual(FileManager.default.fileExists(atPath: offered), existed, "selecting the split does not create the folder")
+        XCTAssertEqual(AppModel.inputBlockers(.setDerivedData, inputs), [], "Run is not blocked because the folder was empty")
+        inputs.productsFolder = "/Users/me/CustomProducts"
+        AppModel.applyDerivedDataMode(true, to: &inputs)
+        XCTAssertEqual(inputs.productsFolder, "/Users/me/CustomProducts", "Choose Another Folder stays")
+        var whole = OperationInputs(folder: "/Volumes/Fast/DerivedData", productsFolder: "/Users/me/CustomProducts")
+        AppModel.applyDerivedDataMode(false, to: &whole)
+        XCTAssertFalse(whole.keepProductsOnThisMac)
+        XCTAssertEqual(whole.productsFolder, "/Users/me/CustomProducts", "whole-folder mode leaves a chosen products folder unused")
+        XCTAssertEqual(AppModel.inputBlockers(.setDerivedData, whole), [])
     }
 
     func testBlockersAreLocalizedAndCoreSentencesAreShownAsGiven() {

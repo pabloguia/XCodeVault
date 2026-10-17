@@ -121,14 +121,47 @@ public enum DriveRegistration {
     }
 
     public static func useDrive(
-        _ volume: Volume, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal(),
+        _ volume: Volume, folderName: String = VaultVolume.directoryName, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal(),
         isMountPoint: @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
         volumeUUID: @Sendable (String) -> String? = { MountStatus.volumeUUID(at: $0) }
     ) throws -> Outcome {
         guard !volume.isNetwork else { throw VaultError("\(volume.volumeName) is a network volume; a vault must be a local disk.") }
-        let vault = try registry.register(volume, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
+        // ADR-0015: the folder is the user's to name; one folder directly in the drive's root, whatever was typed.
+        if let problem = VaultFolderName.problem(folderName) { throw VaultError(VaultFolderName.message(for: problem) ?? "The folder name is not usable.") }
+        if let uuid = volume.volumeUUID, let already = try registry.volumes().first(where: { $0.volumeUUID == uuid }), already.relativeDirectory != folderName {
+            throw VaultError(
+                "\(volume.volumeName) is already a vault, in the folder “\(already.relativeDirectory)”. Use that, or forget it first to choose another name.")
+        }
+        // A folder the user named is used only when it is absent, empty, or already this Mac's vault (ADR-0015).
+        if let mp = volume.mountPoint, let uuid = volume.volumeUUID,
+            let why = VaultFolderName.message(
+                for: VaultFolderName.occupancy(of: mp + "/" + folderName, volumeUUID: uuid, host: HostFingerprint.current()), name: folderName)
+        {
+            throw VaultError(why)
+        }
+        let vault = try registry.register(volume, relativeDirectory: folderName, journal: journal, isMountPoint: isMountPoint, volumeUUID: volumeUUID)
         guard let mp = volume.mountPoint else { throw VaultError("Volume has no mount point.") }
         return outcome(vault: vault) { try VaultLayout.createFolders(vaultDirectory: vault.vaultDirectory(atMountPoint: mp)) }
+    }
+
+    /// R8: the privileged step **Use This Drive** needs first, or nil when there is none. With ownership on, a volume's
+    /// root keeps its real owner: a volume the user made is theirs, and `XCodeVault/` is created without root. A root
+    /// the user cannot write to — root-owned — needs the helper's `createVaultDirectory`, which makes the folder and hands
+    /// it to the user; registration then finds it there. Offered only where the helper accepts the volume
+    /// (`VaultDirectoryRefusal.helperAccepts`) and only while the folder is known to be absent: never for a folder that
+    /// is there, or that cannot be looked at.
+    public static func vaultFolderHelperStep(
+        _ volume: Volume, folderName: String = VaultVolume.directoryName, rootIsWritable: (String) -> Bool = { access($0, W_OK) == 0 },
+        folderIsAbsent: ((String) -> Bool)? = nil
+    ) -> PrivilegedAction? {
+        let folderIsAbsent = folderIsAbsent ?? { VaultDirectoryRefusal.folderState($0) == .absent }
+        // The helper makes exactly one folder name, `XCodeVault`; any other name is made by the user (ADR-0015).
+        guard folderName == VaultVolume.directoryName else { return nil }
+        guard let mp = volume.mountPoint, let uuid = volume.volumeUUID, VaultDirectoryRefusal.helperAccepts(mountPoint: mp, volumeUUID: uuid) else {
+            return nil
+        }
+        guard folderIsAbsent(mp + "/" + VaultVolume.directoryName), !rootIsWritable(mp) else { return nil }
+        return .createVaultDirectory(volumeUUID: uuid)
     }
 
     /// The registered vault and what creating its folders gave: the folders, or the error as a partial outcome.

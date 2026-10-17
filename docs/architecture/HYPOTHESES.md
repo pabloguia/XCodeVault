@@ -2070,3 +2070,155 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 `addPartition`, `eraseVolume` and `eraseDisk` PENDING — disk-image evidence only.** Manual procedure for the remaining physical cases: in the app, on a spare external disk whose data you do not
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
+
+## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; (a)/(b) FAILED with the stock admin rule, 2026-10-05; **(a)/(b) PASS with the right's own rule, 2026-10-06; (c)/(d) PASS 2026-10-07 with fix rounds 6–7**)*
+
+**Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
+(a) asks for the administrator password in the system dialog every time; (b) the helper's re-check of the client's
+externalized right (`AuthorizationCopyRights` on `clientRef`, no interaction) succeeds after a correct password and fails
+after a cancel or a wrong one; (c) `diskutil enableOwnership /dev/<diskNsM>` — the validated disk of the pinned mount entry
+(fix rounds 6–7) — run as root by the daemon turns ownership on
+for a **mounted** external APFS volume without a remount; (d) the helper's re-read then shows `GlobalPermissionsEnabled`
+and no `MNT_IGNORE_OWNERSHIP`, and the app's Plan advances to Use This Drive.
+
+**Read from this Mac (helper-security review, 2026-10-05):** `authenticate-admin` is `allow-root = false`,
+`shared = true`, `timeout = 0` — root is not let through by the rule itself.
+
+**Open questions the run answers.** Whether the helper's non-interactive `extendRights` check succeeds on a client
+reference just granted with interaction: with `timeout = 0` the credential may not be reusable for that second
+evaluation, and EvenBetterAuthorizationSample-style designs rely on it succeeding — the real-window run decides, and if
+it fails the guided fallback is shown and nothing else changes; whether the very first call — the right defined at the daemon's startup, moments before — passes; whether TCC lets the
+root daemon read the volume's root for the Time Machine marker (an unreadable root is refused, which would show here).
+
+**How it is proven.** ADR-0014; the user's real-window run with the signed build (`scripts/bundle-app.sh --release
+--sign … --with-helper`): register and approve the helper, press **Turn On Ownership** on the `XCodeVault` volume, enter
+the password, then check `diskutil info /Volumes/XCodeVault | grep Owners` and `log show --predicate 'subsystem ==
+"com.xcodevault.helper"' --last 10m`; check that no `/Volumes/XCodeVault 1` appeared (`ls /Volumes`), that the mount
+point is unchanged, and that `xcodevaultctl vault status` reports the same verification state as before for every registered vault;
+check `security authorizationdb read com.xcodevault.helper.enable-ownership` shows `identifier` =
+`com.xcodevault.helper` and the `authenticate-admin` rule (L4 follow-up); repeat once cancelling the dialog. Record the outcome here and in
+`COMPATIBILITY_MATRIX.md` ("H18 physical").
+
+**Measured 2026-10-05 (macOS 26.7.1 25G241 · Intel, signed build, by the user in the app's window; evidence
+`docs/research/evidence/h18-enable-ownership-helper-macos26.7.1-25G241-x86_64.txt`).** (a) The password dialog appeared
+and was answered. (b) **FAILED:** the helper's re-check returned `errAuthorizationInteractionNotAllowed` (-60007), so
+nothing ran; `Owners: Disabled` afterwards, no `/Volumes/XCodeVault 1`, and the app showed the guided route with the
+reason — the fallback worked as designed. Cause: the right pointed at the stock `authenticate-admin` rule, whose
+`timeout` is 0, so the credential the client obtained could not be reused by the helper's non-interactive check. The
+database recorded `identifier = com.xcodevault.helper` (L4 confirmed).
+
+**Fix round 4 (pending a re-test).** The right gets its own definition — `class user`, `group admin`, `timeout 10`,
+`shared false`, `allow-root false` — so the client's credential stays valid for the helper's immediate re-check and
+lives only in the client's one reference (destroyed afterwards by both sides, so every click asks again). The daemon
+rewrites the old definition at start; the helper contract moved to 0.2.1-dev, and an app that meets the old 0.2.0
+daemon removes its registration and installs this build's through the approval flow, once per click. Re-test with the
+same procedure; also confirm `security authorizationdb read com.xcodevault.helper.enable-ownership` shows the new
+dictionary.
+
+**Fix round 5 (still pending the same re-test).** The helper reviewer read `"tries" => 10000` on this Mac's
+`authenticate-admin-30` and `authenticate-admin-nonshared`: authd adds it to every user-class rule, and the round-4
+read-back check, which did not allow it, would have refused every call with `authorizationUnavailable`. It is now
+allowed as a whole number of at least 1. A read-back also counts as ours only when its `default-prompt` is absent or
+ours, and its `requirement` names this build's team. The re-test must therefore **capture `security authorizationdb
+read com.xcodevault.helper.enable-ownership` after the new daemon has written the right** and record the dictionary in
+the evidence file — `tries`, `requirement` and `default-prompt` exactly as authd stores them — since the check now
+depends on all three. Also, where feasible: two clicks within 10 s must **both** prompt (the 10 s bounds the right, but
+the reference is destroyed by both sides after each call), and replaying a captured external form must be denied. The
+10 s bounds only this right: the client's reference holds an admin credential that other user-class admin rules (e.g.
+`system.privilege.admin`, 300 s, not shared) could accept until it is destroyed; `.destroyRights` on both sides is
+what bounds it.
+
+**Info step for the re-test (fix round 5, N3; documentation only).** Before installing the new daemon, have a foreign
+writer pre-create the right — e.g. `security authorizationdb write com.xcodevault.helper.enable-ownership allow` from
+Terminal as the user, which `config.add.` permits — then start the new daemon, which must rewrite it, and read
+`security authorizationdb read com.xcodevault.helper.enable-ownership`. Record `identifier` and `requirement`: if authd
+keeps the **original creator's** requirement on a rewrite, the read-back can never be ours and every call is refused;
+the code fix is then `AuthorizationRightRemove` before `AuthorizationRightSet` in `ensureDefinition`.
+
+**Re-test 2026-10-06 (macOS 26.7.1 25G241 · Intel, signed 0.2.1-dev build, by the user; evidence appended to the
+same file).** The password was asked and given; the journal reads `planned` → `started` → `failed: "volume not
+mounted"`. `security authorizationdb read` shows the right as `class user, group admin, shared false, timeout 10,
+tries 10000, identifier com.xcodevault.helper` — F1's `tries` confirmed on device. **(a)/(b): PASS** — the helper's
+re-check passed and the verb went on to the volume. It then failed in the root daemon's pin: the UUID was the right one,
+and the same lookup (`getmntinfo_r_np` + `getattrlist` on each mount point) run read-only as the user finds
+`/Volumes/<vault>` with it. The only difference is the process context: a root launchd daemon is subject to TCC, and
+removable volumes are their own category, which a daemon cannot request (SECURITY_MODEL "Privilege and TCC facts").
+**[LIKELY], not [VERIFIED]:** `log show` returned nothing to this session, so the denial itself was not observed. It
+failed closed: `Owners: Disabled`, no `<vault> 1`.
+
+**Fix round 6.** The helper never opens, stats or asks attributes of anything on the target volume. Identity comes
+from `diskutil info -plist <UUID>` (DiskArbitration), the mount table (one entry at the plist's mount point, the same
+one as the only entry with its device node; `f_fsid`, type and flags pinned) and `diskutil list -plist` (the UUID on
+exactly one volume); all three are read again immediately before the command, with no descriptor held. The verb is
+APFS-only; Time Machine is refused by the APFS `Backup` role, with no marker-file check (**corrected in fix round 7:**
+the role was read from `info -plist`, which has no roles key on macOS 26.7.1, so the check never fired; roles now come
+from `diskutil apfs list -plist` and must be present and empty). The post-verify reads diskutil
+and the mount table again: `GlobalPermissionsEnabled` on, `MNT_IGNORE_OWNERSHIP` clear, the same entry.
+`helper-invariants.sh` forbids file access in `HelperOwnership.swift` and in the verb. **(c)/(d) pending** the same
+re-test with this build.
+
+**Fix round 7.** Roles from `apfs list` (present, found once, empty); the mount entry must be `nosuid` and `nodev`;
+the re-check reads the mount table last; `enableOwnership` gets `/dev/diskNsM`; the contract moved to 0.2.2-dev, so
+the installed 0.2.1 daemon is reinstalled before the re-test. **(c)/(d) pending** with this build.
+
+**Re-test 2026-10-07 (signed 0.2.2-dev build, by the user; evidence appended to the same file).** (c)/(d): **PASS.** After
+the password the journal reads `planned` → `started` → `completed` ("ownership is on"); `diskutil info` reports `Owners:
+Enabled`; `ls /Volumes` lists no `<vault> 1` and the mount point is unchanged; the Plan moved on to Use This Drive. The
+design of rounds 6–7 (identity from diskutil and the mount table only, `/dev/diskNsM`, no file access on the volume) is
+what worked. Not re-run in this pass: the two-clicks-within-10-s and replayed-form checks, and the Time Machine refusal.
+
+**Side finding, same run.** With ownership on the volume root is `root:wheel`, so **Use This Drive** failed creating
+`XCodeVault/` (R7-D and R8 had assumed the root stays the user's). The helper's `createVaultDirectory` opens the volume as
+root and is expected to fail under TCC, so it is not the route. The fix needs no helper change: **Turn On Ownership**
+first makes `XCodeVault/` as the user while ownership is off (`VaultFolderPrecreate`: one `mkdir`, after the mount point
+and UUID are asserted, nothing followed or overwritten), and the folder stays the user's after ownership is on (measured on a
+disk image 2026-10-07; **[VERIFIED] on a disk image only — a real drive is pending**). A volume that already has
+ownership on keeps the guided `sudo mkdir && chown` command.
+
+**Status: (a)/(b) PASS (2026-10-06); (c)/(d) PASS (2026-10-07).** Experimental everywhere (rule 10): one drive, one macOS
+version, Intel.
+
+## H19 — test products can stay internal while DerivedData's bulk sits on a physical external volume *(new, 2026-10-10; **probable**)*
+
+**Claim:** `xcodebuild test` of a dynamic-library XCTest bundle can pass when the test products are on the internal
+disk and the bulky build directories are on a physical external volume. H6 still holds for a bundle that itself
+sits on that volume.
+
+**Status: probable (E19, 2026-10-10, macOS 26.7.1 25G241 / Xcode 26.5 17F42 / Intel; one-shot Locations keys passed 2026-10-11, same machine).** One USB disk, owners on,
+case-sensitive APFS. The fixture is `fixtures/E2Fixture`. Scratch only: the volume's pre-existing per-user
+`.TemporaryItems`, and `~/.xcodevault-e19-scratch`. No Xcode defaults were written (`IDEBuildLocationStyle` stayed
+`Shared`; the four custom location keys stayed unset). Evidence:
+`docs/research/evidence/e19-split-products-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+
+| Layout | Products | Bulk | `xcodebuild test` |
+|---|---|---|---|
+| CTRL — entire DerivedData on the USB volume | external | external (module cache 80 MB, index 21 MB, SDK stat caches 14 MB, build 3.9 MB) | **FAIL** exit 65, the E2 bundle-instance error |
+| SYM — `-derivedDataPath` on the volume, `SYMROOT` internal, intermediates/index/module cache on the volume | internal, 376 KB | external (module cache 80 MB, index 21 MB, intermediates 3.4 MB, SDK stat caches 14 MB inside that DerivedData) | **PASS** |
+| INV — DerivedData internal, `OBJROOT` / index / module cache on the volume | internal, inside DerivedData | those three external; SDK stat caches (14 MB) stayed internal | **PASS** |
+
+What this allows: an invocation can keep the bytes that dominate this build (module cache, index, intermediates, and,
+when DerivedData itself is external, the SDK stat caches) on the USB volume and still load the test bundle. SYM is
+the layout that moves more: the compilation cache and the logs went with DerivedData.
+
+What this does not allow: pointing Xcode's DerivedData location at the volume. That is CTRL, and it still fails.
+`locations set-derived-data` still does that, and it still warns. The product also offers the split, as
+`locations set-derived-data-split` and as a choice on the DerivedData Run sheet. It writes
+`IDECustomDerivedDataLocation` (the external folder), `IDEBuildLocationStyle=Custom`,
+`IDECustomBuildLocationType=Absolute`, `IDECustomBuildProductsPath` (on this Mac) and
+`IDECustomBuildIntermediatesPath` (under the external folder). Index and module cache follow the DerivedData
+location. E19 did not write those keys — it passed the directories as `xcodebuild` settings. On 2026-10-11 the same
+five keys, as one-shot `-IDE…` arguments and with no `defaults write`, made `xcodebuild test` pass (exit 0) on this
+machine: products 376 KB internal, and on the USB volume the intermediates (3.5 MB), the workspace folder that holds
+the index (21 MB), the module cache (79 MB), the SDK stat caches (14 MB) and the compilation cache. There is no
+separate index or module-cache defaults key; both followed `IDECustomDerivedDataLocation`. CTRL, the whole DerivedData
+on that volume, still failed (exit 65, the E2 bundle-instance error), so the baseline holds. `IDEBuildLocationStyle`
+stayed `Shared` and the custom keys stayed unset. This is not a persisted Locations write and not the Xcode GUI.
+Evidence: `docs/research/evidence/e19-locations-keys-macos26.7.1-25G241-xcode26.5-x86_64.txt`. Not Apple Silicon, not the Xcode GUI runner, not a Simulator destination, not a second
+disk, not Thunderbolt (E14d), disconnect not tested. The fixture is small; the split of *where* the bytes went is
+measured, a large project's ratio is not. `swift test` was not repeated; E2 already passed it on this class of
+volume. A project's own workspace location settings can override the global keys; that was not measured.
+
+A 2023 forum note says `tccutil reset SystemPolicyRemovableVolumes` then a permission prompt makes the bundle load
+from the volume itself. That would mutate the user's TCC database. It was not run. It is a hypothesis, not a result.
+
+Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.

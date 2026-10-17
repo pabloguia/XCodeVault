@@ -30,7 +30,13 @@ let privilegedWork = DispatchQueue(label: "com.xcodevault.helper.work")
 final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     let callerUID: uid_t
     let callerGID: gid_t
-    init(callerUID: uid_t, callerGID: gid_t) { self.callerUID = callerUID; self.callerGID = callerGID }
+    /// The team this daemon was built for (R8 fix round 5, F3): the authorization right's definition counts as ours only
+    /// when its writer was signed by this team. `ListenerDelegate` passes the one `main.swift` validated; the default, the
+    /// placeholder, is not a usable team, so a service built without one accepts no definition and refuses the verb.
+    let teamID: String
+    init(callerUID: uid_t, callerGID: gid_t, teamID: String = HelperIdentity.teamIDPlaceholder) {
+        self.callerUID = callerUID; self.callerGID = callerGID; self.teamID = teamID
+    }
 
     /// The caller's name and primary gid. Seams like this one exist so the gate can be tested;
     /// see the target header for why that is not optional here.
@@ -195,6 +201,88 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
                     result: result, wasUnauthorized: Self.wasUnauthorized(result)))
             reply(result)
         }
+    }
+
+    func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void) {
+        privilegedWork.async {
+            let result = self.doEnableOwnership(volumeUUID: volumeUUID, authorization: authorization)
+            // The authorization form is never logged, not even hashed: it is a credential. The result's code carries
+            // the authorization outcome (`HelperAudit.AuditRecord.code`).
+            HelperAudit.emit(
+                .from(
+                    verb: "enableOwnership", callerUID: self.callerUID,
+                    validatedArguments: ["volumeUUID": UUID(uuidString: volumeUUID)?.uuidString ?? "<rejected>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
+    }
+
+    /// R8 (ADR-0014). EXPERIMENTAL (rule 10). The order is the point:
+    ///
+    ///   1. the administrator gate, as every state-changing verb;
+    ///   2. the UUID, parsed and never the all-zero one;
+    ///   3. the right: its definition put in place (a rewritten one refuses this call), then checked from the client's
+    ///      externalized reference — before anything about any disk is read, so a caller without the right learns
+    ///      nothing about this Mac's volumes;
+    ///   4. the volume, resolved by the helper from the UUID, and refused unless eligible (`HelperOwnership.refusal`);
+    ///   5. nothing run when ownership is already on;
+    ///   6. the pinned mount checked once more, then `diskutil enableOwnership <its disk identifier>`, then the volume read again
+    ///      from the mount table and diskutil: the same mount entry, `GlobalPermissionsEnabled`, and no
+    ///      `MNT_IGNORE_OWNERSHIP`. A `diskutil` that reports success without that is `notVerified`.
+    ///
+    /// Fix round 6: nothing here, nor in `HelperOwnership.swift`, touches a file on the volume (`helper-invariants.sh`).
+    ///
+    /// `rights`, `volumes` and `diskutil` are test seams, functions of nothing on the XPC wire; the dispatch above
+    /// passes none of them.
+    func doEnableOwnership(
+        volumeUUID: String, authorization: Data, rights: (any OwnershipRightAuthority)? = nil,
+        volumes: (any OwnershipVolumeReading)? = nil, diskutil: any DiskutilRunning = SpawnedDiskutil()
+    ) -> HelperResult {
+        let rights = rights ?? SecurityRightAuthority(teamID: teamID)
+        if let denied = authorize() { return HelperResult(ok: false, message: denied.message, code: .unauthorized) }
+        guard let uuid = UUID(uuidString: volumeUUID), uuid != Self.nilVolumeUUID else {
+            return HelperResult(ok: false, message: "invalid UUID", code: .invalidArgument)
+        }
+
+        switch rights.ensureDefinition() {
+        case .unchanged, .defined: break
+        case .redefined:
+            return HelperResult(
+                ok: false, message: "the authorization right had a different definition and has been reset; try again", code: .authorizationUnavailable)
+        case .failed(let status):
+            return HelperResult(ok: false, message: "the authorization right could not be defined (\(status))", code: .authorizationUnavailable)
+        }
+        switch rights.check(externalForm: authorization) {
+        case .granted: break
+        case .malformed: return HelperResult(ok: false, message: "the authorization is not valid", code: .authorizationMalformed)
+        case .denied(let status): return HelperResult(ok: false, message: "the authorization was not granted (\(status))", code: .authorizationDenied)
+        }
+
+        let reader = volumes ?? OwnershipVolumeReader(runner: diskutil)
+        // Pinned from the mount table and diskutil only (fix round 6): the helper never opens, stats or getattrlists
+        // anything on the volume, because TCC refuses a root launchd daemon access to a removable volume (H18).
+        guard let pin = reader.pin(volumeUUID: uuid) else { return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound) }
+        let facts: OwnershipVolumeFacts
+        switch reader.lookup(volumeUUID: uuid, pin: pin) {
+        case .found(let f): facts = f
+        case .notMounted: return HelperResult(ok: false, message: "volume not mounted", code: .volumeNotFound)
+        case .unreadable(let why): return HelperResult(ok: false, message: "the volume could not be read: \(why)", code: .volumeNotFound)
+        }
+        if let why = HelperOwnership.refusal(facts) { return HelperResult(ok: false, message: why, code: .volumeIneligible) }
+        if facts.ownersEnabled { return HelperResult(ok: true, message: "ownership is already on", code: .alreadyEnabled) }
+
+        // The last question before the command: is the pinned mount still the same device and file system?
+        guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }
+        let run = diskutil.run(.enableOwnership(disk: pin.disk))
+        guard run.succeeded else {
+            let detail = run.exitStatus.map { "exit \($0)" } ?? run.failure ?? "no exit status"
+            return HelperResult(ok: false, message: "diskutil enableOwnership failed (\(detail))", code: .commandFailed)
+        }
+        // The command named the pinned mount's own disk identifier; the volume read back must be that one, with ownership.
+        guard case .found(let after) = reader.lookup(volumeUUID: uuid, pin: pin), after.deviceNode == facts.deviceNode, after.ownersEnabled else {
+            return HelperResult(ok: false, message: "diskutil reported success, and the volume does not show ownership on", code: .notVerified)
+        }
+        return HelperResult(ok: true, message: "ownership is on", code: .enabled)
     }
 
     /// Whether this result is the authorization gate's refusal — read from the result the caller
@@ -1033,12 +1121,17 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     /// unsupported attribute is simply not packed — which is why the flag check has to come first
     /// and why reading offset 24 unconditionally would be reading whatever happened to be there.
     static func volumeUUID(ofMountPoint mp: String) -> UUID? {
+        volumeUUID { attrList, raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
+    }
+
+    /// The request and the reply's parsing, shared by both forms; `call` makes the one system call.
+    private static func volumeUUID(_ call: (inout attrlist, UnsafeMutableRawBufferPointer) -> Int32) -> UUID? {
         var attrList = attrlist()
         attrList.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         attrList.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
         attrList.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_UUID)
         var buffer = [UInt8](repeating: 0, count: 64)
-        let rc = buffer.withUnsafeMutableBytes { raw in getattrlist(mp, &attrList, raw.baseAddress, raw.count, 0) }
+        let rc = buffer.withUnsafeMutableBytes { raw in call(&attrList, raw) }
         guard rc == 0 else { return nil }
 
         // The reply must be long enough to hold the returned-attribute set at all, and must not
@@ -1082,11 +1175,15 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
 public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     let requirement: String
+    let teamID: String
     /// Takes the team id, never the requirement itself. The split made this type public, and a
     /// public `init(requirement:)` would let a caller outside this module hand the listener
     /// `"anchor apple generic"` — which accepts any Developer-ID binary from any team, and is the
     /// entire peer-validation control. The string is built here and nowhere else.
-    public init(teamID: String) { self.requirement = HelperIdentity.clientRequirement(teamID: teamID) }
+    public init(teamID: String) {
+        self.requirement = HelperIdentity.clientRequirement(teamID: teamID)
+        self.teamID = teamID
+    }
     public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         // Code-signing requirement is enforced by the kernel/XPC layer for this connection — set
         // BEFORE resume(), never validated by PID (SECURITY_MODEL.md).
@@ -1099,7 +1196,7 @@ public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         // Caller identity comes from the connection's audit credentials, never from request payloads.
         let uid = connection.effectiveUserIdentifier, gid = connection.effectiveGroupIdentifier
         connection.exportedInterface = NSXPCInterface(with: XCodeVaultHelperXPC.self)
-        connection.exportedObject = HelperService(callerUID: uid, callerGID: gid)
+        connection.exportedObject = HelperService(callerUID: uid, callerGID: gid, teamID: teamID)
         connection.resume()
         return true
     }

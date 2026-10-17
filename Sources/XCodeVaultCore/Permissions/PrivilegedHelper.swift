@@ -12,6 +12,26 @@ public protocol PrivilegedHelper: Sendable {
     func openApprovalSettings()
     func unregister() async throws
     func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply
+    /// The same, asking `authorized` once the user's authorization is obtained and just before the request is sent (R8
+    /// fix round 2, F2): the runner journals `.started` there, so a crash after the password shows as interrupted. When
+    /// it answers false — the record could not be written — nothing is sent, and `PrivilegedActionNotStarted` is thrown
+    /// (round 3).
+    func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply
+}
+
+extension PrivilegedHelper {
+    /// A helper with no authorization step of its own is authorized as soon as it is asked.
+    public func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
+        guard authorized() else { throw PrivilegedActionNotStarted() }
+        return try await perform(action)
+    }
+}
+
+/// The request was not sent because its `.started` record could not be written (R8 fix round 3): a privileged action
+/// whose start the journal cannot show must not run.
+public struct PrivilegedActionNotStarted: Error, Equatable, CustomStringConvertible {
+    public init() {}
+    public var description: String { "The journal could not record the start, so nothing was sent to the helper." }
 }
 
 /// The helper's answer in Core's terms: a copy of `HelperResult`, which Core cannot see.
@@ -86,6 +106,23 @@ public enum PrivilegedActionOutcome: Sendable, Equatable {
     case done(PrivilegedActionReply)
     case refused(String)
     case failed(String)
+    /// R8: the user cancelled the system password dialog. Not an error, and nothing reached the helper.
+    case cancelled
+    /// R8 fix round 4: the helper that answered is another version than this build's; nothing was sent to it. The app
+    /// reinstalls the helper through the approval flow and tries once more.
+    case helperOutdated(String)
+}
+
+/// What a `PrivilegedHelper` throws when the helper that answered is another version than this build's (R8 fix round 4).
+public struct PrivilegedHelperOutdated: Error, Equatable {
+    public let detail: String
+    public init(detail: String) { self.detail = detail }
+}
+
+/// What a `PrivilegedHelper` throws when the user cancelled the system password dialog (R8): the runner reports
+/// `.cancelled` and journals the step as skipped, never as failed.
+public struct PrivilegedActionCancelled: Error, Equatable {
+    public init() {}
 }
 
 /// Runs one privileged action through the helper, journaled like every change the product makes.
@@ -134,7 +171,20 @@ public struct PrivilegedActionRunner: Sendable {
             return .refused("The journal could not be written, so nothing was done: \(error)")
         }
         do {
-            let reply = try await helper.perform(action)
+            // `.started` once the request is about to leave: for `enableOwnership` that is after the password dialog, so
+            // a cancelled dialog stays a planned-then-skipped record and a crash after it reads as interrupted (F2).
+            // Only `enableOwnership` has a password step between its opening record and the request; every other action
+            // already opens at its own state, so a second record would duplicate it.
+            let journal = self.journal
+            let recordsStarted: Bool = { if case .enableOwnership = action { return true } else { return false } }()
+            let reply = try await helper.perform(action) {
+                guard recordsStarted else { return true }
+                // Written, or the request does not leave (round 3).
+                return
+                    (try? journal.record(
+                        id: id, kind: action.journalKind, state: .started, summary: "helper: \(action.title)", paths: action.journalPaths,
+                        detail: action.journalDetail)) != nil
+            }
             // A failed reply can still have deleted something: the cleanup verb removes what it can, counts only
             // what it removed, and fails when anything is left (`HelperService.removeContents`). The journal says
             // what was deleted, not only whether all of it was (migration-safety review of deliverable 4).
@@ -144,6 +194,16 @@ public struct PrivilegedActionRunner: Sendable {
                 id: id, kind: action.journalKind, state: reply.ok ? .completed : .failed, summary: "helper: \(action.title): \(reply.message)",
                 paths: action.journalPaths, bytes: bytes, detail: action.journalDetail)
             return reply.ok ? .done(reply) : .failed(reply.message)
+        } catch let outdated as PrivilegedHelperOutdated {
+            _ = try? journal.record(
+                id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): the helper is out of date; nothing was sent",
+                paths: action.journalPaths, detail: action.journalDetail)
+            return .helperOutdated(outdated.detail)
+        } catch is PrivilegedActionCancelled {
+            _ = try? journal.record(
+                id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): cancelled at the password dialog",
+                paths: action.journalPaths, detail: action.journalDetail)
+            return .cancelled
         } catch {
             _ = try? journal.record(
                 id: id, kind: action.journalKind, state: .failed, summary: "helper: \(action.title): \(error)", paths: action.journalPaths,

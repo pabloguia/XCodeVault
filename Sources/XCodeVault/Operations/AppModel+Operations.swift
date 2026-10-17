@@ -72,7 +72,18 @@ extension AppModel {
         if kind.needsVault && inputs.vaultUUID == nil { out.append(.chooseVault) }
         if kind.needsRuntime && inputs.runtimeID == nil { out.append(.chooseRuntime) }
         if kind.needsFolder && inputs.folder == nil { out.append(.chooseFolder) }
+        if kind == .setDerivedData, inputs.keepProductsOnThisMac, inputs.productsFolder == nil { out.append(.chooseProductsFolder) }
         return out
+    }
+
+    /// Split mode offers the usual products folder (`XcodeLocations.suggestedProductsDirectory`), expanded, without
+    /// creating it. A folder already chosen stays. Whole-folder mode does not use a products path.
+    static func applyDerivedDataMode(_ keepProductsOnThisMac: Bool, to inputs: inout OperationInputs) {
+        inputs.keepProductsOnThisMac = keepProductsOnThisMac
+        inputs.acknowledgeTests = false
+        if keepProductsOnThisMac, inputs.productsFolder == nil {
+            inputs.productsFolder = XcodeLocations.suggestedProductsDirectory()
+        }
     }
 
     /// Runs the review step for the sheet's current choices, off the cooperative pool. A preview for choices that changed
@@ -153,6 +164,12 @@ extension AppModel {
         }
     }
 
+    /// **Choose…** for the folder on this Mac where built test products stay. It does not change the drive folder.
+    func chooseProductsFolder() async {
+        guard let path = await environment.operations.chooseFolder(operationSheet?.inputs.productsFolder) else { return }
+        updateOperationInputs { $0.productsFolder = path }
+    }
+
     /// What disables the confirm button: the preview's blockers once it has run.
     var operationBlockers: [OperationBlocker] {
         let blockers = operationSheet?.preview?.blockers ?? []
@@ -216,10 +233,13 @@ extension AppModel {
         case .chooseFolder: L10n.tr("app.run.blocker.chooseFolder")
         case .chooseRuntime: L10n.tr("app.run.blocker.chooseRuntime")
         case .acknowledgeTests: L10n.tr("app.run.blocker.acknowledgeTests")
+        case .chooseProductsFolder: L10n.tr("app.run.blocker.chooseProducts")
+        case .acknowledgeSplit: L10n.tr("app.run.blocker.acknowledgeSplit")
         case .simulatorWorkRunning: L10n.tr("app.run.blocker.simulatorWork")
         case .driveGone: L10n.tr("app.run.blocker.driveGone")
         case .typeName(let name): L10n.tr("app.run.blocker.typeName", name)
         case .diskChanged: L10n.tr("app.run.blocker.diskChanged")
+        case .vaultFolderName(let problem): VaultFolderText.message(problem)
         case .core(let why): why
         }
     }
@@ -328,7 +348,16 @@ extension AppModel {
         // Running implies a sheet (`isOperationRunning`), so a kind always reaches the rule; without one, nothing runs.
         let operation = operationSheet.map { Self.quitChoice(running: isOperationRunning, stage: $0.stage, kind: $0.kind) } ?? .quitNow
         // A clean running beside it keeps the app open whatever the operation allows: it cannot be stopped (R5).
-        return Self.quitChoice(operation: operation, cleaning: isCleaning)
+        return Self.quitChoice(operation: Self.quitChoice(operation: operation, cleaning: isCleaning), enablingOwnership: ownershipInFlight != nil)
+    }
+
+    /// R8: turning ownership on — the helper's `diskutil enableOwnership`, or the wait for its approval — cannot be
+    /// stopped from here: quitting offers only **Keep Running**, as for any other disk preparation. Another reason to
+    /// keep running stays the one shown.
+    static func quitChoice(operation: QuitChoice, enablingOwnership: Bool) -> QuitChoice {
+        guard enablingOwnership else { return operation }
+        if case .keepRunningOnly = operation { return operation }
+        return .keepRunningOnly(.diskPreparation)
     }
 
     /// The operation's choice, with a running clean on top (R5): a clean only ever keeps running, so it overrides quitting
@@ -468,7 +497,7 @@ extension AppModel {
     static func secondStep(after result: OperationResult) -> OperationSheetState.SecondStep {
         switch result {
         case .copied(let outcome): outcome.plan.direction == .externalize && !outcome.sourceRemoved ? .removeOriginal : .none
-        case .locationApplied: .undo
+        case .locationApplied, .splitApplied: .undo
         case .offloaded, .exported, .runtimeDeleted, .drivePrepared, .driveRegistered: .none
         }
     }
@@ -586,7 +615,16 @@ extension AppModel {
 
     /// **Undo** after a Locations change: the previous folder put back, or Xcode's default when it had none.
     func undoLocation() async {
-        guard var s = operationSheet, !isOperationRunning, case .locationApplied(let key, let previous)? = s.result else { return }
+        guard var s = operationSheet, !isOperationRunning else { return }
+        let single: (XcodeLocations.Key, String?)? = {
+            if case .locationApplied(let key, let previous) = s.result { return (key, previous) }
+            return nil
+        }()
+        let split: XcodeLocations.SplitRestore? = {
+            if case .splitApplied(let restore) = s.result { return restore }
+            return nil
+        }()
+        guard single != nil || split != nil else { return }
         switch s.secondStep {
         case .undo, .undoFailed: break
         default: return
@@ -596,8 +634,11 @@ extension AppModel {
         operationSheet = s
         beginOperationLog("undo")
         appendLog([LogLine(.stage, OperationStage.applying.rawValue)])
-        let restore = environment.operations.restoreLocation
-        let result = await execute(nil) { children, observer in try restore(key, previous, children, observer) }
+        let restoreLocation = environment.operations.restoreLocation
+        let restoreSplit = environment.operations.restoreSplit
+        let result = await execute(nil) { children, observer in
+            if let split { try restoreSplit(split, children, observer) } else if let single { try restoreLocation(single.0, single.1, children, observer) }
+        }
         guard var done = operationSheet else { return }
         switch result {
         case .success:

@@ -42,6 +42,8 @@ automatic or presented as harmless.
 4. **Anything that needs root is a copyable command, never run.** `sudo diskutil enableOwnership <volume>` is shown with
    **Copy Command**, beside **Show in Finder** (Get Info's "Ignore ownership on this volume", where Finder asks for the
    password). The app never asks for a password, adds **no helper verb** (rule 3 holds unchanged), and never retries a
+   *(Amended by ADR-0014, 2026-10-05: the helper gains exactly one verb, `enableOwnership`, behind the system password
+   dialog on every call; Show in Finder and Copy Command stay as the fallback. The rest of this decision stands.)*
    failed command with privileges: a failure is reported with the exact command for Terminal. Because H17 is verified on
    disk images only, this is also the route if a physical disk refuses a command.
 5. **Destructive actions are never automatic.** An erase lists every volume it destroys with its used bytes, requires the

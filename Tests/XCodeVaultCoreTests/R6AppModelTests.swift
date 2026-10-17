@@ -210,9 +210,10 @@ final class R6AppModelTests: XCTestCase {
         let a = try assessment(m, "disk2")
         m.openUseDrive(a)
         await eventually("the review") { m.operationSheet?.preview != nil }
-        guard case .useDrive(let v)? = m.operationSheet?.preview?.prepared else { return XCTFail("not planned") }
+        guard case .useDrive(let v, let folder)? = m.operationSheet?.preview?.prepared else { return XCTFail("not planned") }
         XCTAssertEqual(v.volumeName, "Media")
-        XCTAssertEqual(m.operationSheet?.preview?.destination, "/Volumes/Media/XCodeVault")
+        XCTAssertEqual(folder, "Vault")
+        XCTAssertEqual(m.operationSheet?.preview?.destination, "/Volumes/Media/Vault")
         XCTAssertTrue(m.canConfirmOperation)
     }
 

@@ -28,12 +28,23 @@ struct LiveHelper: PrivilegedHelper {
     func unregister() async throws { try await client.unregister() }
 
     func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply {
+        try await perform(action, authorized: { true })
+    }
+
+    func perform(_ action: PrivilegedAction, authorized: @escaping @Sendable () -> Bool) async throws -> PrivilegedActionReply {
         let result: HelperResult
         switch action {
         case .createVaultDirectory(let volumeUUID):
+            guard authorized() else { throw PrivilegedActionNotStarted() }
             result = try await client.createVaultDirectory(volumeUUID: volumeUUID)
         case .emptyCoreSimulatorDyldCache:
+            guard authorized() else { throw PrivilegedActionNotStarted() }
             result = try await client.removeRegenerableSystemDirectoryContents(target: .coreSimulatorDyldCache)
+        case .enableOwnership(let volumeUUID):
+            result = try await client.enableOwnership(volumeUUID: volumeUUID, authorized: authorized)
+            // R8: the password dialog is the client's; cancelling it is not a failure (`PrivilegedActionCancelled`).
+            if result.code == .authorizationCanceled { throw PrivilegedActionCancelled() }
+            if result.code == .helperOutdated { throw PrivilegedHelperOutdated(detail: result.message) }
         }
         return PrivilegedActionReply(ok: result.ok, message: result.message, bytesFreed: result.bytesFreed)
     }

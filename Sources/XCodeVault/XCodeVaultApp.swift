@@ -338,11 +338,78 @@ final class AppModel {
     /// A root action waiting on the helper's approval: set when the user chose one and the helper still needs
     /// approving; `showsHelperSheet` presents the one-sentence explanation with **Allow**.
     var pendingPrivilegedAction: PrivilegedAction?
+    /// The action the running approval wait will perform, so stopping the wait can end an ownership request (R8).
+    private var waitingAction: PrivilegedAction?
     var showsHelperSheet = false
     /// Non-nil while waiting for the user to approve the helper in System Settings.
     var helperProgress: String?
     var lastPrivilegedResult: String?
     private var approvalTask: Task<Void, Never>?
+
+    // MARK: - Turn On Ownership (R8, ADR-0014) — EXPERIMENTAL (rule 10)
+
+    /// The volume whose ownership is being turned on, from the click until the helper answered (or the wait for its
+    /// approval ended). The button shows progress meanwhile, and quitting offers only Keep Running.
+    var ownershipInFlight: String?
+    /// Why the last click fell back to the guided route; cleared by the next click.
+    var ownershipFallback: OwnershipFallback?
+    /// R8 fix round 4: this click already reinstalled an out-of-date helper; a second mismatch falls back.
+    private var ownershipHelperReinstalled = false
+    /// ADR-0015: the name of the vault's folder on the drive, suggested and editable; one field for the Plan, the Drives
+    /// screen and **Use This Drive**.
+    var vaultFolderName = VaultFolderName.suggested
+    /// What `VaultFolderPrecreate` said for this click; shown with the result.
+    private var ownershipFolderNote: String?
+
+    /// One click, progress, or the guided route with its reason: `OwnershipRoute.decide`, never the views.
+    var ownershipRoute: OwnershipRoute {
+        OwnershipRoute.decide(helper: helperState, working: ownershipInFlight != nil, fallback: ownershipFallback)
+    }
+
+    /// **Turn On Ownership**: the helper's `enableOwnership` through `request`, which installs and waits for the helper
+    /// first when it needs to. The system password dialog is the client's, on every call.
+    func turnOnOwnership(volumeUUID: String, mountPoint: String) {
+        // One check for the Drives row and the Plan (F4): a volume a drive shows with ownership off now, at that mount
+        // point, with that UUID. And nothing else running (F5): no operation, no clean.
+        // The folder is made with the name in the field: a name that is no folder's name stops the click, with the reason shown there.
+        guard VaultFolderName.problem(vaultFolderName) == nil else { return }
+        guard
+            Self.mayTurnOnOwnership(
+                inFlight: ownershipInFlight != nil, operationRunning: isOperationRunning, cleaning: isCleaning,
+                isTarget: isOwnershipTarget(volumeUUID: volumeUUID, mountPoint: mountPoint))
+        else { return }
+        guard helperState.actionControl != .notAvailableInThisBuild else {
+            ownershipFallback = .unavailableInThisBuild
+            return
+        }
+        ownershipFallback = nil
+        ownershipHelperReinstalled = false
+        // H18 follow-up: with ownership on the drive's root is root's, so the vault folder is made now, as the user, while
+        // it still can be. Best effort: whatever it says is shown with the result, and Use This Drive's own route remains.
+        ownershipFolderNote = VaultFolderPrecreate.createBeforeOwnership(mountPoint: mountPoint, volumeUUID: volumeUUID, folderName: vaultFolderName).note
+        ownershipInFlight = volumeUUID
+        request(.enableOwnership(volumeUUID: volumeUUID))
+    }
+
+    /// The click's guard, as a function so each condition is tested (F4, F5).
+    static func mayTurnOnOwnership(inFlight: Bool, operationRunning: Bool, cleaning: Bool, isTarget: Bool) -> Bool {
+        !inFlight && !operationRunning && !cleaning && isTarget
+    }
+
+    /// Whether a drive shows ownership off now on the volume mounted at `mountPoint` whose UUID is `volumeUUID` — the same
+    /// volume, UUID and mount point, against the current `driveAssessments` (F4).
+    func isOwnershipTarget(volumeUUID: String, mountPoint: String) -> Bool {
+        driveAssessments.contains { a in
+            a.ownershipMountPoints.contains(mountPoint) && a.volumes.contains { $0.mountPoint == mountPoint && $0.volumeUUID == volumeUUID }
+        }
+    }
+
+    /// The ownership request ended without reaching the helper (the sheet was closed, the wait stopped or failed).
+    private func endOwnershipRequest(_ action: PrivilegedAction?, fallback: OwnershipFallback?) {
+        guard case .enableOwnership? = action else { return }
+        ownershipInFlight = nil
+        ownershipFallback = fallback
+    }
 
     /// Every button that runs a root action comes through here and decides by `helperState.actionControl`, the
     /// tested function, never on its own.
@@ -368,13 +435,20 @@ final class AppModel {
         showsHelperSheet = false
         pendingPrivilegedAction = nil
         helperProgress = L10n.tr("app.helper.progress.waiting")
+        waitingAction = action
         approvalTask = Task {
             let outcome = await environment.approvalFlow(environment.helper).run()
             // Cancelled by Stop or by a newer request: this wait no longer owns the progress text, or the action.
             guard !Task.isCancelled else { return }
             helperProgress = nil
             approvalTask = nil
+            waitingAction = nil
             refreshPermissions()
+            // R8: an ownership request that did not get its helper falls back inline, with the reason, not as an alert.
+            if case .enableOwnership? = action, outcome != .enabled {
+                endOwnershipRequest(action, fallback: OwnershipRoute.fallback(after: outcome))
+                return
+            }
             let title = L10n.tr("app.error.helper.title")
             switch outcome {
             case .enabled:
@@ -396,6 +470,8 @@ final class AppModel {
         approvalTask?.cancel()
         approvalTask = nil
         helperProgress = nil
+        endOwnershipRequest(waitingAction, fallback: nil)
+        waitingAction = nil
         refreshPermissions()
     }
 
@@ -411,23 +487,55 @@ final class AppModel {
     /// The sheet closed by **Cancel**, **Stop Waiting** or Escape: no action stays pending, and a wait stops.
     func dismissHelperSheet() {
         showsHelperSheet = false
+        endOwnershipRequest(pendingPrivilegedAction, fallback: nil)
         pendingPrivilegedAction = nil
         if helperProgress != nil { stopWaitingForApproval() }
     }
 
     func perform(_ action: PrivilegedAction) async {
         feedback = nil
-        switch await environment.runner(environment.helper).run(action) {
+        let outcome = await environment.runner(environment.helper).run(action)
+        if case .enableOwnership = action, case .helperOutdated = outcome, !ownershipHelperReinstalled {
+            // R8 fix round 4: the daemon still running is the previous build's (it keeps the old right definition and
+            // a contract this client no longer speaks). Remove its registration — launchd stops it — and install this
+            // build's through the approval flow, then try once more. Nothing was sent to the old one.
+            ownershipHelperReinstalled = true
+            try? await environment.helper.unregister()
+            refreshPermissions()
+            installHelper(then: action)
+            return
+        }
+        if case .enableOwnership = action {
+            // R8: success re-reads the drives (`refresh`) and the Plan moves on by itself; anything else but a cancelled
+            // password dialog brings the guided route back with the reason, inline.
+            // The progress stays until the drives were read again, so the Plan never shows step 2 between "working" and
+            // its new state.
+            await refresh()
+            endOwnershipRequest(action, fallback: OwnershipRoute.fallback(after: outcome))
+            if case .done(let reply) = outcome {
+                feedback = AppFeedback(kind: .success, title: AppText.privilegedDone(action), detail: [reply.message, ownershipFolderNote].compactMap { $0 })
+            } else if let note = ownershipFolderNote {
+                // The folder was made before the password: a cancelled or failed click must not leave it unmentioned.
+                feedback = AppFeedback(kind: .notice, title: AppText.privilegedFailed(action), detail: [note])
+            }
+            ownershipFolderNote = nil
+            return
+        }
+        switch outcome {
+        case .cancelled:
+            break
         case .done(let reply):
             lastPrivilegedResult = [reply.message, action.afterSuccess(in: L10n.locale)].compactMap { $0 }.joined(separator: "\n\n")
             // A step left to the user (the vault folder's `vault init`) makes it a notice, not a plain success.
             let next = action.afterSuccess(in: L10n.locale)
             feedback = AppFeedback(
                 kind: next == nil ? .success : .notice, title: AppText.privilegedDone(action), detail: [reply.message, next].compactMap { $0 })
-        case .refused(let why), .failed(let why):
+        case .refused(let why), .failed(let why), .helperOutdated(let why):
             lastError = AppError(title: AppText.privilegedFailed(action), message: why)
         }
         await refresh()
+        // R8: the vault folder made for **Use This Drive** — its review is planned again, now that the folder is there.
+        if case .createVaultDirectory = action, operationSheet?.kind == .useDrive, operationSheet?.phase == .review { await previewOperation() }
     }
 
     func uninstallHelper() async {

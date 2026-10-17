@@ -56,10 +56,15 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
     /// leaving the directory itself (operator decision 2026-09-27). Experimental: what rebuilds a deleted cache
     /// is not identified (H14).
     case emptyCoreSimulatorDyldCache
+    /// R8 (ADR-0014): the helper's `enableOwnership(volumeUUID:)`, behind the system password dialog on every call. The
+    /// helper resolves the UUID and refuses anything but a mounted external APFS or HFS+ volume. EXPERIMENTAL (rule 10):
+    /// pending the user's check in a real window with a signed build. The guided route (Finder, or the copied command)
+    /// stays beside it as the fallback.
+    case enableOwnership(volumeUUID: String)
 
     public var requirement: PrivilegeRequirement {
         switch self {
-        case .createVaultDirectory: return .helper
+        case .createVaultDirectory, .enableOwnership: return .helper
         case .emptyCoreSimulatorDyldCache: return .helperWithFullDiskAccess
         }
     }
@@ -72,6 +77,7 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
         switch self {
         case .createVaultDirectory: return L10n.tr("perm.action.createVaultDirectory.title", locale: locale)
         case .emptyCoreSimulatorDyldCache: return L10n.tr("perm.action.emptyCoreSimulatorDyldCache.title", locale: locale)
+        case .enableOwnership: return L10n.tr("perm.action.enableOwnership.title", locale: locale)
         }
     }
 
@@ -83,7 +89,7 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
     public func afterSuccess(in locale: String) -> String? {
         switch self {
         case .createVaultDirectory: return L10n.tr("perm.action.createVaultDirectory.afterSuccess", locale: locale)
-        case .emptyCoreSimulatorDyldCache: return nil
+        case .emptyCoreSimulatorDyldCache, .enableOwnership: return nil
         }
     }
 
@@ -100,19 +106,21 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
         switch self {
         case .createVaultDirectory: return .migration
         case .emptyCoreSimulatorDyldCache: return .clean
+        // R8: with the drive preparations, where History lists it; `journalDetail` names the action.
+        case .enableOwnership: return .diskPreparation
         }
     }
 
     var openingState: JournalEntry.State {
         switch self {
-        case .createVaultDirectory: return .planned
+        case .createVaultDirectory, .enableOwnership: return .planned
         case .emptyCoreSimulatorDyldCache: return .started
         }
     }
 
     var journalPaths: [String] {
         switch self {
-        case .createVaultDirectory: return []
+        case .createVaultDirectory, .enableOwnership: return []
         case .emptyCoreSimulatorDyldCache: return [PrivilegeRequirement.coreSimulatorDyldCachePath]
         }
     }
@@ -121,6 +129,8 @@ public enum PrivilegedAction: Sendable, Codable, Hashable {
         switch self {
         case .createVaultDirectory(let volumeUUID): return [VaultDirectoryRefusal.volumeUUIDKey: volumeUUID]
         case .emptyCoreSimulatorDyldCache: return [:]
+        case .enableOwnership(let volumeUUID):
+            return ["action": "enableOwnership", VaultDirectoryRefusal.volumeUUIDKey: volumeUUID, "route": "helper"]
         }
     }
 }

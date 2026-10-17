@@ -85,6 +85,7 @@ enum OperationText {
         case .copied(let o) where o.sourceRemoved: L10n.tr("app.run.done.removed")
         case .copied: L10n.tr("app.run.done.copied")
         case .locationApplied: L10n.tr("app.run.done.location")
+        case .splitApplied: L10n.tr("app.run.done.split")
         case .offloaded: L10n.tr("app.run.done.offloaded")
         case .exported: L10n.tr("app.run.done.exported")
         case .runtimeDeleted: L10n.tr("app.run.done.deleted")

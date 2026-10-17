@@ -31,6 +31,16 @@ public struct HelperClient: Sendable {
         /// What came back was not the helper's interface. Unreachable with a connection `connect()`
         /// configured; stated so a future change turns it into an error rather than a crash.
         case unexpectedProxy
+        /// R8: the helper that answered reports another version than this build's. The authorization is not sent.
+        case versionMismatch(String)
+        /// R8 round 5: the helper that answered is newer than this build, or of a version it cannot order. Not reinstalled.
+        case helperNewer(String)
+        /// R8: the user cancelled the system password dialog. Not an error: nothing was asked of the helper.
+        case authorizationCanceled
+        /// R8: the right was not obtained (wrong password three times, or the authorization service refused).
+        case authorizationDenied(Int32)
+        /// R8 round 3: the caller could not record the start, so the request was not sent.
+        case notStarted
 
         public var description: String {
             switch self {
@@ -53,6 +63,17 @@ public struct HelperClient: Sendable {
                 return "The privileged helper did not reply (\(why)). Whether it acted is unknown; rescan to see."
             case .unexpectedProxy:
                 return "The connection did not return the privileged helper's interface. Refusing to use it."
+            case .versionMismatch(let v):
+                return "The privileged helper that answered is version \(v), not \(HelperIdentity.version). Nothing was sent to it; reinstall the helper."
+            case .helperNewer(let v):
+                return "A newer XCodeVault installed this helper (version \(v); this copy is \(HelperIdentity.version)); update this copy. "
+                    + "Nothing was sent to the helper."
+            case .authorizationCanceled:
+                return "The administrator password was not given."
+            case .authorizationDenied(let status):
+                return "Administrator authorization was not granted (\(status))."
+            case .notStarted:
+                return "The start could not be recorded, so nothing was sent to the helper."
             }
         }
     }
@@ -105,6 +126,23 @@ public struct HelperClient: Sendable {
     }
     let daemon: Daemon
 
+    /// The user's side of the authorization (R8): a fresh `AuthorizationRef`, the right obtained on it with the system
+    /// password dialog, and its externalized form. One value so a test fakes all of it and none of it reaches the
+    /// authorization service. Internal, like `makeConnection`: the public initialiser installs `.live` only.
+    struct Authorizer: Sendable {
+        /// Obtains `right` — the dialog appears — and returns the externalized form and a release that destroys the
+        /// reference. Throws `Failure.authorizationCanceled` or `.authorizationDenied`.
+        let acquire: @Sendable (String) throws -> AcquiredAuthorization
+
+        static let live = Authorizer(acquire: HelperClient.acquireLive)
+    }
+
+    struct AcquiredAuthorization: Sendable {
+        let externalForm: Data
+        let release: @Sendable () -> Void
+    }
+    let authorizer: Authorizer
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -115,17 +153,20 @@ public struct HelperClient: Sendable {
         self.bundleURL = Bundle.main.bundleURL
         self.runningTeam = HelperClient.teamOfRunningCode
         self.daemon = .live
+        self.authorizer = .live
     }
 
     init(
         team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
-        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live
+        runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live,
+        authorizer: Authorizer = .live
     ) {
         self.team = team
         self.makeConnection = makeConnection
         self.bundleURL = bundleURL
         self.runningTeam = runningTeam
         self.daemon = daemon
+        self.authorizer = authorizer
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -269,6 +310,133 @@ public struct HelperClient: Sendable {
         try await send { helper, reply in helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply) }
     }
 
+    /// R8 (ADR-0014): turns ownership on for the volume `volumeUUID`. EXPERIMENTAL (rule 10). One connection, in order:
+    ///
+    ///   1. `version()`, and its reply checked: a reply from a peer that fails the code-signing requirement never comes
+    ///      back (`connect()`), and the request carries nothing. This is the M5 round trip for the one verb that sends
+    ///      a credential — without it the externalized authorization would go to whoever holds the Mach name, since
+    ///      the requirement checks replies, not requests;
+    ///   2. the right, on a fresh reference, with the system password dialog (`Authorizer`). Cancel returns a result
+    ///      with code `authorizationCanceled` and nothing is sent;
+    ///   3. the verb, with the reference's externalized form;
+    ///   4. the reference destroyed whatever happened, so the next call asks for the password again.
+    public func enableOwnership(volumeUUID: String, authorized: @escaping @Sendable () -> Bool = { true }) async throws -> HelperResult {
+        let connection = try connect()
+        defer { connection.invalidate() }
+        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
+        // A result, not a throw, so the app can tell an outdated helper without naming this type (helper-invariants), and
+        // reinstall it (R8 fix round 4: the 0.2.0 daemon still running after an update) — but only an OLDER one (round 5,
+        // F2). A newer helper, or one whose version cannot be ordered, is left alone: reinstalling would downgrade it.
+        guard version == HelperIdentity.version else {
+            if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
+                return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
+            }
+            return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
+        }
+        let right = HelperIdentity.enableOwnershipRight
+        let authorizer = self.authorizer
+        let acquired: AcquiredAuthorization
+        do {
+            acquired = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AcquiredAuthorization, any Error>) in
+                // Off the caller's thread: the dialog blocks until the user answers.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do { continuation.resume(returning: try authorizer.acquire(right)) } catch { continuation.resume(throwing: error) }
+                }
+            }
+        } catch Failure.authorizationCanceled {
+            // A result, not a throw, so the app can tell a cancel without naming this type (helper-invariants).
+            return HelperResult(ok: false, message: Failure.authorizationCanceled.description, code: .authorizationCanceled)
+        }
+        defer { acquired.release() }
+        // The caller's go-ahead (the journal's `.started`); without it nothing is sent and the reference is destroyed.
+        guard authorized() else { throw Failure.notStarted }
+        return try await call(connection) { helper, reply in
+            helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
+        }
+    }
+
+    /// Semantic-version precedence of two `MAJOR.MINOR.PATCH[-PRERELEASE]` strings (R8 fix round 5, F2), or nil when
+    /// either does not parse. A pre-release orders before its release (`0.2.1-dev` < `0.2.1`); two pre-releases of the
+    /// same version order by their identifiers, numerically where both are numbers. Build metadata (`+…`) is ignored.
+    static func compareVersions(_ a: String, _ b: String) -> ComparisonResult? {
+        guard let x = SemanticVersion(a), let y = SemanticVersion(b) else { return nil }
+        return x.compare(y)
+    }
+
+    struct SemanticVersion {
+        let core: [Int]
+        let prerelease: [String]
+
+        init?(_ raw: String) {
+            let noBuild = raw.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+            let parts = noBuild.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            let numbers = parts[0].split(separator: ".", omittingEmptySubsequences: false)
+            guard numbers.count == 3 else { return nil }
+            var core: [Int] = []
+            for n in numbers {
+                guard !n.isEmpty, n.allSatisfy({ $0.isASCII && $0.isNumber }), let v = Int(n) else { return nil }
+                core.append(v)
+            }
+            self.core = core
+            if parts.count == 2 {
+                let ids = parts[1].split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+                guard !ids.isEmpty, ids.allSatisfy({ !$0.isEmpty }) else { return nil }
+                prerelease = ids
+            } else {
+                prerelease = []
+            }
+        }
+
+        func compare(_ other: SemanticVersion) -> ComparisonResult {
+            for (l, r) in zip(core, other.core) where l != r { return l < r ? .orderedAscending : .orderedDescending }
+            switch (prerelease.isEmpty, other.prerelease.isEmpty) {
+            case (true, true): return .orderedSame
+            case (true, false): return .orderedDescending
+            case (false, true): return .orderedAscending
+            case (false, false): break
+            }
+            for (l, r) in zip(prerelease, other.prerelease) where l != r {
+                switch (Int(l), Int(r)) {
+                case (let a?, let b?): return a < b ? .orderedAscending : .orderedDescending
+                case (.some, nil): return .orderedAscending
+                case (nil, .some): return .orderedDescending
+                case (nil, nil): return l < r ? .orderedAscending : .orderedDescending
+                }
+            }
+            if prerelease.count == other.prerelease.count { return .orderedSame }
+            return prerelease.count < other.prerelease.count ? .orderedAscending : .orderedDescending
+        }
+    }
+
+    /// The live `Authorizer`: never called by a test.
+    static func acquireLive(_ right: String) throws -> AcquiredAuthorization {
+        var created: AuthorizationRef?
+        let status = AuthorizationCreate(nil, nil, [], &created)
+        guard status == errAuthorizationSuccess, let ref = created else { throw Failure.authorizationDenied(status) }
+        let granted = right.withCString { name -> OSStatus in
+            var item = AuthorizationItem(name: name, valueLength: 0, value: nil, flags: 0)
+            return withUnsafeMutablePointer(to: &item) { pointer in
+                var rights = AuthorizationRights(count: 1, items: pointer)
+                return AuthorizationCopyRights(ref, &rights, nil, [.interactionAllowed, .extendRights], nil)
+            }
+        }
+        guard granted == errAuthorizationSuccess else {
+            AuthorizationFree(ref, [.destroyRights])
+            if granted == errAuthorizationCanceled { throw Failure.authorizationCanceled }
+            throw Failure.authorizationDenied(granted)
+        }
+        var form = AuthorizationExternalForm()
+        let made = AuthorizationMakeExternalForm(ref, &form)
+        guard made == errAuthorizationSuccess else {
+            AuthorizationFree(ref, [.destroyRights])
+            throw Failure.authorizationDenied(made)
+        }
+        let data = withUnsafeBytes(of: &form.bytes) { Data($0) }
+        // `AuthorizationRef` is an opaque pointer; freeing it once, on this path, is the whole of its lifetime.
+        nonisolated(unsafe) let owned = ref
+        return AcquiredAuthorization(externalForm: data, release: { AuthorizationFree(owned, [.destroyRights]) })
+    }
+
     /// One message over one connection, then the connection is invalidated.
     ///
     /// **The peer check is `connect()`'s and only `connect()`'s**, whatever `serviceStatus()` reports: a reply
@@ -286,7 +454,14 @@ public struct HelperClient: Sendable {
     func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await call(connection, message)
+    }
+
+    /// One message on an open connection, with its own error handler. `ResumeOnce`, for the reasons `send` gives.
+    func call<T: Sendable>(
+        _ connection: NSXPCConnection, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
                 once.resume(throwing: Failure.connectionFailed(error.localizedDescription))

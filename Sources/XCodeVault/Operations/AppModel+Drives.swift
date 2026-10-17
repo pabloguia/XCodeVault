@@ -75,6 +75,7 @@ extension AppModel {
         var inputs = OperationInputs()
         inputs.diskID = assessment.disk.id
         inputs.driveVolumeUUID = volume.volumeUUID
+        inputs.vaultFolderName = vaultFolderName
         open(.useDrive, inputs: inputs, drive: assessment)
     }
 
@@ -84,7 +85,13 @@ extension AppModel {
         switch assessment.prepareAction {
         case .useDrive: openUseDrive(assessment)
         case .prepare(let option): openPreparation(assessment, option: option)
-        case .ownership(let mountPoint): showVolumeForOwnership(mountPoint)
+        case .ownership(let mountPoint):
+            // R8: the click when this build offers it, Finder otherwise.
+            if ownershipRoute == .oneClick, let uuid = ownershipVolumeUUID(assessment, mountPoint: mountPoint) {
+                turnOnOwnership(volumeUUID: uuid, mountPoint: mountPoint)
+            } else {
+                showVolumeForOwnership(mountPoint)
+            }
         case .nothing: break
         }
     }
@@ -164,9 +171,16 @@ extension AppModel {
             }
             let q = VolumeQualification.evaluate(v)
             guard q.verdict != .unsuitable else { return OperationPreview(destination: mp, blockers: q.blockers.map { .core($0) }) }
+            if let problem = VaultFolderName.problem(inputs.vaultFolderName) {
+                return OperationPreview(destination: mp, warnings: q.warnings, blockers: [.vaultFolderName(problem)])
+            }
+            let occupancy = VaultFolderName.occupancy(of: mp + "/" + inputs.vaultFolderName, volumeUUID: uuid, host: HostFingerprint.current())
+            if let why = VaultFolderName.message(for: occupancy, name: inputs.vaultFolderName) {
+                return OperationPreview(destination: mp, warnings: q.warnings, blockers: [.core(why)])
+            }
             return OperationPreview(
-                destination: mp + "/" + VaultVolume.directoryName, warnings: q.warnings,
-                prepared: .useDrive(v))
+                destination: mp + "/" + inputs.vaultFolderName, warnings: q.warnings,
+                prepared: .useDrive(v, folderName: inputs.vaultFolderName))
         }
         guard let diskID = inputs.diskID, let option = inputs.driveOption, let disk = snapshot.disks.first(where: { $0.id == diskID }) else {
             return OperationPreview(blockers: [.driveGone])
@@ -211,6 +225,23 @@ extension AppModel {
         }
     }
 
+    // MARK: - The vault folder's name (ADR-0015)
+
+    /// What the field beside **Turn On Ownership**, in the Plan and in **Use This Drive** shows and changes.
+    var vaultFolderField: VaultFolderField {
+        VaultFolderField(
+            name: vaultFolderName, message: VaultFolderName.problem(vaultFolderName).map { VaultFolderText.message($0) },
+            set: { [weak self] in self?.setVaultFolderName($0) })
+    }
+
+    /// The name typed: kept for the next click, and for the **Use This Drive** review when it is open, planned again.
+    func setVaultFolderName(_ name: String) {
+        vaultFolderName = name
+        guard operationSheet?.kind == .useDrive, operationSheet?.phase == .review else { return }
+        operationSheet?.inputs.vaultFolderName = name
+        previewDriveOperation()
+    }
+
     // MARK: - Ownership (d): nothing runs
 
     /// Shows the volume in Finder, where **File ▸ Get Info** has "Ignore ownership on this volume".
@@ -225,11 +256,28 @@ extension AppModel {
         environment.copy(plan.command)
     }
 
+    /// The UUID of the volume of `assessment` mounted at `mountPoint`, which **Turn On Ownership** sends (R8).
+    func ownershipVolumeUUID(_ assessment: DriveAssessment, mountPoint: String) -> String? {
+        assessment.volumes.first { $0.mountPoint == mountPoint }?.volumeUUID
+    }
+
     /// The Drives screen's buttons (`ExternalDriveActions`).
     var externalDriveActions: ExternalDriveActions {
         ExternalDriveActions(
             prepare: { [weak self] a, o in self?.openPreparation(a, option: o) }, useDrive: { [weak self] in self?.openUseDrive($0) },
-            showInFinder: { [weak self] in self?.showVolumeForOwnership($0) }, copyOwnershipCommand: { [weak self] in self?.copyOwnershipCommand($0) })
+            showInFinder: { [weak self] in self?.showVolumeForOwnership($0) }, copyOwnershipCommand: { [weak self] in self?.copyOwnershipCommand($0) },
+            turnOnOwnership: { [weak self] a, mp in
+                guard let self, let uuid = self.ownershipVolumeUUID(a, mountPoint: mp) else { return }
+                self.turnOnOwnership(volumeUUID: uuid, mountPoint: mp)
+            },
+            ownershipRoute: ownershipRoute, vaultFolder: vaultFolderField)
+    }
+
+    /// R8: the privileged step **Use This Drive**'s review offers first — the vault folder made by the helper, when the
+    /// volume's root is not writable by the user (`DriveRegistration.vaultFolderHelperStep`); nil otherwise.
+    var useDriveHelperStep: PrivilegedAction? {
+        guard let s = operationSheet, s.kind == .useDrive, case .useDrive(let volume, let folderName)? = s.preview?.prepared else { return nil }
+        return DriveRegistration.vaultFolderHelperStep(volume, folderName: folderName)
     }
 
     // MARK: - The form

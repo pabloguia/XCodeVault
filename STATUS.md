@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-04. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-05. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -14,6 +14,32 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Use This Drive after ownership (2026-10-08, branch `feat/r8-helper-ownership`).** H18 **PASS** on the user's drive
+  (2026-10-07; evidence appended). It exposed that an ownership-on volume root is `root:wheel`, so Use This Drive could
+  not create `XCodeVault/`. Fix without a helper change: **Turn On Ownership** first makes the folder as the user while the
+  root is still writable (`VaultFolderPrecreate`); on a disk image it stays the user's after ownership is on. A drive that
+  already has ownership on keeps the guided `sudo mkdir && chown`. Real-drive re-test pending; migration-safety review
+  dispatched.
+- **R8 — Turn On Ownership through the privileged helper (2026-10-05, branch `feat/r8-helper-ownership`, ADR-0014,
+  EXPERIMENTAL).** One new allowlisted verb, `enableOwnership(volumeUUID:authorization:)`: the system password dialog
+  every call (custom right `com.xcodevault.helper.enable-ownership`, `authenticate-admin`, defined by the root daemon),
+  the right re-checked in the helper on the client's externalized reference, the volume resolved and qualified by the
+  helper, one fixed-argv `posix_spawn` of `/usr/sbin/diskutil`. The maintainer approved the narrow hook exception;
+  `helper-invariants.sh` holds its shape (`R8HelperInvariantsTests`). The R7-D guided route stays the fallback, with the
+  reason. **H18 measured 2026-10-05:** with the stock admin rule (timeout 0) the helper's re-check failed (-60007) and
+  the fallback worked; fix round 4 gives the right its own rule (timeout 10, unshared, admin, not root) and an update
+  path for the 0.2.0 daemon; fix round 5 accepts authd's `tries` (10000) in the read-back, requires the writer's team and
+  our prompt text, pins the read-back check whole, and reinstalls only an OLDER helper (a newer one falls back with the
+  reason). **Re-test 2026-10-06:** authorization PASS; the root daemon then could not read the volume (TCC, [LIKELY]).
+  Fix round 6: the helper identifies the volume from the mount table and diskutil only, never touching it; APFS-only —
+  **pending a re-test**. Fix round 7: roles from `apfs list` (`info` has none on macOS 26 — round 6's Backup check
+  never fired), `nosuid`+`nodev` required and the mount table read last, `/dev/diskNsM` to diskutil, an allowlist
+  tripwire, contract 0.2.2-dev. **Follow-ups:** (1) Core's `VolumeDiscovery.parse` reads `APFSVolumeRoles` from
+  `info -plist`, which macOS 26 does not carry; only `isBoot` uses it, and the mount-point test still marks the running
+  system's volumes, so nothing safety-relevant depends on it (Time Machine detection in Core reads `apfs list` roles
+  in `DiskTopology`) — read roles from `apfs list` there too. (2) `createVaultDirectory` opens the volume as root and
+  probably fails under TCC on a removable volume; untested, out of R8's verb. Reviews
+  required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
   plan `docs/superpowers/plans/2026-09-27-user-first-permissions.md`, ADR-0007. Four deliverables,
   one commit each. **4 of 4 done (2026-09-28):** user docs (README, `docs/USER_GUIDE.md`, `UX_AND_CLI.md`),
@@ -125,6 +151,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Blocked / pending — manual (ask the user)
 
+- **Follow-up: the release build hangs on this Intel Mac (2026-10-05, R8).** `scripts/bundle-app.sh --release …` spun
+  at 100% CPU for about 2 hours in the whole-module compile of `XCodeVaultCore` and never finished (twice; stopped by
+  hand). R8's signed build was made without `--release`. Not investigated yet: a release DMG cannot be cut on this
+  machine until it is. Candidates to measure first: the generated `L10nCatalog.core` table (S4 follow-up 4 above) and
+  the type checker on `PlanBuilder`.
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
   off-screen snapshots cannot draw `NSTableView` rows: the Delete table's grouped rows, Storage's rows (the Bucket
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
@@ -177,6 +208,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   passphrase). Left here rather than deleted because the line above it is the reason it was blocked.
 
 ## Next three actions
+
+**R8 first (2026-10-05):** the two mandatory reviews of the R8 branch, then the user's real-window run of **Turn On
+Ownership** with the signed build (H18; procedure in HYPOTHESES), which is also the helper's first live run (#30).
 
 **As of 2026-09-28** (the same list, with its reasons, is in `docs/process/SESSION-HANDOFF.md`
 "What to do, in priority order"):
@@ -3446,3 +3480,15 @@ Two reviews of R5: quality (`.superpowers/sdd/hig/r5-review.md`, Changes request
   `closeAccessGuide`) opens with the pane: the hint, the app's icon as a drag source (its bundle as a file URL), and
   **Done**; it closes on Done or once the grant is seen (`AppModel.closeAccessGuide`, tested). No Accessibility API or
   UI scripting. **Needs a real window:** whether System Settings accepts the dragged icon, and the panel's placement.
+
+## 2026-10-05 — R8: Turn On Ownership through the privileged helper
+
+The user approved one click with the admin password ("pedir a senha e executar o que for necessário"), keeping the
+instructions for when something goes wrong, and will sign the app with their own team. ADR-0014 records the decision,
+the maintainer's approval of the narrow exception (one `posix_spawn` in `HelperDiskutil.swift`, one
+`AuthorizationCopyRights` on `clientRef` in `HelperAuthorizationRight.swift`, `interactionAllowed` banned in the helper),
+and why not AppleScript "with administrator privileges". The verb, the client handshake (`version()` before the
+credential), the app's route (`OwnershipRoute`), the Plan's step 2, the Drives row, the quit guard (Keep Running only),
+journaling (`diskPreparation`, action `enableOwnership`; a cancelled dialog is `skipped`) and Use This Drive's
+`createVaultDirectory` step are tested with fakes. Nothing has run against a real daemon, authorization service or disk:
+H18 is pending.

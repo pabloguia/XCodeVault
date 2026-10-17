@@ -27,6 +27,17 @@ import Foundation
     /// separate call on purpose: forgetting re-enables deletion, so the user's intent is stated, and
     /// audited, before anything is removed.
     func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
+
+    /// Turns ownership on for one mounted external volume, identified by UUID (R8, ADR-0014). EXPERIMENTAL (rule 10).
+    ///
+    /// The client sends the volume UUID and the externalized form of an `AuthorizationRef` on which it has just
+    /// obtained `HelperIdentity.enableOwnershipRight` (the system password dialog, every call). Nothing else: no path,
+    /// no device node, no command text. The helper re-checks the right from that form without any dialog of its own,
+    /// resolves the UUID to a volume itself, refuses anything that is not a mounted, local, writable, external APFS or
+    /// HFS+ volume — never the boot volume, its container, a disk image or a Time Machine backup — then runs
+    /// `/usr/sbin/diskutil enableOwnership <the bare disk identifier of the mount it holds open>` and verifies by reading
+    /// the volume again.
+    func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void)
 }
 
 /// The vault directory's name, which is part of the client↔helper contract: the helper creates it,
@@ -58,23 +69,69 @@ public enum HelperCleanupTarget: String, CaseIterable, Sendable {
     }
 }
 
+/// What a verb's result means, as a closed vocabulary (R8). The message is prose for a person; this is what code reads
+/// — the app's fallback decision and the audit trail, which logs it `.public` because no caller text can reach it.
+///
+/// `none` for the verbs that predate it and for a daemon too old to send it; `unknown` for a value this build does not
+/// know (a newer daemon), so a client never mistakes an unfamiliar code for success.
+public enum HelperResultCode: String, Sendable, CaseIterable {
+    case none = ""
+    case unknown
+    /// The administrator gate refused the caller.
+    case unauthorized
+    /// An argument failed validation (an unparsable or all-zero UUID).
+    case invalidArgument
+    /// The authorization form was not a valid externalized reference.
+    case authorizationMalformed
+    /// The reference does not hold the right.
+    case authorizationDenied
+    /// The right's definition could not be put in place, or was wrong and has just been repaired.
+    case authorizationUnavailable
+    /// No mounted volume has that UUID, or its identity could not be read consistently.
+    case volumeNotFound
+    /// The volume is one this verb never touches.
+    case volumeIneligible
+    /// Ownership was already on; nothing was run.
+    case alreadyEnabled
+    /// Ownership was turned on and verified.
+    case enabled
+    /// `diskutil` failed, timed out, or could not be started.
+    case commandFailed
+    /// `diskutil` reported success, and reading the volume again does not show ownership on.
+    case notVerified
+    /// The user cancelled the system password dialog. Produced by the client only, before anything is sent: the
+    /// helper never replies with it.
+    case authorizationCanceled
+    /// The helper that answered is OLDER than this build (R8 fix rounds 4 and 5): produced by the client only, before
+    /// any password is asked; the app reinstalls the helper through the approval flow and tries once more.
+    case helperOutdated
+    /// The helper that answered is NEWER than this build, or of a version this build cannot order (R8 fix round 5, F2):
+    /// produced by the client only, before any password is asked. Never a reason to reinstall — that would put an older
+    /// daemon in place of a newer one — so the app falls back to the guided route with the reason.
+    case helperNewer
+}
+
 /// Result envelope; `NSSecureCoding` so it can cross XPC.
 @objc public final class HelperResult: NSObject, NSSecureCoding, Sendable {
     public static var supportsSecureCoding: Bool { true }
     public let ok: Bool
     public let message: String
     public let bytesFreed: UInt64
+    public let code: HelperResultCode
 
-    public init(ok: Bool, message: String, bytesFreed: UInt64 = 0) {
-        self.ok = ok; self.message = message; self.bytesFreed = bytesFreed
+    public init(ok: Bool, message: String, bytesFreed: UInt64 = 0, code: HelperResultCode = .none) {
+        self.ok = ok; self.message = message; self.bytesFreed = bytesFreed; self.code = code
     }
     public required init?(coder: NSCoder) {
         ok = coder.decodeBool(forKey: "ok")
         message = coder.decodeObject(of: NSString.self, forKey: "message") as String? ?? ""
         bytesFreed = UInt64(coder.decodeInt64(forKey: "bytesFreed"))
+        let raw = coder.decodeObject(of: NSString.self, forKey: "code") as String? ?? ""
+        code = HelperResultCode(rawValue: raw) ?? .unknown
     }
     public func encode(with coder: NSCoder) {
         coder.encode(ok, forKey: "ok"); coder.encode(message as NSString, forKey: "message"); coder.encode(Int64(bytesFreed), forKey: "bytesFreed")
+        coder.encode(code.rawValue as NSString, forKey: "code")
     }
 }
 
@@ -82,6 +139,11 @@ public enum HelperIdentity {
     public static let machServiceName = "com.xcodevault.helper"
     public static let plistName = "com.xcodevault.helper.plist"
     public static let bundleIdentifier = "com.xcodevault.helper"
+    /// The authorization right `enableOwnership` requires (R8, ADR-0014). The daemon defines it — root, at startup and
+    /// again on every call — with its own rule: admin group, a 10-second unshared credential, never root (fix round 4);
+    /// the client obtains it with the system password dialog
+    /// and sends its externalized form; the daemon re-checks it from that form, never on a reference of its own.
+    public static let enableOwnershipRight = "com.xcodevault.helper.enable-ownership"
     /// Code-signing requirement the daemon enforces on every client: Apple-anchored Developer ID
     /// chain (leaf + intermediate marker OIDs), our team, and one of our two client identifiers.
     /// `TEAMID_PLACEHOLDER` is substituted at bundle time by scripts/bundle-app.sh; a helper built without it
@@ -178,5 +240,5 @@ public enum HelperIdentity {
         teamID.count == 10 && teamID.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
     }
 
-    public static let version = "0.1.0-dev"
+    public static let version = "0.2.2-dev"
 }

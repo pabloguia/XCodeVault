@@ -4411,6 +4411,40 @@
         }
       }
     },
+    "app.error.enableOwnership.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ownership Was Not Turned On"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se activó la propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権は有効になりませんでした"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A Propriedade Não Foi Ativada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "未启用所有权"
+          }
+        }
+      }
+    },
     "app.error.helper.title" : {
       "localizations" : {
         "en" : {
@@ -4843,6 +4877,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "已清空 dyld 缓存。"
+          }
+        }
+      }
+    },
+    "app.feedback.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ownership is on"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "La propiedad está activada"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権が有効になりました"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "A propriedade está ativada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有权已启用"
           }
         }
       }
@@ -10493,6 +10561,176 @@
         }
       }
     },
+    "app.ownership.fallback.approval" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The privileged helper was not approved (%@). Turn ownership on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El asistente privilegiado no se aprobó (%@). Activa la propiedad en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "特権ヘルパーが承認されませんでした（%@）。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O auxiliar privilegiado não foi aprovado (%@). Ative a propriedade no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "特权助手未获批准（%@）。请改为在访达中启用所有权，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.fallback.failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning ownership on through the helper did not work: %@. Turn it on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No se pudo activar la propiedad con el asistente: %@. Actívala en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ヘルパーによる所有権の有効化に失敗しました：%@。代わりに Finder で有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Não foi possível ativar a propriedade pelo auxiliar: %@. Ative-a no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "通过助手启用所有权未成功：%@。请改为在访达中启用，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.fallback.unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One click needs a signed build that includes the privileged helper. Turn ownership on in Finder instead, or copy the command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Un solo clic requiere una compilación firmada que incluya el asistente privilegiado. Activa la propiedad en el Finder o copia el comando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ワンクリックには、特権ヘルパーを含む署名済みビルドが必要です。代わりに Finder で所有権を有効にするか、コマンドをコピーしてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O clique único exige uma versão assinada que inclua o auxiliar privilegiado. Ative a propriedade no Finder ou copie o comando."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "一键操作需要包含特权助手的已签名版本。请改为在访达中启用所有权，或拷贝命令。"
+          }
+        }
+      }
+    },
+    "app.ownership.turnOn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn On Ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar Propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
+          }
+        }
+      }
+    },
+    "app.ownership.working" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning on ownership… Enter your administrator password when macOS asks."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activando la propiedad… Introduce tu contraseña de administrador cuando macOS la pida."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にしています… macOS に求められたら管理者パスワードを入力してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativando a propriedade… Digite sua senha de administrador quando o macOS pedir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在启用所有权… macOS 询问时请输入管理员密码。"
+          }
+        }
+      }
+    },
     "app.permissions.footer" : {
       "localizations" : {
         "en" : {
@@ -11853,6 +12091,40 @@
         }
       }
     },
+    "app.prep.useDrive.needsHelper" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You cannot write to this volume's top folder, so the privileged helper creates the XCodeVault folder first and makes it yours."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "No puedes escribir en la carpeta superior de este volumen, así que el asistente privilegiado crea primero la carpeta XCodeVault y te la asigna."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このボリュームの最上位フォルダに書き込めないため、特権ヘルパーが先に XCodeVault フォルダを作成し、あなたの所有にします。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Você não pode gravar na pasta principal deste volume, então o auxiliar privilegiado cria primeiro a pasta XCodeVault e a torna sua."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "你无法写入此宗卷的顶层文件夹，因此特权助手会先创建 XCodeVault 文件夹并将其归你所有。"
+          }
+        }
+      }
+    },
     "app.privileged.button.createVaultDirectory" : {
       "localizations" : {
         "en" : {
@@ -11921,6 +12193,40 @@
         }
       }
     },
+    "app.privileged.button.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn On Ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar Propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
+          }
+        }
+      }
+    },
     "app.privileged.confirm.createVaultDirectory" : {
       "localizations" : {
         "en" : {
@@ -11985,6 +12291,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "要清空 CoreSimulator 的 dyld 缓存吗？（实验性）"
+          }
+        }
+      }
+    },
+    "app.privileged.confirm.enableOwnership" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on ownership for this volume?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "¿Activar la propiedad en este volumen?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このボリュームの所有権を有効にしますか？"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar a propriedade neste volume?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "要为此宗卷启用所有权吗？"
           }
         }
       }
@@ -12429,6 +12769,168 @@
             "value" : "此路径属于 root，位于 root 只有在具有完全磁盘访问权限时才能读取的文件夹中。助手是否具有该权限，要到它首次运行时才能知道。"
           }
         }
+      }
+    },
+    "app.run.acknowledgeSplit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "I understand this split is experimental, and that a project's own settings can override it" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Entiendo que esta división es experimental y que los ajustes propios de un proyecto pueden anularla" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "この分割は実験的で、プロジェクト自身の設定が優先されることがあることを理解しました" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Entendo que esta divisão é experimental e que os ajustes do próprio projeto podem substituí-la" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "我了解这种拆分是实验性的，项目自己的位置设置可以覆盖它" } }
+      }
+    },
+    "app.run.blocker.acknowledgeSplit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirm that you understand this split is experimental" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Confirma que entiendes que esta división es experimental" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "この分割が実験的であることを確認してください" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Confirme que você entende que esta divisão é experimental" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "请确认你了解这种拆分是实验性的" } }
+      }
+    },
+    "app.run.blocker.chooseProducts" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose the folder on this Mac where built test products stay" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Elige la carpeta de este Mac donde se quedan los productos de prueba compilados" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "ビルドしたテスト成果物を残す、この Mac 上のフォルダを選んでください" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Escolha a pasta neste Mac onde os produtos de teste compilados ficam" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "请选择这台 Mac 上用于存放构建测试产品的文件夹" } }
+      }
+    },
+    "app.run.derivedData.mode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Where this build goes" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Dónde va esta compilación" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "このビルドの置き場所" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Para onde esta compilação vai" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "此构建的去向" } }
+      }
+    },
+    "app.run.derivedData.split" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep test products on this Mac" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Dejar los productos de prueba en este Mac" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "テスト成果物はこの Mac に残す" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Manter os produtos de teste neste Mac" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "测试产品留在这台 Mac 上" } }
+      }
+    },
+    "app.run.derivedData.splitDetail" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Built test products stay on this Mac. DerivedData, intermediates, the index and the module cache go to the drive. My Mac framework tests were measured to pass only with this split. Experimental: measured once with xcodebuild on one Intel Mac. Saving these settings was not part of that measurement. A project's own location settings can override this, and a disconnected drive has not been tested." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Los productos de prueba compilados se quedan en este Mac. DerivedData, los intermedios, el índice y la caché de módulos van al disco. Las pruebas de framework de Mi Mac se midieron como correctas solo con esta división. Experimental: medido una vez con xcodebuild en un Mac Intel. Guardar estos ajustes no formó parte de esa medición. Los ajustes de un proyecto pueden anularlo, y un disco desconectado no se ha probado." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "ビルドしたテスト成果物はこの Mac に残ります。DerivedData、中間ファイル、インデックス、モジュールキャッシュはドライブに移ります。この Mac 上のフレームワークテストが成功すると測定されたのは、この分割のときだけです。実験的: Intel の Mac 1 台で xcodebuild により 1 回測定しました。この設定の保存はその測定に含まれていません。プロジェクト自身の場所設定が優先されることがあり、ドライブを外した場合は試していません。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Os produtos de teste compilados ficam neste Mac. DerivedData, os intermediários, o índice e o cache de módulos vão para o disco. Os testes de framework do Meu Mac foram medidos como aprovados só com esta divisão. Experimental: medido uma vez com xcodebuild num Mac Intel. Salvar estes ajustes não fez parte dessa medição. Os ajustes do próprio projeto podem substituir isto, e um disco desconectado não foi testado." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "构建的测试产品留在这台 Mac 上。DerivedData、中间文件、索引和模块缓存移到驱动器。已测量到“我的 Mac”框架测试仅在这种拆分下通过。实验性：只在一台 Intel Mac 上用 xcodebuild 测过一次。把这些设置存进 Locations 并不在那次测量里。项目自己的位置设置可以覆盖它，断开的驱动器也没有测试过。" } }
+      }
+    },
+    "app.run.derivedData.whole" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Whole DerivedData folder on the drive" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Toda la carpeta DerivedData en el disco" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData フォルダ全体をドライブに" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "A pasta DerivedData inteira no disco" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "整个 DerivedData 文件夹放到驱动器上" } }
+      }
+    },
+    "app.run.derivedData.wholeDetail" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Everything in DerivedData, including built test products, goes to the drive. My Mac framework tests can fail to load a test bundle from there." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Todo lo que hay en DerivedData, incluidos los productos de prueba compilados, va al disco. Las pruebas de framework de Mi Mac pueden no cargar un paquete de pruebas desde allí." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData の中身は、ビルドしたテスト成果物も含めて、すべてドライブに移ります。この Mac 上のフレームワークテストは、そこにあるテストバンドルを読み込めず失敗することがあります。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Tudo em DerivedData, inclusive os produtos de teste compilados, vai para o disco. Os testes de framework do Meu Mac podem falhar ao carregar um pacote de testes de lá." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData 中的一切，包括构建的测试产品，都会移到驱动器上。从那里加载测试包时，“我的 Mac”框架测试可能会失败。" } }
+      }
+    },
+    "app.run.done.split" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Xcode will keep test products on this Mac and the rest of that build on the drive." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Xcode dejará los productos de prueba en este Mac y el resto de esa compilación en el disco." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "Xcode はテスト成果物をこの Mac に残し、そのビルドの残りをドライブに置きます。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "O Xcode manterá os produtos de teste neste Mac e o resto dessa compilação no disco." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "Xcode 会把测试产品留在这台 Mac 上，并把该构建的其余部分放到驱动器上。" } }
+      }
+    },
+    "app.run.label.onTheDrive" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On the drive" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "En el disco" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "ドライブ上" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "No disco" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "在驱动器上" } }
+      }
+    },
+    "app.run.label.products" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Test products" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Productos de prueba" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "テスト成果物" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Produtos de teste" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "测试产品" } }
+      }
+    },
+    "app.run.undoAction.split" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Put DerivedData and the build locations back" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Devolver DerivedData y las ubicaciones de compilación" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData とビルドの場所を元に戻す" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Devolver o DerivedData e os locais de compilação" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "恢复 DerivedData 和构建位置" } }
+      }
+    },
+    "app.run.undone.split" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "DerivedData and the build locations are back where they were." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData y las ubicaciones de compilación volvieron a donde estaban." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData とビルドの場所は元に戻りました。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "O DerivedData e os locais de compilação voltaram para onde estavam." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData 和构建位置已恢复原样。" } }
+      }
+    },
+    "cli.cmd.locations.setDerivedDataSplit.abstract" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep built test products on this Mac and put DerivedData, intermediates, the index and the module cache on an external folder. My Mac framework tests were measured to pass only with this split. Requires --i-understand-the-split-is-experimental." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Mantiene los productos de prueba compilados en este Mac y pone DerivedData, los intermedios, el índice y la caché de módulos en una carpeta externa. Las pruebas de framework de Mi Mac se midieron como correctas solo con esta división. Requiere --i-understand-the-split-is-experimental." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "ビルドしたテスト成果物はこの Mac に残し、DerivedData、中間ファイル、インデックス、モジュールキャッシュを外部フォルダに置きます。この Mac 上のフレームワークテストが成功すると測定されたのは、この分割のときだけです。--i-understand-the-split-is-experimental が必要です。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Mantém os produtos de teste compilados neste Mac e coloca DerivedData, os intermediários, o índice e o cache de módulos numa pasta externa. Os testes de framework do Meu Mac foram medidos como aprovados só com esta divisão. Requer --i-understand-the-split-is-experimental." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "将构建的测试产品留在这台 Mac 上，并把 DerivedData、中间文件、索引和模块缓存放到外部文件夹。已测量到“我的 Mac”框架测试仅在这种拆分下通过。需要 --i-understand-the-split-is-experimental。" } }
+      }
+    },
+    "cli.locations.resetDerivedData.done" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "DerivedData location reset to the default. Build products, intermediates and the build-location type were cleared too. The build location style was put back only when a split had recorded the previous one." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "La ubicación de DerivedData volvió al valor predeterminado. También se borraron los productos de compilación, los intermedios y el tipo de ubicación. El estilo de ubicación de compilación volvió solo cuando una división había registrado el anterior." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData の場所を既定に戻しました。ビルド成果物、中間ファイル、ビルド場所の種類も消しました。ビルド場所のスタイルは、分割が以前の値を記録していたときだけ戻しました。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "O local do DerivedData voltou ao padrão. Os produtos de compilação, os intermediários e o tipo de local também foram apagados. O estilo do local de compilação voltou só quando uma divisão tinha registrado o anterior." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData 位置已恢复为默认。构建产品、中间文件和构建位置类型也已清除。仅当拆分记录过先前的构建位置样式时，才把它改了回去。" } }
+      }
+    },
+    "cli.locations.split.bulkMoves" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "DerivedData, intermediates, the index and the module cache go to the drive: %@" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData, los intermedios, el índice y la caché de módulos van al disco: %@" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData、中間ファイル、インデックス、モジュールキャッシュはドライブに移ります: %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData, os intermediários, o índice e o cache de módulos vão para o disco: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "DerivedData、中间文件、索引和模块缓存移到驱动器：%@" } }
+      }
+    },
+    "cli.locations.split.measured" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "My Mac framework tests were measured to pass only with this split. Experimental." } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Las pruebas de framework de Mi Mac se midieron como correctas solo con esta división. Experimental." } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "この Mac 上のフレームワークテストが成功すると測定されたのは、この分割のときだけです。実験的。" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Os testes de framework do Meu Mac foram medidos como aprovados só com esta divisão. Experimental." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "已测量到“我的 Mac”框架测试仅在这种拆分下通过。实验性。" } }
+      }
+    },
+    "cli.locations.split.productsStay" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Built test products stay on this Mac: %@" } },
+        "es" : { "stringUnit" : { "state" : "needs_review", "value" : "Los productos de prueba compilados se quedan en este Mac: %@" } },
+        "ja" : { "stringUnit" : { "state" : "needs_review", "value" : "ビルドしたテスト成果物はこの Mac に残ります: %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "needs_review", "value" : "Os produtos de teste compilados ficam neste Mac: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "构建的测试产品留在这台 Mac 上：%@" } }
       }
     },
     "app.run.acknowledgeTests" : {
@@ -18633,6 +19135,244 @@
         }
       }
     },
+    "app.vaultFolder.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This folder is made on the drive. On a drive shared by several Macs, give each Mac its own name."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta carpeta se crea en la unidad. En una unidad compartida por varios Mac, da a cada Mac su propio nombre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このフォルダはドライブ上に作成されます。複数の Mac で共有するドライブでは、Mac ごとに別の名前を付けてください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esta pasta é criada no disco. Num disco compartilhado por vários Macs, dê a cada Mac o seu próprio nome."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此文件夹会创建在驱动器上。多台 Mac 共用同一驱动器时,请为每台 Mac 使用不同的名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault folder name"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nombre de la carpeta del vault"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault フォルダ名"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Nome da pasta do vault"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault 文件夹名称"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.dotName" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“.” and “..” are not folder names."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.” y “..” no son nombres de carpeta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "「.」と「..」はフォルダ名にできません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.” e “..” não são nomes de pasta."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "“.”和“..”不能作为文件夹名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type a name for the vault folder."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Escribe un nombre para la carpeta del vault."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "vault フォルダの名前を入力してください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Digite um nome para a pasta do vault."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "请输入 vault 文件夹的名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.hiddenSystemName" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS keeps that name for itself. Choose another."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "macOS se reserva ese nombre. Elige otro."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "その名前は macOS が使用します。別の名前を選んでください。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O macOS reserva esse nome. Escolha outro."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "macOS 保留了该名称,请选择其他名称。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.notOneFolder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name must be one folder: no “/”, “:” or control characters, and no space at either end."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "El nombre debe ser una sola carpeta: sin “/”, “:” ni caracteres de control, y sin espacios en los extremos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名前は 1 つのフォルダ名にしてください。「/」「:」や制御文字、前後の空白は使えません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "O nome deve ser uma só pasta: sem “/”, “:” nem caracteres de controle, e sem espaço nas pontas."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "名称必须是单个文件夹:不能包含“/”、“:”或控制字符,且首尾不能有空格。"
+          }
+        }
+      }
+    },
+    "app.vaultFolder.problem.tooLong" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That name is too long."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ese nombre es demasiado largo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "その名前は長すぎます。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Esse nome é longo demais."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "该名称太长。"
+          }
+        }
+      }
+    },
     "app.volumes.bar.a11y" : {
       "localizations" : {
         "en" : {
@@ -19570,31 +20310,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Xcode ▸ Settings ▸ Locations (DerivedData, Archives, compilation cache): Apple's own setting; the setters here are experimental."
+            "value" : "Xcode ▸ Settings ▸ Locations (DerivedData, Archives, compilation cache): Apple's own setting; the setters here are experimental. set-derived-data-split keeps built test products on this Mac."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode ▸ Ajustes ▸ Ubicaciones (DerivedData, Archives, caché de compilación): el ajuste propio de Apple; los comandos set de aquí son experimentales."
+            "value" : "Xcode ▸ Ajustes ▸ Ubicaciones (DerivedData, Archives, caché de compilación): el ajuste propio de Apple; los comandos set de aquí son experimentales. set-derived-data-split deja los productos de prueba compilados en este Mac."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode ▸ 設定 ▸ 場所（DerivedData、Archives、コンパイルキャッシュ）— Apple 自身の設定。ここでの set コマンドは実験的です。"
+            "value" : "Xcode ▸ 設定 ▸ 場所（DerivedData、Archives、コンパイルキャッシュ）— Apple 自身の設定。ここでの set コマンドは実験的です。set-derived-data-split はビルドしたテスト成果物をこの Mac に残します。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode ▸ Ajustes ▸ Localizações (DerivedData, Archives, cache de compilação): o ajuste da própria Apple; os comandos set daqui são experimentais."
+            "value" : "Xcode ▸ Ajustes ▸ Localizações (DerivedData, Archives, cache de compilação): o ajuste da própria Apple; os comandos set daqui são experimentais. set-derived-data-split mantém os produtos de teste compilados neste Mac."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode ▸ 设置 ▸ 位置（DerivedData、Archives、编译缓存）— Apple 自己的设置；这里的 set 命令是实验性的。"
+            "value" : "Xcode ▸ 设置 ▸ 位置（DerivedData、Archives、编译缓存）— Apple 自己的设置；这里的 set 命令是实验性的。set-derived-data-split 将构建的测试产品留在这台 Mac 上。"
           }
         }
       }
@@ -19672,31 +20412,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Restore Xcode's default DerivedData location."
+            "value" : "Restore Xcode's default DerivedData location, and clear the split's build-location keys. The build location style goes back when a split recorded the previous one."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Restablece la ubicación predeterminada de DerivedData en Xcode."
+            "value" : "Restablece la ubicación predeterminada de DerivedData en Xcode y borra las claves de ubicación de compilación de la división. El estilo vuelve cuando una división registró el anterior."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Xcode の DerivedData の場所を既定に戻します。"
+            "value" : "Xcode の DerivedData の場所を既定に戻し、分割のビルド場所キーも消します。ビルド場所のスタイルは、分割が以前の値を記録していたときだけ戻ります。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "Restaura o local padrão do DerivedData no Xcode."
+            "value" : "Restaura o local padrão do DerivedData no Xcode e apaga as chaves de local de compilação da divisão. O estilo volta quando uma divisão registrou o anterior."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "恢复 Xcode 默认的 DerivedData 位置。"
+            "value" : "恢复 Xcode 默认的 DerivedData 位置，并清除拆分的构建位置键。仅当拆分记录过先前的构建位置样式时，才会把它改回去。"
           }
         }
       }
@@ -21717,6 +22457,40 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "清空 CoreSimulator 的 dyld 缓存（实验性）"
+          }
+        }
+      }
+    },
+    "perm.action.enableOwnership.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on ownership"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Activar la propiedad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "所有権を有効にする"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Ativar a propriedade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "启用所有权"
           }
         }
       }

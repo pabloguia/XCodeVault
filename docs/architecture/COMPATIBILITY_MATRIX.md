@@ -740,6 +740,8 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
+| E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
+| E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
 
 ### Pending — added 2026-09-27 (user-first permissions, ADR-0007)
 
@@ -1203,3 +1205,75 @@ substitution may not be waved through. Issue #29 stays open.
   remain **disk-image only**; every preparation stays Experimental (rule 10).
 - Notes: a new external volume ignores ownership; the app now recommends turning ownership on (Finder Get Info, or the
   copyable `sudo diskutil enableOwnership`) instead of another volume.
+
+### H18 — `enableOwnership` through the privileged helper — PASS (experimental)
+
+- Date tested: 2026-10-05, by the user, signed build (helper 0.2.0-dev), macOS 26.7.1 (25G241) · Intel.
+- Hypothesis reference: H18; ADR-0014.
+- Evidence: `docs/research/evidence/h18-enable-ownership-helper-macos26.7.1-25G241-x86_64.txt`.
+- Result with the stock admin rule: **FAIL** — the helper's re-check returned -60007 (`timeout = 0`); nothing changed,
+  and the guided fallback was shown. Fix round 4 (the right's own rule, contract 0.2.1-dev) and fix round 5 (`tries`,
+  the writer's team and the prompt checked in the read-back; no downgrade of a newer helper): **pending** a re-test,
+  which also captures `security authorizationdb read com.xcodevault.helper.enable-ownership` after the new daemon wrote
+  the right, and checks that two clicks within 10 s both prompt and a replayed external form is denied.
+- Test to perform: in a build signed with the user's Developer ID team and `--with-helper`, approve the helper, press
+  **Turn On Ownership** for an external volume with Owners: Disabled, enter the administrator password; once more with
+  the dialog cancelled.
+- Re-test 2026-10-06 (0.2.1-dev): authorization **PASS** (the right stored with `tries 10000`); the daemon then
+  failed to find the volume — TCC refusing a root daemon access to a removable volume, **[LIKELY]**. Failed closed.
+- Re-test 2026-10-07 (0.2.2-dev, fix rounds 6–7, by the user, Intel, macOS 26.7.1 25G241): **PASS.** Password asked; journal
+  `planned` → `started` → `completed`; `Owners: Enabled`; no `<vault> 1`; the mount point unchanged; the Plan moved on.
+- Side finding: with ownership on, the volume root is `root:wheel`, so Use This Drive could not create `XCodeVault/`. Fixed
+  by making the folder first, as the user (`VaultFolderPrecreate`); real-drive re-test **pending**.
+- Verdict: **PASS on one drive / one macOS / Intel.** Experimental (rule 10): not Apple Silicon, not HFS+, not a second
+  macOS version. The guided route (Show in Finder, Copy Command) stays the fallback and is
+  what an unsigned build shows. The one-click Use This Drive flow on a real drive is **not** verified yet.
+
+### E19 split DerivedData — products internal, bulk on the USB volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-10
+- Hypothesis reference: H19 (and H6's scope: the bundle, not every byte of DerivedData)
+- Test performed: `scripts/experiments/e19-split-products.sh` with `fixtures/E2Fixture`,
+  `xcodebuild test -scheme E2Fixture -destination platform=macOS`. Three layouts. External scratch was the
+  volume's pre-existing per-user `.TemporaryItems`; internal scratch was `~/.xcodevault-e19-scratch`.
+  No `defaults write`. The four custom Locations keys were unset before and after; `IDEBuildLocationStyle`
+  stayed `Shared`.
+- Result: **partial.** CTRL (entire DerivedData on the USB volume) **FAIL** exit 65,
+  `Failed to create a bundle instance representing '…/E2LibTests.xctest'`. SYM (`-derivedDataPath` on the
+  volume, `SYMROOT` internal, intermediates/index/module cache on the volume) **PASS**; products 376 KB
+  internal, and on the volume the module cache 80 MB, index 21 MB, intermediates 3.4 MB, SDK stat caches
+  14 MB. INV (DerivedData internal, those three overrides external) **PASS**; the 14 MB SDK stat caches
+  stayed internal because nothing moved them.
+- Evidence: `../research/evidence/e19-split-products-macos26.7.1-25G241-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild test ✓ (the probe); simulator N/A; physical device N/A
+- Verdict: H19 **probable**. The whole-folder DerivedData relocation stays a warned `nativeConfiguration`.
+  The split is not a Locations setting and is not offered. Experimental (rule 10).
+- Notes: one USB disk (case-sensitive APFS, owners enabled, External/Fixed). Not Apple Silicon, not the
+  Xcode GUI, not a Simulator destination, not Thunderbolt. A 2023 note about resetting
+  `SystemPolicyRemovableVolumes` was not run — it would change the user's TCC database. Scratch removed
+  after the run.
+
+### E19 Locations keys — one-shot split, products internal, bulk on the USB volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-11
+- Hypothesis reference: H19
+- Test performed: `scripts/experiments/e19-locations-keys.sh` with `fixtures/E2Fixture`,
+  `xcodebuild test -scheme E2Fixture -destination platform=macOS`. Two layouts. External scratch was the
+  volume's pre-existing per-user `.TemporaryItems` (`E19-keys`). Internal scratch was
+  `~/.xcodevault-e19-keys-scratch`. No `defaults write`. The five keys `DerivedDataSplit` writes were
+  passed as `-IDE…` arguments. There is no separate index or module-cache defaults key. CTRL was
+  `-derivedDataPath` on the external scratch, the layout E2 and E19 already failed.
+- Result: **partial, and interpretable.** CTRL **FAIL** exit 65, the same bundle-instance error
+  (`Failed to create a bundle instance representing '…/E2LibTests.xctest'`). KEYS **PASS** exit 0.
+  Products 376 KB internal (`E2LibTests.xctest` and `E2Lib.framework`). On the volume: intermediates
+  3.5 MB, the workspace folder holding the index 21 MB, module cache 79 MB, SDK stat caches 14 MB,
+  compilation cache 28 KB. `IDEBuildLocationStyle` stayed `Shared`. The custom location keys, the
+  compilation-cache key, the archives key and `IDEDerivedDataPathOverride` stayed unset before and after.
+- Evidence: `../research/evidence/e19-locations-keys-macos26.7.1-25G241-xcode26.5-x86_64.txt`
+- Functional checks: xcodebuild test ✓ (the probe); simulator N/A; physical device N/A
+- Verdict: H19 stays **probable**. The one-shot keys produce the split E19 measured with build settings.
+  A persisted `defaults write` and the Xcode GUI were not this run. Experimental (rule 10).
+- Notes: one USB disk (case-sensitive APFS, owners enabled, External/Fixed), `/dev/disk3s1`, the same
+  volume class as E19. Not Apple Silicon, not the Xcode GUI, not a Simulator destination, not
+  Thunderbolt. Scratch removed. No disk image was attached for this probe. The invoking user's Xcode
+  defaults were unchanged.

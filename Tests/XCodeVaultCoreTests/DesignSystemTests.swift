@@ -113,7 +113,10 @@ final class DesignSystemTests: XCTestCase {
 
     func testEveryBlockerHasVisibleWordsInEveryLanguage() {
         let blockers: [OperationBlocker] = [
-            .chooseVault, .chooseFolder, .chooseRuntime, .acknowledgeTests, .simulatorWorkRunning, .driveGone, .typeName("PABLO"), .diskChanged,
+            .chooseVault, .chooseFolder, .chooseRuntime, .acknowledgeTests, .chooseProductsFolder, .acknowledgeSplit, .simulatorWorkRunning, .driveGone,
+            .typeName("PABLO"), .diskChanged,
+            .vaultFolderName(.empty), .vaultFolderName(.notOneFolder), .vaultFolderName(.dotName),
+            .vaultFolderName(.tooLong), .vaultFolderName(.hiddenSystemName),
             .core("Core says why."),
         ]
         for locale in L10n.supportedLocales {

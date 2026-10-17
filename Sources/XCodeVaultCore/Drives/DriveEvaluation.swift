@@ -215,6 +215,9 @@ public struct DriveAssessment: Sendable, Equatable, Identifiable {
         if case .enableOwnership(let mp)? = recommendedOption { return .ownership(mountPoint: mp) }
         if let recommended = recommendedOption { return .prepare(recommended) }
         if verdict == .canBeUsed { return .useDrive }
+        // R8 fix round 2, F5: a volume of the right kind is already there, so no command fixes anything — never fall
+        // through to the first command option, which can be an erase.
+        if hasSuitableKindVolume { return .nothing }
         if let first = commandOptions.first { return .prepare(first) }
         return .nothing
     }

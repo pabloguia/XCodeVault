@@ -93,6 +93,74 @@ Two consequences worth stating rather than discovering later:
   user who removes the app by hand leaves a root-owned directory behind.
 - It is per-machine, not per-user, and it is not synced or backed up by design.
 
+## The allowlist, and the one authorization the helper checks (R8, ADR-0014)
+
+The XPC surface is four state-changing verbs and `version()`, read by `scripts/helper-invariants.sh` from
+`XCodeVaultHelperXPC` itself: `removeRegenerableSystemDirectoryContents(target:)` and `forgetMountObservation(target:)`
+(a closed enum), `createVaultDirectory(volumeUUID:)` and, since R8, `enableOwnership(volumeUUID:authorization:)`
+(EXPERIMENTAL, rule 10). Each passes the administrator gate and is audited.
+
+`enableOwnership` is the first verb that needs more than group membership, and the first that runs a program. Both
+were forbidden in the helper; the maintainer approved a narrow exception on 2026-10-05, applied to both editor hooks
+and held by `helper-invariants.sh` (mutation-tested by `R8HelperInvariantsTests`):
+
+- **One process execution.** `posix_spawn` in `HelperCore/HelperDiskutil.swift` only, named once, on the constant
+  `/usr/sbin/diskutil`; no `posix_spawnp`, no shell, no other absolute path, none of the routes around those rules
+  (`dlsym`, `fork`, `@_silgen_name`, `addinherit_np`, `POSIX_SPAWN_SETEXEC`, the API bound to a value). The argv comes
+  from a closed enum (`DiskutilInvocation`: `info -plist <UUID>`, `enableOwnership /dev/<diskNsM>`, and the
+  argument-free `list -plist` and `apfs list -plist`): the UUID the helper's own parse, re-serialized; the disk the
+  pinned mount entry's `f_mntfromname`, validated by `DiskIdentifier` (anchored, on bytes), passed as its `/dev/` path
+  (fix round 7, L1) and re-verified immediately before the spawn. The lines that build it, the
+  environment and the identifier's one assignment are pinned by the script. Environment: one PATH entry. stdin/stderr
+  `/dev/null`, every other descriptor closed in the child, an empty signal mask and default dispositions, every setup
+  call checked, output capped, a deadline after which the child is killed and reaped without blocking past it.
+- **One right check, never on the helper's own reference.** `AuthorizationCopyRights` in
+  `HelperCore/HelperAuthorizationRight.swift` only, exactly one call, on `clientRef` — the reference the client
+  externalized, imported with `AuthorizationCreateFromExternalForm`, after a 32-byte length check, and freed with
+  `.destroyRights` so the form works once. The null-reference
+  and self-made-reference forms (CVE-2025-65842) remain forbidden: the daemon is root and would be told yes. The flags
+  never allow interaction; `interactionAllowed` is forbidden anywhere in the helper.
+- **Who defines the right.** `com.xcodevault.helper.enable-ownership`, with its own rule since fix round 4: `class
+  user, group admin, timeout 10, shared false, allow-root false`. The stock `authenticate-admin` rule (timeout 0) made
+  the helper's re-check fail with -60007 in the real-window test (H18); ten seconds covers that re-check only, the
+  credential is never shared beyond the client's one reference (destroyed by both sides), and root never satisfies it.
+  A password every call. The daemon writes it at startup and checks it on every call, because
+  stock macOS lets any user *add* an undefined right: a definition that is not ours — another rule, an extra key, a
+  writer other than `com.xcodevault.helper`, a writer requirement that does not name this build's team, a
+  `default-prompt` that is not our text, or a `tries` that is not a whole number of at least 1 (authd adds 10000) — is
+  rewritten and that call refused. The read-back check is pinned whole by `scripts/helper-invariants.sh` (fix round 5).
+- **What the 10 seconds bound (fix round 5, F5).** `timeout 10` bounds this right only. The credential the client's
+  reference holds after the password is an administrator credential, and while the reference lives it can satisfy
+  other user-class admin rules evaluated against it, each up to its own timeout — `system.privilege.admin`, for
+  example, is 300 s with `shared` false. The real limit is `.destroyRights` on both sides: the client destroys its
+  reference when the call returns, and the helper frees its imported copy with `.destroyRights` after its one check.
+  The H18 re-test checks, where feasible, that two clicks within 10 s both prompt and that a replayed external form is
+  denied.
+- **The client sends the credential only to a validated helper**: `version()` first on the same connection (replies are
+  checked against the helper's requirement), then the password, then the verb.
+- **A tripwire, not the control.** `helper-invariants.sh` and its mutation tests catch every route the reviews found,
+  but a source lint cannot prove the absence of every encoding of a forbidden call; the mandatory helper-security
+  review is the control.
+- **The volume is the helper's to resolve — without touching it (fix round 6).** The helper never opens, stats or
+  asks attributes of anything on the target volume: TCC refused the root daemon there in the H18 re-test ([LIKELY]).
+  `diskutil info -plist <UUID>` gives the device node and mount point; the mount table must hold exactly one entry at
+  that mount point and exactly one with that device node, and they must be the same entry (its `f_fsid`, type and
+  flags are pinned, and must include `MNT_NOSUID` and `MNT_NODEV`); `diskutil list -plist` must list the UUID on
+  exactly one volume; `diskutil apfs list -plist` must list the pinned disk exactly once with its `Roles` present and
+  **empty** (fix round 7: `info -plist` carries no roles on macOS 26.7.1, so round 6's `Backup` check never fired).
+  All of it is read again immediately before the command, the mount table last. No descriptor is held: the residual
+  window is a device-node reassignment between that re-check and the spawn, which the reviews accepted, and which can
+  land only on a `nosuid`, `nodev` mount. The command is given `/dev/diskNsM`, never a bare name a volume could also be
+  called. Refused unless mounted, local, writable, external, APFS, not the boot volume or its container, not a disk
+  image or virtual, without APFS roles (so not Time Machine) — and refused when a plist lacks a key those answers rest
+  on. Verified afterwards from diskutil and the mount table: `GlobalPermissionsEnabled`, no `MNT_IGNORE_OWNERSHIP`, the
+  same entry. `helper-invariants.sh` holds what the reader and the verb may call to a pinned allowlist.
+
+`authenticate-admin` on this Mac: `allow-root = false`, `shared = true`, `timeout = 0` (read by the reviewer,
+2026-10-05). Unmeasured until the user's signed run (H18): whether the helper's non-interactive check succeeds on the
+client's freshly granted reference, the first call right after the definition is written, and TCC on the external
+volume's root for the daemon.
+
 ## SIP
 
 The helper must never disable, weaken, or instruct disabling of SIP, and must never
@@ -165,6 +233,13 @@ require it as a precondition for any documented flow. Never modify `/System`.
   a clean VM before designing either way.
 - Removable volumes have their own TCC category with **no API to preflight or request
   it** — see H6/E2; this may constrain the product regardless of mount path.
+- **A root launchd daemon was refused access to an external volume's root** ([LIKELY], H18 re-test 2026-10-06): the
+  helper's `getattrlist`/`open` on `/Volumes/<vault>` failed as the daemon, while the same code as the user found the
+  volume. The denial was inferred, not observed (no log reached the session). Design consequence: the helper does no
+  file access on an external volume; `enableOwnership` works from the mount table and diskutil only (ADR-0014, fix
+  round 6). `createVaultDirectory`, which does open the volume, probably fails the same way on a removable volume —
+  unmeasured, out of R8's scope; the app's Use This Drive only takes that helper path when the volume's root is not
+  writable by the user, which it is on a volume with ownership on.
 
 ### Distribution
 Developer ID for app *and* helper · inside-out signing (helper first) · hardened runtime

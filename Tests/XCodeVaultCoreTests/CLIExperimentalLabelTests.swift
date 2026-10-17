@@ -109,6 +109,7 @@ final class CLIExperimentalLabelTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(StorageCatalog.category("derivedData")).isExperimental)
         XCTAssertTrue(try XCTUnwrap(StorageCatalog.category("archives")).isExperimental)
         assertLabelled(Locations.SetDerivedData.self, because: "derivedData")
+        assertLabelled(Locations.SetDerivedDataSplit.self, because: "derivedData split")
         assertLabelled(Locations.SetArchives.self, because: "archives")
         // No catalog entry of its own: its abstract states the label on its own account.
         assertLabelled(Locations.SetCompilationCache.self, because: "compilation cache")

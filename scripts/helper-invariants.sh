@@ -53,6 +53,9 @@
 # necessarily contains the strings it searches for, and a raw text match cannot tell a pattern from
 # a use.
 set -uo pipefail
+# A fixed collation: `sort -u` orders names by the locale, and the allowlists below are in byte order. A runner with
+# an en_US locale put "diskIdentifier" before "DiskIdentifier" and failed an unchanged tree (CI, macos-26-intel).
+export LC_ALL=C
 cd "$(cd "$(dirname "$0")/.." && pwd)" || { echo "helper invariants: cannot reach the repository root" >&2; exit 2; }
 
 PROTOCOL=Sources/XCodeVaultHelperProtocol/HelperProtocol.swift
@@ -211,11 +214,43 @@ done
 helper_files=$(find $HELPER_DIRS -name '*.swift' -type f | sort)
 [ -n "$helper_files" ] || { echo "helper invariants: no Swift sources under the helper targets; refusing to report ok" >&2; exit 2; }
 
+# **The R8 exception (ADR-0014; approved by the maintainer on 2026-10-05).** Exactly two files each lift exactly one
+# token from the two rules below, and the shape of what they do with it is checked further down:
+#   - SPAWN_SITE may call `posix_spawn` — once, on `DiskutilInvocation.executable`, which is `/usr/sbin/diskutil`;
+#     `posix_spawnp` (a PATH search) stays forbidden there as everywhere;
+#   - AUTHZ_SITE may call `AuthorizationCopyRights` — once, on `clientRef`, which only `AuthorizationCreateFromExternalForm`
+#     assigns: the reference the client made, never one the root daemon made itself (the CVE-2025-65842 shape).
+# Every other helper file keeps both prohibitions, and `interactionAllowed` is forbidden in all of them: the helper
+# never shows an authorization dialog of its own.
+SPAWN_SITE=Sources/XCodeVaultHelperCore/HelperDiskutil.swift
+AUTHZ_SITE=Sources/XCodeVaultHelperCore/HelperAuthorizationRight.swift
 for f in $helper_files; do
-    forbid "$f" '/bin/(ba|z)?sh|\bsystem\(|\bpopen\(|posix_spawn|\bexec(v|ve|vp|l|lp|le)\(|NSTask|\bProcess\(|executableURL|launchPath|/usr/bin/env|xcrun' \
+    spawn_token='posix_spawn'
+    [ "$f" = "$SPAWN_SITE" ] && spawn_token='posix_spawnp'
+    authz_token='AuthorizationCopyRight[s]|'
+    [ "$f" = "$AUTHZ_SITE" ] && authz_token=''
+    # Whitespace before `(` is still a call (fix round 2, N1), and `Process.` reaches its class methods.
+    forbid "$f" "/bin/(ba|z)?sh|[[:<:]]system[[:space:]]*\\(|[[:<:]]popen[[:space:]]*\\(|$spawn_token|[[:<:]]exec(v|ve|vp|l|lp|le|vP)[[:space:]]*\\(|execvP|NSTask|[[:<:]]Process[[:space:]]*(\\(|\\.)|executableURL|launchPath|/usr/bin/env|xcrun" \
         "process or shell execution in the privileged helper"
-    forbid "$f" 'AuthorizationCopyRight[s]|processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity' \
+    forbid "$f" "${authz_token}processIdentifier|SecCodeCopyGuestWithAttributes|audit_token_to_pid|xpc_connection_get_pid|SecCodeCheckValidity" \
         "hand-rolled or PID-based peer validation; the connection code-signing requirement is the only accepted form"
+    forbid "$f" 'interactionAllowed|kAuthorizationFlagInteractionAllowed' \
+        "an authorization dialog in the privileged helper; interaction is the client's (ADR-0014)"
+    # The routes around the two rules above, each measured by the helper-security review of R8 (fix round 1, M1): a
+    # symbol looked up at run time, a fork, a symbol bound by name, the asynchronous rights call, flags built from a raw
+    # value (which can carry the interaction bit), an inherited descriptor, a spawn that replaces the daemon itself, and
+    # either API bound to a value and called through it.
+    forbid "$f" 'dlsym|[[:<:]]v?fork[[:space:]]*\(|@_silgen_name|AuthorizationCopyRightsAsync|AuthorizationFlags[[:space:]]*\([[:space:]]*rawValue|addinherit_np|POSIX_SPAWN_SETEXEC' \
+        "a route around the helper's process and authorization rules (ADR-0014)"
+    forbid "$f" '=[[:space:]]*(posix_spawn|AuthorizationCopyRights)[[:>:]][[:space:]]*($|[^([:space:]])' \
+        "the spawn or rights API bound to a value; call it by name, where the rules can see it"
+    # Fix round 2 (N1): scripting and dynamic dispatch, which reach a process or any API by name at run time; and
+    # authorization flags or any other option set built from a raw value — the flags the one right check uses are a
+    # literal on its pinned line, so the type never needs naming.
+    forbid "$f" 'NSAppleScript|OSAScript|NSUserUnixTask|NSUserScriptTask|NSClassFromString|NSSelectorFromString|objc_getClass|objc_msgSend' \
+        "scripting or dynamic dispatch in the privileged helper"
+    forbid "$f" '[[:<:]]AuthorizationFlags[[:>:]]|\.init[[:space:]]*\([[:space:]]*rawValue|[[:<:]]Self[[:space:]]*\([[:space:]]*rawValue' \
+        "authorization flags, or a value built from a raw value, outside the pinned right check"
     forbid "$f" 'dlopen|Bundle\(path:|Bundle\(url:|NSBundle' \
         "dynamic code loading in the privileged helper"
     # `fchown`/`fchmod` are deliberately NOT matched: a descriptor already opened O_NOFOLLOW is the
@@ -373,6 +408,253 @@ for f in $helper_files; do
 done
 
 # ---- the authorization gate ------------------------------------------------------------------------
+# ---- the R8 exception's shape (ADR-0014) -------------------------------------------------------------
+# The loop above lets one token into each of two files. These say what each may do with it. A missing file is a
+# violation, not a pass: the rules would otherwise check nothing.
+if [ -f "$SPAWN_SITE" ]; then
+    # Bare tokens, not `name(`: `posix_spawn (` with a space, or the function bound to a value, is still a use (M1).
+    spawn_uses=$(code_of "$SPAWN_SITE" | grep -oE '[[:<:]]posix_spawn[[:>:]]' | grep -c .)
+    [ "$spawn_uses" -eq 1 ] \
+        || violation "$SPAWN_SITE — posix_spawn named $spawn_uses times" "exactly one process execution is allowed in the helper"
+    code_of "$SPAWN_SITE" | grep -qE '^        let rc = posix_spawn\(&pid, DiskutilInvocation\.executable, &actions, &attributes, argv, envp\)$' \
+        || violation "$SPAWN_SITE — the spawn line changed" "posix_spawn runs DiskutilInvocation.executable with the pinned argv"
+    code_of "$SPAWN_SITE" | grep -qE '^    static let executable = "/usr/sbin/diskutil"$' \
+        || violation "$SPAWN_SITE — DiskutilInvocation.executable is not /usr/sbin/diskutil" "the one program the helper may run"
+    # The argv: built on one line from `arguments`, whose only two returns are a fixed verb and a canonical UUID (L1).
+    code_of "$SPAWN_SITE" | grep -qxF '        let argv: [UnsafeMutablePointer<CChar>?] = ([DiskutilInvocation.executable] + invocation.arguments).map { strdup($0) } + [nil]' \
+        || violation "$SPAWN_SITE — the argv line changed" "argv is the executable and DiskutilInvocation.arguments, nothing else"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .infoPlist(let uuid): return ["info", "-plist", uuid.uuidString]' \
+        || violation "$SPAWN_SITE — the info argv changed" "info -plist <canonical UUID>"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .enableOwnership(let disk): return ["enableOwnership", disk.devicePath]' \
+        || violation "$SPAWN_SITE — the enableOwnership argv changed" "enableOwnership /dev/<the pinned mount's validated disk identifier> (fix round 7, L1)"
+    code_of "$SPAWN_SITE" | grep -qxF '    var devicePath: String { "/dev/" + value }' \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '[[:<:]]devicePath[[:>:]]')" -eq 2 ] \
+        || violation "$SPAWN_SITE — DiskIdentifier.devicePath changed" "\"/dev/\" + the validated value, declared once and used once"
+    code_of "$SPAWN_SITE" | grep -qxF '        case .apfsListPlist: return ["apfs", "list", "-plist"]' \
+        || violation "$SPAWN_SITE — the apfs list argv changed" "apfs list -plist, with no argument (fix round 7, H1)"
+    code_of "$SPAWN_SITE" | grep -qxF '        let envp: [UnsafeMutablePointer<CChar>?] = [strdup("PATH=/usr/bin:/bin:/usr/sbin:/sbin"), nil]' \
+        || violation "$SPAWN_SITE — the environment line changed" "the child's environment is one PATH entry"
+    # `DiskIdentifier.value` is assigned once, inside its validating initialiser (fix round 2, N2).
+    [ "$(code_of "$SPAWN_SITE" | grep -cE '[[:<:]]value[[:space:]]*=[^=]')" -eq 1 ] \
+        && code_of "$SPAWN_SITE" | grep -qxF '        value = raw' \
+        || violation "$SPAWN_SITE — DiskIdentifier.value is assigned outside its validating initialiser" "the identifier is built only by init?"
+    code_of "$SPAWN_SITE" | grep -qxF '    let value: String' \
+        || violation "$SPAWN_SITE — DiskIdentifier.value is not a let" "an identifier cannot change after it was validated"
+    # Fix round 6: a third, argument-free case, `list -plist`, for the UUID's uniqueness without touching any volume.
+    code_of "$SPAWN_SITE" | grep -qxF '        case .listPlist: return ["list", "-plist"]' \
+        || violation "$SPAWN_SITE — the list argv changed" "list -plist, with no argument"
+    returns=$(code_of "$SPAWN_SITE" | grep -cE 'return \[')
+    [ "$returns" -eq 4 ] || violation "$SPAWN_SITE — $returns array returns" "DiskutilInvocation.arguments has exactly four, all pinned"
+    code_of "$SPAWN_SITE" | grep -qxF '    case infoPlist(volumeUUID: UUID)' \
+        && code_of "$SPAWN_SITE" | grep -qxF '    case enableOwnership(disk: DiskIdentifier)' \
+        && code_of "$SPAWN_SITE" | grep -qxF '    case listPlist' \
+        && code_of "$SPAWN_SITE" | grep -qxF '    case apfsListPlist' \
+        && [ "$(code_of "$SPAWN_SITE" | grep -cE '^    case [a-zA-Z]+')" -eq 4 ] \
+        || violation "$SPAWN_SITE — DiskutilInvocation's cases changed" "four cases: a parsed UUID, a validated disk identifier, and two with none"
+    # Every absolute path literal in the file is one of these; `/dev/null` is stdin and stderr.
+    bad_paths=$(code_of "$SPAWN_SITE" | grep -vxF '    var devicePath: String { "/dev/" + value }' | grep -oE '"/[^"]*"' | grep -vxE '"/usr/sbin/diskutil"|"/dev/null"' | sort -u | tr '\n' ' ')
+    [ -z "$bad_paths" ] || violation "$SPAWN_SITE — path literals other than diskutil and /dev/null: $bad_paths" "no other program or file"
+else
+    violation "$SPAWN_SITE — missing" "the R8 spawn rules check nothing; move them with the file"
+fi
+# Across every helper file (fix round 2, N1): one `DiskutilInvocation`, one `executable` — a local type of the same name
+# would shadow the pinned one at the spawn line.
+[ "$(cat $helper_files | sed -E '/"/!s@[[:space:]]*//.*$@@' | grep -cE '(enum|struct|class|typealias|actor)[[:space:]]+DiskutilInvocation[[:>:]]')" -eq 1 ] \
+    || violation "helper targets — more than one DiskutilInvocation" "a second declaration would shadow the pinned one"
+[ "$(cat $helper_files | sed -E '/"/!s@[[:space:]]*//.*$@@' | grep -cE '(let|var|func)[[:space:]]+executable[[:>:]]')" -eq 1 ] \
+    || violation "helper targets — more than one executable declaration" "the only one is DiskutilInvocation.executable = /usr/sbin/diskutil"
+# The last check before the command (L1) is a pinned line of the verb.
+# Read into a variable and searched as a here-string, not through a pipe: `grep -q` exits at the match, and under
+# `pipefail` the writer's SIGPIPE on a file this size would read as "not found".
+service_code=$(code_of Sources/XCodeVaultHelperCore/HelperService.swift)
+grep -qxF \
+    '        guard reader.isUnchanged(pin) else { return HelperResult(ok: false, message: "the volume changed before the command ran", code: .volumeNotFound) }' <<<"$service_code" \
+    || violation "Sources/XCodeVaultHelperCore/HelperService.swift — the pinned-mount check before the command is gone" "the volume must be the one read, right before diskutil runs"
+# Round 3 (L1): the command runs on the pin's own identifier, on one pinned line, and nowhere else outside the spawn
+# file; the pin is never rebound or written to, and its fields are `let`.
+grep -qxF '        let run = diskutil.run(.enableOwnership(disk: pin.disk))' <<<"$service_code" \
+    || violation "Sources/XCodeVaultHelperCore/HelperService.swift — the command no longer runs on pin.disk" "diskutil gets the held mount's identifier, exactly"
+enable_sites=$(for f in $helper_files; do [ "$f" = "$SPAWN_SITE" ] || code_of "$f"; done | grep -oE '\.enableOwnership\(disk:' | grep -c .)
+[ "$enable_sites" -eq 1 ] || violation "helper targets — .enableOwnership(disk: named $enable_sites times outside $SPAWN_SITE" "one command site, the pinned one"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '[[:<:]]var[[:space:]]+pin[[:>:]]|[[:<:]]pin\.[a-zA-Z]+[[:space:]]*=[^=]' | head -3)
+[ -z "$hit" ] || violation "helper targets — the mount pin is rebound or written to" "$hit"
+# Fix round 6 (H18 re-test): TCC refuses a root launchd daemon access to a removable volume, so the verb identifies
+# the volume from the mount table and diskutil only. No call that opens, stats or asks attributes of a path may appear
+# in HelperOwnership.swift or in doEnableOwnership's body; neither may a route to one (a HelperService function, the
+# getattrlist UUID reader, a FileManager or URL API), nor an extension of the ownership types in another file.
+OWN_SITE=Sources/XCodeVaultHelperCore/HelperOwnership.swift
+file_access='[[:<:]](open|openat|open_dprotected_np|fstatat|stat|lstat|fstat|statfs|statfs64|fstatfs|getattrlist|getattrlistat|fgetattrlist|getattrlistbulk|access|faccessat|opendir|fopen|readlink|readlinkat|realpath|chdir|fchdir|setxattr|getxattr|listxattr)[[:space:]]*\(|FileManager|FileHandle|(Data|String|NSData|NSString)[[:space:]]*\([[:space:]]*contentsOf|contentsOfDirectory|contentsOfFile|fileURLWithPath|URL[[:space:]]*\(|volumeUUID[[:space:]]*\([[:space:]]*of|ATTR_|openGuardedDirectory'
+if [ -f "$OWN_SITE" ]; then
+    hit=$(code_of "$OWN_SITE" | grep -nE "$file_access" | head -3)
+    [ -z "$hit" ] || violation "$OWN_SITE — file access on a volume" "the helper reads only the mount table and diskutil (fix round 6): $hit"
+    hit=$(code_of "$OWN_SITE" | grep -oE 'HelperService\.[A-Za-z_]+' | grep -vxF 'HelperService.nilVolumeUUID' | head -3)
+    [ -z "$hit" ] || violation "$OWN_SITE — a HelperService function reached from the volume reader" "$hit"
+else
+    violation "$OWN_SITE — missing" "the fix-round-6 file-access rule checks nothing; move it with the file"
+fi
+verb_body=$(body_of Sources/XCodeVaultHelperCore/HelperService.swift doEnableOwnership)
+[ -n "$verb_body" ] || violation "HelperService.swift — doEnableOwnership not found" "the fix-round-6 file-access rule checks nothing"
+hit=$(grep -nE "$file_access" <<<"$verb_body" | head -3)
+[ -z "$hit" ] || violation "HelperService.swift — doEnableOwnership touches a file" "fix round 6: $hit"
+hit=$(for f in $helper_files; do [ "$f" = "$OWN_SITE" ] || code_of "$f"; done \
+    | grep -nE 'extension[[:space:]]+(HelperOwnership|OwnershipVolumeReader|MountEntry|MountPin)[[:>:]]' | head -3)
+[ -z "$hit" ] || violation "helper targets — an ownership type extended outside $OWN_SITE" "$hit"
+# Fix round 7 (M2): a denylist cannot name every call that reaches a file (fts_open, statvfs, removexattr, a helper
+# defined elsewhere, a function value…), so what the reader and the verb CALL is an allowlist: every identifier
+# followed by `(` — free functions, initialisers, methods, enum cases — compared with the set below. Whole-line
+# comments are dropped first. A new call means changing this list, in front of the helper-security review.
+calls_in() { grep -vE '^[[:space:]]*//' | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(' | sed -E 's/[[:space:]]*\($//' | sort -u | tr '\n' ' '; }
+own_calls_allowed='DiskIdentifier InfoPlist Int MountEntry MountPin OwnershipVolumeFacts Sendable Set String UInt32 UUID append bootNodes cString caseInsensitiveCompare compactMap contains diskIdentifier diskOf dropFirst entry facts filter found free getmntinfo_r_np hasPrefix info infoPlist isNosuidNodev isUnchanged isVolumeDeviceNode lookup lowercased map mountTable parseInfo pin propertyList range readMounts refusal return roles run sharesBoot unreadable uuidCount volumeUUIDCount withMemoryRebound withUnsafePointer '
+verb_calls_allowed='HelperResult OwnershipVolumeReader SecurityRightAuthority SpawnedDiskutil UUID authorize check defined denied doEnableOwnership enableOwnership ensureDefinition failed found granted isUnchanged lookup pin refusal run unreadable '
+own_calls=$(code_of "$OWN_SITE" | calls_in)
+[ "$own_calls" = "$own_calls_allowed" ] \
+    || violation "$OWN_SITE — the calls changed" "allowed: $own_calls_allowed| found: $own_calls"
+verb_calls=$(calls_in <<<"$verb_body")
+[ "$verb_calls" = "$verb_calls_allowed" ] \
+    || violation "HelperService.swift — doEnableOwnership's calls changed" "allowed: $verb_calls_allowed| found: $verb_calls"
+# No `.init` spelling (it would hide the type from the allowlist), no top-level function (a helper reachable by a bare
+# name), no module-qualified C call except the two reads/writes HelperMountHistory has always made, and no typealias of
+# an ownership type (an alias would carry an extension past the rule above).
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '\.init[[:space:]]*[(]|^(public |private |fileprivate |internal )?func ' | head -3)
+[ -z "$hit" ] || violation "helper targets — an .init call or a top-level function" "$hit"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE '[[:<:]](Darwin|Glibc)[[:space:]]*\.' \
+    | grep -vE ':[[:space:]]+let n = buffer\.withUnsafeMutableBytes \{ Darwin\.read\(fd, \$0\.baseAddress, \$0\.count\) \}$|:[[:space:]]+let written = bytes\.withUnsafeBytes \{ Darwin\.write\(fd, \$0\.baseAddress, \$0\.count\) \}$' | head -3)
+[ -z "$hit" ] || violation "helper targets — a Darwin. / Glibc. qualified call" "$hit"
+hit=$(for f in $helper_files; do code_of "$f"; done | grep -nE 'typealias[^=]*=[[:space:]]*(HelperOwnership|OwnershipVolumeReader|OwnershipVolumeReading|MountEntry|MountPin|OwnershipVolumeFacts|DiskutilInvocation|DiskIdentifier)[[:>:]]' | head -3)
+[ -z "$hit" ] || violation "helper targets — a typealias of an ownership type" "$hit"
+pin_vars=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+var[[:space:]]')
+pin_lets=$(sed -n '/^struct MountPin/,/^}/p' Sources/XCodeVaultHelperCore/HelperOwnership.swift | grep -cE '^[[:space:]]+let[[:space:]]')
+[ "$pin_vars" -eq 0 ] && [ "$pin_lets" -ge 6 ] \
+    || violation "Sources/XCodeVaultHelperCore/HelperOwnership.swift — MountPin's fields are not all let" "a pin cannot change after it was taken"
+if [ -f "$AUTHZ_SITE" ]; then
+    copy_calls=$(code_of "$AUTHZ_SITE" | grep -oE '[[:<:]]AuthorizationCopyRights[[:>:]]' | grep -c .)
+    [ "$copy_calls" -eq 1 ] \
+        || violation "$AUTHZ_SITE — AuthorizationCopyRights named $copy_calls times" "exactly one right check is allowed in the helper"
+    code_of "$AUTHZ_SITE" | grep -E 'AuthorizationCopyRights\(' | grep -qE 'AuthorizationCopyRights\(clientRef, ' \
+        || violation "$AUTHZ_SITE — AuthorizationCopyRights is not called on clientRef" "only the client's externalized reference may be checked"
+    # `clientRef` is written only by `AuthorizationCreateFromExternalForm`: no `&clientRef` elsewhere, no assignment.
+    hit=$(code_of "$AUTHZ_SITE" | grep -nE '&clientRef' | grep -vE 'AuthorizationCreateFromExternalForm\(&form, &clientRef\)' | head -3)
+    [ -z "$hit" ] || violation "$AUTHZ_SITE — clientRef is written by something other than AuthorizationCreateFromExternalForm" "$hit"
+    hit=$(code_of "$AUTHZ_SITE" | grep -nE '(^|[^_[:alnum:]])clientRef[[:space:]]*=[^=]' | head -3)
+    [ -z "$hit" ] || violation "$AUTHZ_SITE — clientRef is assigned" "$hit"
+    code_of "$AUTHZ_SITE" | grep -qE 'AuthorizationCreateFromExternalForm\(&form, &clientRef\)' \
+        || violation "$AUTHZ_SITE — clientRef does not come from AuthorizationCreateFromExternalForm" "the reference checked is the client's"
+    # Fix round 2 (N1): the check itself, the reference's release, the writer check, and every line that names
+    # `clientRef`, exactly — a closure parameter, an `if case` or a `for` binding of that name is a different reference.
+    code_of "$AUTHZ_SITE" | grep -qxF '                return AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)' \
+        || violation "$AUTHZ_SITE — the right check changed" "AuthorizationCopyRights(clientRef, …, [.extendRights], nil), exactly"
+    code_of "$AUTHZ_SITE" | grep -qxF '        defer { AuthorizationFree(clientRef, [.destroyRights]) }' \
+        || violation "$AUTHZ_SITE — the client's reference is no longer destroyed" "the externalized form works once (L3)"
+    code_of "$AUTHZ_SITE" | grep -qxF '        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }' \
+        || violation "$AUTHZ_SITE — the right's writer is no longer checked" "only the helper's own definition counts (L4)"
+    # Fix round 4 (H18 measured): the right has its own definition, never the shared admin rule — whose timeout of 0
+    # made the helper's re-check fail with -60007 — and never a shared, root-satisfiable or long-lived credential. The
+    # written dictionary, the values the read-back must match, and the write itself are pinned.
+    forbid "$AUTHZ_SITE" '"rule"|authenticate-admin|kAuthorizationRule' "the right must not point at a stock rule (fix round 4)"
+    authz_code=$(code_of "$AUTHZ_SITE")
+    for pinned in \
+        '            "class": "user",' \
+        '            "group": "admin",' \
+        '            "timeout": 10,' \
+        '            "shared": false,' \
+        '            "allow-root": false,' \
+        '    static let ruleClass = "user"' \
+        '    static let group = "admin"' \
+        '    static let timeoutSeconds = 10' \
+        '        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)' \
+        '            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false' \
+        '        let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]'
+    do
+        grep -qxF "$pinned" <<<"$authz_code" || violation "$AUTHZ_SITE — the right's definition changed" "missing: $pinned"
+    done
+    # Fix round 5 (F4): the read-back check is pinned whole, line for line and in order, so a line slipped between two
+    # pinned lines — an early `return true` (B4), a changed safe default (B6), a key allowed without its check — fails
+    # here; pins of single lines could not see it. The team check (F3) is pinned the same way. Changing either function
+    # means changing this block in the same commit, in front of the helper-security review.
+    expected_ours=$(cat <<'OURS_BODY'
+    static func isOurDefinition(_ d: [String: Any], teamID: String) -> Bool {
+        let metadata: Set<String> = ["version", "created", "modified", "comment", "default-prompt", "identifier", "requirement", "tries"]
+        let fields = Set(OwnershipRightRule.definition.keys)
+        let safeDefaults: [String: Bool] = ["authenticate-user": true, "session-owner": false, "extract-password": false, "password-only": false]
+        guard Set(d.keys).isSubset(of: metadata.union(fields).union(safeDefaults.keys)) else { return false }
+        guard d["identifier"] as? String == HelperIdentity.bundleIdentifier else { return false }
+        guard let requirement = d["requirement"] as? String, namesTeam(requirement, teamID: teamID) else { return false }
+        guard d["class"] as? String == OwnershipRightRule.ruleClass, d["group"] as? String == OwnershipRightRule.group,
+            (d["timeout"] as? NSNumber)?.intValue == OwnershipRightRule.timeoutSeconds, d["shared"] as? Bool == false, d["allow-root"] as? Bool == false
+        else { return false }
+        for (key, safe) in safeDefaults where d[key] != nil {
+            guard d[key] as? Bool == safe else { return false }
+        }
+        if let tries = d["tries"] {
+            guard let n = tries as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), !CFNumberIsFloatType(n), n.int64Value >= 1 else { return false }
+        }
+        if let prompts = d["default-prompt"] {
+            guard let byLanguage = prompts as? [String: Any], byLanguage.values.allSatisfy({ $0 as? String == OwnershipRightRule.prompt }) else { return false }
+        }
+        return true
+    }
+OURS_BODY
+)
+    [ "$(body_of "$AUTHZ_SITE" isOurDefinition)" = "$expected_ours" ] \
+        || violation "$AUTHZ_SITE — isOurDefinition changed" "the read-back check is pinned whole (fix round 5, F4)"
+    expected_team=$(cat <<'TEAM_BODY'
+    static func namesTeam(_ requirement: String, teamID: String) -> Bool {
+        guard HelperIdentity.isUsableTeamID(teamID) else { return false }
+        if requirement.contains("subject.OU] = \"\(teamID)\"") { return true }
+        guard let range = requirement.range(of: "subject.OU] = \(teamID)") else { return false }
+        guard let next = requirement[range.upperBound...].unicodeScalars.first else { return true }
+        return !(CharacterSet.alphanumerics.contains(next) || next == "_" || next == "\"")
+    }
+TEAM_BODY
+)
+    [ "$(body_of "$AUTHZ_SITE" namesTeam)" = "$expected_team" ] \
+        || violation "$AUTHZ_SITE — namesTeam changed" "the writer's team check is pinned whole (fix round 5, F3/F4)"
+    # Fix round 5 (N1): the decision that keeps a definition (`.unchanged`) and the read-back after a write are pinned
+    # whole too: a pin on isOurDefinition is worth nothing if `ensureDefinition` stops asking it. Blank lines (where
+    # comments were) are dropped on both sides, so a comment edit is not a violation.
+    expected_ensure=$(cat <<'ENSURE_BODY'
+    func ensureDefinition() -> RightDefinition {
+        var current: CFDictionary?
+        let got = AuthorizationRightGet(rightName, &current)
+        let existed = got == errAuthorizationSuccess
+        if existed, let dict = current as? [String: Any], Self.isOurDefinition(dict, teamID: teamID) { return .unchanged }
+        var writer: AuthorizationRef?
+        let created = AuthorizationCreate(nil, nil, [], &writer)
+        guard created == errAuthorizationSuccess, let writer else { return .failed(created) }
+        defer { AuthorizationFree(writer, []) }
+        let prompt = OwnershipRightRule.prompt as CFString
+        let set = AuthorizationRightSet(writer, rightName, OwnershipRightRule.definition as CFDictionary, prompt, nil, nil)
+        guard set == errAuthorizationSuccess else { return .failed(set) }
+        var written: CFDictionary?
+        guard AuthorizationRightGet(rightName, &written) == errAuthorizationSuccess, let back = written as? [String: Any],
+            Self.isOurDefinition(back, teamID: teamID)
+        else { return .failed(errAuthorizationInternal) }
+        return existed ? .redefined : .defined
+    }
+ENSURE_BODY
+)
+    actual_ensure=$(code_of "$AUTHZ_SITE" | sed -n '/^    func ensureDefinition() -> RightDefinition {$/,/^    }$/p' | grep -v '^[[:space:]]*$')
+    [ "$actual_ensure" = "$expected_ensure" ] \
+        || violation "$AUTHZ_SITE — ensureDefinition changed" "keeping a definition and the read-back after a write are pinned whole (fix round 5, N1)"
+    trues=$(body_of "$AUTHZ_SITE" isOurDefinition | grep -oE '[[:<:]]return[[:space:]]+true[[:>:]]' | grep -c .)
+    [ "$trues" -eq 1 ] || violation "$AUTHZ_SITE — isOurDefinition returns true $trues times" "one way to be ours: the last line (B4)"
+    # Belt and braces for the one number: whatever the pins say, a credential longer than 30 s is not a re-check window.
+    for t in $(grep -oE '"timeout": [0-9]+|timeoutSeconds = [0-9]+' <<<"$authz_code" | grep -oE '[0-9]+$'); do
+        [ "$t" -le 30 ] || violation "$AUTHZ_SITE — the right's credential lives $t s" "at most 30 s: long enough for the helper's re-check, no longer"
+    done
+    grep -qE '"shared": true|"allow-root": true' <<<"$authz_code" \
+        && violation "$AUTHZ_SITE — the right's credential is shared or satisfied by root" "shared and allow-root stay false"
+    stray=$(code_of "$AUTHZ_SITE" | grep -E '[[:<:]]clientRef[[:>:]]' | grep -vxF \
+        -e '        var clientRef: AuthorizationRef?' \
+        -e '        let imported = AuthorizationCreateFromExternalForm(&form, &clientRef)' \
+        -e '        guard imported == errAuthorizationSuccess, let clientRef else { return .malformed }' \
+        -e '        defer { AuthorizationFree(clientRef, [.destroyRights]) }' \
+        -e '                return AuthorizationCopyRights(clientRef, &rights, nil, [.extendRights], nil)' | head -3)
+    [ -z "$stray" ] || violation "$AUTHZ_SITE — clientRef on a line that is not allowlisted" "$stray"
+else
+    violation "$AUTHZ_SITE — missing" "the R8 authorization rules check nothing; move them with the file"
+fi
+
 # Expected count comes from the XPC surface, not from a naming convention: a new verb that does not
 # happen to be called `doSomething` used to be invisible.
 # Counted by excluding the read-only verb **by name**, not by subtracting one from a pattern that
@@ -557,12 +839,12 @@ while IFS= read -r f; do
             [ -n "$hit" ] && violation "$f — names the helper client outside its two allowed lines" "$(printf '%s' "$hit" | tr '\n' ' ')" ;;
         Sources/xcodevaultctl/PermissionsCommand.swift)
             seen_permissions=1
-            forbid "$f" 'removeRegenerableSystemDirectoryContents|createVaultDirectory' \
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|createVaultDirectory|enableOwnership' \
                 "the permissions command reads the helper's state and calls no verb" ;;
         *)
             forbid "$f" '[[:<:]](XCodeVaultHelperClient|HelperClient)[[:>:]]' \
                 "only LiveHelper and PermissionsCommand may use the helper client, whatever the import spelling"
-            forbid "$f" 'removeRegenerableSystemDirectoryContents|[[:alnum:]_)][[:space:]]*\.createVaultDirectory\(volumeUUID' \
+            forbid "$f" 'removeRegenerableSystemDirectoryContents|[[:alnum:]_)][[:space:]]*\.(createVaultDirectory|enableOwnership)\(volumeUUID' \
                 "only LiveHelper, driven by PrivilegedActionRunner, may call a verb: the journal and the in-use refusal are there" ;;
     esac
 done < <(find Sources/XCodeVault Sources/xcodevaultctl -type f -name '*.swift' 2>/dev/null | sort)

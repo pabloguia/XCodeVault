@@ -1,0 +1,96 @@
+# Experiment: E19 locations keys: one-shot split keys, products internal, bulk on the external volume
+# Date: 2026-10-11T17:32:34Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+volume-device: /dev/disk3s1
+   Mount Point:               /Volumes/<vault>
+   File System Personality:   Case-sensitive APFS
+   Owners:                    Enabled
+   Protocol:                  USB
+   Device Location:           External
+   Removable Media:           Fixed
+external-scratch: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys
+internal-scratch: ~/.xcodevault-e19-keys-scratch (INTERNAL)
+disk-images-before:
+image-path      : /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+image-path      : /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+defaults-before:
+IDECustomDerivedDataLocation=<unset>
+IDEBuildLocationStyle=Shared
+IDECustomBuildLocationType=<unset>
+IDECustomBuildProductsPath=<unset>
+IDECustomBuildIntermediatesPath=<unset>
+IDECustomCompilationCacheLocation=<unset>
+IDECustomDistributionArchivesLocation=<unset>
+IDEDerivedDataPathOverride=<unset>
+
+note: no defaults write. Five -IDE arguments match DerivedDataSplit.changes. No index or module-cache defaults key exists on that split.
+
+==================== CASE CTRL-all-external ====================
+DerivedData: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL
+invocation: xcodebuild test -scheme E2Fixture -destination platform=macOS -derivedDataPath <external> -quiet
+xcodebuild exit=65 verdict=FAIL
+	xctest (76176) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+** TEST FAILED **
+ROOT CTRL-derived EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL
+192M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/SourcePackages
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/info.plist
+ 28K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/CompilationCache.noindex
+3.9M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Build
+ 14M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/SDKStatCaches.noindex
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Index.noindex
+ 75M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Logs
+ 79M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/ModuleCache.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/CompilationCache.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Index.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Build/Products/Debug/PackageFrameworks/E2Lib.framework
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/Build/Products/Debug/E2LibTests.xctest
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-CTRL/ModuleCache.noindex
+
+==================== CASE KEYS-locations-split ====================
+IDECustomDerivedDataLocation: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS
+IDEBuildLocationStyle: Custom
+IDECustomBuildLocationType: Absolute
+IDECustomBuildProductsPath: ~/.xcodevault-e19-keys-scratch/Products
+IDECustomBuildIntermediatesPath: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/Intermediates
+index/module-cache keys: none (they follow IDECustomDerivedDataLocation)
+invocation: xcodebuild test -scheme E2Fixture -destination platform=macOS -IDECustomDerivedDataLocation=<external> -IDEBuildLocationStyle=Custom -IDECustomBuildLocationType=Absolute -IDECustomBuildProductsPath=<internal> -IDECustomBuildIntermediatesPath=<external>/Intermediates -quiet
+xcodebuild exit=0 verdict=PASS
+ROOT KEYS-bulk EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS
+117M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS
+ 28K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/CompilationCache.noindex
+3.5M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/Intermediates
+ 14M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/SDKStatCaches.noindex
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/E2Fixture-ffuqvahemhexjacqjphnexeqskvc
+ 79M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/ModuleCache.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/E2Fixture-ffuqvahemhexjacqjphnexeqskvc/Index.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/CompilationCache.noindex
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/Intermediates
+ITEM EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19-keys/DD-KEYS/ModuleCache.noindex
+ROOT KEYS-products INTERNAL ~/.xcodevault-e19-keys-scratch/Products
+376K	~/.xcodevault-e19-keys-scratch/Products
+376K	~/.xcodevault-e19-keys-scratch/Products/Debug
+ITEM INTERNAL ~/.xcodevault-e19-keys-scratch/Products/Debug/E2LibTests.xctest
+ITEM INTERNAL ~/.xcodevault-e19-keys-scratch/Products/Debug/PackageFrameworks/E2Lib.framework
+
+defaults-after:
+IDECustomDerivedDataLocation=<unset>
+IDEBuildLocationStyle=Shared
+IDECustomBuildLocationType=<unset>
+IDECustomBuildProductsPath=<unset>
+IDECustomBuildIntermediatesPath=<unset>
+IDECustomCompilationCacheLocation=<unset>
+IDECustomDistributionArchivesLocation=<unset>
+IDEDerivedDataPathOverride=<unset>
+
+defaults-unchanged: yes
+
+CONTROL-INTERPRETATION: CTRL failed, consistent with E2/E19. KEYS can be read against that baseline.
+==================== SUMMARY ====================
+CTRL | xcodebuild=FAIL (exit 65)
+KEYS | xcodebuild=PASS (exit 0)

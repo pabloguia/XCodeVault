@@ -1,0 +1,119 @@
+# Experiment: E19 split DerivedData: products where xctest can load them, bulk on the external volume
+# Date: 2026-10-10T06:13:51Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+volume-device: /dev/disk3s1
+   Mount Point:               /Volumes/<vault>
+   File System Personality:   Case-sensitive APFS
+   Owners:                    Enabled
+   Protocol:                  USB
+   Device Location:           External
+   Removable Media:           Fixed
+external-scratch: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19
+internal-scratch: ~/.xcodevault-e19-scratch (INTERNAL)
+defaults-before:
+<unset>
+<unset>
+<unset>
+<unset>
+Shared
+
+== CASE CTRL-all-external
+==================== CASE CTRL-all-external ====================
+DerivedData: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL
+setting: 
+xcodebuild exit=65 verdict=FAIL
+	xctest (23865) encountered an error (Failed to create a bundle instance representing '/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Build/Products/Debug/E2LibTests.xctest'. Check that the bundle exists on disk.)
+** TEST FAILED **
+-- layout --
+ROOT /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL (EXTERNAL)
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/SourcePackages
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/info.plist
+ 28K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/CompilationCache.noindex
+3.9M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Build
+ 14M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/SDKStatCaches.noindex
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Index.noindex
+ 73M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Logs
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/ModuleCache.noindex
+BUNDLE EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Build/Products/Debug/PackageFrameworks/E2Lib.framework
+BUNDLE EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-CTRL/Build/Products/Debug/E2LibTests.xctest
+
+== CASE SYM-products-internal
+==================== CASE SYM-products-internal ====================
+DerivedData: /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM
+setting: SYMROOT=~/.xcodevault-e19-scratch/SYM
+setting: OBJROOT=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Intermediates
+setting: INDEX_DATA_STORE_DIR=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Index
+setting: MODULE_CACHE_DIR=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+setting: CLANG_MODULE_CACHE_PATH=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+xcodebuild exit=0 verdict=PASS
+-- layout --
+ROOT /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM (EXTERNAL)
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache.noindex
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/SourcePackages
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/TestResults
+4.0K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/info.plist
+ 16K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Build
+ 28K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/CompilationCache.noindex
+232K	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Logs
+3.4M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Intermediates
+ 14M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/SDKStatCaches.noindex
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Index
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+OVERRIDE SYMROOT INTERNAL ~/.xcodevault-e19-scratch/SYM
+376K	~/.xcodevault-e19-scratch/SYM
+BUNDLE INTERNAL ~/.xcodevault-e19-scratch/SYM/Debug/E2LibTests.xctest
+BUNDLE INTERNAL ~/.xcodevault-e19-scratch/SYM/Debug/PackageFrameworks/E2Lib.framework
+OVERRIDE OBJROOT EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Intermediates
+3.4M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Intermediates
+OVERRIDE INDEX_DATA_STORE_DIR EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Index
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/Index
+OVERRIDE MODULE_CACHE_DIR EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+OVERRIDE CLANG_MODULE_CACHE_PATH EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/DD-SYM/ModuleCache
+
+== CASE INV-bulk-external
+==================== CASE INV-bulk-external ====================
+DerivedData: ~/.xcodevault-e19-scratch/DD-INV
+setting: OBJROOT=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Intermediates
+setting: INDEX_DATA_STORE_DIR=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Index
+setting: MODULE_CACHE_DIR=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+setting: CLANG_MODULE_CACHE_PATH=/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+xcodebuild exit=0 verdict=PASS
+-- layout --
+ROOT ~/.xcodevault-e19-scratch/DD-INV (INTERNAL)
+4.0K	~/.xcodevault-e19-scratch/DD-INV/ModuleCache.noindex
+4.0K	~/.xcodevault-e19-scratch/DD-INV/SourcePackages
+4.0K	~/.xcodevault-e19-scratch/DD-INV/TestResults
+4.0K	~/.xcodevault-e19-scratch/DD-INV/info.plist
+ 28K	~/.xcodevault-e19-scratch/DD-INV/CompilationCache.noindex
+232K	~/.xcodevault-e19-scratch/DD-INV/Logs
+392K	~/.xcodevault-e19-scratch/DD-INV/Build
+ 14M	~/.xcodevault-e19-scratch/DD-INV/SDKStatCaches.noindex
+BUNDLE INTERNAL ~/.xcodevault-e19-scratch/DD-INV/Build/Products/Debug/E2LibTests.xctest
+BUNDLE INTERNAL ~/.xcodevault-e19-scratch/DD-INV/Build/Products/Debug/PackageFrameworks/E2Lib.framework
+OVERRIDE OBJROOT EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Intermediates
+3.4M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Intermediates
+OVERRIDE INDEX_DATA_STORE_DIR EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Index
+ 21M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-Index
+OVERRIDE MODULE_CACHE_DIR EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+OVERRIDE CLANG_MODULE_CACHE_PATH EXTERNAL /Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+ 80M	/Volumes/<vault>/.TemporaryItems/folders.501/TemporaryItems/<vault>-experiments/E19/INV-ModuleCache
+
+defaults-after:
+<unset>
+<unset>
+<unset>
+<unset>
+Shared
+
+==================== SUMMARY ====================
+CTRL-all-external | xcodebuild=FAIL (exit 65)
+SYM-products-internal | xcodebuild=PASS (exit 0)
+INV-bulk-external | xcodebuild=PASS (exit 0)

@@ -129,6 +129,7 @@ enum GuideText {
         case .showHealth: L10n.tr("app.guide.action.showHealth")
         case .showInFinder: L10n.tr("app.drives.ownership.show")
         case .copyOwnershipCommand: L10n.tr("app.plan.copyCommand")
+        case .turnOnOwnership: L10n.tr("app.ownership.turnOn")
         }
     }
 
@@ -235,6 +236,8 @@ enum GuideText {
 /// opens an existing sheet or screen through `AppModel.performPlanAction`; nothing here runs anything.
 struct GuidedPlanView: View {
     let plan: Plan
+    /// ADR-0015: the vault folder's name, in the step that turns ownership on.
+    var vaultFolder = VaultFolderField()
     var act: @MainActor (PlanAction) -> Void = { _ in }
 
     var body: some View {
@@ -242,7 +245,7 @@ struct GuidedPlanView: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 header
                 ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
-                    GroupBox { StepView(number: index + 1, step: step, primary: plan.primary, act: act) }
+                    GroupBox { StepView(number: index + 1, step: step, primary: plan.primary, vaultFolder: vaultFolder, act: act) }
                 }
                 Text.l10n(L10n.tr("app.guide.footer")).font(.footnote).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -274,6 +277,7 @@ private struct StepView: View {
     let number: Int
     let step: PlanStep
     let primary: PlanPrimary?
+    let vaultFolder: VaultFolderField
     let act: @MainActor (PlanAction) -> Void
 
     var body: some View {
@@ -286,6 +290,19 @@ private struct StepView: View {
                 StatusLabel(s.kind, s.text, symbol: s.symbol).font(.callout)
             }
             Text.l10n(GuideText.explanation(step)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // R8: why the guided ownership route is shown instead of the click, and the click's progress.
+            if let why = step.ownershipFallback {
+                Text(verbatim: why.reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if step.kind == .prepareDrive, step.state != .done, case .turnOnOwnership? = step.note, !step.ownershipWorking {
+                VaultFolderNameField(field: vaultFolder)
+            }
+            if step.ownershipWorking {
+                HStack(spacing: Spacing.s) {
+                    ProgressView().controlSize(.small)
+                    Text(verbatim: L10n.tr("app.ownership.working")).font(.callout).foregroundStyle(.secondary)
+                }
+            }
             if !step.items.isEmpty {
                 Text.l10n(GuideText.legend).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: Spacing.s) {

@@ -134,6 +134,7 @@ enum AppText {
         switch action {
         case .createVaultDirectory: L10n.tr("app.error.createVaultDirectory.title")
         case .emptyCoreSimulatorDyldCache: L10n.tr("app.error.emptyDyldCache.title")
+        case .enableOwnership: L10n.tr("app.error.enableOwnership.title")
         }
     }
 
@@ -142,6 +143,7 @@ enum AppText {
         switch action {
         case .createVaultDirectory: L10n.tr("app.feedback.createVaultDirectory")
         case .emptyCoreSimulatorDyldCache: L10n.tr("app.feedback.emptyDyldCache")
+        case .enableOwnership: L10n.tr("app.feedback.enableOwnership")
         }
     }
 
@@ -150,6 +152,7 @@ enum AppText {
         switch action {
         case .createVaultDirectory: L10n.tr("app.privileged.button.createVaultDirectory")
         case .emptyCoreSimulatorDyldCache: L10n.tr("app.privileged.button.emptyDyldCache")
+        case .enableOwnership: L10n.tr("app.privileged.button.enableOwnership")
         }
     }
 
@@ -158,6 +161,7 @@ enum AppText {
         switch action {
         case .createVaultDirectory: L10n.tr("app.privileged.confirm.createVaultDirectory")
         case .emptyCoreSimulatorDyldCache: L10n.tr("app.privileged.confirm.emptyDyldCache")
+        case .enableOwnership: L10n.tr("app.privileged.confirm.enableOwnership")
         }
     }
 

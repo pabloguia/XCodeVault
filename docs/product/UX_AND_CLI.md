@@ -66,7 +66,7 @@ Command surface as implemented (2026-09-06; mirrors `xcodevaultctl --help`, keep
   `runtime delete <id> [--keep-asset] [--dry-run] --yes`,
   `runtime export <platform> --to <dir> [--build-version] [--arch]`,
   `runtime import <dmg>`, `runtime offload <id> --library <dir> --yes`,
-  `locations set-derived-data|set-archives|set-compilation-cache <path>` and `reset-*`,
+  `locations set-derived-data|set-derived-data-split|set-archives|set-compilation-cache <path>` and `reset-*`,
   `vault init <mount>`, `vault forget <uuid>`,
   `externalize --category archives --vault <ref> [--apply] [--remove-source-after-verify
   --i-confirm-deleting-non-regenerable-data]`, `restore --category … --vault … --name … [--to …] --apply`,
@@ -115,7 +115,7 @@ The app is a projection of Core: every number and every decision a screen shows 
   **Run…** (R3), which runs `runtime delete` through the Run sheet.
 - **Park, Run externally.** `SavingsPlanner.rows` with **Copy Command** per row and Park's vault state, and **Run…**
   (R3, ADR-0011) on the rows the app runs: `externalize` (Archives), `runtime offload`, `locations set-derived-data` /
-  `set-archives` and `runtime export`; on the Delete view, `runtime delete`. Simulator devices stay copy-only. The Run
+  `set-derived-data-split` / `set-archives` and `runtime export`; on the Delete view, `runtime delete`. Simulator devices stay copy-only. The DerivedData sheet chooses the whole folder (tests can fail) or the split that keeps test products on this Mac. The Run
   sheet reviews (Core's preflight or plan; blockers disable the confirm button), confirms with the exact action, then
   shows the stage, a progress bar and the live log (`StreamingCommandRunner`), and the result. The flags become
   controls: the **Destination** picker (R6: ready vaults first, drives that need preparation listed with **Prepare…**,
@@ -129,7 +129,9 @@ The app is a projection of Core: every number and every decision a screen shows 
   `migration status` / `resume` / `abort` on Park, Run externally and History; resume and abort stay CLI-only.
 - **Drives (R6, ADR-0012, experimental).** External physical disks from `DiskTopology` + `DriveEvaluation`: one verdict
   each (Ready / Can be used / Needs preparation / Can't be used), the options least destructive first (add APFS volume,
-  add APFS partition in free space, erase one volume, erase the disk; ownership as Show in Finder + Copy Command), and
+  add APFS partition in free space, erase one volume, erase the disk; ownership as **Turn On Ownership** — the helper's
+  `enableOwnership`, the system password dialog every call, EXPERIMENTAL, ADR-0014 — with Show in Finder + Copy Command
+  and the reason as the fallback, decided by `OwnershipRoute`; Keep Running only on quit while it runs), and
   **Use This Drive…** (`DriveRegistration`: register + `VaultLayout` folders). `DiskSafety` refuses every change on
   internal, boot, disk-image, Time Machine and read-only disks, and every erase on a disk holding a registered vault.
   Preparation runs in the Run sheet: typed name for an erase, Core re-reads and re-checks identity before its one

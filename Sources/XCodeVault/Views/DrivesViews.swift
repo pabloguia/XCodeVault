@@ -153,6 +153,12 @@ struct ExternalDriveActions {
     var useDrive: @MainActor (DriveAssessment) -> Void = { _ in }
     var showInFinder: @MainActor (String) -> Void = { _ in }
     var copyOwnershipCommand: @MainActor (String) -> Void = { _ in }
+    /// R8: **Turn On Ownership** for the drive's volume at that mount point, through the helper.
+    var turnOnOwnership: @MainActor (DriveAssessment, String) -> Void = { _, _ in }
+    /// R8: one click, progress, or the guided route with its reason (`OwnershipRoute.decide`). Guided by default, for renders.
+    var ownershipRoute: OwnershipRoute = .guided(.unavailableInThisBuild)
+    /// ADR-0015: the vault folder's name, which the click creates the folder with.
+    var vaultFolder = VaultFolderField()
 }
 
 /// One external drive (R6): its verdict in words with a symbol, its facts, why nothing can change it when that is so,
@@ -187,11 +193,27 @@ struct ExternalDriveRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(verbatim: L10n.tr("app.drives.ownership.detail", (mp as NSString).lastPathComponent)).font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack {
-                        // R7-D: when turning ownership on is the drive's recommended fix, this is the row's one primary.
-                        Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
+                    // R7-D: when turning ownership on is the drive's recommended fix, its button is the row's one primary. R8: that
+                    // button is **Turn On Ownership** when the route is one click; the guided route keeps R7-D's two, with why.
+                    switch actions.ownershipRoute {
+                    case .oneClick:
+                        VaultFolderNameField(field: actions.vaultFolder)
+                        Tag.marker(.experimental)
+                        Button(L10n.tr("app.ownership.turnOn")) { actions.turnOnOwnership(a, mp) }
+                            .disabled(actions.vaultFolder.message != nil)
                             .actionButton(prominent: a.primaryAction == .option(.enableOwnership(mountPoint: mp))).controlSize(.small)
-                        CopyCommandButton { actions.copyOwnershipCommand(mp) }
+                    case .working:
+                        HStack(spacing: Spacing.s) {
+                            ProgressView().controlSize(.small)
+                            Text(verbatim: L10n.tr("app.ownership.working")).font(.callout).foregroundStyle(.secondary)
+                        }
+                    case .guided(let why):
+                        Text(verbatim: why.reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Button(L10n.tr("app.drives.ownership.show")) { actions.showInFinder(mp) }
+                                .actionButton(prominent: a.primaryAction == .option(.enableOwnership(mountPoint: mp))).controlSize(.small)
+                            CopyCommandButton { actions.copyOwnershipCommand(mp) }
+                        }
                     }
                 }
             }

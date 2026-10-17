@@ -73,8 +73,14 @@ The move step lists each item with its size and one of five outcomes. The line a
 drive connected and which leave their only copy on it.
 
 - **Runs from the drive** — keep the drive connected while you work. *New builds go to the drive* sets Xcode's
-  DerivedData location (new builds only; on macOS 26 unit tests can fail to load from an external drive, which the item
-  always says and the Run sheet asks you to confirm). *New Archives* does the same for Archives.
+  DerivedData location (new builds only). The Run sheet offers two layouts. **Whole DerivedData folder on the drive**
+  puts everything, including built test products, on the external volume; My Mac framework tests can fail to load a
+  test bundle from there, and the sheet asks you to confirm that. **Keep test products on this Mac** leaves those
+  products on this Mac and puts DerivedData, intermediates, the index and the module cache on the drive. My Mac
+  framework tests were measured to pass only with that split, once, with `xcodebuild` on one Intel Mac. Saving it in
+  Xcode's Locations settings was not part of that measurement, a project's own location settings can override it, and
+  a disconnected drive has not been tested. It stays **Experimental**. The command is
+  `locations set-derived-data-split`. *New Archives* is unchanged.
 - **Moved to the drive** — *Existing Archives* are copied and verified; the original is removed only after that, when
   you confirm it.
 - **Parked on the drive** — a simulator runtime. It comes back to this Mac only when you restore it, and that needs the
@@ -207,8 +213,14 @@ options delete.
    partition uses (`diskutil addPartition`).
 3. **Erase “<volume>”…** — only that volume becomes APFS; the disk's other partitions stay (`diskutil eraseVolume`).
 4. **Erase the Disk…** — the whole disk: GUID partition map and one APFS volume (`diskutil eraseDisk`).
-5. **Ownership off** — the app runs nothing: **Show in Finder**, then **File ▸ Get Info** and turn off "Ignore ownership
-   on this volume" (Finder asks for your password), or **Copy Command** for `sudo diskutil enableOwnership` in Terminal.
+5. **Ownership off** — **Turn On Ownership** (Experimental): in a signed build that includes the privileged helper, one
+   click. macOS asks for your administrator password every time; the helper checks the volume is an external APFS one it may
+   change and runs `diskutil enableOwnership` on it, then the drives are read again. The first time, the app installs the
+   helper and you approve it in System Settings ▸ General ▸ Login Items & Extensions. Cancelling the password dialog
+   changes nothing. If the build cannot use the helper, the helper was not approved, or turning it on did not work, the
+   row says why and offers the manual route instead: **Show in Finder**, then **File ▸ Get Info** and turn off "Ignore
+   ownership on this volume" (Finder asks for your password), or **Copy Command** for `sudo diskutil enableOwnership` in
+   Terminal.
 
 The sheet asks for the volume name (default `XCodeVault`) and whether it is case-sensitive (off, and recommended off),
 and shows the exact `diskutil` command with **Copy Command**. The name is only a name, not a path: when you add a volume
@@ -233,12 +245,15 @@ or repartitioning is blocked: this disk holds a vault"). **Prepare…** in the R
 too, rather than registering a case-sensitive volume.
 
 **A new volume ignores ownership.** macOS creates an external volume with "Ignore ownership on this volume" on, so the
-`XCodeVault` volume you just added does not qualify yet. The drive's row then recommends **Turn On Ownership** for it —
-its **Show in Finder** is the row's main button, with **Copy Command** beside it — and no longer recommends another new
-volume (that would add a second volume with the same problem). In the Plan this is step 2, "Turn on ownership for
-XCodeVault". After you change it in Finder, press ⌘R (or the toolbar's refresh): the drives are read again, step 2 is
-done, and step 3 offers **Use This Drive…** for `XCodeVault` — registered as a second vault. Your existing vault stays
-registered and nothing on it moves.
+`XCodeVault` volume you just added does not qualify yet. The drive's row then recommends turning ownership on for it —
+**Turn On Ownership** is the row's main button in a signed build with the helper (otherwise **Show in Finder**, with
+**Copy Command** beside it and the reason) — and no longer recommends another new volume (that would add a second volume
+with the same problem). In the Plan this is step 2, "Turn on ownership for XCodeVault", with the same button. After the
+click the drives are read again by themselves; after a change in Finder, press ⌘R (or the toolbar's refresh). Step 2 is
+then done, and step 3 offers **Use This Drive…** for `XCodeVault` — registered as a second vault. Your existing vault
+stays registered and nothing on it moves. While ownership is being turned on, quitting offers only **Keep Running**.
+Every click is in History as *Drive preparation*. If the volume's top folder belongs to root rather than to you, **Use
+This Drive…** offers **Create Vault Folder** first: the helper makes `XCodeVault` and hands it to you.
 
 **Copy Command** on a Run Externally row copies two lines when you have a vault: the template, commented with `# `, then
 the command filled with the vault's folder. Without a vault it copies the template.

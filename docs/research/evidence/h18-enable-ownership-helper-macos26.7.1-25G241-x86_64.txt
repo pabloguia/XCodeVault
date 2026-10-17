@@ -1,0 +1,107 @@
+# Experiment: H18 — Turn On Ownership through the privileged helper, in a real window (ADR-0014)
+# Date: 2026-10-05
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Build: signed with the user's Developer ID team (debug configuration, --with-helper), branch feat/r8-helper-ownership
+#        at 5182979 (helper contract 0.2.0-dev)
+# Runner: <user> (uid 501, administrator), by hand in the app's window; reported to the controller, recorded here
+# Redaction: user name and home as <user>; mounted volume names as <vault> and <volume-N>; volume and disk UUIDs
+#            omitted (the format of common.sh's xcv_redact).
+#            Not captured by a script: the steps are the user's clicks, and the outputs below are what they copied.
+
+## Steps
+1. In the Plan (step 2, "Turn on ownership for <vault>"), clicked **Turn On Ownership**.
+2. The helper was not registered: the app registered it; System Settings ▸ Login Items & Extensions showed the item; the
+   user approved it.
+3. The macOS administrator password dialog appeared (the app's prompt: "… wants to turn on ownership on an external volume.");
+   the user entered the password.
+
+## Result
+The app fell back to the guided route (Show in Finder, Copy Command) with the reason:
+  Turning ownership on through the helper did not work: the authorization was not granted (-60007).
+-60007 is errAuthorizationInteractionNotAllowed.
+
+## After
+$ diskutil info /Volumes/<vault> | grep -i owners
+   Owners:                    Disabled
+$ ls /Volumes
+<volume-1>
+<volume-2>
+<vault>
+(no "<vault> 1": nothing was remounted; nothing changed — the fallback behaved as designed)
+
+$ security authorizationdb read com.xcodevault.helper.enable-ownership
+class      = rule
+rule       = [ authenticate-admin ]
+identifier = com.xcodevault.helper        (L4 confirmed: authd records the writing helper's code identifier)
+
+$ security authorizationdb read authenticate-admin
+class      = user
+group      = admin
+shared     = true
+timeout    = 0
+allow-root = false
+
+## Reading
+The right pointed at the stock authenticate-admin rule, whose timeout is 0: a credential obtained under it cannot be
+reused for a later evaluation. The client obtained it with the dialog; the helper's re-check on the same (externalized)
+reference, with extendRights and no interaction allowed, needed a fresh authentication and failed with -60007.
+H18 (a)/(b) with the stock rule: FAIL, for this reason. Fix round 4 gives the right its own definition (class user,
+group admin, timeout 10, shared false, allow-root false); pending a re-test.
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Re-test after fix rounds 4 and 5
+# Date: 2026-10-06
+# Build: signed with the user's Developer ID team (debug configuration, --with-helper), helper contract 0.2.1-dev
+# Runner: <user>, by hand in the app's window; reported to the controller, recorded here. Same redaction as above;
+#         the volume UUID is omitted.
+
+## Steps
+1. Turn On Ownership on <vault>; the system dialog asked for the administrator password, which was entered.
+
+## Observed
+journal (the app's operation journal), in order:
+  planned  -> started -> failed: "volume not mounted"
+
+$ security authorizationdb read com.xcodevault.helper.enable-ownership      (after the 0.2.1-dev daemon wrote the right)
+class      = user
+group      = admin
+shared     = false
+timeout    = 10
+tries      = 10000         (added by authd, as fix round 5 F1 expected)
+identifier = com.xcodevault.helper
+
+The UUID the app sent is <vault>'s. A read-only probe as <user>, with the helper's own lookup code (getmntinfo_r_np +
+getattrlist on each mount point), found /Volumes/<vault> carrying exactly that UUID.
+`diskutil info /Volumes/<vault> | grep Owners` -> Owners: Disabled; `ls /Volumes` -> no "<vault> 1".
+`log show --predicate 'subsystem == "com.xcodevault.helper"'` returned nothing to this session.
+
+## Reading
+Authorization now works: the helper's re-check passed (the journal reached `started` and the verb went on to the
+volume), with the right's own rule stored as above. H18 (a)/(b): PASS.
+The failure is in the root daemon's pin: the same lookup that finds the volume as the user found no mount as the
+daemon, so its getattrlist (or open) on the mount point failed. The only difference is the process context: a root
+launchd daemon under TCC, where removable volumes are their own category that a daemon cannot request.
+[LIKELY], not [VERIFIED]: the TCC denial itself was not observed (no log reached this session).
+It failed closed: nothing ran, Owners stays Disabled, nothing was remounted.
+Fix round 6: the helper no longer touches any file on the volume — identity from the mount table and diskutil only,
+APFS only, Time Machine by the APFS Backup role. (c)/(d) pending a re-test.
+Correction (fix round 7): the Backup role was read from `diskutil info -plist`, which on macOS 26.7.1 has no
+APFSVolumeRoles key, so that check could not fire. Roles are now read from `diskutil apfs list -plist`, where this
+Mac's external data volume shows `Roles = []`.
+
+--- Re-test 2026-10-07 (signed 0.2.2-dev build, fix rounds 6-7; by the user, in the app's window; Intel, macOS 26.7.1 25G241) ---
+The user pressed Turn On Ownership on the external APFS volume "<vault>" and entered the administrator password.
+Journal: planned -> started -> completed ("ownership is on").
+$ diskutil info /Volumes/<vault> | grep Owners
+   Owners:                    Enabled
+$ ls /Volumes
+MacOS  <other>  <vault>          (no "<vault> 1"; the mount point is unchanged, no remount)
+$ mount | grep XCodeVault          (read again 2026-10-08)
+/dev/disk3s2 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled)
+The Plan then moved on to Use This Drive (d). H18 (c)/(d): PASS. Fix rounds 6-7 confirmed on device: the helper identified the
+volume from diskutil and the mount table alone, and passed /dev/diskNsM to diskutil, with no file access on the volume.
+Side finding (not H18): with ownership on, the volume root is root:wheel 775, so Use This Drive could not create
+the vault folder (EACCES). The helper's createVaultDirectory opens the volume as root and is not expected to work under TCC
+(not run). Fix: the app makes the folder first, as the user, while ownership is still off (VaultFolderPrecreate); on a
+disk image the folder kept the user's owner after the remount with ownership on. Pending a real-window re-test.

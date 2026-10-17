@@ -171,7 +171,7 @@ struct MainView: View {
     func detail(_ r: ScanReport) -> some View {
         switch model.section {
         case .plan:
-            if let plan = model.plan { GuidedPlanView(plan: plan) { model.performPlanAction($0) } }
+            if let plan = model.plan { GuidedPlanView(plan: plan, vaultFolder: model.vaultFolderField) { model.performPlanAction($0) } }
         case .overview:
             OverviewView(
                 report: r, findings: model.findings, access: model.accessBanner, act: { model.handle($0) }, review: { model.review($0) },
