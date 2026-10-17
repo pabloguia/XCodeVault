@@ -101,18 +101,26 @@ run_case "HYG9 an environment on the build job"           HYG9 "swap $R '    if:
 run_case "HYG0 review: a quoted environment key"          HYG0 "swap $R '    if: github.repository' '    \"environment\": release${NL}    if: github.repository'"
 run_case "HYG9 the sign job's environment renamed"        HYG9 "swap $R '    environment: release' '    environment: staging'"
 
-# scripts/release-artifact-scan.sh, on a fake bundle: a copy of /bin/echo stands in for each binary, so the
-# Mach-O check has real Mach-O files to classify. Each case must exit with the expected status, and a refusal
-# must not print what it found (its output is a public log on CI).
+# scripts/release-artifact-scan.sh, on a fake bundle: a tiny program built here, universal (arm64 + x86_64) as a
+# release's binaries must be, stands in for each binary, so the Mach-O checks have real Mach-O files to classify.
+# Not /bin/echo, which this used until the architecture check: it is x86_64 + arm64e, which the scan refuses.
+# Each case must exit with the expected status, and a refusal must not print what it found (its output is a public
+# log on CI).
+printf 'int main(void) { return 0; }\n' >"$WORK/stand-in.c"
+UNI="$WORK/stand-in-universal"; ARM="$WORK/stand-in-arm64"; X86="$WORK/stand-in-x86_64"
+if clang -Os -arch arm64 -arch x86_64 -mmacosx-version-min=14.0 -o "$UNI" "$WORK/stand-in.c" \
+    && lipo "$UNI" -thin arm64 -output "$ARM" && lipo "$UNI" -thin x86_64 -output "$X86"; then :; else
+    echo "FAIL  scan: could not build the stand-in binaries"; failed=$((failed + 1))
+fi
 SCAN="$REPO/scripts/release-artifact-scan.sh"
 PLIST="$REPO/Resources/LaunchDaemons/com.xcodevault.helper.plist"
 # The bundle's helper parts: a stand-in binary and the tracked plist, as bundle-app.sh --with-helper lays them out.
-WITH_HELPER="cp /bin/echo X.app/Contents/MacOS/xcodevault-helper && mkdir -p X.app/Contents/Library/LaunchDaemons && cp '$PLIST' X.app/Contents/Library/LaunchDaemons/"
+WITH_HELPER="cp '$UNI' X.app/Contents/MacOS/xcodevault-helper && mkdir -p X.app/Contents/Library/LaunchDaemons && cp '$PLIST' X.app/Contents/Library/LaunchDaemons/"
 scan_case() {   # name, expected refusal ("" for a control), edit run inside the bundle's parent, [expected plist, default none]
     # A refusal is pinned by its message, as the unpack cases below are: several of these bundles trip more than one rule.
     local name="$1" want="$2" edit="$3" expected="${4-}" out status
     rm -rf "$WORK/b"; mkdir -p "$WORK/b/X.app/Contents/MacOS" "$WORK/b/X.app/Contents/Resources"
-    cp /bin/echo "$WORK/b/X.app/Contents/MacOS/XCodeVault"; cp /bin/echo "$WORK/b/X.app/Contents/MacOS/xcodevaultctl"
+    cp "$UNI" "$WORK/b/X.app/Contents/MacOS/XCodeVault"; cp "$UNI" "$WORK/b/X.app/Contents/MacOS/xcodevaultctl"
     printf '<plist/>\n' >"$WORK/b/X.app/Contents/Info.plist"
     (cd "$WORK/b" && eval "$edit")
     out=$(bash "$SCAN" "$WORK/b/X.app" $expected 2>&1); status=$?
@@ -127,14 +135,19 @@ scan_case "control: the runner's home"             ""  "printf '/Users/runner/wo
 scan_case "control: the helper and the tracked plist" "" "$WITH_HELPER" "$PLIST"
 scan_case "a person's home path"                   "names a home directory" "printf '/Users/someone/projects\n' >X.app/Contents/Resources/r.txt"
 scan_case "an e-mail address"                      "shaped like an e-mail" "printf 'by jane@example.com\n' >X.app/Contents/Resources/r.txt"
-scan_case "the helper without its plist"           "without its LaunchDaemons plist" "cp /bin/echo X.app/Contents/MacOS/xcodevault-helper"
+scan_case "the helper without its plist"           "without its LaunchDaemons plist" "cp '$UNI' X.app/Contents/MacOS/xcodevault-helper"
 scan_case "a LaunchDaemons folder without the helper" "without the helper" "mkdir -p X.app/Contents/Library/LaunchDaemons"
 scan_case "a plist that is not the tracked one"    "differs from the tracked one" "$WITH_HELPER && printf ' ' >>X.app/Contents/Library/LaunchDaemons/com.xcodevault.helper.plist" "$PLIST"
 scan_case "a second file beside the plist"         "something other than" "$WITH_HELPER && printf 'x' >X.app/Contents/Library/LaunchDaemons/other.plist" "$PLIST"
 scan_case "the helper and no plist to compare with" "no expected plist" "$WITH_HELPER"
 scan_case "a plist expected and no helper"           "carries no helper" "" "$PLIST"
-scan_case "a stray Mach-O"                         "unexpected Mach-O" "cp /bin/echo X.app/Contents/Resources/tool"
+scan_case "a stray Mach-O"                         "unexpected Mach-O" "cp '$UNI' X.app/Contents/Resources/tool"
 scan_case "a symbolic link"                        "symbolic link" "ln -s /etc/hosts X.app/Contents/Resources/l"
+# 0.3.0-rc.1: built on an Apple silicon runner, every binary arm64 only (2026-10-17).
+scan_case "an arm64-only app binary"               "not exactly [arm64 x86_64]" "cp '$ARM' X.app/Contents/MacOS/XCodeVault"
+scan_case "an x86_64-only CLI"                     "not exactly [arm64 x86_64]" "cp '$X86' X.app/Contents/MacOS/xcodevaultctl"
+scan_case "an arm64-only helper"                   "not exactly [arm64 x86_64]" "$WITH_HELPER && cp '$ARM' X.app/Contents/MacOS/xcodevault-helper" "$PLIST"
+scan_case "an arm64e slice, as /bin/echo has"      "not exactly [arm64 x86_64]" "cp /bin/echo X.app/Contents/MacOS/XCodeVault"
 
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.

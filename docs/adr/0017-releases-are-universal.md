@@ -1,0 +1,46 @@
+# ADR 0017: Releases are universal (arm64 + x86_64), and a bundle that is not is refused
+
+- Status: accepted (2026-10-17); the first universal release build is pending (Consequences)
+- Date: 2026-10-17
+- Related: ADR-0001 (minimum macOS 14.0), ADR-0010 and ADR-0016 (the CI release), `docs/process/RUNBOOK-M5-release-signing.md`.
+
+## Context
+
+The release candidate 0.3.0-rc.1 was signed, notarized and stapled correctly, and could not run on the Intel Mac this
+project is developed on: Finder showed the app with the "cannot run" mark (operator, 2026-10-17). `lipo -archs` on its
+three binaries — the app, `xcodevaultctl` and `xcodevault-helper` — said `arm64` for each.
+
+The cause is in the build, not the signing. The release workflow runs on `macos-15`, an Apple silicon runner, and
+`scripts/bundle-app.sh` ran `swift build -c release --product …` with no architecture, which builds for the host only.
+Nothing in the pipeline asked which architectures a binary held, so every check that ran — `codesign`, Gatekeeper, the
+artifact scan, the stapled tickets — passed a build that half the supported Macs cannot open. v0.2.2's draft was built
+the same way. Earlier local bundles worked here only because they were built here, on Intel.
+
+macOS 14 and later run on both Intel and Apple silicon Macs (ADR-0001 sets the floor by OS version, not by hardware),
+and nothing in the product is specific to either.
+
+## Decision
+
+1. **A release is universal.** `bundle-app.sh --release` builds each product once per architecture, one `--arch` per
+   `swift build` (a single `--arch` keeps SwiftPM's native build system; several switch it to XCBuild, which is a
+   different build of the same package), and joins the slices with `lipo -create`. A debug bundle stays host-only: it
+   is for the machine that built it, and building it twice would double the slowest step of local work.
+2. **A release bundle that is not exactly arm64 + x86_64 is refused, twice.** `bundle-app.sh` refuses before signing if
+   any binary in `Contents/MacOS` holds a different set. `scripts/release-artifact-scan.sh` refuses the same for each of
+   the three Mach-O files it allows; the release workflow runs it on the unsigned bundle in `build`, and the `sign` job
+   runs its own copy on the bundle it receives and on the one it signs. "Exactly" also refuses an extra slice, such as
+   the `arm64e` that system binaries carry: what ships is what was built.
+3. `scripts/test-release-hygiene.sh` pins the scan's refusal with an arm64-only app, an x86_64-only CLI, an arm64-only
+   helper and an `arm64e` slice, on stand-in binaries it builds with `clang`. With the check disabled, all four fail
+   (mutation, 2026-10-17).
+
+## Consequences
+
+- The `build` job compiles the package twice in release, so it takes longer. Each slice is a full release compile.
+- **Open:** the x86_64 slice of `XCodeVaultCore` in release mode has never been built on CI. On this Intel Mac the
+  release build of `XCodeVaultCore` spun at 100% CPU for about two hours and never finished (STATUS, 2026-10-05). If
+  that is the compiler and not the machine, the x86_64 slice may now do the same on the runner. The first universal
+  candidate (0.3.0-rc.2) answers it; if it hangs, the job's timeout stops it, and the candidates in STATUS (the
+  generated `L10nCatalog.core` table, `PlanBuilder`'s type checking) are where to look first.
+- The runbook's checks of a downloaded release now include `lipo -archs` on each binary.
+- `scripts/release.sh`, the local release path, inherits the universal build through `bundle-app.sh --release`.

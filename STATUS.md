@@ -14,6 +14,16 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Releases are universal (2026-10-17, branch `fix/universal-release`, ADR-0017).** 0.3.0-rc.1 was signed, notarized
+  and stapled correctly and would not open on this Intel Mac: the Release workflow runs on an Apple silicon runner and
+  `bundle-app.sh` built for the host only, so all three binaries were arm64. `--release` now builds each product per
+  architecture and joins them with `lipo`. A bundle that is not exactly arm64 + x86_64 is refused by `bundle-app.sh`
+  before signing and by `release-artifact-scan.sh` in both release jobs; the scan's refusal is pinned in
+  `test-release-hygiene.sh`, with a mutation check. The `build` job now times out at 90 minutes. Measured here: the
+  per-architecture release build, `--show-bin-path` and `lipo` on the helper (the one product without
+  `XCodeVaultCore`). **Not yet measured:** a universal release build of the whole package — the x86_64 slice of
+  `XCodeVaultCore` is where this Mac's release build hangs (Blocked, below). 0.3.0-rc.2 is the first; the Part F live
+  tests move to it.
 - **Use This Drive after ownership (2026-10-08, branch `feat/r8-helper-ownership`).** H18 **PASS** on the user's drive
   (2026-10-07; evidence appended). It exposed that an ownership-on volume root is `root:wheel`, so Use This Drive could
   not create `XCodeVault/`. Fix without a helper change: **Turn On Ownership** first makes the folder as the user while the

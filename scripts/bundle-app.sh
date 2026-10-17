@@ -5,6 +5,9 @@
 #
 # Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper] [--for-ci-signing]
 #
+# `--release` builds every binary universal (arm64 + x86_64) and refuses a bundle that is not; a debug bundle is built
+# for the host only. See "A release is universal" below.
+#
 # `--for-ci-signing` (M5, ADR-0016): the release workflow's build job has no identity, so it assembles the bundle with
 # `--with-helper --team` and signs it ad hoc, and the `sign` job re-signs every binary with the CI Developer ID
 # (`ci-sign-notarize.sh`). Only that flag lets `--with-helper` go without `--sign`; the bundle it leaves is not usable
@@ -104,8 +107,28 @@ BUILD_PRODUCTS=(XCodeVault xcodevaultctl)
 # One `swift build` per product. Given several `--product` options, SwiftPM builds only the last one: measured
 # 2026-10-02, when `--release` left only xcodevaultctl in .build/release and the copy below failed. Debug
 # bundles hid it by copying whatever an earlier full build had left in .build/debug, possibly stale.
-for product in "${BUILD_PRODUCTS[@]}"; do swift build -c "$CONFIG" --product "$product"; done
-BIN="$ROOT/.build/$CONFIG"
+#
+# A release is universal. A plain `swift build` builds only the host's architecture, and the release workflow runs on
+# `macos-15`, an Apple silicon runner: 0.3.0-rc.1 shipped arm64 only, and on this project's Intel development Mac Finder
+# showed it as unable to run (2026-10-17). So a release builds each product once per architecture, one `--arch` at a
+# time — one keeps SwiftPM's native build system, several switch it to XCBuild, which is a different build — and `lipo`
+# joins the slices. A debug bundle stays host-only: it is for the machine that built it.
+RELEASE_ARCHS=(arm64 x86_64)
+if [ "$CONFIG" = release ]; then
+  BIN="$ROOT/.build/universal-release"
+  rm -rf "$BIN"; mkdir -p "$BIN"
+  for product in "${BUILD_PRODUCTS[@]}"; do
+    slices=()
+    for arch in "${RELEASE_ARCHS[@]}"; do
+      swift build -c release --arch "$arch" --product "$product"
+      slices+=("$(swift build -c release --arch "$arch" --show-bin-path)/$product")
+    done
+    lipo -create "${slices[@]}" -output "$BIN/$product"
+  done
+else
+  for product in "${BUILD_PRODUCTS[@]}"; do swift build -c "$CONFIG" --product "$product"; done
+  BIN="$ROOT/.build/$CONFIG"
+fi
 APP="$ROOT/dist/XCodeVault.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/XCodeVault" "$APP/Contents/MacOS/XCodeVault"
@@ -130,6 +153,18 @@ if [ "$WITH_HELPER" = 1 ]; then
   mkdir -p "$APP/Contents/Library/LaunchDaemons"
   cp "$BIN/xcodevault-helper" "$APP/Contents/MacOS/xcodevault-helper"
   cp Resources/LaunchDaemons/com.xcodevault.helper.plist "$APP/Contents/Library/LaunchDaemons/"
+fi
+# Refuse a release bundle any of whose binaries is not exactly the two release architectures. The build above makes
+# them so; this holds it if that ever changes, before anything is signed. `release-artifact-scan.sh` checks the same
+# again on the bundle the CI `sign` job receives and on the one it signs.
+if [ "$CONFIG" = release ]; then
+  want=$(printf '%s\n' "${RELEASE_ARCHS[@]}" | sort | tr '\n' ' ')
+  for bin in "$APP"/Contents/MacOS/*; do
+    # Not a Mach-O lipo can read is a refusal too, said as one, not a bare `set -e` exit.
+    have=$(lipo -archs "$bin" | tr ' ' '\n' | sort | tr '\n' ' ') || have="unreadable "
+    [ "$have" = "$want" ] \
+      || { echo "refusing: $(basename "$bin") holds [${have% }], a release must hold exactly [${want% }]" >&2; exit 1; }
+  done
 fi
 # SwiftPM resource bundles (none for the app today); strip quarantine (Apple requirement before signing).
 xattr -cr "$APP"

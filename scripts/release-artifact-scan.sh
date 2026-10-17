@@ -4,7 +4,7 @@
 #     holding anything but that one plist, byte for byte the one given as EXPECTED_PLIST (the tracked
 #     Resources/LaunchDaemons/com.xcodevault.helper.plist). A bundle with the helper and no EXPECTED_PLIST is refused,
 #     and so is one without the helper when EXPECTED_PLIST is given: the release always carries it (ADR-0016);
-#   - any Mach-O file but the three we build;
+#   - any Mach-O file but the three we build, and any of the three that is not exactly arm64 + x86_64;
 #   - a home-directory path other than the CI runner's, or anything shaped like an e-mail address;
 #   - a symbolic link, which this scan would not follow.
 #
@@ -51,6 +51,10 @@ while IFS= read -r -d '' f; do
             Contents/MacOS/XCodeVault | Contents/MacOS/xcodevaultctl | Contents/MacOS/xcodevault-helper) ;;
             *) refuse "unexpected Mach-O file: $rel" ;;
         esac
+        # Universal, exactly: 0.3.0-rc.1 was built on an Apple silicon runner, shipped arm64 only, and could not run
+        # on an Intel Mac (2026-10-17). Architecture names are not private, so this one says what it found.
+        archs=$(lipo -archs "$f" 2>/dev/null | tr ' ' '\n' | sort | tr '\n' ' ') || archs="unreadable "
+        [ "$archs" = "arm64 x86_64 " ] || refuse "$rel holds [${archs% }], not exactly [arm64 x86_64]"
     fi
     # Every printable run of the whole file. Not `strings -a`: on macOS 26.7 it found none of the 206 /Users/
     # paths in a debug xcodevaultctl's symbol table, which `tr` finds (measured 2026-10-02).

@@ -29,6 +29,9 @@ jobs:
   build:
     if: github.repository == 'pabloguia/XCodeVault'
     runs-on: macos-15
+    # Preflight plus a universal bundle, which compiles the package in release twice (ADR-0017). It took 15 minutes
+    # arm64-only; a stuck x86_64 slice stops here instead of at GitHub's six-hour default.
+    timeout-minutes: 90
     permissions:
       contents: read
     outputs:
