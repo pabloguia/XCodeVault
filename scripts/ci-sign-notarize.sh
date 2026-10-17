@@ -99,7 +99,7 @@ if [ -f "$HELPER" ]; then
     sign --identifier com.xcodevault.helper "$HELPER"
     codesign --verify --strict --verbose=2 "$HELPER"
     for arch in "${ARCHS[@]}"; do
-        codesign -dv --arch "$arch" "$HELPER" 2>&1 | /usr/bin/grep -x 'Identifier=com.xcodevault.helper' >/dev/null \
+        codesign -dv --arch="$arch" "$HELPER" 2>&1 | /usr/bin/grep -x 'Identifier=com.xcodevault.helper' >/dev/null \
             || { echo "refusing: the helper's $arch slice is not signed as com.xcodevault.helper" >&2; exit 1; }
     done
     SIGNED=("$HELPER" "${SIGNED[@]}")
@@ -111,7 +111,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 for f in "${SIGNED[@]}"; do
     for arch in "${ARCHS[@]}"; do
         check_signed "$f" "$arch"
-        codesign -dv --arch "$arch" "$f" 2>&1 | /usr/bin/grep -E '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' >/dev/null \
+        codesign -dv --arch="$arch" "$f" 2>&1 | /usr/bin/grep -E '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' >/dev/null \
             || { echo "refusing: $f ($arch) lacks the hardened runtime" >&2; exit 1; }
     done
 done
