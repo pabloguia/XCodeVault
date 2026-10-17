@@ -156,14 +156,16 @@ scan_case "the CLI is a text file"                 "xcodevaultctl is missing or 
 # check_signed in scripts/ci-sign-notarize.sh, which nothing ran before a live tag: fix round 1 of ADR-0017 made it read
 # a second argument the DMG call did not pass, and every release would have died at the DMG under `set -u` (re-review,
 # M1). The function is taken from the script as written and run under its own `set -euo pipefail`, with a stand-in
-# `codesign` that answers as the real one does: `--arch` on a disk image exits 2, a missing slice exits 1 silently.
+# `codesign` that answers as the real one does where it matters here: a missing slice exits 1 silently. (A disk image
+# ignores `--arch`; an earlier note here and in the script said it exits 2, from a measurement made under zsh, where the
+# unquoted option was one word. Corrected by the same review.) The real codesign's slice selection is tested below.
 SIGN_SCRIPT="$REPO/scripts/ci-sign-notarize.sh"
 mkdir -p "$WORK/fakebin"
 cat >"$WORK/fakebin/codesign" <<'FAKE'
 #!/bin/bash
 f="${!#}"; arch=""; prev=""
 for a in "$@"; do case "$a" in --arch=*) arch="${a#--arch=}";; *) [ "$prev" = --arch ] && arch="$a";; esac; prev="$a"; done
-case "$f" in *.dmg) [ -n "$arch" ] && exit 2;; *thin-arm64*) [ "$arch" = x86_64 ] && exit 1;; esac
+case "$f" in *thin-arm64*) [ "$arch" = x86_64 ] && exit 1;; esac
 printf 'Executable=%s\nTeamIdentifier=ABCDE12345\nAuthority=Developer ID Application: T (ABCDE12345)\nTimestamp=now\n' "$f" >&2
 FAKE
 chmod +x "$WORK/fakebin/codesign"
@@ -180,7 +182,8 @@ sign_case() {   # name, expected refusal ("" for a control, "*" for any failure)
 }
 sign_case "control: an app slice"               ""  "$WORK/X.app" arm64
 sign_case "control: the disk image"             ""  "$WORK/X.dmg" image
-sign_case "the disk image with an arch"         "is not signed by team" "$WORK/X.dmg" arm64
+sign_case "an empty slice"                      "is not a slice" "$WORK/X.app" ""
+sign_case "a slice that is not ours"            "is not a slice" "$WORK/X.app" arm64e
 sign_case "a missing x86_64 slice"              "(x86_64) is not signed by team" "$WORK/thin-arm64.app" x86_64
 sign_case "no second argument"                  "*" "$WORK/X.app"
 # And every call in the script names its slice or says `image`: the cases above test the function, not its callers.
@@ -188,6 +191,20 @@ calls=$(grep -E '^[[:space:]]*check_signed ' "$SIGN_SCRIPT" | grep -vcE '^[[:spa
 if [ "$calls" = 0 ] && grep -qE '^[[:space:]]*check_signed "\$DMG" image$' "$SIGN_SCRIPT"; then
     echo "ok    sign: every check_signed call passes its slice"; passed=$((passed + 1))
 else echo "FAIL  sign: $calls check_signed call(s) without a slice, or the DMG's is not 'image'"; failed=$((failed + 1)); fi
+# The real codesign, on ad hoc signed copies of the stand-ins: `--arch=` selects the slice the x86_64 checks above rest on,
+# and refuses a slice that is not there. Preflight runs this in CI on every runner, macOS 15 included, which is the
+# codesign the `sign` job uses (re-review, F3).
+cp "$UNI" "$WORK/signed-universal"; cp "$ARM" "$WORK/signed-arm64"
+if codesign --force --sign - "$WORK/signed-universal" 2>/dev/null && codesign --force --sign - "$WORK/signed-arm64" 2>/dev/null; then
+    for a in arm64 x86_64; do
+        if codesign -dv --arch="$a" "$WORK/signed-universal" 2>&1 | grep -F "thin ($a)" >/dev/null; then
+            echo "ok    sign: codesign --arch=$a selects that slice"; passed=$((passed + 1))
+        else echo "FAIL  sign: codesign --arch=$a did not select the $a slice"; failed=$((failed + 1)); fi
+    done
+    if codesign -dv --arch=x86_64 "$WORK/signed-arm64" >/dev/null 2>&1; then
+        echo "FAIL  sign: codesign --arch=x86_64 accepted an arm64-only binary"; failed=$((failed + 1))
+    else echo "ok    sign: codesign --arch=x86_64 refuses an arm64-only binary"; passed=$((passed + 1)); fi
+else echo "FAIL  sign: could not ad hoc sign the stand-ins"; failed=$((failed + 1)); fi
 
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.

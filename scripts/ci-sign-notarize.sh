@@ -73,12 +73,17 @@ with_retry() {
 # the slice an Intel Mac runs. So each display check below is made once per architecture. (`codesign --verify` already
 # checks every slice: measured 2026-10-17 by the helper-security review, a patched arm64 slice failed it on x86_64.)
 ARCHS=(arm64 x86_64)
-check_signed() {   # file, then an architecture, or `image` for the disk image (`--arch` on a DMG exits 2, measured)
-    # The second argument is required, so a binary's check cannot drop to the host slice by leaving it out: with
-    # `set -u` a missing one stops the run. Fix round 1 broke every release that way, at the DMG (re-review, M1).
-    local f="$1" which="$2" info
-    local arch_opt="--arch=$which"
-    [ "$which" = image ] && arch_opt=""
+check_signed() {   # file, then a slice of ARCHS, or `image` for the disk image, which has no slices (codesign ignores --arch)
+    # The second argument is required and must be one of those, so a binary's check cannot drop to the host slice: with
+    # `set -u` a missing one stops the run, and anything else — an empty value included, which codesign takes as the
+    # default slice (measured) — is refused. Fix round 1 broke every release by reading an argument the DMG call did
+    # not pass (re-review, M1).
+    local f="$1" which="$2" info arch_opt
+    case "$which" in
+        image) arch_opt="" ;;
+        arm64 | x86_64) arch_opt="--arch=$which" ;;
+        *) echo "refusing: check_signed: '$which' is not a slice" >&2; exit 1 ;;
+    esac
     # A missing slice makes codesign exit 1; fall through to the refusal that names it rather than a bare `set -e` exit.
     info=$(codesign -dvv ${arch_opt:+"$arch_opt"} "$f" 2>&1) || info=""
     printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $f ($which) is not signed by team $XCV_TEAM" >&2; exit 1; }
@@ -94,7 +99,7 @@ if [ -f "$HELPER" ]; then
     sign --identifier com.xcodevault.helper "$HELPER"
     codesign --verify --strict --verbose=2 "$HELPER"
     for arch in "${ARCHS[@]}"; do
-        codesign -dv --arch "$arch" "$HELPER" 2>&1 | /usr/bin/grep -qx 'Identifier=com.xcodevault.helper' \
+        codesign -dv --arch "$arch" "$HELPER" 2>&1 | /usr/bin/grep -x 'Identifier=com.xcodevault.helper' >/dev/null \
             || { echo "refusing: the helper's $arch slice is not signed as com.xcodevault.helper" >&2; exit 1; }
     done
     SIGNED=("$HELPER" "${SIGNED[@]}")
@@ -106,7 +111,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 for f in "${SIGNED[@]}"; do
     for arch in "${ARCHS[@]}"; do
         check_signed "$f" "$arch"
-        codesign -dv --arch "$arch" "$f" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' \
+        codesign -dv --arch "$arch" "$f" 2>&1 | /usr/bin/grep -E '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' >/dev/null \
             || { echo "refusing: $f ($arch) lacks the hardened runtime" >&2; exit 1; }
     done
 done
