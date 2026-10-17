@@ -40,7 +40,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let client = HelperClient(team: team, makeConnection: { _ in ProxyConnection(proxy: daemon) }, authorizer: authorizer(log))
         let result = try await client.enableOwnership(volumeUUID: "U-1")
         XCTAssertEqual(result.code, .enabled)
-        XCTAssertEqual(daemon.calls, ["version", "ownership:U-1"])
+        XCTAssertEqual(daemon.calls, ["version", "begin:\(HelperIdentity.version)", "ownership:U-1"])
         XCTAssertEqual(daemon.forms, [Data(repeating: 9, count: 32)])
         XCTAssertEqual(log.all, ["acquire:com.xcodevault.helper.enable-ownership", "release"], "one fresh reference per call, destroyed after")
     }
@@ -61,8 +61,8 @@ final class R8OwnershipAppTests: XCTestCase {
     func testOnlyAnOlderHelperIsReportedOutdatedAndANewerOneIsLeftAlone() async {
         for (reply, expected) in [
             ("0.2.0", HelperResultCode.helperOutdated), ("0.2.1-dev", .helperOutdated), ("0.2.1", .helperOutdated),
-            ("0.2.2-alpha", .helperOutdated), ("0.2.2-dev", .helperOutdated), ("0.1.9", .helperOutdated),
-            ("0.2.3", .helperNewer), ("0.2.3-dev", .helperNewer), ("0.3.0", .helperNewer), ("1.0.0", .helperNewer),
+            ("0.2.2-alpha", .helperOutdated), ("0.2.2-dev", .helperOutdated), ("0.2.2", .helperOutdated), ("0.3.0-alpha", .helperOutdated),
+            ("0.1.9", .helperOutdated), ("0.3.0", .helperNewer), ("0.3.1-dev", .helperNewer), ("1.0.0", .helperNewer),
             ("not-a-version", .helperNewer), ("", .helperNewer),
         ] {
             let daemon = FakeDaemon(result: HelperResult(ok: true, message: "x"), versionReply: reply)
@@ -120,7 +120,7 @@ final class R8OwnershipAppTests: XCTestCase {
         let result = try await client.enableOwnership(volumeUUID: "U-1")
         XCTAssertEqual(result.code, .authorizationCanceled)
         XCTAssertFalse(result.ok)
-        XCTAssertEqual(daemon.calls, ["version"], "the verb is never sent")
+        XCTAssertEqual(daemon.calls, ["version", "begin:\(HelperIdentity.version)"], "the verb is never sent")
         // LiveHelper turns that into the runner's quiet cancel.
         let live = LiveHelper(client: client)
         do {
@@ -138,7 +138,7 @@ final class R8OwnershipAppTests: XCTestCase {
             _ = try await client.enableOwnership(volumeUUID: "U-1")
             XCTFail("expected a denial")
         } catch { XCTAssertEqual(error as? HelperClient.Failure, .authorizationDenied(-60005)) }
-        XCTAssertEqual(daemon.calls, ["version"])
+        XCTAssertEqual(daemon.calls, ["version", "begin:\(HelperIdentity.version)"])
     }
 
     // MARK: - Core: the runner, the route, the vault folder
@@ -411,7 +411,7 @@ final class R8OwnershipAppTests: XCTestCase {
             _ = try await client.enableOwnership(volumeUUID: "U-1", authorized: { false })
             XCTFail("expected notStarted")
         } catch { XCTAssertEqual(error as? HelperClient.Failure, .notStarted) }
-        XCTAssertEqual(daemon.calls, ["version"], "the verb is never sent")
+        XCTAssertEqual(daemon.calls, ["version", "begin:\(HelperIdentity.version)"], "the verb is never sent")
         XCTAssertEqual(log.all.last, "release", "the reference is still destroyed")
     }
 

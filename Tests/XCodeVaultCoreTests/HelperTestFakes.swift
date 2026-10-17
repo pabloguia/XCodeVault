@@ -12,18 +12,26 @@ final class FakeDaemon: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     let lock = NSLock()
     var calls: [String] = []
     let result: HelperResult
-    /// What `version()` answers. `"fake"` by default, which `enableOwnership`'s handshake refuses (R8).
+    /// What `version()` answers. This build's version by default, so the opening round trip (M5) lets the verb through;
+    /// `"fake"` and the like are refused by it.
     let versionReply: String
+    /// What `begin` answers; ok by default.
+    let beginResult: HelperResult
     /// The authorization forms `enableOwnership` received (R8).
     var forms: [Data] = []
-    init(result: HelperResult, versionReply: String = "fake") {
+    init(result: HelperResult, versionReply: String = HelperIdentity.version, beginResult: HelperResult = HelperResult(ok: true, message: "ready")) {
         self.result = result
         self.versionReply = versionReply
+        self.beginResult = beginResult
     }
     private func record(_ s: String) { lock.withLock { calls.append(s) } }
     func version(reply: @escaping @Sendable (String) -> Void) {
         record("version")
         reply(versionReply)
+    }
+    func begin(clientVersion: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+        record("begin:\(clientVersion)")
+        reply(beginResult)
     }
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         record("clean:\(target)")

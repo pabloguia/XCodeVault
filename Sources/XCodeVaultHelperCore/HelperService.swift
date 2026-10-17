@@ -23,8 +23,9 @@ import XCodeVaultHelperProtocol
 let privilegedWork = DispatchQueue(label: "com.xcodevault.helper.work")
 
 // `@unchecked` and the reason, rather than six compiler warnings nobody reads: one instance per
-// connection, every stored property a `let` scalar, and all privileged work serialized on one
-// queue, so no shared mutable state is reachable from two connections. The unchecked part is
+// connection, every stored property a `let` scalar but `begun`, which is read and written only on
+// `privilegedWork`, and all privileged work serialized on that one queue, so no shared mutable state is
+// reachable from two connections. The unchecked part is
 // `NSObject`, which is not `Sendable` — the reply closures are declared `@escaping @Sendable` in
 // the protocol and are not the reason.
 final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
@@ -34,6 +35,8 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     /// when its writer was signed by this team. `ListenerDelegate` passes the one `main.swift` validated; the default, the
     /// placeholder, is not a usable team, so a service built without one accepts no definition and refuses the verb.
     let teamID: String
+    /// Whether `begin` succeeded on this connection (M5, ADR-0016). Only ever touched on `privilegedWork`.
+    private var begun = false
     init(callerUID: uid_t, callerGID: gid_t, teamID: String = HelperIdentity.teamIDPlaceholder) {
         self.callerUID = callerUID; self.callerGID = callerGID; self.teamID = teamID
     }
@@ -162,9 +165,49 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     // The audit is written after the reply is computed and before it is sent, so nothing can be
     // returned to a caller that was not first recorded.
 
+    func begin(clientVersion: String, reply: @escaping @Sendable (HelperResult) -> Void) {
+        privilegedWork.async {
+            let result = self.doBegin(clientVersion: clientVersion)
+            HelperAudit.emit(
+                .from(
+                    verb: "begin", callerUID: self.callerUID,
+                    // Only our own version is ever recorded; any other string is the client's and stays out of the log.
+                    validatedArguments: ["clientVersion": clientVersion == HelperIdentity.version ? clientVersion : "<other>"],
+                    result: result, wasUnauthorized: Self.wasUnauthorized(result)))
+            reply(result)
+        }
+    }
+
+    /// The administrator gate, then the client's version: exactly this helper's, or refused (M5, ADR-0016). The
+    /// message never quotes the client's string.
+    func doBegin(clientVersion: String) -> HelperResult {
+        if let refusal = authorize() { return refusal }
+        guard clientVersion == HelperIdentity.version else {
+            return HelperResult(
+                ok: false, message: "refused: this helper serves XCodeVault \(HelperIdentity.version) only, and the app is another version",
+                code: .clientVersionMismatch)
+        }
+        begun = true
+        return HelperResult(ok: true, message: "ready")
+    }
+
+    /// A verb sent on a connection where `begin` has not succeeded (M5, ADR-0016). Nil once it has.
+    var notBegunRefusal: HelperResult? {
+        begun ? nil : HelperResult(ok: false, message: Self.notBegunMessage, code: .clientVersionMismatch)
+    }
+    static let notBegunMessage = "refused: the client did not identify its version on this connection (an older XCodeVault?)"
+
+    /// The cleanup verb and its companion are not offered by this helper release (ADR-0016): the verb deletes the
+    /// caches whatever is running against them, and only the app checks that. Their implementations stay, tested, for
+    /// the release that gives the verb its own in-use check; nothing on the wire reaches them now.
+    static let cleanupOffered = false
+    static let cleanupNotOffered = HelperResult(
+        ok: false, message: "refused: this helper release does not offer the cleanup verb; empty the cache by hand", code: .verbNotOffered)
+
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async {
-            let result = self.doRemoveRegenerableSystemDirectoryContents(target: target)
+            let result =
+                Self.cleanupOffered ? (self.notBegunRefusal ?? self.doRemoveRegenerableSystemDirectoryContents(target: target)) : Self.cleanupNotOffered
             HelperAudit.emit(
                 .from(
                     verb: "removeRegenerableSystemDirectoryContents", callerUID: self.callerUID,
@@ -181,7 +224,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
     }
     func createVaultDirectory(volumeUUID: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async {
-            let result = self.doCreateVaultDirectory(volumeUUID: volumeUUID)
+            let result = self.notBegunRefusal ?? self.doCreateVaultDirectory(volumeUUID: volumeUUID)
             HelperAudit.emit(
                 .from(
                     verb: "createVaultDirectory", callerUID: self.callerUID,
@@ -193,7 +236,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
     func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async {
-            let result = self.doForgetMountObservation(target: target)
+            let result = Self.cleanupOffered ? (self.notBegunRefusal ?? self.doForgetMountObservation(target: target)) : Self.cleanupNotOffered
             HelperAudit.emit(
                 .from(
                     verb: "forgetMountObservation", callerUID: self.callerUID,
@@ -205,7 +248,7 @@ final class HelperService: NSObject, XCodeVaultHelperXPC, @unchecked Sendable {
 
     func enableOwnership(volumeUUID: String, authorization: Data, reply: @escaping @Sendable (HelperResult) -> Void) {
         privilegedWork.async {
-            let result = self.doEnableOwnership(volumeUUID: volumeUUID, authorization: authorization)
+            let result = self.notBegunRefusal ?? self.doEnableOwnership(volumeUUID: volumeUUID, authorization: authorization)
             // The authorization form is never logged, not even hashed: it is a credential. The result's code carries
             // the authorization outcome (`HelperAudit.AuditRecord.code`).
             HelperAudit.emit(

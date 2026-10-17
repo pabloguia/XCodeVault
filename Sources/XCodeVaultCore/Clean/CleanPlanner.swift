@@ -26,13 +26,17 @@ public struct CleanAction: Sendable, Codable, Equatable, Identifiable {
         return PrivilegeRequirement.forRootPath(path)
     }
 
-    /// The helper verb that performs this action, when one exists: the whole dyld cache only. The verb empties
-    /// every build's cache, so a path inside it must not borrow that (operator decision 2026-09-27). `clean`
-    /// never runs this; the app does, through `PrivilegedActionRunner`.
+    /// The helper verb that performs this action, when one is offered. None is, today: the helper release that ships
+    /// (ADR-0016) refuses its cleanup verb, which has no in-use check of its own, so the app shows the manual route.
+    /// When a release offers it again, it is the whole dyld cache only: the verb empties every build's cache, so a path
+    /// inside it must not borrow that (operator decision 2026-09-27). `clean` never runs this; the app does, through
+    /// `PrivilegedActionRunner`.
     public var privilegedAction: PrivilegedAction? {
-        guard requiresRoot, path == PrivilegeRequirement.coreSimulatorDyldCachePath else { return nil }
+        guard Self.helperCleanupOffered, requiresRoot, path == PrivilegeRequirement.coreSimulatorDyldCachePath else { return nil }
         return .emptyCoreSimulatorDyldCache
     }
+    /// Mirrors `HelperService.cleanupOffered` in the daemon, which Core cannot see; `HelperContractTests` asserts the two agree.
+    public static let helperCleanupOffered = false
 }
 
 public struct CleanPlan: Sendable, Codable, Equatable {

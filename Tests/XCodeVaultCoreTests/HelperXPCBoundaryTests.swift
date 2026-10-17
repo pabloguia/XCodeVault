@@ -114,11 +114,16 @@ final class HelperXPCBoundaryTests: XCTestCase {
         else {
             return XCTFail("the connection did not vend a proxy conforming to the protocol")
         }
-        // Not a UUID, so this is refused before a single volume is examined.
-        proxy.createVaultDirectory(volumeUUID: "definitely-not-a-uuid") { result in
-            recorder.record("ok", result.ok ? "true" : "false")
-            recorder.record("message", result.message)
-            answered.fulfill()
+        // `begin` first, as every client must since M5 (ADR-0016); then not a UUID, so this is refused before a single
+        // volume is examined.
+        // The proxy is not Sendable; the second call is made from the first's reply, on XPC's queue, and nowhere else.
+        nonisolated(unsafe) let sameProxy = proxy
+        proxy.begin(clientVersion: HelperIdentity.version) { _ in
+            sameProxy.createVaultDirectory(volumeUUID: "definitely-not-a-uuid") { result in
+                recorder.record("ok", result.ok ? "true" : "false")
+                recorder.record("message", result.message)
+                answered.fulfill()
+            }
         }
         wait(for: [answered], timeout: 15)
 
@@ -127,9 +132,11 @@ final class HelperXPCBoundaryTests: XCTestCase {
         // Which refusal depends on whether the user running the tests is an administrator, and both
         // are correct. Asserting the pair rather than one of them keeps this honest on a CI runner
         // whose account may differ from a developer's, without degrading to "some message arrived".
+        // A non-administrator's `begin` is refused, so its verb meets the not-begun refusal (M5).
         let message = recorder.value("message")
-        XCTAssertTrue(
-            message == "invalid UUID" || message == HelperService.unauthorizedMessage,
+        let admin = HelperService.isAdministrator(uid: getuid())
+        XCTAssertEqual(
+            message, admin ? "invalid UUID" : HelperService.notBegunMessage,
             "unexpected refusal: \(message ?? "<none>")")
     }
 

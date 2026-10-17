@@ -156,7 +156,7 @@ Written 2026-10-02, recorded in ADR-0010, which says what each piece checks and 
 
 - **`.github/workflows/release.yml`** runs only on a pushed `v*` tag.
   - **`build`** sees no secret. It refuses a tag whose commit is not on `main` or that is not
-    `v` + `ScanReport.current`. It runs the preflight and builds without the helper.
+    `v` + `ScanReport.current`. It runs the preflight and builds with the helper, for `sign` to sign (ADR-0016).
   - **`sign`** waits for your approval and is the only job the secrets reach. It builds nothing.
   - **`publish`** attests the DMG and makes a **draft** release.
 - **`scripts/ci-sign-notarize.sh`** does the signing, notarization and checks inside `sign`.
@@ -227,6 +227,60 @@ It must show `required_reviewers` among the rules and `can_admins_bypass: false`
 
 5. Publish the draft release. Updating `packaging/homebrew/` (the real owner and the SHA-256) is a separate
    step.
+
+## Part F — Live tests of the helper on a release candidate (ADR-0016)
+
+The helper ships in a public release only after these pass on a build this workflow made. Tag a candidate the way Part
+D tags a release, with a pre-release version (`ScanReport.current = "0.3.0-rc.1"`, tag `v0.3.0-rc.1`), approve `sign`,
+and download the draft's DMG. **Do not publish the candidate.** Use a scratch disk image for anything that writes; never
+a drive that holds data.
+
+1. **Fresh install.** With no XCodeVault helper registered (System Settings ▸ General ▸ Login Items & Extensions shows
+   none), open the app from the DMG, go to Access, press Install, and allow it in Login Items. Access must show the
+   helper as enabled.
+2. **`enableOwnership` on a scratch image.** Create and attach one (it mounts as `/Volumes/XCVTEST`):
+
+   ```bash
+   hdiutil create -size 200m -fs APFS -volname XCVTEST ~/xcv-scratch.dmg
+   ```
+
+   ```bash
+   hdiutil attach ~/xcv-scratch.dmg
+   ```
+
+   A disk image is refused by the verb (`volumeIneligible`, ADR-0014), and that refusal is the expected result here:
+   press Turn On Ownership for XCVTEST and check that the app says so and changes nothing. The live `enableOwnership`
+   PASS on a real drive is H18's (2026-10-07); repeat it on your external drive only if you want to, it is not required.
+3. **`createVaultDirectory` on the same image.** It is called only when the volume's root is not yours to write, so
+   make it root's first, in your own terminal (the agent never runs `sudo`):
+
+   ```bash
+   sudo diskutil enableOwnership /Volumes/XCVTEST
+   ```
+
+   ```bash
+   sudo chown root:wheel /Volumes/XCVTEST
+   ```
+
+   Then in Drives choose XCVTEST ▸ Use This Drive. The app must ask the helper for the folder, and
+   `/Volumes/XCVTEST/XCodeVault` must exist, owned by you:
+
+   ```bash
+   ls -ld /Volumes/XCVTEST /Volumes/XCVTEST/XCodeVault
+   ```
+
+4. **Update over an older daemon.** Run a `0.2.2-dev` build that installed its helper earlier, or re-install one, then
+   open the candidate and repeat step 2's folder step: the app must say the helper is outdated, reinstall it (Login
+   Items again), and then succeed.
+5. **Uninstall.** In Access, press Uninstall: Login Items must no longer list the helper.
+6. **The trail.** The agent reads it with you; it holds no paths, only hashes:
+
+   ```bash
+   log show --predicate 'subsystem == "com.xcodevault.helper"' --info --last 1h
+   ```
+
+Afterwards, detach the image (`hdiutil detach /Volumes/XCVTEST`) and delete the draft release and the candidate's tag.
+The agent records what you saw as evidence for H18 and #30.
 
 ## Part E — If a CI secret may have leaked
 

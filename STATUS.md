@@ -3492,3 +3492,51 @@ credential), the app's route (`OwnershipRoute`), the Plan's step 2, the Drives r
 journaling (`diskPreparation`, action `enableOwnership`; a cancelled dialog is `skipped`) and Use This Drive's
 `createVaultDirectory` step are tested with fakes. Nothing has run against a real daemon, authorization service or disk:
 H18 is pending.
+
+## 2026-10-17 — v0.2.2 drafted without the helper; M5: the helper in CI releases (ADR-0016), written
+
+**v0.2.2.** The tag `v0.2.2` (9d7065d) ran the Release workflow for the first time (run 38998916695). Attempt 1 failed
+at notarization: the `NOTARY_ISSUER_ID` secret was not a UUID; the operator set it again. Attempt 2: notarization
+accepted, then `stapler validate` failed on a dropped CloudKit connection (error 68). Attempt 3: build, sign and publish
+all passed, and the draft release exists. It is **not published**: the operator chose to close the helper items first.
+The fixes below land in the next version, not in 0.2.2.
+
+**What was open for the helper, as measured in the code on 2026-10-17:** three of the four verbs went to the daemon
+without checking its version; no minimum version either way; the cleanup verb has no in-use check of its own; the
+audit trail was not rate-limited; and the pipeline refused the helper by construction. The operator accepted the
+recommendation for each.
+
+**Written (branch `feat/m5-helper-release`):**
+- `begin(clientVersion:)`, a new verb. The client checks `version()` then sends `begin` on the verb's own connection
+  (`HelperClient.opening`), and the daemon refuses every verb on a connection without a `begin` of exactly its version.
+  The app reinstalls an outdated helper for any verb now, not only `enableOwnership`.
+- The cleanup verb and `forgetMountObservation` refused by the daemon (`verbNotOffered`); the app maps no clean
+  action to them, so the dyld cache row shows its manual route.
+- `AuditThrottle`: 60 records a minute per uid, a flood marked and counted.
+- Contract and product version 0.3.0-dev.
+- `bundle-app.sh --for-ci-signing`; the scan accepts the helper only with the tracked plist, byte for byte;
+  `ci-sign-notarize.sh` signs it as `com.xcodevault.helper`; HYG8 requires it. `stapler` retried; only a UUID is logged
+  as a submission ID; actions on Node 24.
+- `R7AAppTests`' Use This Drive case no longer reads `/Volumes/XCodeVault` on this Mac (its fixture had a real path).
+- ADR-0016; the runbook's Part F (the live tests on a release candidate); USER_GUIDE and README.
+
+**Measured:** `M5HelperReleaseTests` (9) and the helper-related suites: 90 tests, 0 failures. Mutants killed: the
+not-begun refusal disabled, the cleanup verb offered, a refused `begin` ignored by the client.
+`test-release-hygiene.sh`: 66 cases, 0 failed; mutants killed: the plist comparison, the LaunchDaemons listing, the
+Mach-O allowlist widened, HYG8 disabled.
+
+**Helper-security review, round 1: REQUEST CHANGES**, no blocker. Answered:
+- R1: the throttle could drop the record of a verb that ran, so 61 `version` calls hid one privileged act. Now only
+  `version`, `begin` and the refusals before an implementation are throttled (`AuditRecord.isThrottleable`); the
+  comment no longer claims a flood is always counted.
+- R2: `helper-invariants.sh` now requires `self.notBegunRefusal ??` immediately before every verb's implementation and
+  `begun = true` after `authorize()` in `doBegin`; both mutants were reported as violations.
+- R3: ADR-0016 records that a compromised build job could now get a root daemon signed, not only user-level code.
+- N1 step renamed; N2 the scan refuses a bundle without the helper when a plist is expected (67 cases). N3, N4 left.
+
+**Round 2: APPROVE**, two nits taken: N5, `helper-invariants.sh` also requires one assignment of `begun` in the file,
+`private var begun = false`, and `cleanupOffered = false` (three mutants, each reported; the first version of the rule
+piped into `grep -q` under pipefail and failed on correct code, the R8 trap again); N6, the throttle decision is a pure
+`HelperAudit.decide`, and a test shows a verb that ran is recorded inside a flood (the mutant that throttled it failed).
+
+**Not measured:** the helper in a CI-notarized build. That is Part F of the runbook, on `v0.3.0-rc.1`, by the operator.

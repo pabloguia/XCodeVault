@@ -44,8 +44,9 @@ struct LiveHelper: PrivilegedHelper {
             result = try await client.enableOwnership(volumeUUID: volumeUUID, authorized: authorized)
             // R8: the password dialog is the client's; cancelling it is not a failure (`PrivilegedActionCancelled`).
             if result.code == .authorizationCanceled { throw PrivilegedActionCancelled() }
-            if result.code == .helperOutdated { throw PrivilegedHelperOutdated(detail: result.message) }
         }
+        // Every verb now waits for the opening round trip (M5, ADR-0016), so any of them can meet an older helper.
+        if result.code == .helperOutdated { throw PrivilegedHelperOutdated(detail: result.message) }
         return PrivilegedActionReply(ok: result.ok, message: result.message, bytesFreed: result.bytesFreed)
     }
 }

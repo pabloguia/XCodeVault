@@ -203,10 +203,10 @@ public struct HelperClient: Sendable {
     /// (xpc/connection.h:790-793), and an in-process probe measured it on 2026-09-28 (helper-security review of
     /// deliverable 4): the failing peer ran the method, and the caller got 4102. Whoever holds the Mach name
     /// gets the message. What drops a request from a wrong client is the daemon's own listener requirement,
-    /// measured the same day; what keeps an old daemon from acting on a verb is the M5 TODO in
-    /// `HelperProtocol.swift`, which is not written yet.
+    /// measured the same day; what keeps an old daemon from acting on a verb is `opening(_:)` (M5, ADR-0016): the
+    /// verb is sent only after a validated `version()` and `begin` on the same connection.
     ///
-    /// Internal (the same review): `send` is its only caller, and the compiler rather than review keeps it so.
+    /// Internal (the same review): `send` and `enableOwnership` are its only callers, and the compiler rather than review keeps it so.
     func connect() throws -> NSXPCConnection {
         let requirement = try peerRequirement()
         let connection = makeConnection(HelperIdentity.machServiceName)
@@ -300,7 +300,7 @@ public struct HelperClient: Sendable {
         daemon.openSettings()
     }
 
-    // MARK: - Verbs (never run live, #30)
+    // MARK: - Verbs (createVaultDirectory never run live, #30; the cleanup verb is refused by this helper release, ADR-0016)
 
     public func createVaultDirectory(volumeUUID: String) async throws -> HelperResult {
         try await send { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
@@ -312,10 +312,9 @@ public struct HelperClient: Sendable {
 
     /// R8 (ADR-0014): turns ownership on for the volume `volumeUUID`. EXPERIMENTAL (rule 10). One connection, in order:
     ///
-    ///   1. `version()`, and its reply checked: a reply from a peer that fails the code-signing requirement never comes
-    ///      back (`connect()`), and the request carries nothing. This is the M5 round trip for the one verb that sends
-    ///      a credential — without it the externalized authorization would go to whoever holds the Mach name, since
-    ///      the requirement checks replies, not requests;
+    ///   1. `opening(_:)`: `version()` checked, then `begin`. A reply from a peer that fails the code-signing requirement
+    ///      never comes back (`connect()`), and neither request carries anything. Without it the externalized
+    ///      authorization would go to whoever holds the Mach name, since the requirement checks replies, not requests;
     ///   2. the right, on a fresh reference, with the system password dialog (`Authorizer`). Cancel returns a result
     ///      with code `authorizationCanceled` and nothing is sent;
     ///   3. the verb, with the reference's externalized form;
@@ -323,16 +322,7 @@ public struct HelperClient: Sendable {
     public func enableOwnership(volumeUUID: String, authorized: @escaping @Sendable () -> Bool = { true }) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
-        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
-        // A result, not a throw, so the app can tell an outdated helper without naming this type (helper-invariants), and
-        // reinstall it (R8 fix round 4: the 0.2.0 daemon still running after an update) — but only an OLDER one (round 5,
-        // F2). A newer helper, or one whose version cannot be ordered, is left alone: reinstalling would downgrade it.
-        guard version == HelperIdentity.version else {
-            if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
-                return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
-            }
-            return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
-        }
+        if let refusal = try await opening(connection) { return refusal }
         let right = HelperIdentity.enableOwnershipRight
         let authorizer = self.authorizer
         let acquired: AcquiredAuthorization
@@ -454,7 +444,27 @@ public struct HelperClient: Sendable {
     func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
+        if let refusal = try await opening(connection) { return refusal }
         return try await call(connection, message)
+    }
+
+    /// The M5 round trip every verb waits for (ADR-0016), on the connection the verb will use; nil when the verb may go.
+    ///
+    ///   1. `version()`, which every helper since 0.1 answers. A different version is a result, not a throw, so the app
+    ///      can tell an outdated helper without naming this type (helper-invariants) and reinstall it (R8 fix round 4) —
+    ///      but only an OLDER one (round 5, F2). A newer helper, or one whose version cannot be ordered, is left alone:
+    ///      reinstalling would downgrade it.
+    ///   2. `begin(clientVersion:)`, which a helper of this version answers. Its refusal is returned as it came.
+    func opening(_ connection: NSXPCConnection) async throws -> HelperResult? {
+        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
+        guard version == HelperIdentity.version else {
+            if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
+                return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
+            }
+            return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
+        }
+        let begun: HelperResult = try await call(connection) { helper, reply in helper.begin(clientVersion: HelperIdentity.version, reply: reply) }
+        return begun.ok ? nil : begun
     }
 
     /// One message on an open connection, with its own error handler. `ResumeOnce`, for the reasons `send` gives.

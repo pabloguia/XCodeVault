@@ -26,18 +26,27 @@ import os
 /// What is `.private`: every path, every volume UUID, and anything derived from a caller-supplied
 /// argument. Hashed rather than suppressed where it is an identifier one wants to correlate.
 ///
-/// **Not rate-limited, and that is a known gap rather than an oversight.** A client that satisfies
-/// the code-signing requirement can loop a verb and flood the persisted unified log, evicting older
-/// records — including this trail's own. It is mitigated by that requirement and by the
-/// administrator check on every state-changing verb, so reaching it means already holding both;
-/// recorded here because a trail that can be pushed out of the window is a trail with a failure
-/// mode, and the next person should know it rather than discover it.
+/// **The cheap records are rate-limited per caller** (M5, ADR-0016). A client that satisfies the code-signing
+/// requirement could loop a verb and flood the persisted unified log, evicting older records. Now the records
+/// that cost a caller nothing — `version`, `begin`, and every refusal before a verb's implementation
+/// (unauthorized, not begun, not offered) — are limited to `AuditThrottle.limit` per uid per window. Past that,
+/// one `outcome=throttled` line marks where the flood began, those records are dropped until the window ends,
+/// and the next one after it is preceded by `outcome=suppressed count=N` — if that uid sends one; a flood that
+/// stops dead leaves only the `throttled` line. The dropped records' contents are lost.
+///
+/// **A verb that reached its implementation is always recorded**, whatever the throttle says: the dispatch's
+/// rule is that nothing is returned to a caller that was not first recorded (`HelperService`), and a throttle
+/// that could drop those would let 61 cheap calls hide one privileged act (helper-security review of M5, R1).
+/// Such a record needs an administrator and a begun connection, which is what limits a flood of them; it is
+/// the pre-M5 behaviour for those records.
 ///
 /// Read it with:
 ///
 ///     log show --predicate 'subsystem == "com.xcodevault.helper"' --info --last 1h
 enum HelperAudit {
     static let log = Logger(subsystem: "com.xcodevault.helper", category: "audit")
+    private static let throttleLock = NSLock()
+    nonisolated(unsafe) private static var throttle = AuditThrottle()
 
     /// One verb invocation, from the point the connection handed it over to the point it replied.
     ///
@@ -76,6 +85,14 @@ enum HelperAudit {
         /// `authorizationUnavailable` — alongside the gate's own `refused-unauthorized`.
         var code: HelperResultCode = .none
 
+        /// Whether `AuditThrottle` may drop this record (M5, ADR-0016): the read-only verbs and the refusals made before
+        /// any implementation ran. Every other record is a verb that reached its implementation, and is always written.
+        var isThrottleable: Bool {
+            if verb == "version" || verb == "begin" { return true }
+            if outcome == .refusedUnauthorized { return true }
+            return code == .clientVersionMismatch || code == .verbNotOffered
+        }
+
         /// Derived from a `HelperResult`, so a verb cannot report one thing to the caller and
         /// another to the log. `refusedUnauthorized` is the one case the result alone cannot
         /// distinguish — `authorize()` returns an ordinary `ok: false` — so it is passed in.
@@ -102,6 +119,20 @@ enum HelperAudit {
     /// daemon that logged its deletions at `.info` would still have nothing to reconstruct from
     /// after a reboot — which is the entire defect this exists to fix. `.notice` persists.
     static func emit(_ record: AuditRecord) {
+        let decision = throttleLock.withLock { decide(record, with: &throttle, now: Date()) }
+        switch decision {
+        case .suppress:
+            return
+        case .startSuppressing:
+            log.notice(
+                "verb=audit uid=\(record.callerUID, privacy: .public) outcome=throttled limit=\(AuditThrottle.limit, privacy: .public) windowSeconds=\(Int(AuditThrottle.window), privacy: .public)"
+            )
+            return
+        case .emit(let suppressedBefore):
+            if suppressedBefore > 0 {
+                log.notice("verb=audit uid=\(record.callerUID, privacy: .public) outcome=suppressed count=\(suppressedBefore, privacy: .public)")
+            }
+        }
         // Arguments are joined here rather than interpolated per key, because the privacy
         // qualifier has to be applied to a value and the key set differs per verb. The joined
         // string is `.private`: it is built from caller-supplied input, however well validated.
@@ -151,6 +182,12 @@ enum HelperAudit {
         }
     }
 
+    /// What `emit` does with one record: the throttle's answer for a cheap one, always `.emit` for a verb that reached its
+    /// implementation (review R1). Pure, so the rule is tested rather than read (review round 2, N6).
+    static func decide(_ record: AuditRecord, with throttle: inout AuditThrottle, now: Date) -> AuditThrottle.Decision {
+        record.isThrottleable ? throttle.admit(uid: record.callerUID, now: now) : .emit(suppressedBefore: 0)
+    }
+
     /// The daemon's startup step (R8): whether the authorization right's definition was in place, written, or rewritten
     /// over someone else's. A rewrite is the line to look for: it means something defined this right before the helper.
     static func emitStartup(rightDefinition: RightDefinition) {
@@ -164,5 +201,46 @@ enum HelperAudit {
             return
         }
         log.notice("verb=startup right=\(HelperIdentity.enableOwnershipRight, privacy: .public) definition=\(label, privacy: .public)")
+    }
+}
+
+/// How many audit records one caller may write per window (M5, ADR-0016). A value, so the decision can be
+/// tested with a fake clock; `HelperAudit.emit` holds the one live instance under a lock.
+///
+/// Only the cheap records count (`AuditRecord.isThrottleable`): one verb call writes two of them since M5
+/// (`version`, `begin`), so the limit leaves room for thirty calls a minute from one user, and a verb that ran is
+/// recorded either way.
+struct AuditThrottle {
+    static let limit = 60
+    static let window: TimeInterval = 60
+
+    enum Decision: Equatable {
+        /// Write the record; first say how many were suppressed in the window that just ended, when any were.
+        case emit(suppressedBefore: Int)
+        /// The limit was just reached: write one line saying so, and not the record.
+        case startSuppressing
+        case suppress
+    }
+
+    private struct Window {
+        var start: Date
+        var count: Int
+        var suppressed: Int
+    }
+    private var windows: [uid_t: Window] = [:]
+
+    mutating func admit(uid: uid_t, now: Date) -> Decision {
+        guard var w = windows[uid], now.timeIntervalSince(w.start) < Self.window, now >= w.start else {
+            let before = windows[uid]?.suppressed ?? 0
+            windows[uid] = Window(start: now, count: 1, suppressed: 0)
+            return .emit(suppressedBefore: before)
+        }
+        defer { windows[uid] = w }
+        if w.count < Self.limit {
+            w.count += 1
+            return .emit(suppressedBefore: 0)
+        }
+        w.suppressed += 1
+        return w.suppressed == 1 ? .startSuppressing : .suppress
     }
 }
