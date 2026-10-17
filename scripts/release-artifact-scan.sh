@@ -47,7 +47,7 @@ links=$(find "$APP" -type l | wc -l | tr -d ' ')
 
 while IFS= read -r -d '' f; do
     rel="${f#"$APP"/}"
-    if file -b "$f" | /usr/bin/grep -q 'Mach-O'; then
+    if file -b "$f" | /usr/bin/grep 'Mach-O' >/dev/null; then
         case "$rel" in
             Contents/MacOS/XCodeVault | Contents/MacOS/xcodevaultctl | Contents/MacOS/xcodevault-helper) ;;
             *) refuse "unexpected Mach-O file: $rel" ;;
@@ -75,7 +75,7 @@ required=(XCodeVault xcodevaultctl)
 { [ -n "$EXPECTED_PLIST" ] || [ -e "$HELPER" ]; } && required+=(xcodevault-helper)
 for n in "${required[@]}"; do
     f="$APP/Contents/MacOS/$n"
-    { [ -f "$f" ] && file -b "$f" | /usr/bin/grep -q 'Mach-O'; } || refuse "Contents/MacOS/$n is missing or is not a Mach-O file"
+    { [ -f "$f" ] && file -b "$f" | /usr/bin/grep 'Mach-O' >/dev/null; } || refuse "Contents/MacOS/$n is missing or is not a Mach-O file"
 done
 
 [ "$fail" = 0 ] && echo "release-artifact-scan: ok ($APP)"

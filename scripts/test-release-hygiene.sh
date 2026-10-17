@@ -153,6 +153,42 @@ scan_case "the helper is a shell script"           "xcodevault-helper is missing
 scan_case "the app binary is missing"              "XCodeVault is missing or is not a Mach-O" "rm X.app/Contents/MacOS/XCodeVault"
 scan_case "the CLI is a text file"                 "xcodevaultctl is missing or is not a Mach-O" "printf 'x\n' >X.app/Contents/MacOS/xcodevaultctl"
 
+# check_signed in scripts/ci-sign-notarize.sh, which nothing ran before a live tag: fix round 1 of ADR-0017 made it read
+# a second argument the DMG call did not pass, and every release would have died at the DMG under `set -u` (re-review,
+# M1). The function is taken from the script as written and run under its own `set -euo pipefail`, with a stand-in
+# `codesign` that answers as the real one does: `--arch` on a disk image exits 2, a missing slice exits 1 silently.
+SIGN_SCRIPT="$REPO/scripts/ci-sign-notarize.sh"
+mkdir -p "$WORK/fakebin"
+cat >"$WORK/fakebin/codesign" <<'FAKE'
+#!/bin/bash
+f="${!#}"; arch=""; prev=""
+for a in "$@"; do case "$a" in --arch=*) arch="${a#--arch=}";; *) [ "$prev" = --arch ] && arch="$a";; esac; prev="$a"; done
+case "$f" in *.dmg) [ -n "$arch" ] && exit 2;; *thin-arm64*) [ "$arch" = x86_64 ] && exit 1;; esac
+printf 'Executable=%s\nTeamIdentifier=ABCDE12345\nAuthority=Developer ID Application: T (ABCDE12345)\nTimestamp=now\n' "$f" >&2
+FAKE
+chmod +x "$WORK/fakebin/codesign"
+CHECK_FN=$(awk '/^check_signed\(\) \{/ {on=1} on {print} on && /^\}/ {exit}' "$SIGN_SCRIPT")
+sign_case() {   # name, expected refusal ("" for a control, "*" for any failure), arguments to check_signed
+    local name="$1" want="$2" out status; shift 2
+    out=$(PATH="$WORK/fakebin:$PATH" XCV_TEAM=ABCDE12345 bash -c "set -euo pipefail; $CHECK_FN"$'\n''check_signed "$@"' _ "$@" 2>&1); status=$?
+    if [ -z "$CHECK_FN" ]; then echo "FAIL  sign: $name: check_signed not found in $SIGN_SCRIPT"; failed=$((failed + 1))
+    elif [ -z "$want" ] && [ "$status" != 0 ]; then echo "FAIL  sign: $name: exit $status: $out"; failed=$((failed + 1))
+    elif [ "$want" = "*" ] && [ "$status" = 0 ]; then echo "FAIL  sign: $name: passed"; failed=$((failed + 1))
+    elif [ -n "$want" ] && [ "$want" != "*" ] && { [ "$status" != 1 ] || ! printf '%s' "$out" | grep -qF "$want"; }; then
+        echo "FAIL  sign: $name: wanted '$want', exit $status: $out"; failed=$((failed + 1))
+    else echo "ok    sign: $name"; passed=$((passed + 1)); fi
+}
+sign_case "control: an app slice"               ""  "$WORK/X.app" arm64
+sign_case "control: the disk image"             ""  "$WORK/X.dmg" image
+sign_case "the disk image with an arch"         "is not signed by team" "$WORK/X.dmg" arm64
+sign_case "a missing x86_64 slice"              "(x86_64) is not signed by team" "$WORK/thin-arm64.app" x86_64
+sign_case "no second argument"                  "*" "$WORK/X.app"
+# And every call in the script names its slice or says `image`: the cases above test the function, not its callers.
+calls=$(grep -E '^[[:space:]]*check_signed ' "$SIGN_SCRIPT" | grep -vcE '^[[:space:]]*check_signed "[^"]+" ("\$[a-z_]+"|image)$')
+if [ "$calls" = 0 ] && grep -qE '^[[:space:]]*check_signed "\$DMG" image$' "$SIGN_SCRIPT"; then
+    echo "ok    sign: every check_signed call passes its slice"; passed=$((passed + 1))
+else echo "FAIL  sign: $calls check_signed call(s) without a slice, or the DMG's is not 'image'"; failed=$((failed + 1)); fi
+
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.
 UNPACK="$REPO/scripts/ci-unpack-bundle.sh"

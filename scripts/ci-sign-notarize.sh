@@ -73,13 +73,17 @@ with_retry() {
 # the slice an Intel Mac runs. So each display check below is made once per architecture. (`codesign --verify` already
 # checks every slice: measured 2026-10-17 by the helper-security review, a patched arm64 slice failed it on x86_64.)
 ARCHS=(arm64 x86_64)
-check_signed() {   # file, arch
-    local info
+check_signed() {   # file, then an architecture, or `image` for the disk image (`--arch` on a DMG exits 2, measured)
+    # The second argument is required, so a binary's check cannot drop to the host slice by leaving it out: with
+    # `set -u` a missing one stops the run. Fix round 1 broke every release that way, at the DMG (re-review, M1).
+    local f="$1" which="$2" info
+    local arch_opt="--arch=$which"
+    [ "$which" = image ] && arch_opt=""
     # A missing slice makes codesign exit 1; fall through to the refusal that names it rather than a bare `set -e` exit.
-    info=$(codesign -dvv --arch "$2" "$1" 2>&1) || info=""
-    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $1 ($2) is not signed by team $XCV_TEAM" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $1 ($2) is not signed with a Developer ID Application certificate" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $1 ($2) carries no secure timestamp" >&2; exit 1; }
+    info=$(codesign -dvv ${arch_opt:+"$arch_opt"} "$f" 2>&1) || info=""
+    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $f ($which) is not signed by team $XCV_TEAM" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $f ($which) is not signed with a Developer ID Application certificate" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $f ($which) carries no secure timestamp" >&2; exit 1; }
 }
 
 # 3. Inside-out, as bundle-app.sh does: the helper, the CLI, then the app. No --deep, no library-validation opt-out.
@@ -121,7 +125,7 @@ DMG="$XCV_OUT/XCodeVault-$XCV_VERSION.dmg"
 rm -f "$DMG"
 hdiutil create -quiet -volname "XCodeVault" -srcfolder "$APP" -ov -format UDZO "$DMG"
 codesign --force --timestamp --keychain "$XCV_KEYCHAIN" --sign "$XCV_IDENTITY" "$DMG"
-check_signed "$DMG"
+check_signed "$DMG" image
 notarize "$DMG"
 with_retry xcrun stapler staple "$DMG"
 with_retry xcrun stapler validate "$DMG"
