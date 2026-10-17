@@ -30,7 +30,14 @@ and nothing in the product is specific to either.
    the three Mach-O files it allows; the release workflow runs it on the unsigned bundle in `build`, and the `sign` job
    runs its own copy on the bundle it receives and on the one it signs. "Exactly" also refuses an extra slice, such as
    the `arm64e` that system binaries carry: what ships is what was built.
-3. `scripts/test-release-hygiene.sh` pins the scan's refusal with an arm64-only app, an x86_64-only CLI, an arm64-only
+   The scan also refuses a bundle in which the app, the CLI or (when it ships) the helper is missing or is not a Mach-O
+   file. Before, it checked only the Mach-O files it found, so a helper replaced by a shell script passed, and the
+   `sign` job, which runs only the scan, would have signed it for launchd to run as root (helper-security review, L1;
+   it predates this ADR).
+3. **The `sign` job checks each slice.** `codesign -d` shows the host's slice only, arm64 on the runner, so
+   `ci-sign-notarize.sh` checks the team, the Developer ID authority, the timestamp, the hardened runtime and the
+   helper's identifier once per architecture (review, L2). `codesign --verify` already covers every slice.
+4. `scripts/test-release-hygiene.sh` pins the scan's refusal with an arm64-only app, an x86_64-only CLI, an arm64-only
    helper and an `arm64e` slice, on stand-in binaries it builds with `clang`. With the check disabled, all four fail
    (mutation, 2026-10-17).
 

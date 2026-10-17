@@ -161,7 +161,7 @@ if [ "$CONFIG" = release ]; then
   want=$(printf '%s\n' "${RELEASE_ARCHS[@]}" | sort | tr '\n' ' ')
   for bin in "$APP"/Contents/MacOS/*; do
     # Not a Mach-O lipo can read is a refusal too, said as one, not a bare `set -e` exit.
-    have=$(lipo -archs "$bin" | tr ' ' '\n' | sort | tr '\n' ' ') || have="unreadable "
+    have=$(lipo -archs "$bin" 2>/dev/null | tr ' ' '\n' | sort | tr '\n' ' ') || have="unreadable "
     [ "$have" = "$want" ] \
       || { echo "refusing: $(basename "$bin") holds [${have% }], a release must hold exactly [${want% }]" >&2; exit 1; }
   done

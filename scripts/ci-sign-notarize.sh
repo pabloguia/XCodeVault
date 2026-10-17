@@ -69,12 +69,17 @@ with_retry() {
         sleep 20
     done
 }
-check_signed() {
+# Every binary is universal (ADR-0017), and `codesign -d` shows the host's slice only: arm64 on the runner, which is not
+# the slice an Intel Mac runs. So each display check below is made once per architecture. (`codesign --verify` already
+# checks every slice: measured 2026-10-17 by the helper-security review, a patched arm64 slice failed it on x86_64.)
+ARCHS=(arm64 x86_64)
+check_signed() {   # file, arch
     local info
-    info=$(codesign -dvv "$1" 2>&1)
-    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $1 is not signed by team $XCV_TEAM" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $1 is not signed with a Developer ID Application certificate" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $1 carries no secure timestamp" >&2; exit 1; }
+    # A missing slice makes codesign exit 1; fall through to the refusal that names it rather than a bare `set -e` exit.
+    info=$(codesign -dvv --arch "$2" "$1" 2>&1) || info=""
+    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $1 ($2) is not signed by team $XCV_TEAM" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $1 ($2) is not signed with a Developer ID Application certificate" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $1 ($2) carries no secure timestamp" >&2; exit 1; }
 }
 
 # 3. Inside-out, as bundle-app.sh does: the helper, the CLI, then the app. No --deep, no library-validation opt-out.
@@ -84,8 +89,10 @@ SIGNED=("$APP/Contents/MacOS/xcodevaultctl" "$APP")
 if [ -f "$HELPER" ]; then
     sign --identifier com.xcodevault.helper "$HELPER"
     codesign --verify --strict --verbose=2 "$HELPER"
-    codesign -dv "$HELPER" 2>&1 | /usr/bin/grep -qx 'Identifier=com.xcodevault.helper' \
-        || { echo "refusing: the helper is not signed as com.xcodevault.helper" >&2; exit 1; }
+    for arch in "${ARCHS[@]}"; do
+        codesign -dv --arch "$arch" "$HELPER" 2>&1 | /usr/bin/grep -qx 'Identifier=com.xcodevault.helper' \
+            || { echo "refusing: the helper's $arch slice is not signed as com.xcodevault.helper" >&2; exit 1; }
+    done
     SIGNED=("$HELPER" "${SIGNED[@]}")
 fi
 sign --identifier com.xcodevault.xcodevaultctl "$APP/Contents/MacOS/xcodevaultctl"
@@ -93,9 +100,11 @@ sign "$APP"
 codesign --verify --strict --verbose=2 "$APP/Contents/MacOS/xcodevaultctl"
 codesign --verify --deep --strict --verbose=2 "$APP"
 for f in "${SIGNED[@]}"; do
-    check_signed "$f"
-    codesign -dv "$f" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' \
-        || { echo "refusing: $f lacks the hardened runtime" >&2; exit 1; }
+    for arch in "${ARCHS[@]}"; do
+        check_signed "$f" "$arch"
+        codesign -dv --arch "$arch" "$f" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' \
+            || { echo "refusing: $f ($arch) lacks the hardened runtime" >&2; exit 1; }
+    done
 done
 
 # 4. Notarize and staple the app first, so the copy inside the image carries its own ticket (release.sh, F7).

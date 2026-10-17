@@ -148,6 +148,10 @@ scan_case "an arm64-only app binary"               "not exactly [arm64 x86_64]" 
 scan_case "an x86_64-only CLI"                     "not exactly [arm64 x86_64]" "cp '$X86' X.app/Contents/MacOS/xcodevaultctl"
 scan_case "an arm64-only helper"                   "not exactly [arm64 x86_64]" "$WITH_HELPER && cp '$ARM' X.app/Contents/MacOS/xcodevault-helper" "$PLIST"
 scan_case "an arm64e slice, as /bin/echo has"      "not exactly [arm64 x86_64]" "cp /bin/echo X.app/Contents/MacOS/XCodeVault"
+# The binaries must be there and be Mach-O, not only be universal when they are (helper-security review, L1).
+scan_case "the helper is a shell script"           "xcodevault-helper is missing or is not a Mach-O" "$WITH_HELPER && printf '#!/bin/sh\nid\n' >X.app/Contents/MacOS/xcodevault-helper" "$PLIST"
+scan_case "the app binary is missing"              "XCodeVault is missing or is not a Mach-O" "rm X.app/Contents/MacOS/XCodeVault"
+scan_case "the CLI is a text file"                 "xcodevaultctl is missing or is not a Mach-O" "printf 'x\n' >X.app/Contents/MacOS/xcodevaultctl"
 
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.
