@@ -915,11 +915,14 @@ final class XcodeLocationsTests: XCTestCase {
         let bulk = t.dir("bulk")
         let products = t.dir("products")
         let externalBulk: (String) -> Bool = { $0.hasSuffix("/bulk") }
+        // The paths hold a random UUID in upper case, which can itself contain "E2" or "E19": strip them before asking
+        // whether the text names an experiment (the Sonar run on 1dd06d2 failed that way).
+        let withoutPaths: (String) -> String = { $0.replacingOccurrences(of: t.path, with: "") }
         XCTAssertThrowsError(
             try XcodeLocations.preflightDerivedDataSplit(
                 bulk: bulk, products: products, volumes: [], xcodeRunning: false, acknowledgeExperimental: false, pathIsExternal: externalBulk)
         ) { error in
-            let text = "\(error)"
+            let text = withoutPaths("\(error)")
             XCTAssertTrue(text.contains(XcodeLocations.splitAcknowledgementFlag), text)
             XCTAssertFalse(text.contains("--i-understand-tests-may-fail"), "the whole-folder flag is a different risk: \(text)")
             XCTAssertFalse(text.contains("E19"), text)
@@ -930,7 +933,7 @@ final class XcodeLocationsTests: XCTestCase {
         XCTAssertTrue(warnings.contains { $0.contains("stay in \(products) on this Mac") && $0.contains(bulk) })
         XCTAssertTrue(warnings.contains { $0.contains("measured to pass only with this split") })
         XCTAssertTrue(warnings.contains { $0.contains("Experimental") })
-        XCTAssertFalse(warnings.contains { $0.contains("E19") || $0.contains("E2") })
+        XCTAssertFalse(warnings.map(withoutPaths).contains { $0.contains("E19") || $0.contains("E2") })
     }
 
     func testApplyingTheSplitWritesTheFiveKeysAndRestoresTheEarlierStyle() throws {
