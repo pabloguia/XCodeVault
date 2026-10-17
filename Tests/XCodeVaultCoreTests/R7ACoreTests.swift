@@ -82,12 +82,17 @@ final class R7ACoreTests: XCTestCase {
 
     /// `owners: false` is what the user's real disk showed (R7-D): a volume `addVolume` makes on an external disk ignores
     /// ownership until it is turned on.
-    static func snapshotWithMadeVolume(name: String = "XCodeVault", uuid: String = R6DriveTests.u(302), owners: Bool = true) throws -> DriveSnapshot {
+    /// `mount` defaults to `/Volumes/<name>`. A test that previews Use This Drive passes a path that cannot exist, because the
+    /// preview reads the folder at the mount point (`VaultFolderName.occupancy`), and a Mac with a real drive of that name
+    /// answered for it (2026-10-16: the operator's `XCodeVault` drive made the review refuse).
+    static func snapshotWithMadeVolume(
+        name: String = "XCodeVault", uuid: String = R6DriveTests.u(302), owners: Bool = true, mount: String? = nil
+    ) throws -> DriveSnapshot {
         var snap = try R6DriveTests.snapshot()
         let i = try XCTUnwrap(snap.disks.firstIndex { $0.id == "disk2" })
         let j = try XCTUnwrap(snap.disks[i].containers.firstIndex { $0.reference == "disk3" })
         snap.disks[i].containers[j].volumes.append(APFSVolumeInfo(id: "disk3s2", name: name, uuid: uuid))
-        snap.volumes.append(R6DriveTests.volume("disk3s2", name, uuid: uuid, mount: "/Volumes/" + name, owners: owners))
+        snap.volumes.append(R6DriveTests.volume("disk3s2", name, uuid: uuid, mount: mount ?? "/Volumes/" + name, owners: owners))
         return snap
     }
 

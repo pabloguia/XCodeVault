@@ -7,8 +7,20 @@ import Foundation
     /// Helper build identification, for version-skew checks.
     func version(reply: @escaping @Sendable (String) -> Void)
 
+    /// Opens this connection for the verbs below (M5, ADR-0016). The client states its version; the helper refuses
+    /// unless it is exactly its own (`HelperIdentity.version`), and refuses every other verb on a connection where this
+    /// has not succeeded. With the client's own check of `version()` first, a mismatched pair is refused from either
+    /// side before anything is done: an older app (which never sends this) meets a newer helper, or a newer app an
+    /// older one. The version is the client's word, and that is enough here: the client's code signature is already
+    /// checked (`clientRequirement`), so whatever sends it is one of our signed builds, and a build cannot be altered
+    /// without breaking that signature.
+    func begin(clientVersion: String, reply: @escaping @Sendable (HelperResult) -> Void)
+
     /// Deletes the contents of one root-owned, regenerable directory chosen from
     /// `HelperCleanupTarget`. The helper maps the raw value to a fixed absolute path itself.
+    ///
+    /// **Not offered by this helper release** (ADR-0016): the verb has no in-use check of its own, so the daemon
+    /// refuses it with `verbNotOffered` whoever asks. The app shows the manual route instead.
     func removeRegenerableSystemDirectoryContents(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
 
     /// Creates `<mount point>/<VaultDirectory.name>` on a mounted external volume identified by UUID
@@ -26,6 +38,8 @@ import Foundation
     /// It takes the same closed enum as the cleanup verb — no path crosses the wire — and it is a
     /// separate call on purpose: forgetting re-enables deletion, so the user's intent is stated, and
     /// audited, before anything is removed.
+    ///
+    /// Not offered by this helper release either (ADR-0016): it only re-enables the cleanup verb.
     func forgetMountObservation(target: String, reply: @escaping @Sendable (HelperResult) -> Void)
 
     /// Turns ownership on for one mounted external volume, identified by UUID (R8, ADR-0014). EXPERIMENTAL (rule 10).
@@ -109,6 +123,11 @@ public enum HelperResultCode: String, Sendable, CaseIterable {
     /// produced by the client only, before any password is asked. Never a reason to reinstall — that would put an older
     /// daemon in place of a newer one — so the app falls back to the guided route with the reason.
     case helperNewer
+    /// The client's version is not this helper's (M5, ADR-0016): from `begin`, or from a verb sent before `begin`
+    /// succeeded on the connection.
+    case clientVersionMismatch
+    /// The verb is not offered by this helper release (ADR-0016): the cleanup verb and its companion.
+    case verbNotOffered
 }
 
 /// Result envelope; `NSSecureCoding` so it can cross XPC.
@@ -147,7 +166,9 @@ public enum HelperIdentity {
     /// Code-signing requirement the daemon enforces on every client: Apple-anchored Developer ID
     /// chain (leaf + intermediate marker OIDs), our team, and one of our two client identifiers.
     /// `TEAMID_PLACEHOLDER` is substituted at bundle time by scripts/bundle-app.sh; a helper built without it
-    /// refuses every connection. TODO(M5): add a minimum-version predicate once versions ship.
+    /// refuses every connection. No version predicate here: the minimum version is held by `begin`, which the daemon
+    /// requires on every connection before any verb (M5, ADR-0016). A predicate could only compare strings, and the
+    /// CLI, a bare Mach-O, has no Info.plist to compare.
     public static func clientRequirement(teamID: String) -> String {
         "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] "
             + "and certificate leaf[subject.OU] = \"\(teamID)\" and (identifier \"com.xcodevault.app\" or identifier \"com.xcodevault.xcodevaultctl\")"
@@ -172,13 +193,11 @@ public enum HelperIdentity {
     /// explicitly. Drop that flag and this requirement rejects the real daemon. Nothing else holds
     /// that coupling, which is why it is written down here.
     ///
-    /// TODO(M5): a minimum-version predicate, as `clientRequirement` also lacks. It matters more on
-    /// this side — this is the requirement that would refuse a *downgraded helper*. **And a predicate
-    /// alone is not enough:** a client's requirement refuses the peer's *reply*, not the request, so an
-    /// old daemon still holding the name would act on a verb first (xpc/connection.h:790-793; measured
-    /// in-process 2026-09-28, helper-security review of deliverable 4; ours never exits, `main.swift`).
-    /// At M5, `HelperClient.send` must first complete a validated `version()` round trip on the same
-    /// connection, send the verb only after it, and treat an interruption as a failure.
+    /// No version predicate here either. A client's requirement refuses the peer's *reply*, not the request, so an old
+    /// daemon still holding the name would act on a verb first (xpc/connection.h:790-793; measured in-process
+    /// 2026-09-28, helper-security review of deliverable 4; ours never exits, `main.swift`), predicate or not. What
+    /// refuses a downgraded or stale helper is `HelperClient.opening` (M5, ADR-0016): a validated `version()` round
+    /// trip, then `begin`, on the connection the verb will use, before the verb; an interruption is a failure.
     ///
     /// Same anchor and same marker OIDs as `clientRequirement`, differing only in the identifier —
     /// deliberately, so that weakening one and not the other is visible as a diff rather than as a
@@ -240,5 +259,5 @@ public enum HelperIdentity {
         teamID.count == 10 && teamID.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
     }
 
-    public static let version = "0.2.2"
+    public static let version = "0.3.0-dev"
 }

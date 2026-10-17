@@ -199,8 +199,13 @@ files.each do |path|
     refuse "HYG7", "#{rel} job #{name} calls a reusable workflow" if job.keys.any? { |k| key_like?(k, "uses") || key_like?(k, "secrets") }
   end
 
-  # HYG8. The helper stays out of a release built here (bundle-app.sh lists what is open).
-  strings(doc) { |s, _| refuse "HYG8", "#{rel} builds with --with-helper" if s.include?("--with-helper") }
+  # HYG8. Since ADR-0016 the helper is built in, assembled for the sign job to sign (`--for-ci-signing`): exactly one
+  # bundle-app.sh line, and it carries both flags.
+  bundles = []
+  strings(doc) { |s, _| s.each_line { |l| bundles << l.strip if l.include?("bundle-app.sh") && !l.strip.start_with?("#") } }
+  unless bundles.size == 1 && bundles[0].include?("--with-helper") && bundles[0].include?("--for-ci-signing")
+    refuse "HYG8", "#{rel} must build once with `bundle-app.sh ... --with-helper --for-ci-signing` (found #{bundles.size} bundle-app.sh line(s))"
+  end
 
   # HYG9. The signing secrets appear only in the job named `sign`, and that job is the only one with an
   # environment, which is `release`.

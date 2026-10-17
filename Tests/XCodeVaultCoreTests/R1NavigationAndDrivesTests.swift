@@ -258,7 +258,7 @@ final class ScreenLayoutDecisionTests: XCTestCase {
         let list = DeleteList.make(plan: plan, report: survey.0)
         XCTAssertFalse(list.groups.isEmpty)
         let root = plan.actions.filter { $0.privilegedAction != nil }.count
-        XCTAssertEqual(root, 1, "the sample's dyld cache row")
+        XCTAssertEqual(root, 0, "the dyld cache row has no helper verb: this helper release does not offer it (ADR-0016)")
         let notes = DeleteNotes.make(plan: plan, list: list)
         XCTAssertEqual(notes.count, 2 + root + list.otherTools.count + 3, "the access row is not a note: it stays above the table")
         XCTAssertFalse(notes.startsExpanded)

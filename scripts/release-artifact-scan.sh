@@ -1,25 +1,46 @@
 #!/bin/bash
-# Refuses a release bundle that carries what must not ship (ADR-0010):
-#   - the privileged helper or its launchd plist (bundle-app.sh lists why it stays out);
-#   - any Mach-O file but the two we build;
+# Refuses a release bundle that carries what must not ship (ADR-0010, ADR-0016):
+#   - the privileged helper without its launchd plist, or the plist without the helper, or a LaunchDaemons folder
+#     holding anything but that one plist, byte for byte the one given as EXPECTED_PLIST (the tracked
+#     Resources/LaunchDaemons/com.xcodevault.helper.plist). A bundle with the helper and no EXPECTED_PLIST is refused,
+#     and so is one without the helper when EXPECTED_PLIST is given: the release always carries it (ADR-0016);
+#   - any Mach-O file but the three we build;
 #   - a home-directory path other than the CI runner's, or anything shaped like an e-mail address;
 #   - a symbolic link, which this scan would not follow.
 #
 # It names the file and counts what it found, and never prints the match: on CI its output is a public log,
 # and printing what it found would publish what it exists to keep private.
 #
-#   scripts/release-artifact-scan.sh path/to/XCodeVault.app
+#   scripts/release-artifact-scan.sh path/to/XCodeVault.app [EXPECTED_PLIST]
 #
 # Run by the release workflow on the unsigned bundle, before the signing job is reached, and again on the
 # signed one. Run on a bundle built on a developer's Mac it fails, as it should: the build paths name the home.
 set -u -o pipefail
-APP="${1:?usage: release-artifact-scan.sh path/to/XCodeVault.app}"
+APP="${1:?usage: release-artifact-scan.sh path/to/XCodeVault.app [EXPECTED_PLIST]}"
+EXPECTED_PLIST="${2:-}"
 [ -d "$APP/Contents" ] || { echo "release-artifact-scan: $APP is not a bundle" >&2; exit 2; }
 fail=0
 refuse() { echo "release-artifact-scan: $1" >&2; fail=1; }
 
-[ -e "$APP/Contents/MacOS/xcodevault-helper" ] && refuse "the privileged helper is in the bundle"
-[ -e "$APP/Contents/Library/LaunchDaemons" ] && refuse "a LaunchDaemons folder is in the bundle"
+HELPER="$APP/Contents/MacOS/xcodevault-helper"
+DAEMONS="$APP/Contents/Library/LaunchDaemons"
+if [ -n "$EXPECTED_PLIST" ] && [ ! -e "$HELPER" ] && [ ! -e "$DAEMONS" ]; then
+    refuse "an expected plist was given and the bundle carries no helper"
+fi
+if [ -e "$HELPER" ] || [ -e "$DAEMONS" ]; then
+    [ -f "$HELPER" ] || refuse "a LaunchDaemons folder is in the bundle without the helper"
+    if [ ! -d "$DAEMONS" ]; then
+        refuse "the helper is in the bundle without its LaunchDaemons plist"
+    else
+        listing=$(ls -A "$DAEMONS")
+        [ "$listing" = com.xcodevault.helper.plist ] || refuse "the LaunchDaemons folder holds something other than com.xcodevault.helper.plist"
+        if [ -z "$EXPECTED_PLIST" ] || [ ! -f "$EXPECTED_PLIST" ]; then
+            refuse "the bundle carries the helper and no expected plist was given to compare it with"
+        elif ! cmp -s "$EXPECTED_PLIST" "$DAEMONS/com.xcodevault.helper.plist"; then
+            refuse "the helper's launchd plist differs from the tracked one"
+        fi
+    fi
+fi
 links=$(find "$APP" -type l | wc -l | tr -d ' ')
 [ "$links" = 0 ] || refuse "the bundle holds $links symbolic link(s)"
 
@@ -27,7 +48,7 @@ while IFS= read -r -d '' f; do
     rel="${f#"$APP"/}"
     if file -b "$f" | /usr/bin/grep -q 'Mach-O'; then
         case "$rel" in
-            Contents/MacOS/XCodeVault | Contents/MacOS/xcodevaultctl) ;;
+            Contents/MacOS/XCodeVault | Contents/MacOS/xcodevaultctl | Contents/MacOS/xcodevault-helper) ;;
             *) refuse "unexpected Mach-O file: $rel" ;;
         esac
     fi

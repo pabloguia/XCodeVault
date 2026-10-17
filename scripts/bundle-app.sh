@@ -3,35 +3,35 @@
 # record; the .app is script-assembled). Signs inside-out: with Developer ID when `--sign` is given,
 # otherwise ad hoc with the hardened runtime.
 #
-# Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper]
+# Usage: scripts/bundle-app.sh [--release] [--sign "Developer ID Application: Name (TEAMID)"] [--team TEAMID] [--with-helper] [--for-ci-signing]
 #
-# `--with-helper` is off by default, and deliberately. The app can connect since deliverable 4 of the
-# 2026-09-27 permissions plan — registration and the two verb calls — gated on a build signed by a
-# usable team and on this flag, so no build made without `--sign` and `--with-helper` can. None of it
-# has run live (#30). Without the flag the bundle offers no root Mach service in the global bootstrap
-# namespace at all, which stays the default until the helper has run live in a signed build and the
-# list below is empty or accepted in review. The cask once told people to enable it; it must not again.
+# `--for-ci-signing` (M5, ADR-0016): the release workflow's build job has no identity, so it assembles the bundle with
+# `--with-helper --team` and signs it ad hoc, and the `sign` job re-signs every binary with the CI Developer ID
+# (`ci-sign-notarize.sh`). Only that flag lets `--with-helper` go without `--sign`; the bundle it leaves is not usable
+# until that re-signing, and says so.
 #
-# **`--with-helper` needs a Developer ID Application identity** (R8 fix round 5, N2). The helper accepts its
-# authorization right's definition only when the writer's code requirement names the team as
+# `--with-helper` is off by default, and on in the release workflow since ADR-0016 (M5). The app can connect since
+# deliverable 4 of the 2026-09-27 permissions plan, gated on a build signed by a usable team and on this flag. It never
+# registers the helper by itself: only when the user asks (ADR-0007). The cask once told people to enable it; it must
+# not again.
+#
+# **`--with-helper` needs a Developer ID Application identity** (R8 fix round 5, N2), or `--for-ci-signing` (above).
+# The helper accepts its authorization right's definition only when the writer's code requirement names the team as
 # `certificate leaf[subject.OU]` (ADR-0014). An "Apple Development" identity's designated requirement keys on the
 # leaf's `subject.CN` instead, so every read-back would fail and every Turn On Ownership would be refused — fail
 # closed, but a build that cannot work. Refused here rather than shipped broken.
 #
-# **Gate on this flag, not a backlog.** Re-verified against Sources/XCodeVaultHelperCore on 2026-09-28
-# (the list here had gone stale; helper-security review of deliverable 3) and completed by the review of
-# deliverable 4. Still true, and live the moment this flag is used in a release:
-#   - the cleanup verb has no in-use check of its own: it deletes the CoreSimulator dyld and Cryptex
-#     caches whatever is running against them. The client now refuses while Xcode, a simulator,
-#     `simctl`, `xcodebuild` or the cache builder runs (`PrivilegedActionRunner`), which protects against
-#     accident; the verb itself still has none, so a hostile client is not constrained by it;
-#   - the client's requirement refuses a wrong daemon's reply, not the request (xpc/connection.h:790-793;
-#     measured in-process 2026-09-28): a daemon from an older bundle still holding the name acts on a verb
-#     before the client can refuse it. The fix is the M5 TODO on `helperRequirement` in HelperProtocol.swift;
-#   - neither requirement has a minimum-version predicate yet (`clientRequirement` and `helperRequirement`
-#     in HelperProtocol.swift, both TODO(M5));
-#   - the audit trail is not rate-limited: a client that passes the requirement can flood the persisted
-#     log and push older records out (HelperAudit.swift:29-34).
+# **Gate on this flag, not a backlog.** Open, and live the moment this flag is used in a release:
+#   - `createVaultDirectory` has not run live in a signed build (#30); `enableOwnership` has (H18, 2026-10-07). The
+#     runbook's live tests on a release candidate (ADR-0016) are the remaining step;
+#   - no client-call timeout: a daemon that takes a message and never replies leaves the call pending (advisory A2).
+# Closed by ADR-0016 (M5, 2026-10-17):
+#   - the cleanup verb, which has no in-use check of its own, is refused by the daemon (`verbNotOffered`), and so is its
+#     companion; the app offers the manual route (`CleanAction.helperCleanupOffered`);
+#   - every verb waits for a validated `version()` and `begin(clientVersion:)` on its own connection, so a daemon of
+#     another version is sent nothing (`HelperClient.opening`), and the daemon refuses every verb on a connection
+#     without a `begin` of exactly its version (`HelperService.notBegunRefusal`): the minimum version, both ways;
+#   - the audit trail is rate-limited per uid, and a flood is marked and counted (`AuditThrottle`).
 # Closed since the list was first written, with the evidence:
 #   - every component from `/` is opened with `O_NOFOLLOW`, and owner and mode are checked on each
 #     (`openGuardedDirectory`, HelperService.swift:245-251 and 695-794);
@@ -43,11 +43,15 @@
 #     HelperService.swift:142, 162, 179 and 191).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CONFIG=debug; SIGN=""; TEAM=""; WITH_HELPER=0
+CONFIG=debug; SIGN=""; TEAM=""; WITH_HELPER=0; FOR_CI=0
 while [ $# -gt 0 ]; do case "$1" in
   --release) CONFIG=release;; --sign) SIGN="$2"; shift;; --team) TEAM="$2"; shift;;
-  --with-helper) WITH_HELPER=1;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
-if [ "$WITH_HELPER" = 1 ] && ! [[ "$SIGN" =~ ^Developer\ ID\ Application:\ .+\ \([A-Z0-9]{10}\)$ ]]; then
+  --with-helper) WITH_HELPER=1;; --for-ci-signing) FOR_CI=1;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
+if [ "$FOR_CI" = 1 ] && { [ -n "$SIGN" ] || ! [[ "$TEAM" =~ ^[A-Z0-9]{10}$ ]]; }; then
+  echo "refusing: --for-ci-signing takes --team TEAMID and no --sign; the CI sign job signs" >&2
+  exit 2
+fi
+if [ "$WITH_HELPER" = 1 ] && [ "$FOR_CI" = 0 ] && ! [[ "$SIGN" =~ ^Developer\ ID\ Application:\ .+\ \([A-Z0-9]{10}\)$ ]]; then
   echo "refusing: --with-helper needs --sign 'Developer ID Application: Name (TEAMID)'; the helper's right is keyed on the team OU (ADR-0014)" >&2
   exit 2
 fi
@@ -147,6 +151,10 @@ else
   codesign --force --options runtime --identifier com.xcodevault.xcodevaultctl --sign - "$APP/Contents/MacOS/xcodevaultctl"
   codesign --force --options runtime --sign - "$APP"
   codesign --verify --deep --strict --verbose=2 "$APP"
-  echo "note: ad hoc signed with the hardened runtime; the helper refuses connections without a team id (by design)."
+  if [ "$FOR_CI" = 1 ]; then
+    echo "note: ad hoc signed for the CI sign job to re-sign; not usable as it is."
+  else
+    echo "note: ad hoc signed with the hardened runtime; the helper refuses connections without a team id (by design)."
+  fi
 fi
 echo "built $APP"

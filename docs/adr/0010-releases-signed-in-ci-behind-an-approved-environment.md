@@ -1,6 +1,8 @@
 # ADR 0010: Releases are signed and notarized in CI, by a job behind an approved environment
 
-- Status: accepted (2026-10-02); the workflow has not run yet
+- Status: accepted (2026-10-02); first run v0.2.2 on 2026-10-17 (run 38998916695, three attempts: a mistyped Issuer ID
+  secret, then a dropped CloudKit connection at `stapler validate`). Its exclusion of the helper is superseded by ADR-0016, which also widens what a compromised build job could get signed
+  (a root daemon, not only user-level code; ADR-0016, Consequences).
 - Date: 2026-10-02
 - Related: ADR-0005 (public open-source release); M5 in STATUS.md; issue #30 (the helper has not run live in
   a signed build). Operator steps: docs/process/RUNBOOK-M5-release-signing.md.

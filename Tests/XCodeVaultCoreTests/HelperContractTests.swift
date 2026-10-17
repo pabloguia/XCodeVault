@@ -79,8 +79,9 @@ final class HelperContractTests: XCTestCase {
     /// Round 7 bumped it to 0.2.2: the 0.2.1 daemon reads the volume's files, which TCC refuses it (H18), and must be replaced.
     /// The v0.2.2 release dropped `-dev` with the product (test above), the contract unchanged: a `0.2.2-dev` daemon orders
     /// before `0.2.2`, so the client reports it outdated and reinstalls it.
+    /// M5 (ADR-0016) bumped it to 0.3.0: a new verb, `begin`, every other verb refused without it, and two new codes.
     func testTheContractVersionMovedWithEnableOwnership() {
-        XCTAssertEqual(HelperIdentity.version, "0.2.2")
+        XCTAssertEqual(HelperIdentity.version, "0.3.0-dev")
         XCTAssertTrue(HelperResultCode.allCases.contains(.enabled))
     }
 }
