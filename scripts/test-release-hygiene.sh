@@ -101,18 +101,26 @@ run_case "HYG9 an environment on the build job"           HYG9 "swap $R '    if:
 run_case "HYG0 review: a quoted environment key"          HYG0 "swap $R '    if: github.repository' '    \"environment\": release${NL}    if: github.repository'"
 run_case "HYG9 the sign job's environment renamed"        HYG9 "swap $R '    environment: release' '    environment: staging'"
 
-# scripts/release-artifact-scan.sh, on a fake bundle: a copy of /bin/echo stands in for each binary, so the
-# Mach-O check has real Mach-O files to classify. Each case must exit with the expected status, and a refusal
-# must not print what it found (its output is a public log on CI).
+# scripts/release-artifact-scan.sh, on a fake bundle: a tiny program built here, universal (arm64 + x86_64) as a
+# release's binaries must be, stands in for each binary, so the Mach-O checks have real Mach-O files to classify.
+# Not /bin/echo, which this used until the architecture check: it is x86_64 + arm64e, which the scan refuses.
+# Each case must exit with the expected status, and a refusal must not print what it found (its output is a public
+# log on CI).
+printf 'int main(void) { return 0; }\n' >"$WORK/stand-in.c"
+UNI="$WORK/stand-in-universal"; ARM="$WORK/stand-in-arm64"; X86="$WORK/stand-in-x86_64"
+if clang -Os -arch arm64 -arch x86_64 -mmacosx-version-min=14.0 -o "$UNI" "$WORK/stand-in.c" \
+    && lipo "$UNI" -thin arm64 -output "$ARM" && lipo "$UNI" -thin x86_64 -output "$X86"; then :; else
+    echo "FAIL  scan: could not build the stand-in binaries"; failed=$((failed + 1))
+fi
 SCAN="$REPO/scripts/release-artifact-scan.sh"
 PLIST="$REPO/Resources/LaunchDaemons/com.xcodevault.helper.plist"
 # The bundle's helper parts: a stand-in binary and the tracked plist, as bundle-app.sh --with-helper lays them out.
-WITH_HELPER="cp /bin/echo X.app/Contents/MacOS/xcodevault-helper && mkdir -p X.app/Contents/Library/LaunchDaemons && cp '$PLIST' X.app/Contents/Library/LaunchDaemons/"
+WITH_HELPER="cp '$UNI' X.app/Contents/MacOS/xcodevault-helper && mkdir -p X.app/Contents/Library/LaunchDaemons && cp '$PLIST' X.app/Contents/Library/LaunchDaemons/"
 scan_case() {   # name, expected refusal ("" for a control), edit run inside the bundle's parent, [expected plist, default none]
     # A refusal is pinned by its message, as the unpack cases below are: several of these bundles trip more than one rule.
     local name="$1" want="$2" edit="$3" expected="${4-}" out status
     rm -rf "$WORK/b"; mkdir -p "$WORK/b/X.app/Contents/MacOS" "$WORK/b/X.app/Contents/Resources"
-    cp /bin/echo "$WORK/b/X.app/Contents/MacOS/XCodeVault"; cp /bin/echo "$WORK/b/X.app/Contents/MacOS/xcodevaultctl"
+    cp "$UNI" "$WORK/b/X.app/Contents/MacOS/XCodeVault"; cp "$UNI" "$WORK/b/X.app/Contents/MacOS/xcodevaultctl"
     printf '<plist/>\n' >"$WORK/b/X.app/Contents/Info.plist"
     (cd "$WORK/b" && eval "$edit")
     out=$(bash "$SCAN" "$WORK/b/X.app" $expected 2>&1); status=$?
@@ -127,14 +135,76 @@ scan_case "control: the runner's home"             ""  "printf '/Users/runner/wo
 scan_case "control: the helper and the tracked plist" "" "$WITH_HELPER" "$PLIST"
 scan_case "a person's home path"                   "names a home directory" "printf '/Users/someone/projects\n' >X.app/Contents/Resources/r.txt"
 scan_case "an e-mail address"                      "shaped like an e-mail" "printf 'by jane@example.com\n' >X.app/Contents/Resources/r.txt"
-scan_case "the helper without its plist"           "without its LaunchDaemons plist" "cp /bin/echo X.app/Contents/MacOS/xcodevault-helper"
+scan_case "the helper without its plist"           "without its LaunchDaemons plist" "cp '$UNI' X.app/Contents/MacOS/xcodevault-helper"
 scan_case "a LaunchDaemons folder without the helper" "without the helper" "mkdir -p X.app/Contents/Library/LaunchDaemons"
 scan_case "a plist that is not the tracked one"    "differs from the tracked one" "$WITH_HELPER && printf ' ' >>X.app/Contents/Library/LaunchDaemons/com.xcodevault.helper.plist" "$PLIST"
 scan_case "a second file beside the plist"         "something other than" "$WITH_HELPER && printf 'x' >X.app/Contents/Library/LaunchDaemons/other.plist" "$PLIST"
 scan_case "the helper and no plist to compare with" "no expected plist" "$WITH_HELPER"
 scan_case "a plist expected and no helper"           "carries no helper" "" "$PLIST"
-scan_case "a stray Mach-O"                         "unexpected Mach-O" "cp /bin/echo X.app/Contents/Resources/tool"
+scan_case "a stray Mach-O"                         "unexpected Mach-O" "cp '$UNI' X.app/Contents/Resources/tool"
 scan_case "a symbolic link"                        "symbolic link" "ln -s /etc/hosts X.app/Contents/Resources/l"
+# 0.3.0-rc.1: built on an Apple silicon runner, every binary arm64 only (2026-10-17).
+scan_case "an arm64-only app binary"               "not exactly [arm64 x86_64]" "cp '$ARM' X.app/Contents/MacOS/XCodeVault"
+scan_case "an x86_64-only CLI"                     "not exactly [arm64 x86_64]" "cp '$X86' X.app/Contents/MacOS/xcodevaultctl"
+scan_case "an arm64-only helper"                   "not exactly [arm64 x86_64]" "$WITH_HELPER && cp '$ARM' X.app/Contents/MacOS/xcodevault-helper" "$PLIST"
+scan_case "an arm64e slice, as /bin/echo has"      "not exactly [arm64 x86_64]" "cp /bin/echo X.app/Contents/MacOS/XCodeVault"
+# The binaries must be there and be Mach-O, not only be universal when they are (helper-security review, L1).
+scan_case "the helper is a shell script"           "xcodevault-helper is missing or is not a Mach-O" "$WITH_HELPER && printf '#!/bin/sh\nid\n' >X.app/Contents/MacOS/xcodevault-helper" "$PLIST"
+scan_case "the app binary is missing"              "XCodeVault is missing or is not a Mach-O" "rm X.app/Contents/MacOS/XCodeVault"
+scan_case "the CLI is a text file"                 "xcodevaultctl is missing or is not a Mach-O" "printf 'x\n' >X.app/Contents/MacOS/xcodevaultctl"
+
+# check_signed in scripts/ci-sign-notarize.sh, which nothing ran before a live tag: fix round 1 of ADR-0017 made it read
+# a second argument the DMG call did not pass, and every release would have died at the DMG under `set -u` (re-review,
+# M1). The function is taken from the script as written and run under its own `set -euo pipefail`, with a stand-in
+# `codesign` that answers as the real one does where it matters here: a missing slice exits 1 silently. (A disk image
+# ignores `--arch`; an earlier note here and in the script said it exits 2, from a measurement made under zsh, where the
+# unquoted option was one word. Corrected by the same review.) The real codesign's slice selection is tested below.
+SIGN_SCRIPT="$REPO/scripts/ci-sign-notarize.sh"
+mkdir -p "$WORK/fakebin"
+cat >"$WORK/fakebin/codesign" <<'FAKE'
+#!/bin/bash
+f="${!#}"; arch=""; prev=""
+for a in "$@"; do case "$a" in --arch=*) arch="${a#--arch=}";; *) [ "$prev" = --arch ] && arch="$a";; esac; prev="$a"; done
+case "$f" in *thin-arm64*) [ "$arch" = x86_64 ] && exit 1;; esac
+printf 'Executable=%s\nTeamIdentifier=ABCDE12345\nAuthority=Developer ID Application: T (ABCDE12345)\nTimestamp=now\n' "$f" >&2
+FAKE
+chmod +x "$WORK/fakebin/codesign"
+CHECK_FN=$(awk '/^check_signed\(\) \{/ {on=1} on {print} on && /^\}/ {exit}' "$SIGN_SCRIPT")
+sign_case() {   # name, expected refusal ("" for a control, "*" for any failure), arguments to check_signed
+    local name="$1" want="$2" out status; shift 2
+    out=$(PATH="$WORK/fakebin:$PATH" XCV_TEAM=ABCDE12345 bash -c "set -euo pipefail; $CHECK_FN"$'\n''check_signed "$@"' _ "$@" 2>&1); status=$?
+    if [ -z "$CHECK_FN" ]; then echo "FAIL  sign: $name: check_signed not found in $SIGN_SCRIPT"; failed=$((failed + 1))
+    elif [ -z "$want" ] && [ "$status" != 0 ]; then echo "FAIL  sign: $name: exit $status: $out"; failed=$((failed + 1))
+    elif [ "$want" = "*" ] && [ "$status" = 0 ]; then echo "FAIL  sign: $name: passed"; failed=$((failed + 1))
+    elif [ -n "$want" ] && [ "$want" != "*" ] && { [ "$status" != 1 ] || ! printf '%s' "$out" | grep -qF "$want"; }; then
+        echo "FAIL  sign: $name: wanted '$want', exit $status: $out"; failed=$((failed + 1))
+    else echo "ok    sign: $name"; passed=$((passed + 1)); fi
+}
+sign_case "control: an app slice"               ""  "$WORK/X.app" arm64
+sign_case "control: the disk image"             ""  "$WORK/X.dmg" image
+sign_case "an empty slice"                      "is not a slice" "$WORK/X.app" ""
+sign_case "a slice that is not ours"            "is not a slice" "$WORK/X.app" arm64e
+sign_case "a missing x86_64 slice"              "(x86_64) is not signed by team" "$WORK/thin-arm64.app" x86_64
+sign_case "no second argument"                  "*" "$WORK/X.app"
+# And every call in the script names its slice or says `image`: the cases above test the function, not its callers.
+calls=$(grep -E '^[[:space:]]*check_signed ' "$SIGN_SCRIPT" | grep -vcE '^[[:space:]]*check_signed "[^"]+" ("\$[a-z_]+"|image)$')
+if [ "$calls" = 0 ] && grep -qE '^[[:space:]]*check_signed "\$DMG" image$' "$SIGN_SCRIPT"; then
+    echo "ok    sign: every check_signed call passes its slice"; passed=$((passed + 1))
+else echo "FAIL  sign: $calls check_signed call(s) without a slice, or the DMG's is not 'image'"; failed=$((failed + 1)); fi
+# The real codesign, on ad hoc signed copies of the stand-ins: `--arch=` selects the slice the x86_64 checks above rest on,
+# and refuses a slice that is not there. Preflight runs this in CI on every runner, macOS 15 included, which is the
+# codesign the `sign` job uses (re-review, F3).
+cp "$UNI" "$WORK/signed-universal"; cp "$ARM" "$WORK/signed-arm64"
+if codesign --force --sign - "$WORK/signed-universal" 2>/dev/null && codesign --force --sign - "$WORK/signed-arm64" 2>/dev/null; then
+    for a in arm64 x86_64; do
+        if codesign -dv --arch="$a" "$WORK/signed-universal" 2>&1 | grep -F "thin ($a)" >/dev/null; then
+            echo "ok    sign: codesign --arch=$a selects that slice"; passed=$((passed + 1))
+        else echo "FAIL  sign: codesign --arch=$a did not select the $a slice"; failed=$((failed + 1)); fi
+    done
+    if codesign -dv --arch=x86_64 "$WORK/signed-arm64" >/dev/null 2>&1; then
+        echo "FAIL  sign: codesign --arch=x86_64 accepted an arm64-only binary"; failed=$((failed + 1))
+    else echo "ok    sign: codesign --arch=x86_64 refuses an arm64-only binary"; passed=$((passed + 1)); fi
+else echo "FAIL  sign: could not ad hoc sign the stand-ins"; failed=$((failed + 1)); fi
 
 # scripts/ci-unpack-bundle.sh, on zips made with Python's zipfile so entries can be what ditto would never
 # write. Each case must exit with the expected status, and a refusal must leave nothing outside DEST.

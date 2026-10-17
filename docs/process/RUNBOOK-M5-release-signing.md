@@ -225,6 +225,13 @@ It must show `required_reviewers` among the rules and `can_admins_bypass: false`
      spctl --assess -vv /Volumes/XCodeVault/XCodeVault.app
      ```
 
+   - Every binary in it is universal: each line must say `x86_64 arm64` (ADR-0017). 0.3.0-rc.1 passed every check
+     above and was arm64 only, so it would not open on an Intel Mac.
+
+     ```bash
+     for f in /Volumes/XCodeVault/XCodeVault.app/Contents/MacOS/*; do echo "$(basename "$f"): $(lipo -archs "$f")"; done
+     ```
+
 5. Publish the draft release. Updating `packaging/homebrew/` (the real owner and the SHA-256) is a separate
    step.
 

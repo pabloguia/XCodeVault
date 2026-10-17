@@ -4,7 +4,8 @@
 #     holding anything but that one plist, byte for byte the one given as EXPECTED_PLIST (the tracked
 #     Resources/LaunchDaemons/com.xcodevault.helper.plist). A bundle with the helper and no EXPECTED_PLIST is refused,
 #     and so is one without the helper when EXPECTED_PLIST is given: the release always carries it (ADR-0016);
-#   - any Mach-O file but the three we build;
+#   - any Mach-O file but the three we build, any of the three that is not exactly arm64 + x86_64, and a bundle in
+#     which the app, the CLI or (when it ships) the helper is missing or is not a Mach-O file;
 #   - a home-directory path other than the CI runner's, or anything shaped like an e-mail address;
 #   - a symbolic link, which this scan would not follow.
 #
@@ -46,11 +47,15 @@ links=$(find "$APP" -type l | wc -l | tr -d ' ')
 
 while IFS= read -r -d '' f; do
     rel="${f#"$APP"/}"
-    if file -b "$f" | /usr/bin/grep -q 'Mach-O'; then
+    if file -b "$f" | /usr/bin/grep 'Mach-O' >/dev/null; then
         case "$rel" in
             Contents/MacOS/XCodeVault | Contents/MacOS/xcodevaultctl | Contents/MacOS/xcodevault-helper) ;;
             *) refuse "unexpected Mach-O file: $rel" ;;
         esac
+        # Universal, exactly: 0.3.0-rc.1 was built on an Apple silicon runner, shipped arm64 only, and could not run
+        # on an Intel Mac (2026-10-17). Architecture names are not private, so this one says what it found.
+        archs=$(lipo -archs "$f" 2>/dev/null | tr ' ' '\n' | sort | tr '\n' ' ') || archs="unreadable "
+        [ "$archs" = "arm64 x86_64 " ] || refuse "$rel holds [${archs% }], not exactly [arm64 x86_64]"
     fi
     # Every printable run of the whole file. Not `strings -a`: on macOS 26.7 it found none of the 206 /Users/
     # paths in a debug xcodevaultctl's symbol table, which `tr` finds (measured 2026-10-02).
@@ -61,6 +66,17 @@ while IFS= read -r -d '' f; do
     mails=$(printf '%s\n' "$text" | /usr/bin/grep -cE '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}')
     [ "$mails" = 0 ] || refuse "$rel carries $mails line(s) shaped like an e-mail address"
 done < <(find "$APP" -type f -print0)
+
+# The loop above checks the Mach-O files it finds; it does not ask that the binaries be there, or be Mach-O. Without
+# this, a bundle whose helper is a shell script, or whose app binary is missing, passed: the `sign` job runs only this
+# scan, so it would have signed the script with Developer ID for launchd to run as root (helper-security review of
+# ADR-0017, L1). The helper is required when the release carries it: an expected plist was given, or the file is there.
+required=(XCodeVault xcodevaultctl)
+{ [ -n "$EXPECTED_PLIST" ] || [ -e "$HELPER" ]; } && required+=(xcodevault-helper)
+for n in "${required[@]}"; do
+    f="$APP/Contents/MacOS/$n"
+    { [ -f "$f" ] && file -b "$f" | /usr/bin/grep 'Mach-O' >/dev/null; } || refuse "Contents/MacOS/$n is missing or is not a Mach-O file"
+done
 
 [ "$fail" = 0 ] && echo "release-artifact-scan: ok ($APP)"
 exit "$fail"

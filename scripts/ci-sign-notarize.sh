@@ -69,12 +69,26 @@ with_retry() {
         sleep 20
     done
 }
-check_signed() {
-    local info
-    info=$(codesign -dvv "$1" 2>&1)
-    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $1 is not signed by team $XCV_TEAM" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $1 is not signed with a Developer ID Application certificate" >&2; exit 1; }
-    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $1 carries no secure timestamp" >&2; exit 1; }
+# Every binary is universal (ADR-0017), and `codesign -d` shows the host's slice only: arm64 on the runner, which is not
+# the slice an Intel Mac runs. So each display check below is made once per architecture. (`codesign --verify` already
+# checks every slice: measured 2026-10-17 by the helper-security review, a patched arm64 slice failed it on x86_64.)
+ARCHS=(arm64 x86_64)
+check_signed() {   # file, then a slice of ARCHS, or `image` for the disk image, which has no slices (codesign ignores --arch)
+    # The second argument is required and must be one of those, so a binary's check cannot drop to the host slice: with
+    # `set -u` a missing one stops the run, and anything else — an empty value included, which codesign takes as the
+    # default slice (measured) — is refused. Fix round 1 broke every release by reading an argument the DMG call did
+    # not pass (re-review, M1).
+    local f="$1" which="$2" info arch_opt
+    case "$which" in
+        image) arch_opt="" ;;
+        arm64 | x86_64) arch_opt="--arch=$which" ;;
+        *) echo "refusing: check_signed: '$which' is not a slice" >&2; exit 1 ;;
+    esac
+    # A missing slice makes codesign exit 1; fall through to the refusal that names it rather than a bare `set -e` exit.
+    info=$(codesign -dvv ${arch_opt:+"$arch_opt"} "$f" 2>&1) || info=""
+    printf '%s\n' "$info" | /usr/bin/grep -qx "TeamIdentifier=$XCV_TEAM" || { echo "refusing: $f ($which) is not signed by team $XCV_TEAM" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Authority=Developer ID Application: ' || { echo "refusing: $f ($which) is not signed with a Developer ID Application certificate" >&2; exit 1; }
+    printf '%s\n' "$info" | /usr/bin/grep -qE '^Timestamp=' || { echo "refusing: $f ($which) carries no secure timestamp" >&2; exit 1; }
 }
 
 # 3. Inside-out, as bundle-app.sh does: the helper, the CLI, then the app. No --deep, no library-validation opt-out.
@@ -84,8 +98,10 @@ SIGNED=("$APP/Contents/MacOS/xcodevaultctl" "$APP")
 if [ -f "$HELPER" ]; then
     sign --identifier com.xcodevault.helper "$HELPER"
     codesign --verify --strict --verbose=2 "$HELPER"
-    codesign -dv "$HELPER" 2>&1 | /usr/bin/grep -qx 'Identifier=com.xcodevault.helper' \
-        || { echo "refusing: the helper is not signed as com.xcodevault.helper" >&2; exit 1; }
+    for arch in "${ARCHS[@]}"; do
+        codesign -dv --arch="$arch" "$HELPER" 2>&1 | /usr/bin/grep -x 'Identifier=com.xcodevault.helper' >/dev/null \
+            || { echo "refusing: the helper's $arch slice is not signed as com.xcodevault.helper" >&2; exit 1; }
+    done
     SIGNED=("$HELPER" "${SIGNED[@]}")
 fi
 sign --identifier com.xcodevault.xcodevaultctl "$APP/Contents/MacOS/xcodevaultctl"
@@ -93,9 +109,11 @@ sign "$APP"
 codesign --verify --strict --verbose=2 "$APP/Contents/MacOS/xcodevaultctl"
 codesign --verify --deep --strict --verbose=2 "$APP"
 for f in "${SIGNED[@]}"; do
-    check_signed "$f"
-    codesign -dv "$f" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' \
-        || { echo "refusing: $f lacks the hardened runtime" >&2; exit 1; }
+    for arch in "${ARCHS[@]}"; do
+        check_signed "$f" "$arch"
+        codesign -dv --arch="$arch" "$f" 2>&1 | /usr/bin/grep -E '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime[^)]*\)' >/dev/null \
+            || { echo "refusing: $f ($arch) lacks the hardened runtime" >&2; exit 1; }
+    done
 done
 
 # 4. Notarize and staple the app first, so the copy inside the image carries its own ticket (release.sh, F7).
@@ -112,7 +130,7 @@ DMG="$XCV_OUT/XCodeVault-$XCV_VERSION.dmg"
 rm -f "$DMG"
 hdiutil create -quiet -volname "XCodeVault" -srcfolder "$APP" -ov -format UDZO "$DMG"
 codesign --force --timestamp --keychain "$XCV_KEYCHAIN" --sign "$XCV_IDENTITY" "$DMG"
-check_signed "$DMG"
+check_signed "$DMG" image
 notarize "$DMG"
 with_retry xcrun stapler staple "$DMG"
 with_retry xcrun stapler validate "$DMG"
