@@ -114,11 +114,15 @@ final class HelperClientTimeoutTests: XCTestCase {
     }
 
     /// The client's verb deadline is above the daemon's own worst case, so it never cuts off a verb the daemon is still
-    /// running (review of A2, M1): `enableOwnership` runs `diskutil` about ten times, each under `SpawnedDiskutil`'s kill.
+    /// running (review of A2, M1): `enableOwnership`'s `diskutil` runs, counted through the shipping code
+    /// (`HelperDiskutilCountTests`, L-b), each under `SpawnedDiskutil`'s kill, with a minute to spare for the rest.
     func testTheLiveDeadlinesAreAboveTheDaemonsOwnBound() {
         let live = HelperClient.Timeouts.live
         let perDiskutil = TimeInterval(SpawnedDiskutil().timeoutSeconds)
-        XCTAssertGreaterThan(live.verb, perDiskutil * 10, "ten diskutil runs, each up to \(perDiskutil) s")
+        let (result, runs) = HelperDiskutilCountTests.enableOwnershipRuns()
+        XCTAssertEqual(result.code, .enabled, "the count is of the success path: \(result.message)")
+        XCTAssertGreaterThan(
+            live.verb, perDiskutil * TimeInterval(runs.count) + 60, "\(runs.count) diskutil runs, each up to \(perDiskutil) s: \(runs)")
         XCTAssertGreaterThanOrEqual(live.cleanup, live.verb)
         XCTAssertGreaterThan(live.opening, 0)
         XCTAssertLessThan(live.opening, live.verb, "the opening is answered from memory")
