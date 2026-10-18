@@ -28,7 +28,8 @@
 #   - `createVaultDirectory` has not run live in a signed build (#30); `enableOwnership` has (H18, 2026-10-07). The
 #     runbook's live tests on a release candidate (ADR-0016) are the remaining step.
 # Closed 2026-10-18 (advisory A2): every client message has a deadline (`HelperClient.Timeouts`); on it the connection is
-#   invalidated and a later reply is dropped (`HelperClientTimeoutTests`).
+#   invalidated by the caller's defer, a later reply is dropped, and an unanswered opening sends nothing
+#   (`HelperClientTimeoutTests`).
 # Closed by ADR-0016 (M5, 2026-10-17):
 #   - the cleanup verb, which has no in-use check of its own, is refused by the daemon (`verbNotOffered`), and so is its
 #     companion; the app offers the manual route (`CleanAction.helperCleanupOffered`);

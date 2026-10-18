@@ -154,13 +154,17 @@ public struct HelperClient: Sendable {
     struct Timeouts: Sendable {
         /// `version()` and `begin`: the daemon answers them from memory.
         let opening: TimeInterval
-        /// `createVaultDirectory` and `enableOwnership`: one directory, or one fixed-argument `diskutil`.
+        /// `createVaultDirectory` and `enableOwnership`. Above the daemon's own worst case, so a deadline here never cuts
+        /// off an operation the daemon is still legitimately running (helper-security review of A2, M1): `enableOwnership`
+        /// runs `diskutil` about ten times (pin, lookup, the identity re-check, the command, the read-back), each under the
+        /// daemon's own 120 s kill (`SpawnedDiskutil.timeoutSeconds`), so up to some 1200 s; `HelperClientTimeoutTests`
+        /// holds this above that. What it ends is a daemon that never answers, not a slow disk.
         let verb: TimeInterval
-        /// The cleanup verb deletes a cache of many gigabytes. Refused by this helper release (ADR-0016), and given the
-        /// time a deletion of that size may take should it be offered again.
+        /// The cleanup verb deletes a cache of many gigabytes. Refused by this helper release (ADR-0016), and given at
+        /// least a verb's time should it be offered again.
         let cleanup: TimeInterval
 
-        static let live = Timeouts(opening: 15, verb: 120, cleanup: 900)
+        static let live = Timeouts(opening: 15, verb: 1500, cleanup: 1500)
     }
     let timeouts: Timeouts
 
@@ -482,7 +486,20 @@ public struct HelperClient: Sendable {
     ///      but only an OLDER one (round 5, F2). A newer helper, or one whose version cannot be ordered, is left alone:
     ///      reinstalling would downgrade it.
     ///   2. `begin(clientVersion:)`, which a helper of this version answers. Its refusal is returned as it came.
+    ///
+    /// A deadline met here is a result too, `helperDidNotAnswer`: the verb was certainly not sent, which a timeout during
+    /// the verb cannot say (helper-security review of A2, M2).
     func opening(_ connection: NSXPCConnection) async throws -> HelperResult? {
+        do {
+            return try await openingCalls(connection)
+        } catch Failure.timedOut(let what) {
+            return HelperResult(
+                ok: false, message: "The privileged helper did not answer \(what) in time, so nothing was sent to it. Try again in a moment.",
+                code: .helperDidNotAnswer)
+        }
+    }
+
+    private func openingCalls(_ connection: NSXPCConnection) async throws -> HelperResult? {
         let version: String = try await call(connection, "version", within: timeouts.opening) { helper, reply in helper.version(reply: reply) }
         guard version == HelperIdentity.version else {
             if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
@@ -500,28 +517,26 @@ public struct HelperClient: Sendable {
     /// gives, and because the deadline is a third way to finish: whichever of the reply, the error handler and the timer
     /// comes first is the outcome, and the others are dropped.
     ///
-    /// On the deadline the connection is invalidated, so the daemon's reply, if it ever comes, goes nowhere, and every
-    /// later message on it fails at once. Only the timer that won invalidates: one that fires after a reply does nothing.
+    /// The timer touches only the continuation. The connection is invalidated by the caller's `defer` (`send`,
+    /// `enableOwnership`), which runs as soon as the timeout is thrown, so the daemon's reply, if it ever comes, goes
+    /// nowhere. A reply or an error that comes first cancels the timer, so it does not hold the call for its full length
+    /// (review of A2, L1 and L2).
     func call<T: Sendable>(
         _ connection: NSXPCConnection, _ what: String, within timeout: TimeInterval,
         _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
-            // `NSXPCConnection` is not `Sendable`; `invalidate()` is safe from any thread (NSXPCConnection.h), and it is
-            // the only thing the timer does with it.
-            nonisolated(unsafe) let deadlined = connection
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
-                if once.resume(throwing: Failure.timedOut(what)) { deadlined.invalidate() }
-            }
+            let deadline = DispatchWorkItem { once.resume(throwing: Failure.timedOut(what)) }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: deadline)
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
-                once.resume(throwing: Failure.connectionFailed(error.localizedDescription))
+                if once.resume(throwing: Failure.connectionFailed(error.localizedDescription)) { deadline.cancel() }
             }
             guard let helper = proxy as? any XCodeVaultHelperXPC else {
-                once.resume(throwing: Failure.unexpectedProxy)
+                if once.resume(throwing: Failure.unexpectedProxy) { deadline.cancel() }
                 return
             }
-            message(helper) { result in once.resume(returning: result) }
+            message(helper) { result in if once.resume(returning: result) { deadline.cancel() } }
         }
     }
 }

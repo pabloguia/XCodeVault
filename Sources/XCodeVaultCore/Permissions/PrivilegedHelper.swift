@@ -119,6 +119,13 @@ public struct PrivilegedHelperOutdated: Error, Equatable {
     public init(detail: String) { self.detail = detail }
 }
 
+/// What a `PrivilegedHelper` throws when the helper did not answer the opening round trip in time (advisory A2): the
+/// verb was not sent, so the runner journals the step as skipped and reports a refusal, never a failure.
+public struct PrivilegedHelperDidNotAnswer: Error, Equatable {
+    public let detail: String
+    public init(detail: String) { self.detail = detail }
+}
+
 /// What a `PrivilegedHelper` throws when the user cancelled the system password dialog (R8): the runner reports
 /// `.cancelled` and journals the step as skipped, never as failed.
 public struct PrivilegedActionCancelled: Error, Equatable {
@@ -199,6 +206,11 @@ public struct PrivilegedActionRunner: Sendable {
                 id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): the helper is out of date; nothing was sent",
                 paths: action.journalPaths, detail: action.journalDetail)
             return .helperOutdated(outdated.detail)
+        } catch let silent as PrivilegedHelperDidNotAnswer {
+            _ = try? journal.record(
+                id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): the helper did not answer; nothing was sent",
+                paths: action.journalPaths, detail: action.journalDetail)
+            return .refused(silent.detail)
         } catch is PrivilegedActionCancelled {
             _ = try? journal.record(
                 id: id, kind: action.journalKind, state: .skipped, summary: "helper: \(action.title): cancelled at the password dialog",

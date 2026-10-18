@@ -1,14 +1,17 @@
 import Foundation
 import XCTest
-import XCodeVaultHelperProtocol
 
+@testable import XCodeVault
+@testable import XCodeVaultCore
 @testable import XCodeVaultHelperClient
+@testable import XCodeVaultHelperCore
+@testable import XCodeVaultHelperProtocol
 
 /// Advisory A2: every message to the helper has a deadline. A daemon that takes a message and never replies used to leave
 /// the call — and the app waiting on it — pending until the daemon or its connection died. Over the fake connection of
 /// `HelperTestFakes`, with deadlines of a fraction of a second.
 final class HelperClientTimeoutTests: XCTestCase {
-    private let short = HelperClient.Timeouts(opening: 0.2, verb: 0.2, cleanup: 0.2)
+    private let short = HelperClient.Timeouts(opening: 0.05, verb: 0.05, cleanup: 0.05)
 
     private func client(_ daemon: StallingDaemon, _ connection: ProxyConnection, authorizer: HelperClient.Authorizer = .live) -> HelperClient {
         HelperClient(team: "ABCDE12345", makeConnection: { _ in connection }, authorizer: authorizer, timeouts: short)
@@ -25,19 +28,38 @@ final class HelperClientTimeoutTests: XCTestCase {
         }
     }
 
-    func testAHelperThatNeverAnswersVersionTimesOutAndNothingIsSent() async {
+    /// A deadline met in the opening is a result, not a throw: the verb was certainly not sent (review of A2, M2).
+    func testAHelperThatNeverAnswersVersionIsAResultAndNothingIsSent() async throws {
         let daemon = StallingDaemon(stall: .version)
         let connection = ProxyConnection(proxy: daemon)
-        await assertTimedOut("version") { try await self.client(daemon, connection).createVaultDirectory(volumeUUID: "U-1") }
+        let result = try await client(daemon, connection).createVaultDirectory(volumeUUID: "U-1")
+        XCTAssertEqual(result.code, .helperDidNotAnswer)
+        XCTAssertFalse(result.ok)
+        XCTAssertTrue(result.message.contains("nothing was sent"), result.message)
         XCTAssertEqual(daemon.calls, ["version"], "neither begin nor the verb goes out after the opening stalls")
-        XCTAssertTrue(connection.events.contains("invalidate"))
+        XCTAssertTrue(connection.events.contains("invalidate"), "the caller's defer invalidates the connection")
     }
 
-    func testAHelperThatNeverAnswersBeginTimesOut() async {
+    func testAHelperThatNeverAnswersBeginIsAResultToo() async throws {
         let daemon = StallingDaemon(stall: .begin)
         let connection = ProxyConnection(proxy: daemon)
-        await assertTimedOut("begin") { try await self.client(daemon, connection).createVaultDirectory(volumeUUID: "U-1") }
+        let result = try await client(daemon, connection).createVaultDirectory(volumeUUID: "U-1")
+        XCTAssertEqual(result.code, .helperDidNotAnswer)
         XCTAssertEqual(daemon.calls, ["version", "begin"])
+    }
+
+    /// Before the password dialog: an opening that stalls asks for no password and sends no authorization.
+    func testAnOwnershipOpeningThatStallsAsksForNoPassword() async throws {
+        let daemon = StallingDaemon(stall: .version)
+        let connection = ProxyConnection(proxy: daemon)
+        let asked = LockedFlag()
+        let authorizer = HelperClient.Authorizer(acquire: { _ in
+            asked.set()
+            return HelperClient.AcquiredAuthorization(externalForm: Data([1]), release: {})
+        })
+        let result = try await client(daemon, connection, authorizer: authorizer).enableOwnership(volumeUUID: UUID().uuidString)
+        XCTAssertEqual(result.code, .helperDidNotAnswer)
+        XCTAssertFalse(asked.value)
     }
 
     func testAVerbThatIsNeverAnsweredTimesOut() async {
@@ -76,26 +98,63 @@ final class HelperClientTimeoutTests: XCTestCase {
         let daemon = StallingDaemon(stall: .verb, lateReplyAfter: 0.5)
         let connection = ProxyConnection(proxy: daemon)
         await assertTimedOut("createVaultDirectory") { try await self.client(daemon, connection).createVaultDirectory(volumeUUID: "U-1") }
-        try await Task.sleep(nanoseconds: 900_000_000)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertTrue(daemon.lateReplySent, "the late reply was made, and dropped")
     }
 
-    /// A reply in time is the outcome, and the timer that fires afterwards does nothing: the connection is invalidated
-    /// once, by the call's own `defer`, not a second time by the losing timer.
-    func testAReplyInTimeWinsAndTheLosingTimerDoesNothing() async throws {
+    /// A reply in time is the outcome, and nothing else happens afterwards: the connection is invalidated once, by the
+    /// call's own `defer`, and no timer touches it (the margin is twenty deadlines, for a loaded runner).
+    func testAReplyInTimeWinsAndNothingHappensAfterwards() async throws {
         let daemon = StallingDaemon(stall: nil)
         let connection = ProxyConnection(proxy: daemon)
         let result = try await client(daemon, connection).createVaultDirectory(volumeUUID: "U-1")
         XCTAssertTrue(result.ok, result.message)
-        try await Task.sleep(nanoseconds: 500_000_000)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertEqual(connection.events.filter { $0 == "invalidate" }.count, 1, "\(connection.events)")
     }
 
-    func testTheLiveDeadlinesAreOrderedAndNoneIsZero() {
+    /// The client's verb deadline is above the daemon's own worst case, so it never cuts off a verb the daemon is still
+    /// running (review of A2, M1): `enableOwnership` runs `diskutil` about ten times, each under `SpawnedDiskutil`'s kill.
+    func testTheLiveDeadlinesAreAboveTheDaemonsOwnBound() {
         let live = HelperClient.Timeouts.live
+        let perDiskutil = TimeInterval(SpawnedDiskutil().timeoutSeconds)
+        XCTAssertGreaterThan(live.verb, perDiskutil * 10, "ten diskutil runs, each up to \(perDiskutil) s")
+        XCTAssertGreaterThanOrEqual(live.cleanup, live.verb)
         XCTAssertGreaterThan(live.opening, 0)
         XCTAssertLessThan(live.opening, live.verb, "the opening is answered from memory")
-        XCTAssertLessThanOrEqual(live.verb, live.cleanup, "the cleanup verb deletes a large cache")
+    }
+
+    // MARK: - The app and Core: an opening that stalls is journaled as skipped, nothing sent
+
+    func testLiveHelperTurnsAStalledOpeningIntoDidNotAnswer() async throws {
+        let daemon = StallingDaemon(stall: .version)
+        let live = LiveHelper(client: client(daemon, ProxyConnection(proxy: daemon)))
+        do {
+            _ = try await live.perform(.createVaultDirectory(volumeUUID: "U-1"))
+            XCTFail("expected PrivilegedHelperDidNotAnswer")
+        } catch let silent as PrivilegedHelperDidNotAnswer {
+            XCTAssertTrue(silent.detail.contains("nothing was sent"), silent.detail)
+        }
+    }
+
+    func testTheRunnerJournalsAStalledOpeningAsSkippedAndRefuses() async throws {
+        final class Silent: PrivilegedHelper, @unchecked Sendable {
+            func state() -> HelperState { .enabled }
+            func register() throws {}
+            func openApprovalSettings() {}
+            func unregister() async throws {}
+            func perform(_ action: PrivilegedAction) async throws -> PrivilegedActionReply {
+                throw PrivilegedHelperDidNotAnswer(detail: "did not answer version in time, so nothing was sent")
+            }
+        }
+        let t = TempDir()
+        let journal = Journal(url: URL(fileURLWithPath: t.path + "/j.jsonl"))
+        let outcome = await PrivilegedActionRunner(helper: Silent(), journal: journal, isXcodeRunning: { false }, isSimulatorWorkRunning: { false })
+            .run(.createVaultDirectory(volumeUUID: "U-1"))
+        XCTAssertEqual(outcome, .refused("did not answer version in time, so nothing was sent"))
+        let states = try journal.entries().map(\.state)
+        XCTAssertEqual(states.last, .skipped, "\(states)")
+        XCTAssertFalse(states.contains(.failed), "nothing was sent, so nothing failed")
     }
 
     func testATimeoutSaysThatWhetherItActedIsUnknown() {

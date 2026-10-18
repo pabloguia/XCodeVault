@@ -82,9 +82,13 @@ dropped CloudKit connection after notarization was accepted, and the log printed
   approval, the tag ruleset, and the build job running only this repository's pinned code at the tagged commit are
   what stand in the way. A reproducible-build comparison of the helper would close it; not done.
 - ~~Still open: no timeout on a client call (advisory A2).~~ Closed 2026-10-18: every message has a deadline
-  (`HelperClient.Timeouts`: 15 s for `version` and `begin`, 120 s for a verb, 900 s for the cleanup verb); on it the
-  connection is invalidated and a later reply is dropped. The password dialog is answered before the verb is sent, so no
-  deadline waits on the user.
+  (`HelperClient.Timeouts`: 15 s for `version` and `begin`, 1500 s for a verb, above the daemon's own worst case of
+  about ten `diskutil` runs of up to 120 s each); on it the connection is invalidated and a later reply is dropped. The
+  password dialog is answered before the verb is sent, so no deadline waits on the user. A deadline met in the opening
+  is `helperDidNotAnswer`: nothing was sent, and the runner journals the step as skipped. One met during the verb stays a
+  thrown error, journaled as failed with "whether it acted is unknown"; it is not left open as `started`, because
+  `createVaultDirectory` journals as a migration and an open migration record reads as an interrupted migration to
+  resume. With the deadline above the daemon's bound, it ends only a daemon that never answers.
 
 ## Evidence
 
