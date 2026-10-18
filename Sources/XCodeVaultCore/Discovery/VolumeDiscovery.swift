@@ -86,14 +86,14 @@ public enum VolumeDiscovery {
         }
         // Roles come from `apfs list`: macOS 26's `info -plist` no longer carries `APFSVolumeRoles` (measured in R8), so
         // reading them there left every volume role-less. Best effort: without the listing, `parse` falls back to `info`.
-        let roles: [String: [String]] = {
+        let apfs: [String: APFSVolumeInfo] = {
             guard let r = try? runner.run(Tools.diskutil, ["apfs", "list", "-plist"]), r.succeeded else { return [:] }
-            return (try? apfsRoles(Data(r.stdout.utf8))) ?? [:]
+            return (try? apfsVolumes(Data(r.stdout.utf8))) ?? [:]
         }()
         var out: [Volume] = []
         for id in ids {
             guard let r = try? runner.run(Tools.diskutil, ["info", "-plist", id]), r.succeeded,
-                let v = try? parse(diskutilInfoPlist: Data(r.stdout.utf8), apfsRoles: roles)
+                let v = try? parse(diskutilInfoPlist: Data(r.stdout.utf8), apfsVolumes: apfs)
             else { continue }
             guard let mp = v.mountPoint, !mp.isEmpty else { continue }
             if mp.hasPrefix("/System/Volumes/") && mp != "/System/Volumes/Data" { continue }
@@ -104,18 +104,21 @@ public enum VolumeDiscovery {
         return out
     }
 
-    /// Each APFS volume's roles from `diskutil apfs list -plist`, by device identifier (`disk3s1`).
-    public static func apfsRoles(_ apfsList: Data) throws -> [String: [String]] {
-        var out: [String: [String]] = [:]
+    /// Each APFS volume of `diskutil apfs list -plist`, by device identifier (`disk3s1`).
+    public static func apfsVolumes(_ apfsList: Data) throws -> [String: APFSVolumeInfo] {
+        var out: [String: APFSVolumeInfo] = [:]
         for container in try DiskTopology.parseContainers(apfsList) {
-            for volume in container.volumes { out[volume.id] = volume.roles }
+            for volume in container.volumes { out[volume.id] = volume }
         }
         return out
     }
 
-    /// `apfsRoles` is `apfsRoles(_:)` of the same moment: a volume found there takes its roles from it, and one that is
-    /// not (not APFS, or the listing could not be read) from `info`'s `APFSVolumeRoles`, which macOS 15 still carries.
-    public static func parse(diskutilInfoPlist data: Data, apfsRoles: [String: [String]] = [:]) throws -> Volume {
+    /// A volume's roles are the union of what `info` says (`APFSVolumeRoles`, absent on macOS 26; whether macOS 15's
+    /// `info` carries it is unmeasured here) and what `apfsVolumes` says, so neither source can take a role away: a role
+    /// only ever marks a volume as the boot volume's. The listing's entry is used only when its volume UUID is the
+    /// volume's, where both have one: the two are read seconds apart, and a device identifier can be reused by another
+    /// drive in between (migration-safety review, findings c and d).
+    public static func parse(diskutilInfoPlist data: Data, apfsVolumes: [String: APFSVolumeInfo] = [:]) throws -> Volume {
         guard let d = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
             throw CommandError(executable: Tools.diskutil, arguments: ["info", "-plist"], result: nil, underlying: "not a plist")
         }
@@ -123,7 +126,11 @@ public enum VolumeDiscovery {
         func s(_ k: String) -> String { d[k] as? String ?? "" }
         func u(_ k: String) -> UInt64 { (d[k] as? NSNumber)?.uint64Value ?? 0 }
         let mp = s("MountPoint")
-        let role = apfsRoles[s("DeviceIdentifier")] ?? (d["APFSVolumeRoles"] as? [String]) ?? []
+        var role = Set((d["APFSVolumeRoles"] as? [String]) ?? [])
+        if let listed = apfsVolumes[s("DeviceIdentifier")] {
+            let infoUUID = (d["VolumeUUID"] as? String)?.uppercased()
+            if listed.uuid == nil || infoUUID == nil || listed.uuid?.uppercased() == infoUUID { role.formUnion(listed.roles) }
+        }
         let isBoot = mp == "/" || mp == "/System/Volumes/Data" || role.contains("Data") && b("Internal") || role.contains("System")
         return Volume(
             deviceNode: s("DeviceNode"), volumeName: s("VolumeName"), volumeUUID: d["VolumeUUID"] as? String,
