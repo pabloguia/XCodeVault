@@ -41,6 +41,9 @@ public struct HelperClient: Sendable {
         case authorizationDenied(Int32)
         /// R8 round 3: the caller could not record the start, so the request was not sent.
         case notStarted
+        /// Advisory A2: the helper took the message and did not reply in time. The connection is invalidated, and a
+        /// reply that comes later is dropped. Like `connectionFailed`, whether it acted is unknown.
+        case timedOut(String)
 
         public var description: String {
             switch self {
@@ -74,6 +77,8 @@ public struct HelperClient: Sendable {
                 return "Administrator authorization was not granted (\(status))."
             case .notStarted:
                 return "The start could not be recorded, so nothing was sent to the helper."
+            case .timedOut(let what):
+                return "The privileged helper did not reply to \(what) in time. Whether it acted is unknown; rescan to see."
             }
         }
     }
@@ -143,6 +148,26 @@ public struct HelperClient: Sendable {
     }
     let authorizer: Authorizer
 
+    /// How long each kind of message may go unanswered (advisory A2). None of them waits on the user: the password
+    /// dialog of `enableOwnership` is answered before the verb is sent (`Authorizer`), not inside a call. Internal, like
+    /// `makeConnection`, so a test can wait a fraction of a second; the public initialiser installs `.live`.
+    struct Timeouts: Sendable {
+        /// `version()` and `begin`: the daemon answers them from memory.
+        let opening: TimeInterval
+        /// `createVaultDirectory` and `enableOwnership`. Above the daemon's own worst case, so a deadline here never cuts
+        /// off an operation the daemon is still legitimately running (helper-security review of A2, M1): `enableOwnership`
+        /// runs `diskutil` about ten times (pin, lookup, the identity re-check, the command, the read-back), each under the
+        /// daemon's own 120 s kill (`SpawnedDiskutil.timeoutSeconds`), so up to some 1200 s; `HelperClientTimeoutTests`
+        /// holds this above that. What it ends is a daemon that never answers, not a slow disk.
+        let verb: TimeInterval
+        /// The cleanup verb deletes a cache of many gigabytes. Refused by this helper release (ADR-0016), and given at
+        /// least a verb's time should it be offered again.
+        let cleanup: TimeInterval
+
+        static let live = Timeouts(opening: 15, verb: 1500, cleanup: 1500)
+    }
+    let timeouts: Timeouts
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -154,12 +179,13 @@ public struct HelperClient: Sendable {
         self.runningTeam = HelperClient.teamOfRunningCode
         self.daemon = .live
         self.authorizer = .live
+        self.timeouts = .live
     }
 
     init(
         team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
         runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live,
-        authorizer: Authorizer = .live
+        authorizer: Authorizer = .live, timeouts: Timeouts = .live
     ) {
         self.team = team
         self.makeConnection = makeConnection
@@ -167,6 +193,7 @@ public struct HelperClient: Sendable {
         self.runningTeam = runningTeam
         self.daemon = daemon
         self.authorizer = authorizer
+        self.timeouts = timeouts
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -303,11 +330,13 @@ public struct HelperClient: Sendable {
     // MARK: - Verbs (createVaultDirectory never run live, #30; the cleanup verb is refused by this helper release, ADR-0016)
 
     public func createVaultDirectory(volumeUUID: String) async throws -> HelperResult {
-        try await send { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
+        try await send("createVaultDirectory", within: timeouts.verb) { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
     }
 
     public func removeRegenerableSystemDirectoryContents(target: HelperCleanupTarget) async throws -> HelperResult {
-        try await send { helper, reply in helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply) }
+        try await send("removeRegenerableSystemDirectoryContents", within: timeouts.cleanup) { helper, reply in
+            helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply)
+        }
     }
 
     /// R8 (ADR-0014): turns ownership on for the volume `volumeUUID`. EXPERIMENTAL (rule 10). One connection, in order:
@@ -340,7 +369,7 @@ public struct HelperClient: Sendable {
         defer { acquired.release() }
         // The caller's go-ahead (the journal's `.started`); without it nothing is sent and the reference is destroyed.
         guard authorized() else { throw Failure.notStarted }
-        return try await call(connection) { helper, reply in
+        return try await call(connection, "enableOwnership", within: timeouts.verb) { helper, reply in
             helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
         }
     }
@@ -438,14 +467,16 @@ public struct HelperClient: Sendable {
     /// `ResumeOnce` does not rely on that: a second call — a violated contract, or a later change here — is
     /// dropped instead of crashing the process.
     ///
-    /// **No timeout** (helper-security review of deliverable 4, advisory A2): a daemon that takes the message and
-    /// never replies leaves this call pending, and the connection open, until the daemon or its connection dies.
-    /// Declared, not fixed.
-    func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
+    /// **Every message has a deadline** (advisory A2, helper-security review of deliverable 4): `call`'s `within`. A daemon
+    /// that takes a message and never replies used to leave the call pending, and the connection open, until the daemon
+    /// or its connection died — the app waiting with it.
+    func send(
+        _ what: String, within timeout: TimeInterval, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void
+    ) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
         if let refusal = try await opening(connection) { return refusal }
-        return try await call(connection, message)
+        return try await call(connection, what, within: timeout, message)
     }
 
     /// The M5 round trip every verb waits for (ADR-0016), on the connection the verb will use; nil when the verb may go.
@@ -455,24 +486,49 @@ public struct HelperClient: Sendable {
     ///      but only an OLDER one (round 5, F2). A newer helper, or one whose version cannot be ordered, is left alone:
     ///      reinstalling would downgrade it.
     ///   2. `begin(clientVersion:)`, which a helper of this version answers. Its refusal is returned as it came.
+    ///
+    /// A deadline met here is a result too, `helperDidNotAnswer`: the verb was certainly not sent, which a timeout during
+    /// the verb cannot say (helper-security review of A2, M2).
     func opening(_ connection: NSXPCConnection) async throws -> HelperResult? {
-        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
+        do {
+            return try await openingCalls(connection)
+        } catch Failure.timedOut(let what) {
+            return HelperResult(
+                ok: false, message: "The privileged helper did not answer \(what) in time, so the action was not sent to it. Try again in a moment.",
+                code: .helperDidNotAnswer)
+        }
+    }
+
+    private func openingCalls(_ connection: NSXPCConnection) async throws -> HelperResult? {
+        let version: String = try await call(connection, "version", within: timeouts.opening) { helper, reply in helper.version(reply: reply) }
         guard version == HelperIdentity.version else {
             if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
                 return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
             }
             return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
         }
-        let begun: HelperResult = try await call(connection) { helper, reply in helper.begin(clientVersion: HelperIdentity.version, reply: reply) }
+        let begun: HelperResult = try await call(connection, "begin", within: timeouts.opening) { helper, reply in
+            helper.begin(clientVersion: HelperIdentity.version, reply: reply)
+        }
         return begun.ok ? nil : begun
     }
 
-    /// One message on an open connection, with its own error handler. `ResumeOnce`, for the reasons `send` gives.
+    /// One message on an open connection, with its own error handler and a deadline. `ResumeOnce`, for the reasons `send`
+    /// gives, and because the deadline is a third way to finish: whichever of the reply, the error handler and the timer
+    /// comes first is the outcome, and the others are dropped.
+    ///
+    /// The timer touches only the continuation. The connection is invalidated by the caller's `defer` (`send`,
+    /// `enableOwnership`), which runs as soon as the timeout is thrown, so the daemon's reply, if it ever comes, goes
+    /// nowhere (review of A2, L1). A timer that loses still fires at its deadline and finds the continuation gone; until
+    /// then it holds only this `ResumeOnce`, already emptied, and the verb's name (L2: not cancelled, because
+    /// `DispatchWorkItem` is not `Sendable` and the reply closure could not hold one).
     func call<T: Sendable>(
-        _ connection: NSXPCConnection, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
+        _ connection: NSXPCConnection, _ what: String, within timeout: TimeInterval,
+        _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { once.resume(throwing: Failure.timedOut(what)) }
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
                 once.resume(throwing: Failure.connectionFailed(error.localizedDescription))
             }

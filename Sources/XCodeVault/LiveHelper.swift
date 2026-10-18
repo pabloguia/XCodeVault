@@ -47,6 +47,8 @@ struct LiveHelper: PrivilegedHelper {
         }
         // Every verb now waits for the opening round trip (M5, ADR-0016), so any of them can meet an older helper.
         if result.code == .helperOutdated { throw PrivilegedHelperOutdated(detail: result.message) }
+        // Advisory A2: the opening was not answered in time, so the verb was not sent; a timeout during the verb throws.
+        if result.code == .helperDidNotAnswer { throw PrivilegedHelperDidNotAnswer(detail: result.message) }
         return PrivilegedActionReply(ok: result.ok, message: result.message, bytesFreed: result.bytesFreed)
     }
 }

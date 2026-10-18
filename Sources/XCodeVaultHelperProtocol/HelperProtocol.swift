@@ -128,6 +128,10 @@ public enum HelperResultCode: String, Sendable, CaseIterable {
     case clientVersionMismatch
     /// The verb is not offered by this helper release (ADR-0016): the cleanup verb and its companion.
     case verbNotOffered
+    /// `version()` or `begin` was not answered in time (advisory A2): produced by the client only, before the verb is
+    /// sent, so the verb certainly did not run. A deadline met during the verb is a thrown error instead: its outcome is
+    /// unknown.
+    case helperDidNotAnswer
 }
 
 /// Result envelope; `NSSecureCoding` so it can cross XPC.

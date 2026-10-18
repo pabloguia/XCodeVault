@@ -19,6 +19,18 @@ final class L10nTests: XCTestCase {
             ]
         ])
 
+    /// The shipped table is JSON in a raw string literal (2026-10-18), decoded on first use; `init(json:)` traps if it does
+    /// not decode, so this is the test that reads it whole. 677 strings and 19 plurals when the format changed, compared
+    /// entry by entry against the dictionary literal they replaced.
+    func testTheShippedTableDecodesAndEveryEntryHasTheBaseLocale() {
+        let core = L10nCatalog.core
+        XCTAssertGreaterThanOrEqual(core.strings.count, 677)
+        XCTAssertGreaterThanOrEqual(core.plurals.count, 19)
+        for (key, byLocale) in core.strings { XCTAssertNotNil(byLocale[L10n.baseLocale], key) }
+        for (key, byLocale) in core.plurals { XCTAssertNotNil(byLocale[L10n.baseLocale]?["other"], key) }
+        XCTAssertEqual(core.strings["app.a11y.off"]?["pt-BR"], "Desativado", "a sample value, as it was in the literal")
+    }
+
     func testTheLocaleListIsTheFiveShippedLanguagesBaseFirst() {
         XCTAssertEqual(L10n.supportedLocales, ["en", "pt-BR", "es", "ja", "zh-Hans"])
         XCTAssertEqual(L10n.baseLocale, "en")
