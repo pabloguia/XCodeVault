@@ -50,7 +50,7 @@ public enum DiskSafety {
         var out: [DiskRefusal] = []
         if disk.isInternal { out.append(.internalDisk) }
         if snapshot.bootDiskIDs.contains(disk.id) { out.append(.bootDisk) }
-        if snapshot.macOSInstallDiskIDs.contains(disk.id) { out.append(.holdsMacOSInstall) }
+        if holdsMacOSInstall(disk, in: snapshot) { out.append(.holdsMacOSInstall) }
         if disk.isDiskImage { out.append(.diskImage) }
         if holdsTimeMachine(disk, in: snapshot) { out.append(.timeMachine) }
         if !disk.isWritable { out.append(.readOnlyMedia) }
@@ -91,6 +91,16 @@ public enum DiskSafety {
     public static func unverifiedHFSPartitions(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [String] {
         let mounted = Set(snapshot.volumes(on: disk).map { DriveSnapshot.deviceID($0.deviceNode) })
         return disk.partitions.filter { ($0.content == "Apple_HFS" || $0.content == "Apple_HFSX") && !mounted.contains($0.id) }.map(\.id)
+    }
+
+    /// Another macOS installation on `disk`: a mounted volume marked so, or — mounted or not — an APFS volume whose role
+    /// is System or Data, read from the container (an installation whose volumes are unmounted, or whose System volume
+    /// mounts as a role-less snapshot, is still on the disk; review of finding e, M1). Not the running system's disk,
+    /// which `.bootDisk` already names.
+    public static func holdsMacOSInstall(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> Bool {
+        guard !snapshot.bootDiskIDs.contains(disk.id) else { return false }
+        return snapshot.macOSInstallDiskIDs.contains(disk.id)
+            || disk.containers.contains { $0.volumes.contains { $0.roles.contains("Data") || $0.roles.contains("System") } }
     }
 
     public static func holdsTimeMachine(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> Bool {

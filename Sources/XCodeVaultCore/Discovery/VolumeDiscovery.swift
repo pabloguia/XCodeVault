@@ -22,6 +22,8 @@ public struct Volume: Sendable, Codable, Equatable, Identifiable {
     public var isBootVolume: Bool  // the system or data volume of the running OS
     /// A System or Data volume of another macOS installation (by its APFS role), not the running one. Never a vault, and
     /// its disk is never prepared; told apart from the boot volume so neither says "the running system" about it.
+    /// Added 2026-10-18: the synthesized `Decodable` requires the key, so a `scan --json` written before then does not
+    /// decode as a `Volume`. Nothing in the product decodes one (review, L2).
     public var belongsToMacOSInstall: Bool = false
     public var isDiskImage: Bool { busProtocol == "Disk Image" }
     public var isAPFS: Bool { filesystemType.lowercased() == "apfs" }

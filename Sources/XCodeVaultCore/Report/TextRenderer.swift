@@ -30,7 +30,7 @@ public enum TextRenderer {
         for v in r.volumes {
             let q = VolumeQualification.evaluate(v)
             o +=
-                "  \(pad(v.volumeName, 18)) \(pad(v.filesystemPersonality, 20)) \(pad(v.busProtocol, 12)) \(v.isInternal ? "internal" : "external") free \(pad(ByteCount.format(v.freeBytes), 10)) \(v.isBootVolume ? "boot" : q.verdict.rawValue)\n"
+                "  \(pad(v.volumeName, 18)) \(pad(v.filesystemPersonality, 20)) \(pad(v.busProtocol, 12)) \(v.isInternal ? "internal" : "external") free \(pad(ByteCount.format(v.freeBytes), 10)) \(v.isBootVolume ? "boot" : v.belongsToMacOSInstall ? "macOS installation" : q.verdict.rawValue)\n"
         }
         return o
     }

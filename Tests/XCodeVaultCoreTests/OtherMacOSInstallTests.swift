@@ -62,4 +62,19 @@ final class OtherMacOSInstallTests: XCTestCase {
         XCTAssertTrue(after.options.isEmpty, "\(after.options)")
         XCTAssertTrue(DiskRefusal.holdsMacOSInstall.reason.contains("another macOS installation"))
     }
+
+    /// An installation whose volumes are not mounted is still on the disk: its roles are read from the container, as
+    /// Time Machine's are (review of finding e, M1). Erasing is not offered.
+    func testAnUnmountedInstallStillRefusesItsDisk() throws {
+        var disks = try R6DriveTests.disks()
+        let i = try XCTUnwrap(disks.firstIndex { $0.id == "disk2" })
+        disks[i].containers[0].volumes[0].roles = ["System"]
+        let unmounted = R6DriveTests.volumes().filter { $0.deviceNode != "/dev/disk3s1" }
+        let snap = DriveSnapshot(disks: disks, volumes: unmounted, timeMachineMarkedVolumeIDs: [])
+        XCTAssertEqual(DiskSafety.changeRefusals(disks[i], in: snap), [.holdsMacOSInstall])
+        XCTAssertTrue(DriveEvaluation.assess(disks[i], in: snap, vaults: []).options.isEmpty)
+        // The running system's disk keeps its own reason, not this one as well.
+        let disk0 = try XCTUnwrap(disks.first { $0.id == "disk0" })
+        XCTAssertEqual(DiskSafety.changeRefusals(disk0, in: snap), [.internalDisk, .bootDisk])
+    }
 }

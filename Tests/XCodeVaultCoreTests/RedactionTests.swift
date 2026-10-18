@@ -88,6 +88,17 @@ final class RedactionTests: XCTestCase {
         XCTAssertEqual(r.redact("/Volumes/MacOS/Users"), "/Volumes/<bootvolume>/Users")
     }
 
+    /// A volume of another macOS installation — a bootable clone keeps the boot volume's name — is redacted as a system
+    /// volume, with the same lookbehind, not as a vault (review of finding e, M2).
+    func testAnotherInstallsVolumeIsRedactedAsASystemVolume() {
+        var clone = vol("MacOS")
+        clone.belongsToMacOSInstall = true
+        let r = make(volumes: [clone])
+        XCTAssertEqual(r.redact("/Volumes/MacOS/Users"), "/Volumes/<bootvolume>/Users")
+        XCTAssertEqual(r.redact("the MacOS volume"), "the <bootvolume> volume")
+        XCTAssertEqual(r.redact("/Applications/X.app/Contents/MacOS/X"), "/Applications/X.app/Contents/MacOS/X", "bundle paths survive")
+    }
+
     /// A boot volume can be named after its owner, so its name still has to go where it appears as
     /// a *name* — the `volumeName` field of the JSON report, or prose. What distinguishes that from
     /// a path component is the preceding slash, and nothing else.
