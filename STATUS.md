@@ -14,6 +14,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Three follow-ups (2026-10-18, branch `fix/followups-a2-roles-l10n`).** (1) Advisory A2: every message to the helper
+  has a deadline; on it the connection is invalidated and a late reply dropped (`HelperClientTimeoutTests`). (2) Core
+  reads APFS volume roles from `apfs list` (R8 follow-up 1). (3) The localization table is JSON in a string, which ends
+  this Mac's release-build hang (ADR-0018). Reviews: helper-security for (1), migration-safety for (2), whose role change
+  reaches destination eligibility.
 - **Releases are universal — DONE (2026-10-17, PR #49, merged as 3bc7af3, ADR-0017).** Measured on CI with
   `v0.3.0-rc.2` (run 39080152043, macos-15): the universal `build` job took 14 min, the same as the arm64-only rc.1
   (15 min); each slice of `XCodeVault` compiled in about 81 s, `xcodevaultctl` in 17 s, the helper in 4 s; the artifact
@@ -60,7 +65,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   tripwire, contract 0.2.2-dev. **Follow-ups:** (1) Core's `VolumeDiscovery.parse` reads `APFSVolumeRoles` from
   `info -plist`, which macOS 26 does not carry; only `isBoot` uses it, and the mount-point test still marks the running
   system's volumes, so nothing safety-relevant depends on it (Time Machine detection in Core reads `apfs list` roles
-  in `DiskTopology`) — read roles from `apfs list` there too. (2) `createVaultDirectory` opens the volume as root and
+  in `DiskTopology`) — read roles from `apfs list` there too. **Done 2026-10-18:** `mountedVolumes` reads them from
+  `apfs list`, falling back to `info`; on macOS 26 an internal Data or a System volume is now marked by its role again,
+  as on macOS 15. (2) `createVaultDirectory` opens the volume as root and
   probably fails under TCC on a removable volume; untested, out of R8's verb. Reviews
   required before merge: `helper-security-reviewer` and `migration-safety-reviewer`.
 - **User-first permissions** — spec `docs/superpowers/specs/2026-09-27-user-first-permissions-design.md`,
@@ -180,7 +187,10 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   machine until it is. Candidates to measure first: the generated `L10nCatalog.core` table (S4 follow-up 4 above) and
   the type checker on `PlanBuilder`. **Narrowed 2026-10-17 (ADR-0017):** the same package, both slices, builds in release
   on the macos-15 runner in minutes, so this is this Mac's build (machine or its Swift 6.3.2 toolchain), not the code
-  alone. Releases come from CI since M5, so it no longer blocks one.
+  alone. Releases come from CI since M5, so it no longer blocks one. **Resolved 2026-10-18 (ADR-0018):** the generated
+  localization table was the cause. Alone, at `-O -wmo`, it kept the compiler at 100% CPU for over ten minutes until
+  stopped; written as JSON in a raw string it compiles in 0.85 s, and `swift build -c release --product xcodevaultctl`
+  finishes here in 116 s, its help localized.
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
   off-screen snapshots cannot draw `NSTableView` rows: the Delete table's grouped rows, Storage's rows (the Bucket
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
@@ -188,7 +198,8 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
   catalog's English in every language (S4 Task 2) — localizing them needs display names in the catalog; (4) the
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
-  (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further; (5) the runtime
+  (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further — **done 2026-10-18,
+  another way:** the table is JSON in a raw string literal (ADR-0018); (5) the runtime
   `.dmg` gap below is still open: the Overview and Simulators show those bytes on their own, outside the totals;
   (6) platform names in
   the Simulators screen are mapped from five known `platformIdentifier`s (iOS, watchOS, tvOS, visionOS, macOS); an

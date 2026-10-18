@@ -8,7 +8,9 @@ XCodeVault ships in English (base), Brazilian Portuguese, Spanish, Japanese and 
   the JSON), with keys namespaced by where they are shown — `savings.*` and `perm.*` (shared), `cli.*`, `app.*`
   (spec §4.6). Keys are stable identifiers such as `savings.bucket.parkExternally.title`, not English sentences.
 - `scripts/l10n.sh gen` compiles it into `CoreStrings.generated.swift`, a static table built into the binary.
-  There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language. The catalog is
+  There is no runtime resource bundle, so a stand-alone `xcodevaultctl` has every language. The table is JSON in a
+  raw string literal, decoded on first use (ADR-0018): as a Swift dictionary literal it kept a release build of Core
+  compiling for hours on an Intel Mac. The catalog is
   kept sorted (`add` writes it that way); an editor that reorders it produces a large, harmless diff.
 - Code uses `L10n.tr("key", args…)` and `L10n.plural("key", count: n, args…)` with **literal** keys.
 - Locale: `--lang <code>` (CLI) → `XCODEVAULT_LANG` → macOS language preferences → English. Tests that

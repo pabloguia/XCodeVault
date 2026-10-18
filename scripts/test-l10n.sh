@@ -43,6 +43,22 @@ grep -q 'swift-format-ignore-file' "$work/T.generated.swift" || { fail=$((fail +
 echo '// edited' >>"$work/T.generated.swift"
 expect "check refuses a stale table" 1 check
 
+# The table is JSON in a raw string literal (2026-10-18). A value holding `\#` or `"""#` would start an escape or close a
+# one-`#` literal, so the generator adds `#`s until neither can occur. Compiled and run with the real L10n.swift: the
+# value must come back exactly.
+tricky='"t.k":{"localizations":{"en":{"stringUnit":{"state":"translated","value":"a \\# b \"\"\"# c \\\\#( d"}},"ja":{"stringUnit":{"state":"translated","value":"x"}}}}'
+catalog "$tricky"
+"${tool[@]}" gen "$work/c.xcstrings" "$work/T.generated.swift" test --locales en,ja >/dev/null 2>&1
+grep -q '##"""' "$work/T.generated.swift" || { fail=$((fail + 1)); echo "FAIL: the delimiter did not grow past the value's # sequences"; }
+want=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["strings"]["t.k"]["localizations"]["en"]["stringUnit"]["value"], end="")' "$work/c.xcstrings")
+printf 'print(L10nCatalog.test.strings["t.k"]?["en"] ?? "<missing>", terminator: "")\n' >"$work/main.swift"
+if swiftc -Onone Sources/XCodeVaultCore/Localization/L10n.swift Sources/XCodeVaultCore/Localization/CoreStrings.generated.swift "$work/T.generated.swift" "$work/main.swift" -o "$work/run" >"$work/out" 2>&1 \
+    && got=$("$work/run") && [ "$got" = "$want" ]; then
+    pass=$((pass + 1))
+else
+    fail=$((fail + 1)); echo "FAIL: a value with # sequences did not round-trip through the generated table"; sed 's/^/    /' "$work/out"
+fi
+
 catalog "${good/,\"ja\":\{\"stringUnit\":\{\"state\":\"needs_review\",\"value\":\"最大 %@\"\}\}/}"
 "${tool[@]}" gen "$work/c.xcstrings" "$work/T.generated.swift" test --locales en,ja >/dev/null 2>&1
 expect "check refuses a missing locale" 1 check

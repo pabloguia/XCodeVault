@@ -9,6 +9,24 @@ public struct L10nCatalog: Sendable {
         self.strings = strings
         self.plurals = plurals
     }
+
+    /// The generated tables' form: `{"strings": …, "plurals": …}`, written by `scripts/l10n.sh gen` into a raw string
+    /// literal. A literal of nested dictionaries this size kept a whole-module `-O` build at 100% CPU for over ten
+    /// minutes on this project's Intel Mac (2026-10-18); a string constant costs the compiler nothing, and this decodes
+    /// it once, when the table is first read. It traps rather than return an empty table: the text is the generator's,
+    /// `scripts/l10n.sh check` holds it equal to the catalog, and `L10nTests` decodes it.
+    init(json: String) {
+        struct Tables: Decodable {
+            let strings: [String: [String: String]]
+            let plurals: [String: [String: [String: String]]]
+        }
+        do {
+            let tables = try JSONDecoder().decode(Tables.self, from: Data(json.utf8))
+            self.init(strings: tables.strings, plurals: tables.plurals)
+        } catch {
+            preconditionFailure("a generated localization table does not decode (\(error)); run scripts/l10n.sh gen")
+        }
+    }
 }
 
 /// Localization (spec 2026-10-03 §4). Compiled tables instead of `Bundle.module`, so a binary copied on its
