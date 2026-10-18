@@ -84,10 +84,16 @@ public enum VolumeDiscovery {
             for part in (disk["Partitions"] as? [[String: Any]]) ?? [] { if let id = part["DeviceIdentifier"] as? String { ids.append(id) } }
             for vol in (disk["APFSVolumes"] as? [[String: Any]]) ?? [] { if let id = vol["DeviceIdentifier"] as? String { ids.append(id) } }
         }
+        // Roles come from `apfs list`: macOS 26's `info -plist` no longer carries `APFSVolumeRoles` (measured in R8), so
+        // reading them there left every volume role-less. Best effort: without the listing, `parse` falls back to `info`.
+        let roles: [String: [String]] = {
+            guard let r = try? runner.run(Tools.diskutil, ["apfs", "list", "-plist"]), r.succeeded else { return [:] }
+            return (try? apfsRoles(Data(r.stdout.utf8))) ?? [:]
+        }()
         var out: [Volume] = []
         for id in ids {
             guard let r = try? runner.run(Tools.diskutil, ["info", "-plist", id]), r.succeeded,
-                let v = try? parse(diskutilInfoPlist: Data(r.stdout.utf8))
+                let v = try? parse(diskutilInfoPlist: Data(r.stdout.utf8), apfsRoles: roles)
             else { continue }
             guard let mp = v.mountPoint, !mp.isEmpty else { continue }
             if mp.hasPrefix("/System/Volumes/") && mp != "/System/Volumes/Data" { continue }
@@ -98,7 +104,18 @@ public enum VolumeDiscovery {
         return out
     }
 
-    public static func parse(diskutilInfoPlist data: Data) throws -> Volume {
+    /// Each APFS volume's roles from `diskutil apfs list -plist`, by device identifier (`disk3s1`).
+    public static func apfsRoles(_ apfsList: Data) throws -> [String: [String]] {
+        var out: [String: [String]] = [:]
+        for container in try DiskTopology.parseContainers(apfsList) {
+            for volume in container.volumes { out[volume.id] = volume.roles }
+        }
+        return out
+    }
+
+    /// `apfsRoles` is `apfsRoles(_:)` of the same moment: a volume found there takes its roles from it, and one that is
+    /// not (not APFS, or the listing could not be read) from `info`'s `APFSVolumeRoles`, which macOS 15 still carries.
+    public static func parse(diskutilInfoPlist data: Data, apfsRoles: [String: [String]] = [:]) throws -> Volume {
         guard let d = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
             throw CommandError(executable: Tools.diskutil, arguments: ["info", "-plist"], result: nil, underlying: "not a plist")
         }
@@ -106,7 +123,7 @@ public enum VolumeDiscovery {
         func s(_ k: String) -> String { d[k] as? String ?? "" }
         func u(_ k: String) -> UInt64 { (d[k] as? NSNumber)?.uint64Value ?? 0 }
         let mp = s("MountPoint")
-        let role = (d["APFSVolumeRoles"] as? [String]) ?? []
+        let role = apfsRoles[s("DeviceIdentifier")] ?? (d["APFSVolumeRoles"] as? [String]) ?? []
         let isBoot = mp == "/" || mp == "/System/Volumes/Data" || role.contains("Data") && b("Internal") || role.contains("System")
         return Volume(
             deviceNode: s("DeviceNode"), volumeName: s("VolumeName"), volumeUUID: d["VolumeUUID"] as? String,
