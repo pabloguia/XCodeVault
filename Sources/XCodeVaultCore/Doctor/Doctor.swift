@@ -110,6 +110,7 @@ public struct Doctor: Sendable {
 
     public func diagnose(report: ScanReport) -> [Finding] {
         var f: [Finding] = []
+        f += checkVolumesRead(report: report)
         // Computed once and shared: the shadow-root rule escalates when a live redirect is also
         // present, because that is the case where two device sets can take writes at the same time.
         let forbidden = checkForbiddenSymlinks()
@@ -131,6 +132,33 @@ public struct Doctor: Sendable {
     }
 
     // MARK: rules
+
+    /// The volume checks below walk `report.volumes`; a volume `diskutil` could not read is not in it, so they said
+    /// nothing about it — silence that read as "no problem" (review of PR #51, M2). Not an error: nothing is known to be
+    /// wrong, but this run is not a clean result for the volumes it could not see.
+    func checkVolumesRead(report: ScanReport) -> [Finding] {
+        if !report.volumesListed {
+            return [
+                Finding(
+                    id: "volumes-unreadable", severity: .warning, title: "The volume list could not be read",
+                    detail: "diskutil list failed, so no volume was checked: shadow data, prior-tool leftovers and vault locations "
+                        + "on external volumes are unknown, not absent.",
+                    path: nil, remediation: "Re-run doctor. Do not treat this run as a clean result for external volumes.",
+                    evidence: "VolumeDiscovery.enumerate: a list that does not parse is an error, not \"no volumes\"")
+            ]
+        }
+        guard !report.unreadableVolumeIDs.isEmpty else { return [] }
+        let ids = report.unreadableVolumeIDs.joined(separator: ", ")
+        return [
+            Finding(
+                id: "volumes-unreadable", severity: .warning,
+                title: "diskutil could not read \(report.unreadableVolumeIDs.count) volume(s)",
+                detail: "\(ids): listed by diskutil, but its info could not be read even on a second try. They may be mounted; "
+                    + "the checks for shadow data, prior-tool leftovers and vault locations did not see them.",
+                path: nil, remediation: "Re-run doctor in a moment. If one stays unreadable, check it in Disk Utility.",
+                evidence: "VolumeEnumeration.unreadable: unknown, never absent")
+        ]
+    }
 
     func checkForbiddenSymlinks() -> [Finding] {
         var out: [Finding] = []

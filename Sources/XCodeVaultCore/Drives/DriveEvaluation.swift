@@ -25,6 +25,9 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
     /// An HFS+ partition that is not mounted: it might be a Time Machine backup, and nothing can tell until it is mounted
     /// (the marker check reads the volume's root).
     case mightBeTimeMachine
+    /// `diskutil` could not read one of its volumes: whatever that volume is, nothing here can tell, so the disk is not
+    /// changed until it can be read.
+    case volumeUnreadable
 
     /// English, for Core's own prose and the journal; the app has its own words.
     public var reason: String {
@@ -37,6 +40,8 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
         case .timeMachine: "This disk holds a Time Machine backup."
         case .readOnlyMedia: "This disk's media is read-only."
         case .mightBeTimeMachine: "An unmounted HFS+ partition on this disk might be a Time Machine backup; mount it so XCodeVault can check."
+        case .volumeUnreadable:
+            "diskutil could not read a volume on this disk, so XCodeVault cannot tell what it holds and changes nothing on it. Try again in a moment."
         }
     }
 }
@@ -44,8 +49,9 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
 /// The central guard. Every option that changes a disk is offered only when `refusals` for that change is empty, and
 /// `DiskPreparation.revalidate` asks again, on a fresh snapshot, right before the command runs.
 public enum DiskSafety {
-    /// What forbids ANY change to `disk` — even adding a volume, which erases nothing: internal, boot, disk image,
-    /// Time Machine, read-only media.
+    /// What forbids ANY change to `disk` — even adding a volume, which erases nothing: internal, boot, another macOS
+    /// installation, disk image, Time Machine, read-only media, and a volume that could not be read (it might be any of
+    /// those, or a vault).
     public static func changeRefusals(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [DiskRefusal] {
         var out: [DiskRefusal] = []
         if disk.isInternal { out.append(.internalDisk) }
@@ -54,6 +60,7 @@ public enum DiskSafety {
         if disk.isDiskImage { out.append(.diskImage) }
         if holdsTimeMachine(disk, in: snapshot) { out.append(.timeMachine) }
         if !disk.isWritable { out.append(.readOnlyMedia) }
+        if !snapshot.unreadableVolumeIDs(on: disk).isEmpty { out.append(.volumeUnreadable) }
         return out
     }
 

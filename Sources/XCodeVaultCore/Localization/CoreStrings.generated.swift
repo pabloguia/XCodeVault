@@ -1087,6 +1087,13 @@ extension L10nCatalog {
       "pt-BR" : "Ele contém um backup do Time Machine, então o XCodeVault nunca o altera.",
       "zh-Hans" : "它包含时间机器备份，因此 XCodeVault 绝不会更改它。"
     },
+    "app.drives.refusal.volumeUnreadable" : {
+      "en" : "diskutil could not read a volume on this disk, so XCodeVault cannot tell what it holds and changes nothing on it. Try again in a moment.",
+      "es" : "diskutil no pudo leer un volumen de este disco, así que XCodeVault no puede saber qué contiene y no cambia nada en él. Inténtalo de nuevo en un momento.",
+      "ja" : "diskutil がこのディスク上のボリュームを読み取れなかったため、XCodeVault は内容を判断できず、このディスクには何も変更しません。しばらくしてからもう一度お試しください。",
+      "pt-BR" : "O diskutil não conseguiu ler um volume deste disco, então o XCodeVault não sabe o que ele contém e não altera nada nele. Tente novamente em instantes.",
+      "zh-Hans" : "diskutil 无法读取此磁盘上的某个宗卷，因此 XCodeVault 无法判断其中的内容，不会对此磁盘做任何更改。请稍后再试。"
+    },
     "app.drives.useDrive" : {
       "en" : "Use This Drive…",
       "es" : "Usar este disco…",

@@ -171,6 +171,7 @@ enum DriveText {
         case .timeMachine: L10n.tr("app.drives.refusal.timeMachine")
         case .readOnlyMedia: L10n.tr("app.drives.refusal.readOnlyMedia")
         case .mightBeTimeMachine: L10n.tr("app.drives.refusal.mightBeTimeMachine")
+        case .volumeUnreadable: L10n.tr("app.drives.refusal.volumeUnreadable")
         }
     }
 
