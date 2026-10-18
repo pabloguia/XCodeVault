@@ -72,13 +72,32 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
     }
 }
 
+/// What one pass over the mounted volumes found: the volumes, and the device identifiers whose `diskutil info` could not
+/// be read even on a second try. A volume in `unreadable` may well be mounted — it is unknown, never absent.
+public struct VolumeEnumeration: Sendable, Equatable {
+    public var volumes: [Volume]
+    public var unreadable: [String]
+    public init(volumes: [Volume], unreadable: [String] = []) {
+        self.volumes = volumes
+        self.unreadable = unreadable
+    }
+}
+
 public enum VolumeDiscovery {
-    /// All mounted volumes (excluding the OS's own hidden system volumes and CoreSimulator's runtime images).
+    /// All mounted volumes (excluding the OS's own hidden system volumes and CoreSimulator's runtime images). The volumes
+    /// of `enumerate(runner:)`; a caller that must tell "not mounted" from "not read" uses that instead.
     public static func mountedVolumes(runner: CommandRunning = ProcessCommandRunner()) throws -> [Volume] {
+        try enumerate(runner: runner).volumes
+    }
+
+    /// One `diskutil info` per device. A failed or unparsable one is asked again once, after a moment: on 2026-10-18 a
+    /// single failed `info` on the macos-26 CI runner removed a mounted disk image from the list between two commands
+    /// seconds apart, and a vault missing from it reads as not connected. One still unreadable is reported, not dropped.
+    public static func enumerate(runner: CommandRunning = ProcessCommandRunner(), retryDelay: TimeInterval = 0.25) throws -> VolumeEnumeration {
         let list = try runner.check(Tools.diskutil, ["list", "-plist"])
         guard let plist = try PropertyListSerialization.propertyList(from: Data(list.stdout.utf8), format: nil) as? [String: Any],
             let all = plist["AllDisksAndPartitions"] as? [[String: Any]]
-        else { return [] }
+        else { return VolumeEnumeration(volumes: []) }
         var ids: [String] = []
         for disk in all {
             for part in (disk["Partitions"] as? [[String: Any]]) ?? [] { if let id = part["DeviceIdentifier"] as? String { ids.append(id) } }
@@ -90,18 +109,29 @@ public enum VolumeDiscovery {
             guard let r = try? runner.run(Tools.diskutil, ["apfs", "list", "-plist"]), r.succeeded else { return [:] }
             return (try? apfsVolumes(Data(r.stdout.utf8))) ?? [:]
         }()
+        func info(_ id: String) -> Volume? {
+            guard let r = try? runner.run(Tools.diskutil, ["info", "-plist", id]), r.succeeded else { return nil }
+            return try? parse(diskutilInfoPlist: Data(r.stdout.utf8), apfsVolumes: apfs)
+        }
         var out: [Volume] = []
+        var unreadable: [String] = []
         for id in ids {
-            guard let r = try? runner.run(Tools.diskutil, ["info", "-plist", id]), r.succeeded,
-                let v = try? parse(diskutilInfoPlist: Data(r.stdout.utf8), apfsVolumes: apfs)
-            else { continue }
+            var read = info(id)
+            if read == nil {
+                if retryDelay > 0 { Thread.sleep(forTimeInterval: retryDelay) }
+                read = info(id)
+            }
+            guard let v = read else {
+                unreadable.append(id)
+                continue
+            }
             guard let mp = v.mountPoint, !mp.isEmpty else { continue }
             if mp.hasPrefix("/System/Volumes/") && mp != "/System/Volumes/Data" { continue }
             if mp.hasPrefix("/Library/Developer/CoreSimulator/Volumes/") { continue }
             if mp.hasPrefix("/private/var/") { continue }
             out.append(v)
         }
-        return out
+        return VolumeEnumeration(volumes: out, unreadable: unreadable)
     }
 
     /// Each APFS volume of `diskutil apfs list -plist`, by device identifier (`disk3s1`).

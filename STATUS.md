@@ -14,7 +14,14 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-- **Three follow-ups (2026-10-18, branch `fix/followups-a2-roles-l10n`).** (1) Advisory A2: every message to the helper
+- **A failed `diskutil info` no longer hides a volume (2026-10-18, branch `fix/volume-info-transient`).** On PR #50's
+  CI a single failed `info` removed a mounted disk image from `mountedVolumes`; a vault missing from it read as "a
+  different volume is mounted" (its own volume) or as not connected. `VolumeDiscovery.enumerate` asks a failed `info`
+  once more and reports what stays unreadable instead of dropping it, and the scan says so. `VaultVerifier` asks the
+  kernel (`MountStatus.volumeUUID`, no `diskutil`) which volume is mounted at the vault's last path: ours is verified
+  there by its sentinel, another is foreign, an unreadable one is refused with that reason. Still open: a vault mounted
+  somewhere other than its last path and missed by `diskutil` reads as not connected. Review: migration-safety.
+- **Three follow-ups — MERGED (2026-10-18, PR #50, a517a45).** (1) Advisory A2: every message to the helper
   has a deadline; on it the connection is invalidated and a late reply dropped (`HelperClientTimeoutTests`). (2) Core
   reads APFS volume roles from `apfs list` (R8 follow-up 1). (3) The localization table is JSON in a string, which ends
   this Mac's release-build hang (ADR-0018). Reviews: helper-security for (1), migration-safety for (2), whose role change

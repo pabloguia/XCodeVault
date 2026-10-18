@@ -263,11 +263,16 @@ public struct VaultVerifier: Sendable {
     public let mountedVolumes: @Sendable () -> [Volume]
     /// Mount-point predicate; defaults to `ATTR_DIR_MOUNTSTATUS`. Injectable so tests can stand in a directory for a volume.
     public let isMountPoint: @Sendable (String) -> Bool
+    /// The volume UUID the kernel reports for a path (`getattrlist`, no `diskutil`). Asked when `mountedVolumes` does not
+    /// list the vault but something is mounted at its last path: `diskutil` can fail to read a mounted volume, and the
+    /// verifier then called the vault's own volume "a different volume". `scripts/public-surface.sh` pins the default.
+    public let volumeUUIDAt: @Sendable (String) -> String?
     public init(
         registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
-        isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) }
+        isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
+        volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:)
     ) {
-        self.registry = registry; self.mountedVolumes = mountedVolumes; self.isMountPoint = isMountPoint
+        self.registry = registry; self.mountedVolumes = mountedVolumes; self.isMountPoint = isMountPoint; self.volumeUUIDAt = volumeUUIDAt
     }
 
     public static func readSentinel(at vaultDir: String) -> VaultSentinel? {
@@ -280,30 +285,51 @@ public struct VaultVerifier: Sendable {
         let mounted = mountedVolumes()
         // 1. Is the volume (by UUID) mounted anywhere?
         if let live = mounted.first(where: { $0.volumeUUID == v.volumeUUID }), let mp = live.mountPoint, isMountPoint(mp) {
-            let sentinel = VaultVerifier.readSentinel(at: v.vaultDirectory(atMountPoint: mp))
-            guard let sentinel else {
-                return VaultVolumeCheck(
-                    volume: v, state: .sentinelMissing, currentMountPoint: mp, shadowBytes: nil,
-                    detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(v.relativeDirectory)/\(VaultVolume.sentinelName) is missing.")
-            }
-            guard sentinel.sentinelID == v.sentinelID, sentinel.volumeUUID == v.volumeUUID else {
-                return VaultVolumeCheck(
-                    volume: v, state: .foreign, currentMountPoint: mp, shadowBytes: nil,
-                    detail: "Sentinel at \(mp) does not match the registry (expected \(v.sentinelID), found \(sentinel.sentinelID)).")
-            }
-            if mp != v.lastMountPoint {
-                return VaultVolumeCheck(
-                    volume: v, state: .movedMountPoint, currentMountPoint: mp, shadowBytes: nil,
-                    detail: "Verified, but mounted at \(mp) instead of \(v.lastMountPoint). Absolute paths recorded earlier will not resolve.")
-            }
-            return VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: mp, shadowBytes: nil, detail: "Mounted at \(mp); UUID and sentinel match.")
+            return checkMounted(v, at: mp)
         }
-        // 2. Not mounted. Is something else mounted at our last path?
+        // 2. Not listed. Is something mounted at our last path? Ask the kernel which volume it is: `diskutil` can fail to
+        //    read a volume that is mounted (2026-10-18), and ours is then verified there like any other, by its sentinel.
         if isMountPoint(v.lastMountPoint) {
-            return VaultVolumeCheck(
-                volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
-                detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
+            switch MountStatus.compareVolumeIdentity(recorded: v.volumeUUID, found: volumeUUIDAt(v.lastMountPoint)) {
+            case .matches:
+                return checkMounted(v, at: v.lastMountPoint)
+            case .differs:
+                return VaultVolumeCheck(
+                    volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
+                    detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
+            case .unreadable, .notRecorded:
+                return VaultVolumeCheck(
+                    volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
+                    detail: "A volume is mounted at \(v.lastMountPoint) and its identity could not be read, so it cannot be told from this "
+                        + "vault (\(v.volumeUUID)). Refusing until it can.")
+            }
         }
+        return checkUnmounted(v)
+    }
+
+    /// Our volume, mounted at `mp`: the sentinel decides the rest.
+    private func checkMounted(_ v: VaultVolume, at mp: String) -> VaultVolumeCheck {
+        let sentinel = VaultVerifier.readSentinel(at: v.vaultDirectory(atMountPoint: mp))
+        guard let sentinel else {
+            return VaultVolumeCheck(
+                volume: v, state: .sentinelMissing, currentMountPoint: mp, shadowBytes: nil,
+                detail: "Volume \(v.volumeUUID) is mounted at \(mp) but \(v.relativeDirectory)/\(VaultVolume.sentinelName) is missing.")
+        }
+        guard sentinel.sentinelID == v.sentinelID, sentinel.volumeUUID == v.volumeUUID else {
+            return VaultVolumeCheck(
+                volume: v, state: .foreign, currentMountPoint: mp, shadowBytes: nil,
+                detail: "Sentinel at \(mp) does not match the registry (expected \(v.sentinelID), found \(sentinel.sentinelID)).")
+        }
+        if mp != v.lastMountPoint {
+            return VaultVolumeCheck(
+                volume: v, state: .movedMountPoint, currentMountPoint: mp, shadowBytes: nil,
+                detail: "Verified, but mounted at \(mp) instead of \(v.lastMountPoint). Absolute paths recorded earlier will not resolve.")
+        }
+        return VaultVolumeCheck(volume: v, state: .verified, currentMountPoint: mp, shadowBytes: nil, detail: "Mounted at \(mp); UUID and sentinel match.")
+    }
+
+    /// Not mounted, and nothing mounted at the last path.
+    private func checkUnmounted(_ v: VaultVolume) -> VaultVolumeCheck {
         // 3. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data. A
         //    directory found there that could not be read in full is not known to be empty, so it is ambiguous too, not
         //    "not connected" (rule 6; migration-safety review, 2026-09-28), and what could be read is not given as its
