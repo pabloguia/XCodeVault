@@ -291,10 +291,14 @@ public struct DriveSnapshot: Sendable, Equatable {
         volumes.filter { disk.contains(Self.deviceID($0.deviceNode)) }
     }
 
-    /// The unreadable volumes that may be on `disk`: those it holds, and those no disk of the snapshot claims — a volume
-    /// that cannot be placed could be on any of them.
+    /// The unreadable volumes `disk` holds.
     public func unreadableVolumeIDs(on disk: PhysicalDisk) -> [String] {
-        unreadableVolumeIDs.filter { id in disk.contains(id) || !disks.contains { $0.contains(id) } }.sorted()
+        unreadableVolumeIDs.filter(disk.contains).sorted()
+    }
+
+    /// The unreadable volumes no disk of the snapshot claims: one could be on any of them.
+    public var unplacedUnreadableVolumeIDs: [String] {
+        unreadableVolumeIDs.filter { id in !disks.contains { $0.contains(id) } }.sorted()
     }
 
     /// The disks that hold the running system: the store of every container with a boot volume, and any disk holding a

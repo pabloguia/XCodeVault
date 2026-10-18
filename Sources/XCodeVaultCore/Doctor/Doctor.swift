@@ -134,13 +134,14 @@ public struct Doctor: Sendable {
     // MARK: rules
 
     /// The volume checks below walk `report.volumes`; a volume `diskutil` could not read is not in it, so they said
-    /// nothing about it — silence that read as "no problem" (review of PR #51, M2). Not an error: nothing is known to be
-    /// wrong, but this run is not a clean result for the volumes it could not see.
+    /// nothing about it — silence that read as "no problem" (review of PR #51, M2). A list that failed is an error, as
+    /// `vault-registry-unreadable` is: no external volume was checked, so `doctor` must not exit 0. A few unreadable
+    /// volumes are a warning: partial, and usually gone on the next run, like `shadow-coresimulator-unscannable`.
     func checkVolumesRead(report: ScanReport) -> [Finding] {
         if !report.volumesListed {
             return [
                 Finding(
-                    id: "volumes-unreadable", severity: .warning, title: "The volume list could not be read",
+                    id: "volumes-unreadable", severity: .error, title: "The volume list could not be read",
                     detail: "diskutil list failed, so no volume was checked: shadow data, prior-tool leftovers and vault locations "
                         + "on external volumes are unknown, not absent.",
                     path: nil, remediation: "Re-run doctor. Do not treat this run as a clean result for external volumes.",

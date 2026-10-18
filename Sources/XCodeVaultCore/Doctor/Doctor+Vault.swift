@@ -5,7 +5,7 @@ import Foundation
 extension Doctor {
     public func diagnoseVault(report: ScanReport, registry: VaultRegistry = VaultRegistry(), journal: Journal = Journal()) -> [Finding] {
         var f: [Finding] = []
-        f += checkVaultVolumes(registry: registry, volumes: report.volumes)
+        f += checkVaultVolumes(registry: registry, volumes: report.volumes, unreadable: report.unreadableVolumeIDs)
         f += checkUncreatableVaultDirectories(registry: registry, journal: journal, volumes: report.volumes)
         f += checkShadowVolumesDirectories(volumes: report.volumes)
         f += checkInterruptedMigrations(journal: journal)
@@ -14,7 +14,9 @@ extension Doctor {
         return f
     }
 
-    func checkVaultVolumes(registry: VaultRegistry, volumes: [Volume]) -> [Finding] {
+    func checkVaultVolumes(registry: VaultRegistry, volumes: [Volume], unreadable: [String] = []) -> [Finding] {
+        // An unreadable volume is missing from `volumes`: a vault among them reads as not connected, so say so.
+        let maybe = unreadable.isEmpty ? "" : " diskutil could not read \(unreadable.joined(separator: ", ")); the vault may be one of them."
         let verifier = VaultVerifier(registry: registry, mountedVolumes: { volumes })
         // "I could not check" is a finding, not the absence of one. `try? … else { return [] }`
         // here reported a clean bill of health for every vault volume whenever the registry could
@@ -39,7 +41,7 @@ extension Doctor {
             case .absent:
                 return Finding(
                     id: "vault-absent:\(c.volume.volumeUUID)", severity: .info, title: "Vault volume \(c.volume.volumeName) is not connected",
-                    detail: c.detail, path: c.volume.lastMountPoint,
+                    detail: c.detail + maybe, path: c.volume.lastMountPoint,
                     remediation: "Connect the volume before running externalize/restore. Data on it is unaffected.",
                     evidence: "MIGRATION_ENGINE.md §Split-brain safety")
             case .movedMountPoint:

@@ -30,12 +30,19 @@ final class UnreadableVolumeGateTests: XCTestCase {
         XCTAssertTrue(DiskRefusal.volumeUnreadable.reason.contains("could not read a volume on this disk"))
     }
 
-    /// A volume no disk of the snapshot claims could be on any of them.
+    /// A volume no disk of the snapshot claims could be on any of them, and the refusal says it cannot tell which.
     func testAnUnplaceableUnreadableVolumeRefusesEveryDisk() throws {
         let snap = DriveSnapshot(disks: try R6DriveTests.disks(), volumes: R6DriveTests.volumes(), unreadableVolumeIDs: ["disk99s1"])
+        XCTAssertEqual(snap.unplacedUnreadableVolumeIDs, ["disk99s1"])
         for disk in snap.disks {
-            XCTAssertTrue(DiskSafety.changeRefusals(disk, in: snap).contains(.volumeUnreadable), disk.id)
+            let r = DiskSafety.changeRefusals(disk, in: snap)
+            XCTAssertTrue(r.contains(.unplacedVolumeUnreadable), disk.id)
+            XCTAssertFalse(r.contains(.volumeUnreadable), "\(disk.id): not said to be on this disk")
+            XCTAssertEqual(snap.unreadableVolumeIDs(on: disk), [], disk.id)
         }
+        XCTAssertTrue(DiskRefusal.unplacedVolumeUnreadable.reason.contains("cannot tell which disk it is on"))
+        let placed = DriveSnapshot(disks: snap.disks, volumes: snap.volumes, unreadableVolumeIDs: ["disk3s1"])
+        XCTAssertEqual(placed.unplacedUnreadableVolumeIDs, [], "the control: a placed one is not unplaced")
     }
 
     /// The check right before the command runs asks again on a fresh snapshot, and a volume that has become unreadable
@@ -116,8 +123,21 @@ final class UnreadableVolumeGateTests: XCTestCase {
         XCTAssertTrue(hit?.detail.contains("disk9s1, disk9s2") == true, "\(String(describing: hit))")
 
         let none = doctor.diagnose(report: report(home: t.path, listed: false)).first { $0.id == "volumes-unreadable" }
-        XCTAssertEqual(none?.severity, .warning)
+        XCTAssertEqual(none?.severity, .error, "no volume was checked: doctor must not exit 0")
         XCTAssertTrue(none?.title.contains("volume list could not be read") == true)
+    }
+
+    /// A vault missing from the list because it could not be read reads as not connected; the finding says it may be.
+    func testTheAbsentVaultFindingNamesTheUnreadableVolumes() throws {
+        let t = TempDir()
+        let registry = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
+        try registry.save([VaultVolume(volumeUUID: "U-1", volumeName: "Vault", lastMountPoint: t.path + "/Vault", registeredAt: Date(), sentinelID: "s")])
+        let doctor = Doctor(home: t.path, runner: FakeRunner(responses: [:]))
+        let control = doctor.checkVaultVolumes(registry: registry, volumes: []).first { $0.id == "vault-absent:U-1" }
+        XCTAssertNotNil(control)
+        XCTAssertFalse(control?.detail.contains("could not read") == true, "the control")
+        let hit = doctor.checkVaultVolumes(registry: registry, volumes: [], unreadable: ["disk9s1"]).first { $0.id == "vault-absent:U-1" }
+        XCTAssertTrue(hit?.detail.contains("could not read disk9s1; the vault may be one of them") == true, "\(String(describing: hit))")
     }
 
     /// The scan records them as typed fields, not only as a warning line.

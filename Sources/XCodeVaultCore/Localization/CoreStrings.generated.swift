@@ -1087,12 +1087,19 @@ extension L10nCatalog {
       "pt-BR" : "Ele contém um backup do Time Machine, então o XCodeVault nunca o altera.",
       "zh-Hans" : "它包含时间机器备份，因此 XCodeVault 绝不会更改它。"
     },
+    "app.drives.refusal.unplacedVolumeUnreadable" : {
+      "en" : "diskutil could not read a volume and XCodeVault cannot tell which disk it is on, so no disk is changed. Try again in a moment; if it stays, eject the drive it belongs to or check it in Disk Utility.",
+      "es" : "diskutil no pudo leer un volumen y XCodeVault no puede saber en qué disco está, así que no cambia ningún disco. Inténtalo de nuevo en un momento; si persiste, expulsa la unidad a la que pertenece o revísala en Utilidad de Discos.",
+      "ja" : "diskutil がボリュームを読み取れず、XCodeVault はそれがどのディスクにあるか判断できないため、どのディスクも変更しません。しばらくしてからもう一度お試しください。解消しない場合は、そのボリュームのドライブを取り出すか、ディスクユーティリティで確認してください。",
+      "pt-BR" : "O diskutil não conseguiu ler um volume e o XCodeVault não sabe em qual disco ele está, então nenhum disco é alterado. Tente novamente em instantes; se continuar, ejete a unidade a que ele pertence ou verifique-a no Utilitário de Disco.",
+      "zh-Hans" : "diskutil 无法读取某个宗卷，XCodeVault 无法判断它位于哪个磁盘，因此不会更改任何磁盘。请稍后再试；如果问题依旧，请推出它所属的驱动器，或在“磁盘工具”中检查。"
+    },
     "app.drives.refusal.volumeUnreadable" : {
-      "en" : "diskutil could not read a volume on this disk, so XCodeVault cannot tell what it holds and changes nothing on it. Try again in a moment.",
-      "es" : "diskutil no pudo leer un volumen de este disco, así que XCodeVault no puede saber qué contiene y no cambia nada en él. Inténtalo de nuevo en un momento.",
-      "ja" : "diskutil がこのディスク上のボリュームを読み取れなかったため、XCodeVault は内容を判断できず、このディスクには何も変更しません。しばらくしてからもう一度お試しください。",
-      "pt-BR" : "O diskutil não conseguiu ler um volume deste disco, então o XCodeVault não sabe o que ele contém e não altera nada nele. Tente novamente em instantes.",
-      "zh-Hans" : "diskutil 无法读取此磁盘上的某个宗卷，因此 XCodeVault 无法判断其中的内容，不会对此磁盘做任何更改。请稍后再试。"
+      "en" : "diskutil could not read a volume on this disk, so XCodeVault cannot tell what it holds and changes nothing on it. Try again in a moment; if it stays, check the disk in Disk Utility.",
+      "es" : "diskutil no pudo leer un volumen de este disco, así que XCodeVault no puede saber qué contiene y no cambia nada en él. Inténtalo de nuevo en un momento; si persiste, revisa el disco en Utilidad de Discos.",
+      "ja" : "diskutil がこのディスク上のボリュームを読み取れなかったため、XCodeVault は内容を判断できず、このディスクには何も変更しません。しばらくしてからもう一度お試しください。解消しない場合は、ディスクユーティリティでディスクを確認してください。",
+      "pt-BR" : "O diskutil não conseguiu ler um volume deste disco, então o XCodeVault não sabe o que ele contém e não altera nada nele. Tente novamente em instantes; se continuar, verifique o disco no Utilitário de Disco.",
+      "zh-Hans" : "diskutil 无法读取此磁盘上的某个宗卷，因此 XCodeVault 无法判断其中的内容，不会对此磁盘做任何更改。请稍后再试；如果问题依旧，请在“磁盘工具”中检查此磁盘。"
     },
     "app.drives.useDrive" : {
       "en" : "Use This Drive…",
