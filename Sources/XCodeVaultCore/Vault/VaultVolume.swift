@@ -301,8 +301,8 @@ public struct VaultVerifier: Sendable {
                 guard let fs = filesystemAt(v.lastMountPoint), fs.mountPoint == v.lastMountPoint, !fs.device.contains("@"), !fs.isReadOnly else {
                     return VaultVolumeCheck(
                         volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
-                        detail: "What is mounted at \(v.lastMountPoint) reports this vault's UUID but is a snapshot or a read-only mount "
-                            + "of it, not the volume itself. Refusing.")
+                        detail: "What is mounted at \(v.lastMountPoint) reports this vault's UUID but is not the writable volume itself "
+                            + "(a snapshot, a read-only mount, or it changed while being checked). Refusing.")
                 }
                 return checkMounted(v, at: v.lastMountPoint)
             case .differs:

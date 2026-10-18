@@ -171,5 +171,8 @@ final class VolumeEnumerationTests: XCTestCase {
     func testAnUnparsableListIsAnErrorNotNoVolumes() {
         let garbage = FakeRunner(responses: ["diskutil list -plist": CommandResult(status: 0, stdout: "not a plist", stderr: "")])
         XCTAssertThrowsError(try VolumeDiscovery.enumerate(runner: garbage, retryDelay: 0))
+        // The case that changed: a valid plist without the list, which used to read as no volumes at all.
+        let empty = FakeRunner(responses: ["diskutil list -plist": CommandResult(status: 0, stdout: FlakyInfo.xml([:]), stderr: "")])
+        XCTAssertThrowsError(try VolumeDiscovery.enumerate(runner: empty, retryDelay: 0))
     }
 }
