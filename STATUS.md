@@ -14,6 +14,19 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Releases are universal — DONE (2026-10-17, PR #49, merged as 3bc7af3, ADR-0017).** Measured on CI with
+  `v0.3.0-rc.2` (run 39080152043, macos-15): the universal `build` job took 14 min, the same as the arm64-only rc.1
+  (15 min); each slice of `XCodeVault` compiled in about 81 s, `xcodevaultctl` in 17 s, the helper in 4 s; the artifact
+  scan passed, then `sign` and `publish`. Checked on the downloaded DMG (2026-10-18): sha256, the provenance attestation
+  (release.yml, tag v0.3.0-rc.2, commit 3bc7af3), Developer ID signature, notarization and stapling on the image and
+  the app, all three binaries `x86_64 arm64`, and identifier, team and hardened runtime on each slice. Installed on this
+  Intel Mac and opened by the operator: it runs. The x86_64 slice of `XCodeVaultCore` compiling in about a minute on the
+  runner says this Mac's two-hour release-build hang (Blocked, below) is this Mac's build, its machine or its toolchain,
+  not cross-compiling to x86_64. **Still open:** the
+  Part F live tests of the helper; the operator opened the app on an already partly configured Mac instead of running
+  the runbook, so `createVaultDirectory` live (#30) and the update over an older daemon remain unmeasured, and ADR-0016
+  keeps the helper out of a published release until they pass. The arm64-only drafts of 0.2.2 and 0.3.0-rc.1 were
+  deleted (their tags kept); the 0.3.0-rc.2 draft stays unpublished. The history of the fix:
 - **Releases are universal (2026-10-17, branch `fix/universal-release`, ADR-0017).** 0.3.0-rc.1 was signed, notarized
   and stapled correctly and would not open on this Intel Mac: the Release workflow runs on an Apple silicon runner and
   `bundle-app.sh` built for the host only, so all three binaries were arm64. `--release` now builds each product per
@@ -165,7 +178,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   at 100% CPU for about 2 hours in the whole-module compile of `XCodeVaultCore` and never finished (twice; stopped by
   hand). R8's signed build was made without `--release`. Not investigated yet: a release DMG cannot be cut on this
   machine until it is. Candidates to measure first: the generated `L10nCatalog.core` table (S4 follow-up 4 above) and
-  the type checker on `PlanBuilder`.
+  the type checker on `PlanBuilder`. **Narrowed 2026-10-17 (ADR-0017):** the same package, both slices, builds in release
+  on the macos-15 runner in minutes, so this is this Mac's build (machine or its Swift 6.3.2 toolchain), not the code
+  alone. Releases come from CI since M5, so it no longer blocks one.
 - **S4 GUI follow-ups (2026-10-03).** Recorded, not blocking: (1) table and list rows have never been seen in a real window —
   off-screen snapshots cannot draw `NSTableView` rows: the Delete table's grouped rows, Storage's rows (the Bucket
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled

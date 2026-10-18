@@ -1,6 +1,6 @@
 # ADR 0017: Releases are universal (arm64 + x86_64), and a bundle that is not is refused
 
-- Status: accepted (2026-10-17); the first universal release build is pending (Consequences)
+- Status: accepted (2026-10-17); the first universal release build passed on CI the same day (Consequences)
 - Date: 2026-10-17
 - Related: ADR-0001 (minimum macOS 14.0), ADR-0010 and ADR-0016 (the CI release), `docs/process/RUNBOOK-M5-release-signing.md`.
 
@@ -44,10 +44,11 @@ and nothing in the product is specific to either.
 ## Consequences
 
 - The `build` job compiles the package twice in release, so it takes longer. Each slice is a full release compile.
-- **Open:** the x86_64 slice of `XCodeVaultCore` in release mode has never been built on CI. On this Intel Mac the
-  release build of `XCodeVaultCore` spun at 100% CPU for about two hours and never finished (STATUS, 2026-10-05). If
-  that is the compiler and not the machine, the x86_64 slice may now do the same on the runner. The first universal
-  candidate (0.3.0-rc.2) answers it; if it hangs, the job's timeout stops it, and the candidates in STATUS (the
-  generated `L10nCatalog.core` table, `PlanBuilder`'s type checking) are where to look first.
+- **Answered (2026-10-17, `v0.3.0-rc.2`, run 39080152043):** whether the x86_64 slice of `XCodeVaultCore` builds in
+  release on CI, given that on this Intel Mac the release build of `XCodeVaultCore` spun at 100% CPU for about two hours
+  and never finished (STATUS, 2026-10-05). It does: the universal `build` job took 14 minutes, as the arm64-only one had,
+  and each slice of the app compiled in about 81 s. So the hang is in this Mac's build, its machine or its toolchain
+  (Swift 6.3.2 here; the runner's Xcode differs), and is not cross-compilation to x86_64. The resulting DMG ran on this
+  Intel Mac, and every slice of every binary carried the team, identifier and hardened runtime.
 - The runbook's checks of a downloaded release now include `lipo -archs` on each binary.
 - `scripts/release.sh`, the local release path, inherits the universal build through `bundle-app.sh --release`.
