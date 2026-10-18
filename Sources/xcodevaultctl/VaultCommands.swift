@@ -36,8 +36,14 @@ struct Vault: ParsableCommand {
                 "Vault directory relative to the volume root (default: \(VaultFolderName.suggested)). Create it yourself (or let the app do it) — see the discussion."
         ) var directory: String = VaultFolderName.suggested
         func run() throws {
-            let vols = try VolumeDiscovery.mountedVolumes()
-            guard let v = vols.first(where: { $0.mountPoint == mountPoint }) else {
+            let found = try VolumeDiscovery.enumerate()
+            guard let v = found.volumes.first(where: { $0.mountPoint == mountPoint }) else {
+                // Not "no volume" when diskutil could not read some (2026-10-18): that one may be it.
+                guard found.unreadable.isEmpty else {
+                    throw ValidationError(
+                        "No volume read at \(mountPoint), and diskutil could not read \(found.unreadable.count) volume(s) "
+                            + "(\(found.unreadable.joined(separator: ", "))). Try again in a moment.")
+                }
                 throw ValidationError("No mounted volume at \(mountPoint). See `xcodevaultctl volumes`.")
             }
             let q = VolumeQualification.evaluate(v)
