@@ -68,8 +68,12 @@ final class OtherMacOSInstallTests: XCTestCase {
     func testAnUnmountedInstallStillRefusesItsDisk() throws {
         var disks = try R6DriveTests.disks()
         let i = try XCTUnwrap(disks.firstIndex { $0.id == "disk2" })
-        disks[i].containers[0].volumes[0].roles = ["System"]
         let unmounted = R6DriveTests.volumes().filter { $0.deviceNode != "/dev/disk3s1" }
+        // The control: the same disk, unmounted and without the role, keeps its options (re-review nit).
+        let plain = DriveSnapshot(disks: disks, volumes: unmounted, timeMachineMarkedVolumeIDs: [])
+        XCTAssertEqual(DiskSafety.changeRefusals(disks[i], in: plain), [])
+        XCTAssertFalse(DriveEvaluation.assess(disks[i], in: plain, vaults: []).options.isEmpty)
+        disks[i].containers[0].volumes[0].roles = ["System"]
         let snap = DriveSnapshot(disks: disks, volumes: unmounted, timeMachineMarkedVolumeIDs: [])
         XCTAssertEqual(DiskSafety.changeRefusals(disks[i], in: snap), [.holdsMacOSInstall])
         XCTAssertTrue(DriveEvaluation.assess(disks[i], in: snap, vaults: []).options.isEmpty)
