@@ -118,6 +118,14 @@ final class VolumeTests: XCTestCase {
         XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": same]).isBootVolume)
         let lowercase = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "11111111-2222-3333-4444-555555555555".lowercased(), roles: ["System"])
         XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": lowercase]).isBootVolume, "UUIDs compare by value")
+        // One side without a UUID cannot be compared, and the listing only ever adds a role, so it applies (re-review, nit 1).
+        let listingWithout = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: nil, roles: ["System"])
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": listingWithout]).isBootVolume)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info([:]), apfsVolumes: ["disk9s1": same]).isBootVolume, "info without one")
+        // An empty UUID is a missing one, not a mismatch (nit 2).
+        let empty = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "", roles: ["System"])
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": empty]).isBootVolume)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info(["VolumeUUID": ""]), apfsVolumes: ["disk9s1": same]).isBootVolume)
     }
 
     /// The two sources are joined, so neither takes a role away (finding c): a role only ever marks a volume.
@@ -142,16 +150,20 @@ final class VolumeTests: XCTestCase {
         let list = try PropertyListSerialization.data(
             fromPropertyList: ["AllDisksAndPartitions": [["APFSVolumes": [["DeviceIdentifier": "disk9s1"]]]]], format: .xml, options: 0)
         let apfs = try PropertyListSerialization.data(
-            fromPropertyList: ["Containers": [[
-                "ContainerReference": "disk9", "PhysicalStores": [["DeviceIdentifier": "disk8s2"]],
-                "Volumes": [["DeviceIdentifier": "disk9s1", "Name": "Other", "Roles": ["Data"]]],
-            ]]], format: .xml, options: 0)
+            fromPropertyList: [
+                "Containers": [
+                    [
+                        "ContainerReference": "disk9", "PhysicalStores": [["DeviceIdentifier": "disk8s2"]],
+                        "Volumes": [["DeviceIdentifier": "disk9s1", "Name": "Other", "Roles": ["Data"]]],
+                    ]
+                ]
+            ], format: .xml, options: 0)
         let text = { (d: Data) in String(decoding: d, as: UTF8.self) }
-        func runner(apfs apfsResult: CommandResult) throws -> FakeRunner {
+        func runner(apfs apfsResult: CommandResult, info extra: [String: Any] = [:]) throws -> FakeRunner {
             FakeRunner(responses: [
                 "diskutil list -plist": CommandResult(status: 0, stdout: text(list), stderr: ""),
                 "diskutil apfs list -plist": apfsResult,
-                "diskutil info -plist disk9s1": CommandResult(status: 0, stdout: text(try Self.info([:])), stderr: ""),
+                "diskutil info -plist disk9s1": CommandResult(status: 0, stdout: text(try Self.info(extra)), stderr: ""),
             ])
         }
         let withRoles = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: CommandResult(status: 0, stdout: text(apfs), stderr: "")))
@@ -161,6 +173,9 @@ final class VolumeTests: XCTestCase {
             let fallback = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: broken))
             XCTAssertEqual(fallback.map(\.volumeName), ["Other"], "the enumeration survives an unreadable listing")
             XCTAssertEqual(fallback.first?.isBootVolume, false, "and falls back to info, which has no role here")
+            // The fallback really reads info's roles (re-review, nit 3).
+            let fromInfo = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: broken, info: ["APFSVolumeRoles": ["Data"]]))
+            XCTAssertEqual(fromInfo.first?.isBootVolume, true)
         }
     }
 

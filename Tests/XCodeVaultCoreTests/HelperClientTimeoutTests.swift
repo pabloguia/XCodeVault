@@ -35,7 +35,7 @@ final class HelperClientTimeoutTests: XCTestCase {
         let result = try await client(daemon, connection).createVaultDirectory(volumeUUID: "U-1")
         XCTAssertEqual(result.code, .helperDidNotAnswer)
         XCTAssertFalse(result.ok)
-        XCTAssertTrue(result.message.contains("nothing was sent"), result.message)
+        XCTAssertTrue(result.message.contains("the action was not sent"), result.message)
         XCTAssertEqual(daemon.calls, ["version"], "neither begin nor the verb goes out after the opening stalls")
         XCTAssertTrue(connection.events.contains("invalidate"), "the caller's defer invalidates the connection")
     }
@@ -133,7 +133,7 @@ final class HelperClientTimeoutTests: XCTestCase {
             _ = try await live.perform(.createVaultDirectory(volumeUUID: "U-1"))
             XCTFail("expected PrivilegedHelperDidNotAnswer")
         } catch let silent as PrivilegedHelperDidNotAnswer {
-            XCTAssertTrue(silent.detail.contains("nothing was sent"), silent.detail)
+            XCTAssertTrue(silent.detail.contains("the action was not sent"), silent.detail)
         }
     }
 

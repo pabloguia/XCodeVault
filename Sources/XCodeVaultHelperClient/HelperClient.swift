@@ -494,7 +494,7 @@ public struct HelperClient: Sendable {
             return try await openingCalls(connection)
         } catch Failure.timedOut(let what) {
             return HelperResult(
-                ok: false, message: "The privileged helper did not answer \(what) in time, so nothing was sent to it. Try again in a moment.",
+                ok: false, message: "The privileged helper did not answer \(what) in time, so the action was not sent to it. Try again in a moment.",
                 code: .helperDidNotAnswer)
         }
     }
@@ -519,24 +519,24 @@ public struct HelperClient: Sendable {
     ///
     /// The timer touches only the continuation. The connection is invalidated by the caller's `defer` (`send`,
     /// `enableOwnership`), which runs as soon as the timeout is thrown, so the daemon's reply, if it ever comes, goes
-    /// nowhere. A reply or an error that comes first cancels the timer, so it does not hold the call for its full length
-    /// (review of A2, L1 and L2).
+    /// nowhere (review of A2, L1). A timer that loses still fires at its deadline and finds the continuation gone; until
+    /// then it holds only this `ResumeOnce`, already emptied, and the verb's name (L2: not cancelled, because
+    /// `DispatchWorkItem` is not `Sendable` and the reply closure could not hold one).
     func call<T: Sendable>(
         _ connection: NSXPCConnection, _ what: String, within timeout: TimeInterval,
         _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
-            let deadline = DispatchWorkItem { once.resume(throwing: Failure.timedOut(what)) }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: deadline)
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { once.resume(throwing: Failure.timedOut(what)) }
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
-                if once.resume(throwing: Failure.connectionFailed(error.localizedDescription)) { deadline.cancel() }
+                once.resume(throwing: Failure.connectionFailed(error.localizedDescription))
             }
             guard let helper = proxy as? any XCodeVaultHelperXPC else {
-                if once.resume(throwing: Failure.unexpectedProxy) { deadline.cancel() }
+                once.resume(throwing: Failure.unexpectedProxy)
                 return
             }
-            message(helper) { result in if once.resume(returning: result) { deadline.cancel() } }
+            message(helper) { result in once.resume(returning: result) }
         }
     }
 }
@@ -548,17 +548,8 @@ final class ResumeOnce<T: Sendable>: @unchecked Sendable {
 
     init(_ continuation: CheckedContinuation<T, any Error>) { self.continuation = continuation }
 
-    /// True when this call resumed the continuation, false when an earlier one had.
-    @discardableResult func resume(returning value: T) -> Bool {
-        guard let c = take() else { return false }
-        c.resume(returning: value)
-        return true
-    }
-    @discardableResult func resume(throwing error: any Error) -> Bool {
-        guard let c = take() else { return false }
-        c.resume(throwing: error)
-        return true
-    }
+    func resume(returning value: T) { take()?.resume(returning: value) }
+    func resume(throwing error: any Error) { take()?.resume(throwing: error) }
 
     private func take() -> CheckedContinuation<T, any Error>? {
         lock.lock()

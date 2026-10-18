@@ -128,8 +128,10 @@ public enum VolumeDiscovery {
         let mp = s("MountPoint")
         var role = Set((d["APFSVolumeRoles"] as? [String]) ?? [])
         if let listed = apfsVolumes[s("DeviceIdentifier")] {
-            let infoUUID = (d["VolumeUUID"] as? String)?.uppercased()
-            if listed.uuid == nil || infoUUID == nil || listed.uuid?.uppercased() == infoUUID { role.formUnion(listed.roles) }
+            // An empty UUID is a missing one (re-review, nit 2).
+            let present = { (u: String?) in u.flatMap { $0.isEmpty ? nil : $0.uppercased() } }
+            let infoUUID = present(d["VolumeUUID"] as? String), listedUUID = present(listed.uuid)
+            if listedUUID == nil || infoUUID == nil || listedUUID == infoUUID { role.formUnion(listed.roles) }
         }
         let isBoot = mp == "/" || mp == "/System/Volumes/Data" || role.contains("Data") && b("Internal") || role.contains("System")
         return Volume(
