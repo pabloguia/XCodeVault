@@ -41,6 +41,9 @@ public struct HelperClient: Sendable {
         case authorizationDenied(Int32)
         /// R8 round 3: the caller could not record the start, so the request was not sent.
         case notStarted
+        /// Advisory A2: the helper took the message and did not reply in time. The connection is invalidated, and a
+        /// reply that comes later is dropped. Like `connectionFailed`, whether it acted is unknown.
+        case timedOut(String)
 
         public var description: String {
             switch self {
@@ -74,6 +77,8 @@ public struct HelperClient: Sendable {
                 return "Administrator authorization was not granted (\(status))."
             case .notStarted:
                 return "The start could not be recorded, so nothing was sent to the helper."
+            case .timedOut(let what):
+                return "The privileged helper did not reply to \(what) in time. Whether it acted is unknown; rescan to see."
             }
         }
     }
@@ -143,6 +148,22 @@ public struct HelperClient: Sendable {
     }
     let authorizer: Authorizer
 
+    /// How long each kind of message may go unanswered (advisory A2). None of them waits on the user: the password
+    /// dialog of `enableOwnership` is answered before the verb is sent (`Authorizer`), not inside a call. Internal, like
+    /// `makeConnection`, so a test can wait a fraction of a second; the public initialiser installs `.live`.
+    struct Timeouts: Sendable {
+        /// `version()` and `begin`: the daemon answers them from memory.
+        let opening: TimeInterval
+        /// `createVaultDirectory` and `enableOwnership`: one directory, or one fixed-argument `diskutil`.
+        let verb: TimeInterval
+        /// The cleanup verb deletes a cache of many gigabytes. Refused by this helper release (ADR-0016), and given the
+        /// time a deletion of that size may take should it be offered again.
+        let cleanup: TimeInterval
+
+        static let live = Timeouts(opening: 15, verb: 120, cleanup: 900)
+    }
+    let timeouts: Timeouts
+
     public init() {
         self.team = HelperClient.teamID
         self.makeConnection = { name in
@@ -154,12 +175,13 @@ public struct HelperClient: Sendable {
         self.runningTeam = HelperClient.teamOfRunningCode
         self.daemon = .live
         self.authorizer = .live
+        self.timeouts = .live
     }
 
     init(
         team: String, makeConnection: @escaping @Sendable (String) -> NSXPCConnection, bundleURL: URL = Bundle.main.bundleURL,
         runningTeam: @escaping @Sendable () -> String? = HelperClient.teamOfRunningCode, daemon: Daemon = .live,
-        authorizer: Authorizer = .live
+        authorizer: Authorizer = .live, timeouts: Timeouts = .live
     ) {
         self.team = team
         self.makeConnection = makeConnection
@@ -167,6 +189,7 @@ public struct HelperClient: Sendable {
         self.runningTeam = runningTeam
         self.daemon = daemon
         self.authorizer = authorizer
+        self.timeouts = timeouts
     }
 
     /// The requirement this client will demand of the daemon, or a failure explaining why it cannot
@@ -303,11 +326,13 @@ public struct HelperClient: Sendable {
     // MARK: - Verbs (createVaultDirectory never run live, #30; the cleanup verb is refused by this helper release, ADR-0016)
 
     public func createVaultDirectory(volumeUUID: String) async throws -> HelperResult {
-        try await send { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
+        try await send("createVaultDirectory", within: timeouts.verb) { helper, reply in helper.createVaultDirectory(volumeUUID: volumeUUID, reply: reply) }
     }
 
     public func removeRegenerableSystemDirectoryContents(target: HelperCleanupTarget) async throws -> HelperResult {
-        try await send { helper, reply in helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply) }
+        try await send("removeRegenerableSystemDirectoryContents", within: timeouts.cleanup) { helper, reply in
+            helper.removeRegenerableSystemDirectoryContents(target: target.rawValue, reply: reply)
+        }
     }
 
     /// R8 (ADR-0014): turns ownership on for the volume `volumeUUID`. EXPERIMENTAL (rule 10). One connection, in order:
@@ -340,7 +365,7 @@ public struct HelperClient: Sendable {
         defer { acquired.release() }
         // The caller's go-ahead (the journal's `.started`); without it nothing is sent and the reference is destroyed.
         guard authorized() else { throw Failure.notStarted }
-        return try await call(connection) { helper, reply in
+        return try await call(connection, "enableOwnership", within: timeouts.verb) { helper, reply in
             helper.enableOwnership(volumeUUID: volumeUUID, authorization: acquired.externalForm, reply: reply)
         }
     }
@@ -438,14 +463,16 @@ public struct HelperClient: Sendable {
     /// `ResumeOnce` does not rely on that: a second call — a violated contract, or a later change here — is
     /// dropped instead of crashing the process.
     ///
-    /// **No timeout** (helper-security review of deliverable 4, advisory A2): a daemon that takes the message and
-    /// never replies leaves this call pending, and the connection open, until the daemon or its connection dies.
-    /// Declared, not fixed.
-    func send(_ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void) async throws -> HelperResult {
+    /// **Every message has a deadline** (advisory A2, helper-security review of deliverable 4): `call`'s `within`. A daemon
+    /// that takes a message and never replies used to leave the call pending, and the connection open, until the daemon
+    /// or its connection died — the app waiting with it.
+    func send(
+        _ what: String, within timeout: TimeInterval, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (HelperResult) -> Void) -> Void
+    ) async throws -> HelperResult {
         let connection = try connect()
         defer { connection.invalidate() }
         if let refusal = try await opening(connection) { return refusal }
-        return try await call(connection, message)
+        return try await call(connection, what, within: timeout, message)
     }
 
     /// The M5 round trip every verb waits for (ADR-0016), on the connection the verb will use; nil when the verb may go.
@@ -456,23 +483,37 @@ public struct HelperClient: Sendable {
     ///      reinstalling would downgrade it.
     ///   2. `begin(clientVersion:)`, which a helper of this version answers. Its refusal is returned as it came.
     func opening(_ connection: NSXPCConnection) async throws -> HelperResult? {
-        let version: String = try await call(connection) { helper, reply in helper.version(reply: reply) }
+        let version: String = try await call(connection, "version", within: timeouts.opening) { helper, reply in helper.version(reply: reply) }
         guard version == HelperIdentity.version else {
             if Self.compareVersions(version, HelperIdentity.version) == .orderedAscending {
                 return HelperResult(ok: false, message: Failure.versionMismatch(version).description, code: .helperOutdated)
             }
             return HelperResult(ok: false, message: Failure.helperNewer(version).description, code: .helperNewer)
         }
-        let begun: HelperResult = try await call(connection) { helper, reply in helper.begin(clientVersion: HelperIdentity.version, reply: reply) }
+        let begun: HelperResult = try await call(connection, "begin", within: timeouts.opening) { helper, reply in
+            helper.begin(clientVersion: HelperIdentity.version, reply: reply)
+        }
         return begun.ok ? nil : begun
     }
 
-    /// One message on an open connection, with its own error handler. `ResumeOnce`, for the reasons `send` gives.
+    /// One message on an open connection, with its own error handler and a deadline. `ResumeOnce`, for the reasons `send`
+    /// gives, and because the deadline is a third way to finish: whichever of the reply, the error handler and the timer
+    /// comes first is the outcome, and the others are dropped.
+    ///
+    /// On the deadline the connection is invalidated, so the daemon's reply, if it ever comes, goes nowhere, and every
+    /// later message on it fails at once. Only the timer that won invalidates: one that fires after a reply does nothing.
     func call<T: Sendable>(
-        _ connection: NSXPCConnection, _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
+        _ connection: NSXPCConnection, _ what: String, within timeout: TimeInterval,
+        _ message: (any XCodeVaultHelperXPC, @escaping @Sendable (T) -> Void) -> Void
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             let once = ResumeOnce(continuation)
+            // `NSXPCConnection` is not `Sendable`; `invalidate()` is safe from any thread (NSXPCConnection.h), and it is
+            // the only thing the timer does with it.
+            nonisolated(unsafe) let deadlined = connection
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) {
+                if once.resume(throwing: Failure.timedOut(what)) { deadlined.invalidate() }
+            }
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
                 once.resume(throwing: Failure.connectionFailed(error.localizedDescription))
             }
@@ -492,8 +533,17 @@ final class ResumeOnce<T: Sendable>: @unchecked Sendable {
 
     init(_ continuation: CheckedContinuation<T, any Error>) { self.continuation = continuation }
 
-    func resume(returning value: T) { take()?.resume(returning: value) }
-    func resume(throwing error: any Error) { take()?.resume(throwing: error) }
+    /// True when this call resumed the continuation, false when an earlier one had.
+    @discardableResult func resume(returning value: T) -> Bool {
+        guard let c = take() else { return false }
+        c.resume(returning: value)
+        return true
+    }
+    @discardableResult func resume(throwing error: any Error) -> Bool {
+        guard let c = take() else { return false }
+        c.resume(throwing: error)
+        return true
+    }
 
     private func take() -> CheckedContinuation<T, any Error>? {
         lock.lock()

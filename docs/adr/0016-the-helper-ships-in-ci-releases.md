@@ -81,8 +81,10 @@ dropped CloudKit connection after notarization was accepted, and the log printed
   could get a root LaunchDaemon signed and notarized as this team's, once the operator approves `sign`. That
   approval, the tag ruleset, and the build job running only this repository's pinned code at the tagged commit are
   what stand in the way. A reproducible-build comparison of the helper would close it; not done.
-- Still open: no timeout on a client call (advisory A2). A daemon that takes a message and never replies leaves it
-  pending.
+- ~~Still open: no timeout on a client call (advisory A2).~~ Closed 2026-10-18: every message has a deadline
+  (`HelperClient.Timeouts`: 15 s for `version` and `begin`, 120 s for a verb, 900 s for the cleanup verb); on it the
+  connection is invalidated and a later reply is dropped. The password dialog is answered before the verb is sent, so no
+  deadline waits on the user.
 
 ## Evidence
 

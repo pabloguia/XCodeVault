@@ -26,8 +26,9 @@
 #
 # **Gate on this flag, not a backlog.** Open, and live the moment this flag is used in a release:
 #   - `createVaultDirectory` has not run live in a signed build (#30); `enableOwnership` has (H18, 2026-10-07). The
-#     runbook's live tests on a release candidate (ADR-0016) are the remaining step;
-#   - no client-call timeout: a daemon that takes a message and never replies leaves the call pending (advisory A2).
+#     runbook's live tests on a release candidate (ADR-0016) are the remaining step.
+# Closed 2026-10-18 (advisory A2): every client message has a deadline (`HelperClient.Timeouts`); on it the connection is
+#   invalidated and a later reply is dropped (`HelperClientTimeoutTests`).
 # Closed by ADR-0016 (M5, 2026-10-17):
 #   - the cleanup verb, which has no in-use check of its own, is refused by the daemon (`verbNotOffered`), and so is its
 #     companion; the app offers the manual route (`CleanAction.helperCleanupOffered`);
