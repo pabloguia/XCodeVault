@@ -267,12 +267,17 @@ public struct VaultVerifier: Sendable {
     /// list the vault but something is mounted at its last path: `diskutil` can fail to read a mounted volume, and the
     /// verifier then called the vault's own volume "a different volume". `scripts/public-surface.sh` pins the default.
     public let volumeUUIDAt: @Sendable (String) -> String?
+    /// The filesystem mounted at a path (`statfs`). With `volumeUUIDAt`: a snapshot of the vault's volume (its device
+    /// carries `@`) or a read-only mount of it reports the same UUID, and must not pass as the vault (review, L4).
+    public let filesystemAt: @Sendable (String) -> MountStatus.FilesystemInfo?
     public init(
         registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
         isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
-        volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:)
+        volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:),
+        filesystemAt: @escaping @Sendable (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
     ) {
         self.registry = registry; self.mountedVolumes = mountedVolumes; self.isMountPoint = isMountPoint; self.volumeUUIDAt = volumeUUIDAt
+        self.filesystemAt = filesystemAt
     }
 
     public static func readSentinel(at vaultDir: String) -> VaultSentinel? {
@@ -292,16 +297,28 @@ public struct VaultVerifier: Sendable {
         if isMountPoint(v.lastMountPoint) {
             switch MountStatus.compareVolumeIdentity(recorded: v.volumeUUID, found: volumeUUIDAt(v.lastMountPoint)) {
             case .matches:
+                // The live volume itself, mounted there and writable: not a snapshot of it, nor a read-only mount.
+                guard let fs = filesystemAt(v.lastMountPoint), fs.mountPoint == v.lastMountPoint, !fs.device.contains("@"), !fs.isReadOnly else {
+                    return VaultVolumeCheck(
+                        volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
+                        detail: "What is mounted at \(v.lastMountPoint) reports this vault's UUID but is a snapshot or a read-only mount "
+                            + "of it, not the volume itself. Refusing.")
+                }
                 return checkMounted(v, at: v.lastMountPoint)
             case .differs:
                 return VaultVolumeCheck(
                     volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
-                    detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted).")
-            case .unreadable, .notRecorded:
+                    detail: "A different volume is mounted at \(v.lastMountPoint) (our UUID \(v.volumeUUID) is not mounted here).")
+            case .unreadable:
                 return VaultVolumeCheck(
                     volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
                     detail: "A volume is mounted at \(v.lastMountPoint) and its identity could not be read, so it cannot be told from this "
                         + "vault (\(v.volumeUUID)). Refusing until it can.")
+            case .notRecorded:
+                return VaultVolumeCheck(
+                    volume: v, state: .foreign, currentMountPoint: v.lastMountPoint, shadowBytes: nil,
+                    detail: "A volume is mounted at \(v.lastMountPoint), and the registry has no volume UUID for this vault to compare "
+                        + "it with. Refusing.")
             }
         }
         return checkUnmounted(v)

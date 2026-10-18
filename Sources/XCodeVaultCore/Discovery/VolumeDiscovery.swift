@@ -95,9 +95,12 @@ public enum VolumeDiscovery {
     /// seconds apart, and a vault missing from it reads as not connected. One still unreadable is reported, not dropped.
     public static func enumerate(runner: CommandRunning = ProcessCommandRunner(), retryDelay: TimeInterval = 0.25) throws -> VolumeEnumeration {
         let list = try runner.check(Tools.diskutil, ["list", "-plist"])
-        guard let plist = try PropertyListSerialization.propertyList(from: Data(list.stdout.utf8), format: nil) as? [String: Any],
+        // A list that does not parse is an error, not "no volumes": the same collapse `unreadable` exists to prevent (L3).
+        guard let plist = try? PropertyListSerialization.propertyList(from: Data(list.stdout.utf8), format: nil) as? [String: Any],
             let all = plist["AllDisksAndPartitions"] as? [[String: Any]]
-        else { return VolumeEnumeration(volumes: []) }
+        else {
+            throw CommandError(executable: Tools.diskutil, arguments: ["list", "-plist"], result: nil, underlying: "the volume list did not parse")
+        }
         var ids: [String] = []
         for disk in all {
             for part in (disk["Partitions"] as? [[String: Any]]) ?? [] { if let id = part["DeviceIdentifier"] as? String { ids.append(id) } }

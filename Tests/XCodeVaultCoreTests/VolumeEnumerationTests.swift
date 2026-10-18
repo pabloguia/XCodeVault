@@ -60,8 +60,21 @@ final class VolumeEnumerationTests: XCTestCase {
 
     // MARK: - The verifier, when `diskutil` did not list the vault
 
-    private func vault(at mp: String) -> VaultVolume {
-        VaultVolume(volumeUUID: "U-1", volumeName: "Vault", lastMountPoint: mp, registeredAt: Date(), sentinelID: "tok")
+    private func vault(at mp: String, uuid: String = "U-1") -> VaultVolume {
+        VaultVolume(volumeUUID: uuid, volumeName: "Vault", lastMountPoint: mp, registeredAt: Date(), sentinelID: "tok")
+    }
+
+    /// The live volume mounted at `mp`, writable; `device` and `flags` vary for the snapshot and read-only cases.
+    private func live(_ mp: String, device: String = "/dev/disk9s1", flags: UInt32 = 0) -> @Sendable (String) -> MountStatus.FilesystemInfo? {
+        { path in path == mp ? MountStatus.FilesystemInfo(mountPoint: mp, device: device, typeName: "apfs", flags: flags) : nil }
+    }
+
+    private func verifier(
+        _ t: TempDir, mountPoint mp: String, isMountPoint: Bool = true, uuid: String?, filesystem: (@Sendable (String) -> MountStatus.FilesystemInfo?)? = nil
+    ) -> VaultVerifier {
+        VaultVerifier(
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] },
+            isMountPoint: { $0 == mp && isMountPoint }, volumeUUIDAt: { _ in uuid }, filesystemAt: filesystem ?? live(mp))
     }
 
     private func writeSentinel(_ mp: String, id: String = "tok") throws {
@@ -78,9 +91,7 @@ final class VolumeEnumerationTests: XCTestCase {
         let t = TempDir()
         let mp = t.dir("mnt")
         try writeSentinel(mp)
-        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
-        let verifier = VaultVerifier(registry: reg, mountedVolumes: { [] }, isMountPoint: { $0 == mp }, volumeUUIDAt: { $0 == mp ? "U-1" : nil })
-        let check = verifier.check(vault(at: mp))
+        let check = verifier(t, mountPoint: mp, uuid: "U-1").check(vault(at: mp))
         XCTAssertEqual(check.state, .verified, check.detail)
         XCTAssertEqual(check.currentMountPoint, mp)
     }
@@ -89,20 +100,17 @@ final class VolumeEnumerationTests: XCTestCase {
     func testAnUnlistedVaultStillNeedsItsSentinel() throws {
         let t = TempDir()
         let mp = t.dir("mnt")
-        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
-        let verifier = VaultVerifier(registry: reg, mountedVolumes: { [] }, isMountPoint: { $0 == mp }, volumeUUIDAt: { _ in "U-1" })
-        XCTAssertEqual(verifier.check(vault(at: mp)).state, .sentinelMissing)
+        let ours = verifier(t, mountPoint: mp, uuid: "U-1")
+        XCTAssertEqual(ours.check(vault(at: mp)).state, .sentinelMissing)
         try writeSentinel(mp, id: "WRONG")
-        XCTAssertEqual(verifier.check(vault(at: mp)).state, .foreign)
+        XCTAssertEqual(ours.check(vault(at: mp)).state, .foreign)
     }
 
     func testAnotherVolumeAtTheLastPathIsForeign() throws {
         let t = TempDir()
         let mp = t.dir("mnt")
         try writeSentinel(mp)
-        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
-        let other = VaultVerifier(registry: reg, mountedVolumes: { [] }, isMountPoint: { $0 == mp }, volumeUUIDAt: { _ in "U-OTHER" })
-        let check = other.check(vault(at: mp))
+        let check = verifier(t, mountPoint: mp, uuid: "U-OTHER").check(vault(at: mp))
         XCTAssertEqual(check.state, .foreign)
         XCTAssertTrue(check.detail.contains("A different volume"), check.detail)
     }
@@ -112,11 +120,56 @@ final class VolumeEnumerationTests: XCTestCase {
         let t = TempDir()
         let mp = t.dir("mnt")
         try writeSentinel(mp)
-        let reg = VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json"))
-        let blind = VaultVerifier(registry: reg, mountedVolumes: { [] }, isMountPoint: { $0 == mp }, volumeUUIDAt: { _ in nil })
-        let check = blind.check(vault(at: mp))
+        let check = verifier(t, mountPoint: mp, uuid: nil).check(vault(at: mp))
         XCTAssertEqual(check.state, .foreign)
         XCTAssertFalse(check.isUsable)
         XCTAssertTrue(check.detail.contains("could not be read"), check.detail)
+    }
+
+    /// The mount-point check decides whether the kernel is asked at all (review, L1): a plain directory at the last path
+    /// holding a valid sentinel is never verified, whatever the UUID of the volume it lives on — it is shadow data.
+    func testAPlainDirectoryAtTheLastPathIsNeverVerified() throws {
+        let t = TempDir()
+        let mp = t.dir("mnt")
+        try writeSentinel(mp)
+        let check = verifier(t, mountPoint: mp, isMountPoint: false, uuid: "U-1").check(vault(at: mp))
+        XCTAssertNotEqual(check.state, .verified)
+        XCTAssertFalse(check.isUsable)
+        XCTAssertEqual(check.state, .ambiguous, "a local folder with content where the vault was: shadow data")
+    }
+
+    /// A snapshot of the vault's volume, or a read-only mount of it, reports the same UUID and must not pass (L4); nor
+    /// may a filesystem whose mount point is not the last path, or one statfs cannot read.
+    func testASnapshotOrReadOnlyMountOfTheVaultIsRefused() throws {
+        let t = TempDir()
+        let mp = t.dir("mnt")
+        try writeSentinel(mp)
+        let cases: [(String, @Sendable (String) -> MountStatus.FilesystemInfo?)] = [
+            ("snapshot", live(mp, device: "com.apple.TimeMachine.2026-10-18-120000@/dev/disk9s1")),
+            ("read-only", live(mp, flags: UInt32(MNT_RDONLY))),
+            ("elsewhere", { _ in MountStatus.FilesystemInfo(mountPoint: "/", device: "/dev/disk1s1", typeName: "apfs", flags: 0) }),
+            ("unreadable", { _ in nil }),
+        ]
+        for (name, fs) in cases {
+            let check = verifier(t, mountPoint: mp, uuid: "U-1", filesystem: fs).check(vault(at: mp))
+            XCTAssertEqual(check.state, .foreign, name)
+            XCTAssertFalse(check.isUsable, name)
+        }
+        XCTAssertEqual(verifier(t, mountPoint: mp, uuid: "U-1").check(vault(at: mp)).state, .verified, "the control: the live volume")
+    }
+
+    /// A registry entry without a volume UUID cannot be compared with what is mounted, and says that, not "unreadable".
+    func testAVaultWithoutARecordedUUIDIsRefusedAndSaysSo() throws {
+        let t = TempDir()
+        let mp = t.dir("mnt")
+        let check = verifier(t, mountPoint: mp, uuid: "U-1").check(vault(at: mp, uuid: ""))
+        XCTAssertEqual(check.state, .foreign)
+        XCTAssertTrue(check.detail.contains("no volume UUID"), check.detail)
+    }
+
+    /// A volume list that does not parse is an error, not an empty list (L3).
+    func testAnUnparsableListIsAnErrorNotNoVolumes() {
+        let garbage = FakeRunner(responses: ["diskutil list -plist": CommandResult(status: 0, stdout: "not a plist", stderr: "")])
+        XCTAssertThrowsError(try VolumeDiscovery.enumerate(runner: garbage, retryDelay: 0))
     }
 }
