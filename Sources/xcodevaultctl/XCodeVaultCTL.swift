@@ -238,7 +238,8 @@ struct Volumes: ParsableCommand {
                 let v = r.volume
                 o +=
                     "\(v.volumeName)  \(v.mountPoint ?? "-")  \(v.filesystemPersonality)  \(v.busProtocol)  \(v.isInternal ? "internal" : "external")  uuid=\(v.volumeUUID ?? "-")  free \(ByteCount.format(v.freeBytes)) / \(ByteCount.format(v.totalBytes))  owners=\(v.ownersEnabled ? "on" : "OFF")\n"
-                o += "    verdict: \(v.isBootVolume ? "boot volume" : r.qualification.verdict.rawValue)\n"
+                let label = v.isBootVolume ? "boot volume" : v.belongsToMacOSInstall ? "macOS installation" : r.qualification.verdict.rawValue
+                o += "    verdict: \(label)\n"
                 for b in r.qualification.blockers { o += "    ✗ \(b)\n" }
                 for w in r.qualification.warnings { o += "    ! \(w)\n" }
             }

@@ -165,6 +165,7 @@ enum DriveText {
         switch r {
         case .internalDisk: L10n.tr("app.drives.refusal.internalDisk")
         case .bootDisk: L10n.tr("app.drives.refusal.bootDisk")
+        case .holdsMacOSInstall: L10n.tr("app.drives.refusal.holdsMacOSInstall")
         case .diskImage: L10n.tr("app.drives.refusal.diskImage")
         case .holdsVault: L10n.tr("app.drives.refusal.holdsVault")
         case .timeMachine: L10n.tr("app.drives.refusal.timeMachine")

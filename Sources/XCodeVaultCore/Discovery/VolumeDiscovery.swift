@@ -20,6 +20,9 @@ public struct Volume: Sendable, Codable, Equatable, Identifiable {
     public var totalBytes: UInt64
     public var freeBytes: UInt64
     public var isBootVolume: Bool  // the system or data volume of the running OS
+    /// A System or Data volume of another macOS installation (by its APFS role), not the running one. Never a vault, and
+    /// its disk is never prepared; told apart from the boot volume so neither says "the running system" about it.
+    public var belongsToMacOSInstall: Bool = false
     public var isDiskImage: Bool { busProtocol == "Disk Image" }
     public var isAPFS: Bool { filesystemType.lowercased() == "apfs" }
     public var isExternal: Bool { !isInternal }
@@ -40,6 +43,7 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
     public static func evaluate(_ v: Volume, minimumFreeBytes: UInt64 = 20 * 1_000_000_000) -> VolumeQualification {
         var blockers: [String] = [], warnings: [String] = []
         if v.isBootVolume { blockers.append("This is the boot/system volume — the thing we are trying to free.") }
+        if v.belongsToMacOSInstall { blockers.append("This volume belongs to a macOS installation; XCodeVault never uses one as a vault.") }
         if v.mountPoint == nil { blockers.append("Not mounted.") }
         if v.isNetwork {
             blockers.append("This is a network volume (\(v.filesystemType)). XCodeVault needs a local disk: a network share disconnects with the network.")
@@ -166,7 +170,10 @@ public enum VolumeDiscovery {
             let infoUUID = present(d["VolumeUUID"] as? String), listedUUID = present(listed.uuid)
             if listedUUID == nil || infoUUID == nil || listedUUID == infoUUID { role.formUnion(listed.roles) }
         }
-        let isBoot = mp == "/" || mp == "/System/Volumes/Data" || role.contains("Data") && b("Internal") || role.contains("System")
+        // The running system by where it is mounted; another installation by its role, on any disk — wider than before
+        // (an external install's Data volume was a candidate), so it only ever adds refusals.
+        let isBoot = mp == "/" || mp == "/System/Volumes/Data"
+        let otherInstall = !isBoot && (role.contains("Data") || role.contains("System"))
         return Volume(
             deviceNode: s("DeviceNode"), volumeName: s("VolumeName"), volumeUUID: d["VolumeUUID"] as? String,
             mountPoint: mp.isEmpty ? nil : mp,
@@ -177,6 +184,6 @@ public enum VolumeDiscovery {
             isSolidState: d["SolidState"] as? Bool, isWritable: b("WritableVolume"),
             ownersEnabled: b("GlobalPermissionsEnabled"),
             totalBytes: u("TotalSize"), freeBytes: u("APFSContainerFree") > 0 ? u("APFSContainerFree") : u("FreeSpace"),
-            isBootVolume: isBoot)
+            isBootVolume: isBoot, belongsToMacOSInstall: otherInstall)
     }
 }

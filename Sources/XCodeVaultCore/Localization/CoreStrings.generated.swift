@@ -1045,6 +1045,13 @@ extension L10nCatalog {
       "pt-BR" : "Uma imagem de disco, não um disco.",
       "zh-Hans" : "这是磁盘映像，不是驱动器。"
     },
+    "app.drives.refusal.holdsMacOSInstall" : {
+      "en" : "This disk holds another macOS installation. XCodeVault never erases or partitions it.",
+      "es" : "Este disco contiene otra instalación de macOS. XCodeVault nunca lo borra ni lo particiona.",
+      "ja" : "このディスクには別の macOS インストールがあります。XCodeVault はこのディスクを消去もパーティション分割もしません。",
+      "pt-BR" : "Este disco contém outra instalação do macOS. O XCodeVault nunca o apaga nem o particiona.",
+      "zh-Hans" : "此磁盘包含另一个 macOS 安装。XCodeVault 绝不会抹掉或分区此磁盘。"
+    },
     "app.drives.refusal.holdsVault" : {
       "en" : "Erasing or repartitioning is blocked: this disk holds a vault.",
       "es" : "Borrar o reparticionar está bloqueado: este disco contiene un disco bóveda.",

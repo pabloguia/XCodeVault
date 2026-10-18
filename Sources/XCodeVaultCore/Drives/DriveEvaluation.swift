@@ -12,6 +12,8 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
     case internalDisk
     /// The disk holds the running system (the boot volume or its container).
     case bootDisk
+    /// Holds a System or Data volume of another macOS installation: erasing or repartitioning it would destroy one.
+    case holdsMacOSInstall
     /// A disk image: it backs something mounted (a simulator runtime, an installer), never a drive to prepare.
     case diskImage
     /// One of its volumes is a registered vault: erasing it would destroy a vault and everything parked on it.
@@ -29,6 +31,7 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
         switch self {
         case .internalDisk: "This is an internal disk. XCodeVault never erases or partitions an internal disk."
         case .bootDisk: "This disk holds the running system."
+        case .holdsMacOSInstall: "This disk holds another macOS installation. XCodeVault never erases or partitions it."
         case .diskImage: "This is a disk image, not a drive."
         case .holdsVault: "This disk holds a registered vault. Erasing or repartitioning it is blocked: it would destroy or remount the vault."
         case .timeMachine: "This disk holds a Time Machine backup."
@@ -47,6 +50,7 @@ public enum DiskSafety {
         var out: [DiskRefusal] = []
         if disk.isInternal { out.append(.internalDisk) }
         if snapshot.bootDiskIDs.contains(disk.id) { out.append(.bootDisk) }
+        if snapshot.macOSInstallDiskIDs.contains(disk.id) { out.append(.holdsMacOSInstall) }
         if disk.isDiskImage { out.append(.diskImage) }
         if holdsTimeMachine(disk, in: snapshot) { out.append(.timeMachine) }
         if !disk.isWritable { out.append(.readOnlyMedia) }
