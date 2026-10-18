@@ -144,11 +144,13 @@ final class UnreadableVolumeGateTests: XCTestCase {
     func testTheScanRecordsThem() throws {
         let t = TempDir()
         let r = XCodeVaultCore.Scanner(
-            runner: VolumeEnumerationTests.FlakyInfo(failures: 2), home: t.path, catalog: [], measureSizes: false, detectXcodeCapabilities: false).scan()
+            runner: VolumeEnumerationTests.FlakyInfo(failures: 2), home: t.path, catalog: [], measureSizes: false, detectXcodeCapabilities: false
+        ).scan()
         XCTAssertEqual(r.unreadableVolumeIDs, ["disk9s1"])
         XCTAssertTrue(r.volumesListed)
         let failed = XCodeVaultCore.Scanner(
-            runner: FakeRunner(responses: [:]), home: t.path, catalog: [], measureSizes: false, detectXcodeCapabilities: false).scan()
+            runner: FakeRunner(responses: [:]), home: t.path, catalog: [], measureSizes: false, detectXcodeCapabilities: false
+        ).scan()
         XCTAssertFalse(failed.volumesListed)
         XCTAssertEqual(failed.unreadableVolumeIDs, [])
     }

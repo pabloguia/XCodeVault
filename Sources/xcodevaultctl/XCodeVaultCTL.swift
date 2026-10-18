@@ -249,7 +249,8 @@ struct Volumes: ParsableCommand {
         // On stderr, so the JSON stays an array of rows: unknown, never absent.
         if !found.unreadable.isEmpty {
             let ids = found.unreadable.joined(separator: ", ")
-            FileHandle.standardError.write(Data("diskutil could not read \(found.unreadable.count) volume(s) (\(ids)); they may be mounted and are not listed.\n".utf8))
+            FileHandle.standardError.write(
+                Data("diskutil could not read \(found.unreadable.count) volume(s) (\(ids)); they may be mounted and are not listed.\n".utf8))
         }
     }
 }
