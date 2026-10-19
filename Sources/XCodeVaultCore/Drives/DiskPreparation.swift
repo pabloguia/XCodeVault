@@ -251,7 +251,8 @@ public enum DiskPreparation {
             return nil
         }
         func name(_ id: String) -> String {
-            disk.containers.flatMap(\.volumes).first { $0.id == id }?.name ?? disk.partitions.first { $0.id == id }?.volumeName ?? ""
+            disk.containers.flatMap(\.volumes).first { $0.id == id }?.name ?? disk.partitions.first { $0.id == id }?.volumeName
+                ?? (disk.wholeDiskVolume?.id == id ? disk.wholeDiskVolume?.volumeName : nil) ?? ""
         }
         switch action {
         case .addVolume, .addPartition:
@@ -280,6 +281,8 @@ public enum DiskPreparation {
             }
         case .eraseVolume:
             guard disk.volumeIDs.contains(target) else { throw DiskPreparationError("\(target) is not a volume of \(disk.id).") }
+            // A file system on the whole disk is erased by erasing the disk: `eraseVolume` on it was never measured (H17).
+            guard target != disk.id else { throw DiskPreparationError("\(target) is the whole disk: erase the disk instead.") }
         case .eraseDisk:
             guard target == disk.id else { throw DiskPreparationError("\(target) is not the whole disk \(disk.id).") }
         }

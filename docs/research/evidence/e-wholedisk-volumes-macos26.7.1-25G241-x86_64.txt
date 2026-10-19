@@ -1,0 +1,41 @@
+# Whole-disk file systems (no partition map): what diskutil reports — 2026-10-18
+# Host: macOS 26.7.1 (25G241), x86_64. Disk images only; no real disk was touched.
+# Why: migration-safety review of PR #54 read that VolumeDiscovery.enumerate and DiskTopology never see such a disk's volume.
+
+$ hdiutil create -size 64m -layout NONE -fs "MS-DOS FAT32" -volname XCVWDFAT -type SPARSE /private/tmp/xcv-wd-fat
+$ hdiutil create -size 64m -layout NONE -fs "Journaled HFS+" -volname XCVWDHFS -type SPARSE /private/tmp/xcv-wd-hfs
+$ hdiutil create -size 64m -layout NONE -fs APFS -volname XCVWDAPFS -type SPARSE /private/tmp/xcv-wd-apfs
+(note: -fs "HFS+" with -layout NONE fails; "Journaled HFS+" works. Created under /private/tmp: in the agent scratchpad hdiutil create fails with "Operation not permitted".)
+(the failed scratchpad attempt still attached two blank 32 MB images, disk8 and disk9, unnoticed until the review; they were
+ measured as blank disks — below — and detached.)
+$ hdiutil attach <each>  =>  disk10 (FAT, /Volumes/XCVWDFAT), disk11 (HFS+, /Volumes/XCVWDHFS), disk12 (APFS store) + disk13 (container) / disk13s1 (/Volumes/XCVWDAPFS)
+
+## diskutil list -plist: the entries of these disks
+{'Content': '', 'DeviceIdentifier': 'disk10', 'MountPoint': '/Volumes/XCVWDFAT', 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWDFAT'}
+{'Content': '', 'DeviceIdentifier': 'disk11', 'MountPoint': '/Volumes/XCVWDHFS', 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWDHFS'}
+{'Content': '', 'DeviceIdentifier': 'disk12', 'OSInternal': False, 'Size': 67108864}
+{'APFSPhysicalStores': [{'DeviceIdentifier': 'disk12'}], 'APFSVolumes': [{'CapacityInUse': 24576, 'DeviceIdentifier': 'disk13s1', 'DiskUUID': '4EF6B081-6218-44F6-BB19-53B62B549FD1', 'MountPoint': '/Volumes/XCVWDAPFS', 'MountedSnapshots': [], 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWDAPFS', 'VolumeUUID': '4EF6B081-6218-44F6-BB19-53B62B549FD1'}], 'Content': 'Apple_APFS_Container', 'DeviceIdentifier': 'disk13', 'OSInternal': False, 'Partitions': [], 'Size': 67108864}
+
+## diskutil info -plist, selected keys
+disk10 {'WholeDisk': True, 'Content': '', 'FilesystemType': 'msdos', 'MountPoint': '/Volumes/XCVWDFAT', 'VolumeName': 'XCVWDFAT', 'VolumeUUID': 'B8FDA4AE-6932-3362-855F-CAA93A84EFD1', 'APFSContainerReference': None, 'APFSPhysicalStores': None, 'BusProtocol': 'Disk Image', 'VirtualOrPhysical': 'Virtual'}
+disk11 {'WholeDisk': True, 'Content': '', 'FilesystemType': 'hfs', 'MountPoint': '/Volumes/XCVWDHFS', 'VolumeName': 'XCVWDHFS', 'VolumeUUID': '3FF43BEF-85EE-350F-A404-7806C1E025E0', 'APFSContainerReference': None, 'APFSPhysicalStores': None, 'BusProtocol': 'Disk Image', 'VirtualOrPhysical': 'Virtual'}
+disk12 {'WholeDisk': True, 'Content': '', 'FilesystemType': None, 'MountPoint': '', 'VolumeName': '', 'VolumeUUID': None, 'APFSContainerReference': 'disk13', 'APFSPhysicalStores': None, 'BusProtocol': 'Disk Image', 'VirtualOrPhysical': 'Virtual'}
+disk13 {'WholeDisk': True, 'Content': 'EF57347C-0000-11AA-AA11-00306543ECAC', 'FilesystemType': None, 'MountPoint': '', 'VolumeName': '', 'VolumeUUID': None, 'APFSContainerReference': 'disk13', 'APFSPhysicalStores': [{'APFSPhysicalStore': 'disk12'}], 'BusProtocol': 'Disk Image', 'VirtualOrPhysical': 'Virtual'}
+disk13s1 {'WholeDisk': False, 'Content': '41504653-0000-11AA-AA11-00306543ECAC', 'FilesystemType': 'apfs', 'MountPoint': '/Volumes/XCVWDAPFS', 'VolumeName': 'XCVWDAPFS', 'VolumeUUID': '4EF6B081-6218-44F6-BB19-53B62B549FD1', 'APFSContainerReference': 'disk13', 'APFSPhysicalStores': [{'APFSPhysicalStore': 'disk12'}], 'BusProtocol': 'Disk Image', 'VirtualOrPhysical': None}
+
+## disk11 after `diskutil unmount /dev/disk11` (guarded: VolumeName XCVWDHFS, BusProtocol Disk Image)
+info {'FilesystemType': 'hfs', 'FilesystemName': 'Journaled HFS+', 'MountPoint': '', 'VolumeName': 'XCVWDHFS', 'VolumeUUID': '3FF43BEF-85EE-350F-A404-7806C1E025E0'}
+list [{'Content': '', 'DeviceIdentifier': 'disk11', 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWDHFS'}]
+
+## xcodevaultctl volumes --json, before the fix (main at dba99aa), filtered to XCVWD*
+/dev/disk13s1 XCVWDAPFS /Volumes/XCVWDAPFS unsuitable      <- disk10 and disk11 absent
+
+FINDINGS
+1. A whole-disk file system has no Partitions and no APFSVolumes in `list`; its VolumeName (and MountPoint when mounted) sit on the disk entry; Content is "".
+2. `info` on such a disk names FilesystemType (msdos, hfs) and VolumeUUID. Measured unmounted: hfs only (FAT was measured mounted, exFAT/NTFS not at all); MountPoint is "" when unmounted.
+3. An APFS -layout NONE image: the store disk12 has Content "", no FilesystemType, APFSContainerReference disk13; the container disk13 lists APFSPhysicalStores [disk12] (a whole disk, not a partition).
+4. Before the fix, VolumeDiscovery.enumerate did not list disk10/disk11, and DiskTopology attached container disk13 to no disk.
+5. A blank whole disk (disk8/disk9, the leftovers above): `list` entry {Content: "", no VolumeName, no Partitions}; `info`
+   FilesystemType, FilesystemName and VolumeUUID absent, VolumeName "", MountPoint "". Fixture diskutil-info-wholedisk-blank.plist.
+NOT MEASURED: an unmounted exFAT/NTFS/FAT whole disk; CoreStorage; `apfs addVolume` / `eraseVolume` on a container whose store is a
+whole disk (H17 measured them with a partition map only).

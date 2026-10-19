@@ -109,8 +109,15 @@ public enum VolumeDiscovery {
         }
         var ids: [String] = []
         for disk in all {
-            for part in (disk["Partitions"] as? [[String: Any]]) ?? [] { if let id = part["DeviceIdentifier"] as? String { ids.append(id) } }
-            for vol in (disk["APFSVolumes"] as? [[String: Any]]) ?? [] { if let id = vol["DeviceIdentifier"] as? String { ids.append(id) } }
+            let parts = (disk["Partitions"] as? [[String: Any]]) ?? []
+            let apfs = (disk["APFSVolumes"] as? [[String: Any]]) ?? []
+            for part in parts { if let id = part["DeviceIdentifier"] as? String { ids.append(id) } }
+            for vol in apfs { if let id = vol["DeviceIdentifier"] as? String { ids.append(id) } }
+            // A disk with no partitions and no APFS volumes may carry a file system on the whole disk, which `list`
+            // reports on the disk's own entry (measured 2026-10-18 on `-layout NONE` images). Asked like a partition:
+            // a blank disk or an APFS store reads as not mounted and is skipped below, and one that cannot be read is
+            // reported as unreadable, never dropped.
+            if parts.isEmpty, apfs.isEmpty, disk["APFSPhysicalStores"] == nil, let id = disk["DeviceIdentifier"] as? String { ids.append(id) }
         }
         // Roles come from `apfs list`: macOS 26's `info -plist` no longer carries `APFSVolumeRoles` (measured in R8), so
         // reading them there left every volume role-less. Best effort: without the listing, `parse` falls back to `info`.
