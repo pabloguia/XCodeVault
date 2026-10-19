@@ -109,6 +109,9 @@ final class WholeDiskVolumeTests: XCTestCase {
         private let lock = NSLock()
         private var asked: [String] = []
         var infos: [String] { lock.withLock { asked } }
+        /// `info` of the device fails after this many successful reads of it (0: always).
+        let failing: [String: Int]
+        init(failing: [String: Int] = [:]) { self.failing = failing }
 
         func run(_ executable: String, _ arguments: [String], environment: [String: String]?) throws -> CommandResult {
             func ok(_ data: Data) -> CommandResult { CommandResult(status: 0, stdout: String(decoding: data, as: UTF8.self), stderr: "") }
@@ -116,7 +119,11 @@ final class WholeDiskVolumeTests: XCTestCase {
             case ["list", "-plist"]: return ok(Fixtures.data("diskutil-list-wholedisk.plist"))
             case ["apfs", "list", "-plist"]: return ok(Fixtures.data("diskutil-apfs-list-wholedisk.plist"))
             case let a where a.count == 3 && a[0] == "info" && a[1] == "-plist":
-                lock.withLock { asked.append(a[2]) }
+                let earlier = lock.withLock { () -> Int in
+                    defer { asked.append(a[2]) }
+                    return asked.filter { $0 == a[2] }.count
+                }
+                if let ok = failing[a[2]], earlier >= ok { return CommandResult(status: 1, stdout: "", stderr: "Could not find disk: \(a[2])") }
                 guard ["disk10", "disk11", "disk12", "disk13s1"].contains(a[2]) else { return CommandResult(status: 1, stdout: "", stderr: "no fixture") }
                 return ok(Fixtures.data("diskutil-info-wholedisk-\(a[2]).plist"))
             default:
@@ -137,5 +144,71 @@ final class WholeDiskVolumeTests: XCTestCase {
         let snap = try DriveSnapshot.read(runner: WholeDiskDiskutil(), fileExists: { _ in false })
         let fat = try XCTUnwrap(snap.disks.first { $0.id == "disk10" })
         XCTAssertEqual(snap.volumes(on: fat).map(\.volumeName), ["XCVWDFAT"])
+    }
+
+    /// A whole disk `enumerate` now asks about, whose `info` fails. Both reads failing: the topology drops the disk and
+    /// no disk claims the id, so every disk refuses (PR #54's rule for a volume that cannot be placed — broad on purpose:
+    /// the snapshot cannot tell it is the dropped disk's own). Only the second read failing: that disk alone refuses.
+    func testAWholeDiskWhoseInfoFailsRefusesChanges() throws {
+        let gone = try DriveSnapshot.read(runner: WholeDiskDiskutil(failing: ["disk10": 0]), fileExists: { _ in false })
+        XCTAssertFalse(gone.disks.contains { $0.id == "disk10" }, "the topology leaves out a disk it could not read")
+        XCTAssertEqual(gone.unreadableVolumeIDs, ["disk10"])
+        XCTAssertEqual(gone.unplacedUnreadableVolumeIDs, ["disk10"])
+        let disk11 = try XCTUnwrap(gone.disks.first { $0.id == "disk11" })
+        XCTAssertTrue(DiskSafety.changeRefusals(disk11, in: gone).contains(.unplacedVolumeUnreadable))
+
+        let later = try DriveSnapshot.read(runner: WholeDiskDiskutil(failing: ["disk10": 1]), fileExists: { _ in false })
+        let disk10 = try XCTUnwrap(later.disks.first { $0.id == "disk10" }, "the topology's read succeeded")
+        XCTAssertEqual(later.unreadableVolumeIDs, ["disk10"])
+        // `.diskImage` too: these are the fixtures' images, read through `DriveSnapshot.read`, not made USB disks.
+        XCTAssertEqual(DiskSafety.changeRefusals(disk10, in: later), [.diskImage, .volumeUnreadable])
+        let other = try XCTUnwrap(later.disks.first { $0.id == "disk11" })
+        XCTAssertFalse(DiskSafety.changeRefusals(other, in: later).contains(.volumeUnreadable), "only its own disk")
+        XCTAssertFalse(DiskSafety.changeRefusals(other, in: later).contains(.unplacedVolumeUnreadable))
+
+        let control = try DriveSnapshot.read(runner: WholeDiskDiskutil(), fileExists: { _ in false })
+        XCTAssertEqual(control.unreadableVolumeIDs, [])
+    }
+
+    /// A whole-disk file system `info` gives no type is still the disk's volume; a blank disk (measured on an image) has
+    /// no type, name or UUID and no volume.
+    func testAnUntypedFileSystemIsStillAVolumeAndABlankDiskIsNot() throws {
+        func disk10(_ info: Data) throws -> PhysicalDisk {
+            var all = Dictionary(uniqueKeysWithValues: Self.wholeDisks.map { ($0, Self.info($0)) })
+            all["disk10"] = info
+            return try XCTUnwrap(
+                try DiskTopology.parse(
+                    list: Fixtures.data("diskutil-list-wholedisk.plist"), apfs: Fixtures.data("diskutil-apfs-list-wholedisk.plist"),
+                    wholeDiskInfo: all
+                ).first { $0.id == "disk10" })
+        }
+        var plist = try XCTUnwrap(try PropertyListSerialization.propertyList(from: Self.info("disk10"), format: nil) as? [String: Any])
+        plist["FilesystemType"] = nil
+        plist["MountPoint"] = ""
+        let untyped = try disk10(try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0))
+        XCTAssertEqual(untyped.wholeDiskVolume?.content, "unknown")
+        XCTAssertEqual(untyped.wholeDiskVolume?.volumeName, "XCVWDFAT")
+        XCTAssertNil(untyped.wholeDiskVolume?.mountPoint)
+        XCTAssertEqual(untyped.volumeIDs, ["disk10"])
+        XCTAssertEqual(untyped.wholeDiskVolume?.isHFS, false)
+
+        // The blank disk's measured `info`, under disk10's `list` entry, which names XCVWDFAT: the entry's name alone
+        // would make a volume, so the control uses an entry without it.
+        var list = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: Fixtures.data("diskutil-list-wholedisk.plist"), format: nil) as? [String: Any])
+        var entries = try XCTUnwrap(list["AllDisksAndPartitions"] as? [[String: Any]])
+        let i = try XCTUnwrap(entries.firstIndex { $0["DeviceIdentifier"] as? String == "disk10" })
+        entries[i]["VolumeName"] = nil
+        entries[i]["MountPoint"] = nil
+        list["AllDisksAndPartitions"] = entries
+        var infos = Dictionary(uniqueKeysWithValues: Self.wholeDisks.map { ($0, Self.info($0)) })
+        infos["disk10"] = Fixtures.data("diskutil-info-wholedisk-blank.plist")
+        let blank = try XCTUnwrap(
+            try DiskTopology.parse(
+                list: try PropertyListSerialization.data(fromPropertyList: list, format: .xml, options: 0),
+                apfs: Fixtures.data("diskutil-apfs-list-wholedisk.plist"), wholeDiskInfo: infos
+            ).first { $0.id == "disk10" })
+        XCTAssertNil(blank.wholeDiskVolume)
+        XCTAssertEqual(blank.volumeIDs, [])
     }
 }

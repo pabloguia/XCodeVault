@@ -21,7 +21,12 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   nothing there. `PhysicalDisk.wholeDiskVolume` now carries it into `volumeIDs`, identity, `holdsVault`, the HFS+
   "might be Time Machine" check and the erase preview; `enumerate` lists it; a container on a whole-disk store belongs to
   that disk. Erasing such a volume on its own is refused (`eraseVolume` on a whole disk was never measured); erasing the
-  disk lists it. Review: migration-safety.
+  disk lists it. A whole disk whose `info` fails both times is dropped by the topology and its id refuses every disk
+  (`.unplacedVolumeUnreadable`) — broad on purpose, the snapshot cannot tell the id is that disk's own. Not measured, so
+  open: an unmounted exFAT/NTFS whole disk (kept as a volume typed `unknown` if `info` names it or a UUID); `apfs addVolume`
+  and `eraseVolume` on a container whose store is a whole disk, now offered on such a drive (H17 measured them with a
+  partition map only); CoreStorage — its logical volume is now seen, but the disk holding its `Apple_CoreStorage`
+  partition is not refused as possibly Time Machine, the old encrypted-HFS+ backup layout. Review: migration-safety.
 - **Unreadable volumes reach the disk gate and the doctor — MERGED (2026-10-18, PR #54, dba99aa; M1/M2 of the PR #51
   review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
   or any disk, when no disk claims it — refuses every change (`DiskRefusal.volumeUnreadable`, localized, drafts

@@ -199,14 +199,20 @@ public enum DiskTopology {
             // A container whose store is the whole disk (measured: an APFS image made with `-layout NONE`) belongs to
             // it as one stored on a partition does.
             let ids = Set(parts.map(\.id) + [id])
-            // A file system on the whole disk: no partitions, a file system type, and not an APFS store (whose `info`
-            // names its container instead). Read from `info`, which names it whether or not it is mounted (measured).
+            // A file system on the whole disk: no partitions, not an APFS store (whose `info` names its container
+            // instead), and any sign of a file system — a type, a name or a UUID, from `info` or the `list` entry.
+            // Measured: `info` names an HFS+ one unmounted as well as mounted (FAT was measured mounted only), and a
+            // blank disk has none of the three. A file system `info` does not type is still a volume of the disk, typed
+            // `unknown`: it is listed for erasing and tells the disk apart, though it is not read as HFS+.
             var whole: DiskPartition?
-            if parts.isEmpty, info["APFSContainerReference"] == nil, let fs = info["FilesystemType"] as? String, !fs.isEmpty {
-                let mp = info["MountPoint"] as? String
+            func text(_ v: Any?) -> String? { (v as? String).flatMap { $0.isEmpty ? nil : $0 } }
+            let fs = text(info["FilesystemType"])
+            let volumeName = text(info["VolumeName"]) ?? text(entry["VolumeName"])
+            let volumeUUID = text(info["VolumeUUID"])
+            if parts.isEmpty, info["APFSContainerReference"] == nil, fs != nil || volumeName != nil || volumeUUID != nil {
                 whole = DiskPartition(
-                    id: id, content: fs, sizeBytes: uint(info["Size"] ?? entry["Size"]), volumeName: info["VolumeName"] as? String,
-                    volumeUUID: info["VolumeUUID"] as? String, mountPoint: (mp?.isEmpty ?? true) ? nil : mp)
+                    id: id, content: fs ?? "unknown", sizeBytes: uint(info["Size"] ?? entry["Size"]), volumeName: volumeName,
+                    volumeUUID: volumeUUID, mountPoint: text(info["MountPoint"]))
             }
             disks.append(
                 PhysicalDisk(

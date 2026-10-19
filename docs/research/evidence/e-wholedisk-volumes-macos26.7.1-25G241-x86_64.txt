@@ -6,6 +6,8 @@ $ hdiutil create -size 64m -layout NONE -fs "MS-DOS FAT32" -volname XCVWDFAT -ty
 $ hdiutil create -size 64m -layout NONE -fs "Journaled HFS+" -volname XCVWDHFS -type SPARSE /private/tmp/xcv-wd-hfs
 $ hdiutil create -size 64m -layout NONE -fs APFS -volname XCVWDAPFS -type SPARSE /private/tmp/xcv-wd-apfs
 (note: -fs "HFS+" with -layout NONE fails; "Journaled HFS+" works. Created under /private/tmp: in the agent scratchpad hdiutil create fails with "Operation not permitted".)
+(the failed scratchpad attempt still attached two blank 32 MB images, disk8 and disk9, unnoticed until the review; they were
+ measured as blank disks — below — and detached.)
 $ hdiutil attach <each>  =>  disk10 (FAT, /Volumes/XCVWDFAT), disk11 (HFS+, /Volumes/XCVWDHFS), disk12 (APFS store) + disk13 (container) / disk13s1 (/Volumes/XCVWDAPFS)
 
 ## diskutil list -plist: the entries of these disks
@@ -30,6 +32,10 @@ list [{'Content': '', 'DeviceIdentifier': 'disk11', 'OSInternal': False, 'Size':
 
 FINDINGS
 1. A whole-disk file system has no Partitions and no APFSVolumes in `list`; its VolumeName (and MountPoint when mounted) sit on the disk entry; Content is "".
-2. `info` on such a disk names FilesystemType (msdos, hfs) and VolumeUUID whether or not it is mounted; MountPoint is "" when unmounted.
+2. `info` on such a disk names FilesystemType (msdos, hfs) and VolumeUUID. Measured unmounted: hfs only (FAT was measured mounted, exFAT/NTFS not at all); MountPoint is "" when unmounted.
 3. An APFS -layout NONE image: the store disk12 has Content "", no FilesystemType, APFSContainerReference disk13; the container disk13 lists APFSPhysicalStores [disk12] (a whole disk, not a partition).
 4. Before the fix, VolumeDiscovery.enumerate did not list disk10/disk11, and DiskTopology attached container disk13 to no disk.
+5. A blank whole disk (disk8/disk9, the leftovers above): `list` entry {Content: "", no VolumeName, no Partitions}; `info`
+   FilesystemType, FilesystemName and VolumeUUID absent, VolumeName "", MountPoint "". Fixture diskutil-info-wholedisk-blank.plist.
+NOT MEASURED: an unmounted exFAT/NTFS/FAT whole disk; CoreStorage; `apfs addVolume` / `eraseVolume` on a container whose store is a
+whole disk (H17 measured them with a partition map only).
