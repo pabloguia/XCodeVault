@@ -289,4 +289,9 @@ public struct DriveSnapshot: Sendable, Equatable {
     public var bootDiskIDs: Set<String> {
         Set(volumes.filter(\.isBootVolume).compactMap { disk(holding: $0.deviceNode)?.id })
     }
+
+    /// Disks holding a volume of another macOS installation (`Volume.belongsToMacOSInstall`).
+    public var macOSInstallDiskIDs: Set<String> {
+        Set(volumes.filter(\.belongsToMacOSInstall).compactMap { disk(holding: $0.deviceNode)?.id })
+    }
 }

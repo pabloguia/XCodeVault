@@ -3853,6 +3853,40 @@
         }
       }
     },
+    "app.drives.refusal.holdsMacOSInstall" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This disk holds another macOS installation. XCodeVault never erases or partitions it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Este disco contiene otra instalación de macOS. XCodeVault nunca lo borra ni lo particiona."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "このディスクには別の macOS インストールがあります。XCodeVault はこのディスクを消去もパーティション分割もしません。"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Este disco contém outra instalação do macOS. O XCodeVault nunca o apaga nem o particiona."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "此磁盘包含另一个 macOS 安装。XCodeVault 绝不会抹掉或分区此磁盘。"
+          }
+        }
+      }
+    },
     "app.drives.refusal.holdsVault" : {
       "localizations" : {
         "en" : {

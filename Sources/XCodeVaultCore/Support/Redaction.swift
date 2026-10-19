@@ -57,9 +57,13 @@ public struct Redaction: Sendable {
         if !user.isEmpty, user != "root" { add(Self.bounded(user), "<user>") }
 
         for v in volumes where !v.volumeName.isEmpty {
-            let marker = v.isBootVolume ? "<bootvolume>" : "<vault>"
+            // A volume of another macOS installation is redacted as a system volume too (review of finding e, M2): a
+            // bootable clone keeps the boot volume's name, and `<vault>` without the lookbehind would rewrite every
+            // `Contents/MacOS/…` of a volume named "MacOS".
+            let systemish = v.isBootVolume || v.belongsToMacOSInstall
+            let marker = systemish ? "<bootvolume>" : "<vault>"
             add("/Volumes/" + Self.quote(v.volumeName), "/Volumes/" + marker)
-            if v.isBootVolume {
+            if systemish {
                 // The boot volume's name is redacted as a *name* but never as a path component, and
                 // `(?<!/)` is what tells those apart: `Contents/MacOS/…` is preceded by a slash and
                 // survives, while the `volumeName` field, or prose calling it "the MacOS volume",

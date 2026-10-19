@@ -14,6 +14,12 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+- **Another macOS installation is not "the boot volume" (2026-10-18, branch `fix/other-macos-install`, finding e of the
+  PR #50 review).** `Volume.isBootVolume` now means the running system only (mounted at `/` or `/System/Volumes/Data`);
+  a new `belongsToMacOSInstall` marks a System or Data volume of another installation, by role, on any disk — wider than
+  before (an external install's Data volume was a vault candidate). It has its own blocker, and its disk its own refusal
+  (`DiskRefusal.holdsMacOSInstall`, localized, drafts `needs_review`), which refuses every preparation as `.bootDisk`
+  does. Review: migration-safety.
 - **A failed `diskutil info` no longer hides a volume (2026-10-18, branch `fix/volume-info-transient`).** On PR #50's
   CI a single failed `info` removed a mounted disk image from `mountedVolumes`; a vault missing from it read as "a
   different volume is mounted" (its own volume) or as not connected. `VolumeDiscovery.enumerate` asks a failed `info`

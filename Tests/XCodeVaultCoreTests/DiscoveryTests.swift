@@ -104,8 +104,8 @@ final class VolumeTests: XCTestCase {
         raw["MountPoint"] = "/Volumes/Elsewhere"
         raw["VolumeUUID"] = listed["disk1s1"]?.uuid
         let info = try PropertyListSerialization.data(fromPropertyList: raw, format: .xml, options: 0)
-        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: info).isBootVolume, "without the listing nothing marks it")
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: info, apfsVolumes: listed).isBootVolume, "the Data role does")
+        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: info).belongsToMacOSInstall, "without the listing nothing marks it")
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: info, apfsVolumes: listed).belongsToMacOSInstall, "the Data role does")
     }
 
     /// A device identifier reused by another drive between the two reads must not carry the first drive's roles: the
@@ -113,34 +113,35 @@ final class VolumeTests: XCTestCase {
     func testTheListingsRolesNeedTheSameVolumeUUID() throws {
         let plain = try Self.info(["VolumeUUID": "11111111-2222-3333-4444-555555555555"])
         let other = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE", roles: ["System"])
-        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": other]).isBootVolume)
+        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": other]).belongsToMacOSInstall)
         let same = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "11111111-2222-3333-4444-555555555555", roles: ["System"])
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": same]).isBootVolume)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": same]).belongsToMacOSInstall)
         let lowercase = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "11111111-2222-3333-4444-555555555555".lowercased(), roles: ["System"])
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": lowercase]).isBootVolume, "UUIDs compare by value")
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": lowercase]).belongsToMacOSInstall, "UUIDs compare by value")
         // One side without a UUID cannot be compared, and the listing only ever adds a role, so it applies (re-review, nit 1).
         let listingWithout = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: nil, roles: ["System"])
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": listingWithout]).isBootVolume)
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info([:]), apfsVolumes: ["disk9s1": same]).isBootVolume, "info without one")
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": listingWithout]).belongsToMacOSInstall)
+        XCTAssertTrue(
+            try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info([:]), apfsVolumes: ["disk9s1": same]).belongsToMacOSInstall, "info without one")
         // An empty UUID is a missing one, not a mismatch (nit 2).
         let empty = APFSVolumeInfo(id: "disk9s1", name: "Other", uuid: "", roles: ["System"])
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": empty]).isBootVolume)
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info(["VolumeUUID": ""]), apfsVolumes: ["disk9s1": same]).isBootVolume)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: ["disk9s1": empty]).belongsToMacOSInstall)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: try Self.info(["VolumeUUID": ""]), apfsVolumes: ["disk9s1": same]).belongsToMacOSInstall)
     }
 
     /// The two sources are joined, so neither takes a role away (finding c): a role only ever marks a volume.
     func testRolesAreTheUnionOfInfoAndTheListing() throws {
         let entry = { (roles: [String]) in ["disk9s1": APFSVolumeInfo(id: "disk9s1", name: "Other", roles: roles)] }
         let plain = try Self.info([:])
-        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: plain).isBootVolume, "no role anywhere: a candidate")
+        XCTAssertFalse(try VolumeDiscovery.parse(diskutilInfoPlist: plain).belongsToMacOSInstall, "no role anywhere: a candidate")
         let data = try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: entry(["Data"]))
-        XCTAssertTrue(data.isBootVolume, "an internal Data volume mounted elsewhere")
+        XCTAssertTrue(data.belongsToMacOSInstall, "an internal Data volume mounted elsewhere")
         XCTAssertEqual(VolumeQualification.evaluate(data).verdict, .unsuitable)
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: entry(["System"])).isBootVolume)
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: plain, apfsVolumes: entry(["System"])).belongsToMacOSInstall)
         let infoSaysSystem = try Self.info(["APFSVolumeRoles": ["System"]])
-        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: infoSaysSystem).isBootVolume, "info's roles still count")
+        XCTAssertTrue(try VolumeDiscovery.parse(diskutilInfoPlist: infoSaysSystem).belongsToMacOSInstall, "info's roles still count")
         XCTAssertTrue(
-            try VolumeDiscovery.parse(diskutilInfoPlist: infoSaysSystem, apfsVolumes: entry([])).isBootVolume,
+            try VolumeDiscovery.parse(diskutilInfoPlist: infoSaysSystem, apfsVolumes: entry([])).belongsToMacOSInstall,
             "an empty listing entry does not take info's System away")
     }
 
@@ -168,14 +169,14 @@ final class VolumeTests: XCTestCase {
         }
         let withRoles = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: CommandResult(status: 0, stdout: text(apfs), stderr: "")))
         XCTAssertEqual(withRoles.map(\.volumeName), ["Other"])
-        XCTAssertEqual(withRoles.first?.isBootVolume, true, "the Data role from apfs list reached parse")
+        XCTAssertEqual(withRoles.first?.belongsToMacOSInstall, true, "the Data role from apfs list reached parse")
         for broken in [CommandResult(status: 1, stdout: "", stderr: "busy"), CommandResult(status: 0, stdout: "not a plist", stderr: "")] {
             let fallback = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: broken))
             XCTAssertEqual(fallback.map(\.volumeName), ["Other"], "the enumeration survives an unreadable listing")
-            XCTAssertEqual(fallback.first?.isBootVolume, false, "and falls back to info, which has no role here")
+            XCTAssertEqual(fallback.first?.belongsToMacOSInstall, false, "and falls back to info, which has no role here")
             // The fallback really reads info's roles (re-review, nit 3).
             let fromInfo = try VolumeDiscovery.mountedVolumes(runner: try runner(apfs: broken, info: ["APFSVolumeRoles": ["Data"]]))
-            XCTAssertEqual(fromInfo.first?.isBootVolume, true)
+            XCTAssertEqual(fromInfo.first?.belongsToMacOSInstall, true)
         }
     }
 
