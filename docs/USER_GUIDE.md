@@ -228,7 +228,9 @@ or a partition, the sheet says where it will appear ("Will appear as /Volumes/XC
 is already mounted, warns that macOS would mount the new one as "XCodeVault 1" and suggests another name. An erase lists every volume it destroys with how much each
 holds, and its button stays disabled until you type the disk's name (or the volume's) exactly; Return cancels and Escape closes the sheet. Erasing
 is never offered on a disk that holds a registered vault or a Time Machine backup, nor on an internal or boot disk, nor
-while an HFS+ partition on it is unmounted (it might be a Time Machine backup: mount it so XCodeVault can check); a new
+while an HFS+ partition on it is unmounted (it might be a Time Machine backup: mount it so XCodeVault can check). No
+change at all is offered on a disk that holds another macOS installation, or on one where `diskutil` could not read a
+volume — whatever that volume is, XCodeVault cannot tell, so try again in a moment; a new
 partition is never added to a disk that holds a vault, because rewriting the partition map remounts the disk. On a USB
 stick with no recognised file system the confirmation also says the disk can't be told apart from another of the same
 model. If the disk is swapped or changes while the sheet is open, the sheet says "The disk changed. Close this and

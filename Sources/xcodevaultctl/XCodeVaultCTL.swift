@@ -230,7 +230,8 @@ struct Volumes: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     struct Row: Encodable { let volume: Volume; let qualification: VolumeQualification }
     func run() throws {
-        let vols = try VolumeDiscovery.mountedVolumes()
+        let found = try VolumeDiscovery.enumerate()
+        let vols = found.volumes
         let rows = vols.map { Row(volume: $0, qualification: VolumeQualification.evaluate($0)) }
         try emit(rows, json: global.json) {
             var o = ""
@@ -244,6 +245,12 @@ struct Volumes: ParsableCommand {
                 for w in r.qualification.warnings { o += "    ! \(w)\n" }
             }
             return o
+        }
+        // On stderr, so the JSON stays an array of rows: unknown, never absent.
+        if !found.unreadable.isEmpty {
+            let ids = found.unreadable.joined(separator: ", ")
+            FileHandle.standardError.write(
+                Data("diskutil could not read \(found.unreadable.count) volume(s) (\(ids)); they may be mounted and are not listed.\n".utf8))
         }
     }
 }

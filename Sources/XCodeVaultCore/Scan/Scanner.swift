@@ -28,14 +28,20 @@ public struct Scanner: Sendable {
         do { runtimes = try SimulatorDiscovery.runtimes(runner: runner) } catch { warnings.append("simctl runtime list failed: \(error)") }
         do { devices = try SimulatorDiscovery.devices(runner: runner) } catch { warnings.append("simctl list devices failed: \(error)") }
         var volumes: [Volume] = []
+        var unreadableVolumeIDs: [String] = []
+        var volumesListed = true
         do {
             let found = try VolumeDiscovery.enumerate(runner: runner)
             volumes = found.volumes
+            unreadableVolumeIDs = found.unreadable
             if !found.unreadable.isEmpty {
                 let ids = found.unreadable.joined(separator: ", ")
                 warnings.append("diskutil could not read \(found.unreadable.count) volume(s) (\(ids)); they may be mounted and are not listed.")
             }
-        } catch { warnings.append("diskutil enumeration failed: \(error)") }
+        } catch {
+            volumesListed = false
+            warnings.append("diskutil enumeration failed: \(error)")
+        }
 
         let items = resolveItems(warnings: &warnings)
         let summary = summarize(items: items, runtimes: runtimes)
@@ -63,6 +69,8 @@ public struct Scanner: Sendable {
             items: items, summary: summary, warnings: warnings)
         report.savings = savings
         report.sizesMeasured = measureSizes
+        report.unreadableVolumeIDs = unreadableVolumeIDs
+        report.volumesListed = volumesListed
         return report
     }
 

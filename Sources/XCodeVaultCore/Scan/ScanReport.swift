@@ -82,6 +82,12 @@ public struct ScanReport: Sendable, Codable, Equatable {
     /// False for a scan that skipped measuring (`scan --no-sizes`): every byte count is then zero, not small.
     /// Defaulted like `savings`, with the same caveat about older stored reports.
     public var sizesMeasured = true
+    /// Device ids `diskutil` listed but whose `info` could not be read even on a second try: possibly mounted, and absent
+    /// from `volumes`, so every check that walks `volumes` did not see them. Defaulted like `savings`.
+    public var unreadableVolumeIDs: [String] = []
+    /// False when the volume list itself could not be read: `volumes` is then empty because nothing was read, not
+    /// because nothing is mounted. Defaulted like `savings`.
+    public var volumesListed = true
     public var warnings: [String]
 
     public func category(for item: StorageItem) -> StorageCategory? { StorageCatalog.category(item.categoryID) }

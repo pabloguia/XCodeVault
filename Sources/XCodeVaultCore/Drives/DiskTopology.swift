@@ -246,9 +246,14 @@ public struct DriveSnapshot: Sendable, Equatable {
     /// Volumes (by device id) whose root holds a Time Machine marker (`Backups.backupdb`, `.timemachine`): an HFS+ or
     /// older backup disk has no APFS `Backup` role to read.
     public var timeMachineMarkedVolumeIDs: Set<String>
+    /// Volumes (by device id) whose `diskutil info` could not be read even on a second try (`VolumeEnumeration`). Not
+    /// in `volumes`, and not known to be unmounted: whatever they are — a vault, a Time Machine backup, another macOS
+    /// installation — the refusals that read `volumes` cannot see it (review of PR #51, M1).
+    public var unreadableVolumeIDs: Set<String>
 
-    public init(disks: [PhysicalDisk], volumes: [Volume], timeMachineMarkedVolumeIDs: Set<String> = []) {
+    public init(disks: [PhysicalDisk], volumes: [Volume], timeMachineMarkedVolumeIDs: Set<String> = [], unreadableVolumeIDs: Set<String> = []) {
         self.disks = disks; self.volumes = volumes; self.timeMachineMarkedVolumeIDs = timeMachineMarkedVolumeIDs
+        self.unreadableVolumeIDs = unreadableVolumeIDs
     }
 
     /// The Time Machine markers at a volume's root.
@@ -260,14 +265,16 @@ public struct DriveSnapshot: Sendable, Equatable {
         runner: CommandRunning = ProcessCommandRunner(), fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) throws -> DriveSnapshot {
         let disks = try DiskTopology.read(runner: runner)
-        let volumes = try VolumeDiscovery.mountedVolumes(runner: runner)
+        let found = try VolumeDiscovery.enumerate(runner: runner)
+        let volumes = found.volumes
         var marked = Set<String>()
         for v in volumes {
             // Never a network share: a dead server would stall this read, and a share is never a drive to prepare.
             guard let mp = v.mountPoint, mp != "/", !v.isNetwork else { continue }
             if timeMachineMarkers.contains(where: { fileExists(mp + "/" + $0) }) { marked.insert(deviceID(v.deviceNode)) }
         }
-        return DriveSnapshot(disks: disks, volumes: volumes, timeMachineMarkedVolumeIDs: marked)
+        return DriveSnapshot(
+            disks: disks, volumes: volumes, timeMachineMarkedVolumeIDs: marked, unreadableVolumeIDs: Set(found.unreadable.map(deviceID)))
     }
 
     /// `/dev/disk3s1` → `disk3s1`.
@@ -282,6 +289,16 @@ public struct DriveSnapshot: Sendable, Equatable {
     /// The mounted volumes on `disk`.
     public func volumes(on disk: PhysicalDisk) -> [Volume] {
         volumes.filter { disk.contains(Self.deviceID($0.deviceNode)) }
+    }
+
+    /// The unreadable volumes `disk` holds.
+    public func unreadableVolumeIDs(on disk: PhysicalDisk) -> [String] {
+        unreadableVolumeIDs.filter(disk.contains).sorted()
+    }
+
+    /// The unreadable volumes no disk of the snapshot claims: one could be on any of them.
+    public var unplacedUnreadableVolumeIDs: [String] {
+        unreadableVolumeIDs.filter { id in !disks.contains { $0.contains(id) } }.sorted()
     }
 
     /// The disks that hold the running system: the store of every container with a boot volume, and any disk holding a
