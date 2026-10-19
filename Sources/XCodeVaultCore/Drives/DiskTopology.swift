@@ -28,6 +28,9 @@ public struct DiskPartition: Sendable, Equatable, Codable {
 
     /// An APFS container's physical store: its volumes are listed under the container, not here.
     public var isAPFSStore: Bool { content == "Apple_APFS" }
+    /// HFS+: a partition typed so, or a file system written on the whole disk (`content` is then `info`'s
+    /// `FilesystemType`, `hfs`). Either might be a Time Machine backup.
+    public var isHFS: Bool { ["Apple_HFS", "Apple_HFSX", "hfs"].contains(content) }
     /// Partitions that are not user volumes and are never offered for erasing on their own.
     public var isSystemPartition: Bool {
         ["EFI", "Apple_Boot", "Apple_APFS_Recovery", "Apple_APFS_ISC", "Apple_KernelCoreDump", "Apple_partition_map", "Apple_Free"].contains(content)
@@ -112,16 +115,21 @@ public struct PhysicalDisk: Sendable, Equatable, Codable, Identifiable {
     /// (a whole-disk file system, or a blank disk).
     public var partitionScheme: String?
     public var partitions: [DiskPartition]
-    /// The APFS containers stored on this disk's partitions.
+    /// The APFS containers stored on this disk's partitions, or on the whole disk.
     public var containers: [APFSContainerInfo]
+    /// A file system written on the whole disk, with no partition map: a stick formatted that way, or a disk image made
+    /// with `-layout NONE`. Its `id` is the disk's and its `content` the file system type (`msdos`, `hfs`, `exfat`, …).
+    /// Measured 2026-10-18 on disk images: `diskutil list` gives such a disk no `Partitions`, so before this nothing
+    /// here saw its volume — not the safety guard, not the erase preview.
+    public var wholeDiskVolume: DiskPartition?
 
     public init(
         id: String, mediaName: String, sizeBytes: UInt64, busProtocol: String, isInternal: Bool, isVirtual: Bool, isWritable: Bool = true,
-        partitionScheme: String?, partitions: [DiskPartition], containers: [APFSContainerInfo] = []
+        partitionScheme: String?, partitions: [DiskPartition], containers: [APFSContainerInfo] = [], wholeDiskVolume: DiskPartition? = nil
     ) {
         self.id = id; self.mediaName = mediaName; self.sizeBytes = sizeBytes; self.busProtocol = busProtocol; self.isInternal = isInternal
         self.isVirtual = isVirtual; self.isWritable = isWritable; self.partitionScheme = partitionScheme; self.partitions = partitions
-        self.containers = containers
+        self.containers = containers; self.wholeDiskVolume = wholeDiskVolume
     }
 
     public var isDiskImage: Bool { isVirtual || busProtocol == "Disk Image" }
@@ -129,7 +137,8 @@ public struct PhysicalDisk: Sendable, Equatable, Codable, Identifiable {
     public var identity: DiskIdentity {
         DiskIdentity(
             wholeDisk: id, mediaName: mediaName, sizeBytes: sizeBytes, partitionUUIDs: partitions.compactMap(\.diskUUID),
-            volumeUUIDs: partitions.compactMap(\.volumeUUID) + containers.compactMap(\.uuid) + containers.flatMap { $0.volumes.compactMap(\.uuid) })
+            volumeUUIDs: partitions.compactMap(\.volumeUUID) + containers.compactMap(\.uuid) + containers.flatMap { $0.volumes.compactMap(\.uuid) }
+                + [wholeDiskVolume?.volumeUUID].compactMap { $0 })
     }
 
     /// GPT keeps its primary and backup tables and the alignment between partitions out of every partition; `diskutil`
@@ -143,10 +152,12 @@ public struct PhysicalDisk: Sendable, Equatable, Codable, Identifiable {
         return sizeBytes > used + Self.mapOverheadBytes ? sizeBytes - used - Self.mapOverheadBytes : 0
     }
 
-    /// Every volume device id on the disk: non-APFS partitions that carry a file system, and every APFS volume of its
-    /// containers. What "every volume this disk holds" means to the safety guard (`DiskSafety`).
+    /// Every volume device id on the disk: non-APFS partitions that carry a file system, every APFS volume of its
+    /// containers, and a file system on the whole disk. What "every volume this disk holds" means to the safety guard
+    /// (`DiskSafety`).
     public var volumeIDs: [String] {
         partitions.filter { !$0.isAPFSStore && !$0.isSystemPartition }.map(\.id) + containers.flatMap { $0.volumes.map(\.id) }
+            + [wholeDiskVolume?.id].compactMap { $0 }
     }
 
     /// Whether `id` (a partition, a container reference or an APFS volume) is on this disk.
@@ -185,13 +196,25 @@ public enum DiskTopology {
             let content = entry["Content"] as? String ?? info["Content"] as? String ?? ""
             // A disk whose content is a file system (no map) reports the file system's name here, never a scheme.
             let scheme = content.hasSuffix("_partition_scheme") ? content : nil
-            let ids = Set(parts.map(\.id))
+            // A container whose store is the whole disk (measured: an APFS image made with `-layout NONE`) belongs to
+            // it as one stored on a partition does.
+            let ids = Set(parts.map(\.id) + [id])
+            // A file system on the whole disk: no partitions, a file system type, and not an APFS store (whose `info`
+            // names its container instead). Read from `info`, which names it whether or not it is mounted (measured).
+            var whole: DiskPartition?
+            if parts.isEmpty, info["APFSContainerReference"] == nil, let fs = info["FilesystemType"] as? String, !fs.isEmpty {
+                let mp = info["MountPoint"] as? String
+                whole = DiskPartition(
+                    id: id, content: fs, sizeBytes: uint(info["Size"] ?? entry["Size"]), volumeName: info["VolumeName"] as? String,
+                    volumeUUID: info["VolumeUUID"] as? String, mountPoint: (mp?.isEmpty ?? true) ? nil : mp)
+            }
             disks.append(
                 PhysicalDisk(
                     id: id, mediaName: info["MediaName"] as? String ?? "", sizeBytes: uint(info["Size"] ?? entry["Size"]),
                     busProtocol: info["BusProtocol"] as? String ?? "", isInternal: info["Internal"] as? Bool ?? true,
                     isVirtual: (info["VirtualOrPhysical"] as? String) == "Virtual", isWritable: info["WritableMedia"] as? Bool ?? false,
-                    partitionScheme: scheme, partitions: parts, containers: containers.filter { $0.physicalStores.contains(where: ids.contains) }))
+                    partitionScheme: scheme, partitions: parts, containers: containers.filter { $0.physicalStores.contains(where: ids.contains) },
+                    wholeDiskVolume: whole))
         }
         return disks
     }

@@ -101,10 +101,11 @@ public enum DiskSafety {
         return out
     }
 
-    /// HFS+ partitions of `disk` that are not mounted: their root, where a Time Machine marker would be, cannot be read.
+    /// HFS+ partitions of `disk` that are not mounted — and an HFS+ file system on the whole disk: their root, where a
+    /// Time Machine marker would be, cannot be read.
     public static func unverifiedHFSPartitions(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [String] {
         let mounted = Set(snapshot.volumes(on: disk).map { DriveSnapshot.deviceID($0.deviceNode) })
-        return disk.partitions.filter { ($0.content == "Apple_HFS" || $0.content == "Apple_HFSX") && !mounted.contains($0.id) }.map(\.id)
+        return (disk.partitions + [disk.wholeDiskVolume].compactMap { $0 }).filter { $0.isHFS && !mounted.contains($0.id) }.map(\.id)
     }
 
     /// Another macOS installation on `disk`: a mounted volume marked so, or — mounted or not — an APFS volume whose role
@@ -127,6 +128,7 @@ public enum DiskSafety {
         let wanted = Set(registeredVaultUUIDs.map { $0.uppercased() })
         let uuids =
             disk.containers.flatMap { $0.volumes.compactMap(\.uuid) } + disk.partitions.compactMap(\.volumeUUID)
+            + [disk.wholeDiskVolume?.volumeUUID].compactMap { $0 }
             + snapshot.volumes(on: disk).compactMap(\.volumeUUID)
         return uuids.contains { wanted.contains($0.uppercased()) }
     }

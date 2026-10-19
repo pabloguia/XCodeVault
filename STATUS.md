@@ -14,13 +14,21 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-- **Unreadable volumes reach the disk gate and the doctor (2026-10-18, PR #54, M1/M2 of the PR #51 review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
+- **Whole-disk file systems are seen (2026-10-18, branch `fix/whole-disk-volumes`).** Measured on `-layout NONE` disk
+  images (`docs/research/evidence/e-wholedisk-volumes-macos26.7.1-25G241-x86_64.txt`): a file system written on a whole
+  disk has no `Partitions` in `diskutil list`, so `enumerate` never listed its volume, the topology gave its disk no
+  volumes, and an APFS container stored on a whole disk was attached to no disk — the guard and the erase preview saw
+  nothing there. `PhysicalDisk.wholeDiskVolume` now carries it into `volumeIDs`, identity, `holdsVault`, the HFS+
+  "might be Time Machine" check and the erase preview; `enumerate` lists it; a container on a whole-disk store belongs to
+  that disk. Erasing such a volume on its own is refused (`eraseVolume` on a whole disk was never measured); erasing the
+  disk lists it. Review: migration-safety.
+- **Unreadable volumes reach the disk gate and the doctor — MERGED (2026-10-18, PR #54, dba99aa; M1/M2 of the PR #51
+  review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
   or any disk, when no disk claims it — refuses every change (`DiskRefusal.volumeUnreadable`, localized, drafts
   `needs_review`), and `revalidate` asks again right before a command runs. `ScanReport` records them
   (`unreadableVolumeIDs`, and `volumesListed` false when the list itself failed), and the doctor reports a
   `volumes-unreadable` finding instead of the silence its volume checks gave (an error when the list itself failed).
-  Review: migration-safety, two rounds. Still open: a whole disk carrying a file system with no partition map is never
-  enumerated, so neither the gate nor the erase preview sees its volume (pre-existing, not measured on hardware).
+  Review: migration-safety, two rounds. The whole-disk gap it named is the entry above.
 - **Another macOS installation is not "the boot volume" — MERGED (2026-10-18, PR #53, f8248b3; finding e of the PR #50
   review).** `Volume.isBootVolume` now means the running system only (mounted at `/` or `/System/Volumes/Data`);
   a new `belongsToMacOSInstall` marks a System or Data volume of another installation, by role, on any disk — wider than

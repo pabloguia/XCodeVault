@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Bootable</key>
+	<false/>
+	<key>BusProtocol</key>
+	<string>Disk Image</string>
+	<key>CanBeMadeBootable</key>
+	<false/>
+	<key>CanBeMadeBootableRequiresDestroy</key>
+	<false/>
+	<key>Content</key>
+	<string></string>
+	<key>DeviceBlockSize</key>
+	<integer>512</integer>
+	<key>DeviceIdentifier</key>
+	<string>disk10</string>
+	<key>DeviceNode</key>
+	<string>/dev/disk10</string>
+	<key>DeviceTreePath</key>
+	<string>IODeviceTree:/</string>
+	<key>Ejectable</key>
+	<true/>
+	<key>EjectableMediaAutomaticUnderSoftwareControl</key>
+	<true/>
+	<key>EjectableOnly</key>
+	<true/>
+	<key>FilesystemName</key>
+	<string>MS-DOS FAT32</string>
+	<key>FilesystemType</key>
+	<string>msdos</string>
+	<key>FilesystemUserVisibleName</key>
+	<string>MS-DOS (FAT32)</string>
+	<key>FreeSpace</key>
+	<integer>66057728</integer>
+	<key>GlobalPermissionsEnabled</key>
+	<false/>
+	<key>IOKitSize</key>
+	<integer>67108864</integer>
+	<key>IORegistryEntryName</key>
+	<string>Apple sparse disk image Media</string>
+	<key>Internal</key>
+	<false/>
+	<key>LowLevelFormatSupported</key>
+	<false/>
+	<key>MediaName</key>
+	<string>Disk Image</string>
+	<key>MediaType</key>
+	<string>Generic</string>
+	<key>MountPoint</key>
+	<string>/Volumes/XCVWDFAT</string>
+	<key>OS9DriversInstalled</key>
+	<false/>
+	<key>OSInternalMedia</key>
+	<false/>
+	<key>ParentWholeDisk</key>
+	<string>disk10</string>
+	<key>PartitionMapPartition</key>
+	<false/>
+	<key>RAIDMaster</key>
+	<false/>
+	<key>RAIDSlice</key>
+	<false/>
+	<key>Removable</key>
+	<true/>
+	<key>RemovableMedia</key>
+	<true/>
+	<key>RemovableMediaOrExternalDevice</key>
+	<true/>
+	<key>SMARTDeviceSpecificKeysMayVaryNotGuaranteed</key>
+	<dict/>
+	<key>SMARTStatus</key>
+	<string>Not Supported</string>
+	<key>Size</key>
+	<integer>67108864</integer>
+	<key>SupportsGlobalPermissionsDisable</key>
+	<false/>
+	<key>SystemImage</key>
+	<false/>
+	<key>TotalSize</key>
+	<integer>66059776</integer>
+	<key>VirtualOrPhysical</key>
+	<string>Virtual</string>
+	<key>VolumeAllocationBlockSize</key>
+	<integer>512</integer>
+	<key>VolumeName</key>
+	<string>XCVWDFAT</string>
+	<key>VolumeSize</key>
+	<integer>66059776</integer>
+	<key>VolumeUUID</key>
+	<string>B8FDA4AE-6932-3362-855F-CAA93A84EFD1</string>
+	<key>WholeDisk</key>
+	<true/>
+	<key>Writable</key>
+	<true/>
+	<key>WritableMedia</key>
+	<true/>
+	<key>WritableVolume</key>
+	<true/>
+</dict>
+</plist>
