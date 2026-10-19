@@ -465,21 +465,24 @@ final class R3StreamingTests: XCTestCase {
     /// L-B: a child that ignores SIGTERM is not waited out: SIGKILL ends it.
     func testAChildIgnoringSIGTERMIsKilled() throws {
         let children = ChildProcesses()
-        let runner = StreamingCommandRunner(observer: { _ in }, children: children)
-        let done = expectation(description: "returned")
         let box = Seen()
+        let result = Seen()
+        let runner = StreamingCommandRunner(observer: box.observer, children: children)
+        let done = expectation(description: "returned")
         DispatchQueue.global().async {
-            let r = try? runner.run("/bin/sh", ["-c", "trap '' TERM; exec /bin/sleep 30"])
-            box.observer(LogLine(.exit, r.map { String($0.status) } ?? "threw"))
+            let r = try? runner.run("/bin/sh", ["-c", "trap '' TERM; echo trapped; exec /bin/sleep 30"])
+            result.observer(LogLine(.exit, r.map { String($0.status) } ?? "threw"))
             done.fulfill()
         }
-        let deadline = Date().addingTimeInterval(5)
-        while children.count == 0 && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
-        Thread.sleep(forTimeInterval: 0.2)  // the trap is set before `exec`
+        // Waits for the child to say its trap is set. A fixed 0.2 s sleep here raced a busy CI runner: SIGTERM arrived
+        // before `trap` ran and ended the shell with 15 (macos-26, PR #54).
+        let deadline = Date().addingTimeInterval(10)
+        while !box.of(.stdout).contains("trapped") && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        XCTAssertEqual(box.of(.stdout), ["trapped"], "the child set its trap")
         XCTAssertFalse(children.stopAndWait(timeout: 0.5), "SIGTERM is ignored")
         XCTAssertTrue(children.killAndWait(timeout: 5))
         wait(for: [done], timeout: 5)
-        XCTAssertEqual(box.of(.exit), ["9"])
+        XCTAssertEqual(result.of(.exit), ["9"])
         XCTAssertEqual(children.count, 0)
     }
 }
