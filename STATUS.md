@@ -14,13 +14,15 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-- **Unreadable volumes reach the disk gate and the doctor (2026-10-18, branch `fix/unreadable-volumes-gate`, M1/M2 of
-  the PR #51 review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
+- **Unreadable volumes reach the disk gate and the doctor (2026-10-18, PR #54, M1/M2 of the PR #51 review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
   or any disk, when no disk claims it — refuses every change (`DiskRefusal.volumeUnreadable`, localized, drafts
   `needs_review`), and `revalidate` asks again right before a command runs. `ScanReport` records them
   (`unreadableVolumeIDs`, and `volumesListed` false when the list itself failed), and the doctor reports a
-  `volumes-unreadable` warning instead of the silence its volume checks gave. Review: migration-safety.
-- **Another macOS installation is not "the boot volume" (2026-10-18, PR #53, finding e of the PR #50 review).** `Volume.isBootVolume` now means the running system only (mounted at `/` or `/System/Volumes/Data`);
+  `volumes-unreadable` finding instead of the silence its volume checks gave (an error when the list itself failed).
+  Review: migration-safety, two rounds. Still open: a whole disk carrying a file system with no partition map is never
+  enumerated, so neither the gate nor the erase preview sees its volume (pre-existing, not measured on hardware).
+- **Another macOS installation is not "the boot volume" — MERGED (2026-10-18, PR #53, f8248b3; finding e of the PR #50
+  review).** `Volume.isBootVolume` now means the running system only (mounted at `/` or `/System/Volumes/Data`);
   a new `belongsToMacOSInstall` marks a System or Data volume of another installation, by role, on any disk — wider than
   before (an external install's Data volume was a vault candidate). It has its own blocker, and its disk its own refusal
   (`DiskRefusal.holdsMacOSInstall`, localized, drafts `needs_review`), which refuses every preparation as `.bootDisk`
