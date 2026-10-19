@@ -26,7 +26,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   open: an unmounted exFAT/NTFS whole disk (kept as a volume typed `unknown` if `info` names it or a UUID); `apfs addVolume`
   and `eraseVolume` on a container whose store is a whole disk, now offered on such a drive (H17 measured them with a
   partition map only); CoreStorage — its logical volume is now seen, but the disk holding its `Apple_CoreStorage`
-  partition is not refused as possibly Time Machine, the old encrypted-HFS+ backup layout. Review: migration-safety.
+  partition is not refused as possibly Time Machine, the old encrypted-HFS+ backup layout; an unmounted whole-disk
+  volume typed `unknown` is not either (HFS+ was measured to keep its type unmounted). Review: migration-safety, two
+  rounds (REQUEST CHANGES, then APPROVE).
 - **Unreadable volumes reach the disk gate and the doctor — MERGED (2026-10-18, PR #54, dba99aa; M1/M2 of the PR #51
   review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
   or any disk, when no disk claims it — refuses every change (`DiskRefusal.volumeUnreadable`, localized, drafts
