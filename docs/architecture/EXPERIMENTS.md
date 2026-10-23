@@ -651,5 +651,12 @@ rehearses any phase without changing anything. Readings are pre-registered in th
 discriminator is which device each open `<UUID>.dmg` is on, not `Ready`. Arms 3 (import as a clone), 4b (physical
 disconnect) and 5 (mount at boot) are deferred until this passes.
 
-**Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
+**Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry.
+
+**Arm 3, `clone-import` (written 2026-10-23, not run).** While staged: APFS-clone the smallest runtime's image
+inside the volume, `simctl runtime delete --keep-asset` it from the mounted store, re-add it from the clone, and
+time it and measure free space. CLONE / COPY thresholds are pre-registered in the script's header. Every step
+re-checks that `Images` is still the staged volume, so a dropped mount cannot turn the delete onto the internal
+store. `--reuse-copy` lets `stage` reuse a verified copy already on the volume. Migration-safety review: blocked
+(10 findings), rewritten, ship. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
 Disk Access.

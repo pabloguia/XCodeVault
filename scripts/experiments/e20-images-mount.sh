@@ -36,6 +36,13 @@
 #   stage       sudo. Copy + verify the store onto the volume; detach the runtimes; mount the volume
 #               at Images; restart simdiskimaged; record WHICH FILE each runtime is served from.
 #   exercise    a scratch device set: create, boot, wait for Booted, shut down, delete.
+#   clone-import  (arm 3) sudo; staged only. Clone the smallest runtime's image INSIDE the volume
+#               (cp -c, APFS clonefile), delete that runtime from the mounted store, and re-add it
+#               from the clone with `simctl runtime add`, timing it and measuring free space on the
+#               volume and on the internal disk. Re-checks before every step that Images is still the
+#               staged volume. Re-baselines the stage-mounted snapshot only if the sole change is its
+#               own image swap. Afterwards the volume differs from the internal store (new image UUID),
+#               so a later stage needs a fresh copy, not --reuse-copy.
 #   restore     sudo. Compare the mounted store with what stage left (anything written there while
 #               mounted would be stranded); detach the runtimes; unmount Images (never -f); snapshot
 #               the uncovered internal store at once and again after a rescan (rule 6).
@@ -48,12 +55,19 @@
 #                 and mount — the script asserts that and stops otherwise.
 #   stage FAIL    a runtime Unusable/missing, signature not Verified, or served from the internal disk.
 #   exercise PASS the scratch device reaches Booted and shuts down cleanly.
+#   clone-import  (pre-registered 2026-10-23, before its first run)
+#                 CLONE  the re-added runtime is Ready + Verified, served from the volume, AND the
+#                        volume's free space fell by less than 5% of the image's size during the add.
+#                 COPY   it is Ready, but the volume's free space fell by 50% or more of the image.
+#                 In between: report the numbers, call it neither. FAIL if it never becomes Ready.
+#                 Internal free space is recorded too; it must not fall by the image's size.
 #   restore       records, does not judge: the internal store at the mount (pre-mount) vs. the moment
 #                 it is uncovered (post-umount) vs. after a rescan (post-rescan). lastUsedAt churn in
 #                 images.plist is expected after the rescan; any other change is a rule-6 finding.
 #
 # WHAT THIS DOES NOT TEST (deliberately deferred, see H20):
-#   arm 3 import of an .exportedBundle on the same volume (the clone question); arm 4b a physical
+#   arm 3 import of an .exportedBundle (clone-import uses a raw image clone, the cheaper shape —
+#   the .exportedBundle form is what the product's Runtime Library holds); arm 4b a physical
 #   disconnect or a forced unmount with runtimes attached; arm 5 mounting at boot (LaunchDaemon); and
 #   a layout with the internal store deleted — that turns "uncovered store" into an empty stub, the
 #   shadow-data case rule 6 forbids. Not before every other arm passes and an ADR says so.
@@ -69,8 +83,11 @@
 #
 # Usage:
 #   scripts/experiments/e20-images-mount.sh [--dry-run] [--i-understand] \
-#       --volume /Volumes/<name> --volume-uuid <Volume UUID> <phase>
+#       [--reuse-copy] --volume /Volumes/<name> --volume-uuid <Volume UUID> <phase>
 #   --volume is needed for preflight and stage; restore/status read it from the state file.
+#   --reuse-copy lets stage accept a volume that already holds a copy of the store from an earlier
+#   stage (every entry must be a name the store also has); the copy is NOT redone but IS verified
+#   byte for byte before anything is detached.
 #   --dry-run runs every read-only check for real and prints each mutating command instead of
 #   running it; its output goes to a temp file, never to docs/research/evidence.
 #   --i-understand is required for stage, exercise and restore without --dry-run.
@@ -87,23 +104,24 @@ SNAP_DIR="$STATE_DIR/snapshots"
 DEVICE_TYPE="${XCV_E20_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
 SELF="scripts/experiments/e20-images-mount.sh"
 
-DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""
+DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --i-understand) OK=1 ;;
+    --reuse-copy) REUSE=1 ;;
     --volume) VOLMP="${2:-}"; shift ;;
     --volume-uuid) VOLUUID="${2:-}"; shift ;;
-    preflight|stage|exercise|restore|status) PHASE="$1" ;;
+    preflight|stage|exercise|clone-import|restore|status) PHASE="$1" ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
-[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|restore|status" >&2; exit 2; }
+[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status" >&2; exit 2; }
 case "$VOLMP" in *[[:space:]]*) echo "REFUSING: the volume's name contains whitespace; this script parses the mount table and needs a name without spaces (rename it in Disk Utility)." >&2; exit 2 ;; esac
 [ -n "$VOLUUID" ] || { echo "REFUSING: --volume-uuid is required. Read it from 'diskutil apfs list' next to the volume's NAME." >&2; exit 2; }
 case "$PHASE" in
-  stage|exercise|restore)
+  stage|exercise|clone-import|restore)
     if [ "$DRY" = 0 ] && [ "$OK" = 0 ]; then
       echo "REFUSING: '$PHASE' changes this machine's state. Read the header of this script, then pass --i-understand (or --dry-run)." >&2; exit 2
     fi ;;
@@ -237,11 +255,19 @@ volume_checks() { # needs --volume; read-only
   entries=0
   for f in "$VOLMP"/* "$VOLMP"/.[!.]*; do
     [ -e "$f" ] || continue
-    case "${f##*/}" in .fseventsd|.Spotlight-V100|.Trashes|.TemporaryItems|.DS_Store) ;; *) entries=$((entries + 1)) ;; esac
+    case "${f##*/}" in
+      .fseventsd|.Spotlight-V100|.Trashes|.TemporaryItems|.DS_Store) ;;
+      *) if [ "$REUSE" = 1 ] && [ -e "$IMAGES/${f##*/}" ]; then :; else entries=$((entries + 1)); fi ;;
+    esac
   done
-  [ "$entries" = 0 ] || refuse "volume is not empty ($entries entries) — E20 needs a dedicated, empty volume"
+  if [ "$entries" != 0 ]; then
+    if [ "$REUSE" = 1 ]; then refuse "volume holds $entries entries the store does not have — not a previous E20 copy"
+    else refuse "volume is not empty ($entries entries) — E20 needs a dedicated, empty volume (or --reuse-copy for a previous E20 copy)"; fi
+  fi
   used=$(du -sk "$IMAGES" 2>/dev/null | awk '{print $1}')
   need=$(( ${used:-0} + 2 * 1024 * 1024 ))
+  # A reused copy already occupies its space; only the headroom is needed.
+  [ "$REUSE" = 1 ] && need=$(( 2 * 1024 * 1024 ))
   have=$(df -k "$VOLMP" | awk 'NR==2{print $4}')
   echo "   store ${used:-?} KB; volume free ${have:-?} KB; needed $need KB"
   [ "${have:-0}" -ge "$need" ] || refuse "not enough free space on the volume"
@@ -362,10 +388,13 @@ phase_stage() {
   # 1. Copy and verify with the runtimes still attached.
   act "keep Spotlight off the volume" sudo mdutil -i off "$VOLSHOW"
   assert_volume || { stop "the volume is no longer the one checked; nothing was copied"; return 1; }
-  act "copy the store to the volume (copy, never move)" sudo ditto "$IMAGES/" "$VOLSHOW/" || {
+  if [ "$REUSE" = 1 ]; then
+    echo "## --reuse-copy: the volume's existing copy is kept and verified below; ditto is not run"; echo
+  elif ! act "copy the store to the volume (copy, never move)" sudo ditto "$IMAGES/" "$VOLSHOW/"; then
     if assert_volume; then stop "ditto failed; the internal store is untouched, the volume holds a partial copy"
     else stop "the volume went away during the copy — a copy may now be on the INTERNAL disk at $VOLSHOW; inspect and remove it yourself"; fi
-    return 1; }
+    return 1
+  fi
   assert_volume || { stop "the volume went away during the copy — a copy may now be on the INTERNAL disk at $VOLSHOW; inspect and remove it yourself"; return 1; }
   owner=$(stat -f '%Su:%Sg' "$IMAGES"); mode=$(stat -f '%Lp' "$IMAGES")
   act "volume root owned like the store ($owner)" sudo chown "$owner" "$VOLSHOW"
@@ -475,6 +504,195 @@ print(r[0] if r else "")')
   [ "$state" = "Booted" ]
 }
 
+# Before EVERY step, Images must still be the staged volume — same UUID, same device as at the
+# start. If the mount dropped, every path below would be the INTERNAL store, and `runtime delete`
+# would delete the internal image (clone-import review #1).
+ci_guard() {
+  [ "$DRY" = 1 ] && return 0
+  if is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ] && [ "$(dev_of "$IMAGES")" = "$CI_DEV" ]; then return 0; fi
+  stop "Images is no longer the staged volume — stopped before '$1' so nothing reaches the internal store"
+  return 1
+}
+ci_names() { imageset_of "$1" | awk '{print $1}'; }
+devices_on() { # <runtimeIdentifier> — "udid isAvailable" per device in the default set; UNREADABLE on failure
+  local j; j=$(xcrun simctl list devices -j 2>/dev/null) || { echo UNREADABLE; return 1; }
+  printf '%s' "$j" | python3 -I -c '
+import json, sys
+for d in json.load(sys.stdin)["devices"].get(sys.argv[1], []): print(d["udid"], d.get("isAvailable"))' "$1" || echo UNREADABLE
+}
+pairs_now() { # UNREADABLE on failure
+  local j; j=$(xcrun simctl list pairs -j 2>/dev/null) || { echo UNREADABLE; return 1; }
+  printf '%s' "$j" | python3 -I -c '
+import json, sys
+for k, p in sorted(json.load(sys.stdin)["pairs"].items()): print(k, p["watch"]["udid"], p["phone"]["udid"])' || echo UNREADABLE
+}
+dyld_cache_kb() { du -sk /Library/Developer/CoreSimulator/Caches/dyld/*/*"$1"* 2>/dev/null | awk '{s+=$1} END {print s+0}'; }
+
+phase_clone_import() {
+  local pick uuid rid size src srcdir short vfree0 vfree1 vfree2 vfree3 ifree0 ifree1 ifree2 t0 t1 dv out newuuid devs0 devs1 pairs0 pairs1 fell kb
+  echo "## checks"
+  if [ "$DRY" = 0 ]; then
+    is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ] || { echo "RESULT: clone-import REFUSED — Images is not mounted with $VOLUUID; run stage first"; return 1; }
+    no_xcodebuild || { echo "RESULT: clone-import REFUSED"; return 1; }
+    nothing_booted || { echo "RESULT: clone-import REFUSED"; return 1; }
+    head -c1 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" >/dev/null 2>&1 || {
+      echo "RESULT: clone-import REFUSED — this terminal lacks Full Disk Access"; return 1; }
+    [ -f "$SNAP_DIR/stage-mounted" ] || { echo "RESULT: clone-import REFUSED — no stage-mounted snapshot to compare against"; return 1; }
+  elif ! is_mountpoint "$IMAGES"; then
+    echo "[dry-run] Images is not staged: a real run would REFUSE here. Every path below would be the internal store — which is exactly why each real step re-checks the mount."
+  fi
+  CI_DEV=$(dev_of "$IMAGES")
+  echo "   staged volume device at Images: $CI_DEV"; echo
+  trap on_interrupt INT TERM HUP
+
+  # Nothing may have landed on the volume since stage: otherwise the re-baseline below would absorb it (#3).
+  snap ci-start "$IMAGES"
+  if [ "$DRY" = 0 ] && [ "$(imageset_of stage-mounted)" != "$(imageset_of ci-start)" ]; then
+    diff <(imageset_of stage-mounted) <(imageset_of ci-start)
+    echo "RESULT: clone-import REFUSED — the volume's image set changed since stage (above). Run restore and look before anything else."
+    return 1
+  fi
+
+  # The smallest Ready runtime whose image is a file directly in Images: least to re-add, fewest devices.
+  pick=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c '
+import json, sys
+c = [(v.get("sizeBytes") or 0, k, v.get("runtimeIdentifier"), v.get("path", "")) for k, v in json.load(sys.stdin).items()
+     if v.get("state") == "Ready" and v.get("path", "").startswith("/Library/Developer/CoreSimulator/Images/")]
+c.sort()
+print("%s %s %s" % (c[0][1], c[0][2], c[0][0]) if c else "")') || pick=""
+  [ -n "$pick" ] || { echo "RESULT: clone-import REFUSED — no Ready runtime with an image in Images"; return 1; }
+  read -r uuid rid size <<< "$pick"
+  # The UUID ends up in sudo paths: accept only the shape simdiskimaged uses (#7).
+  printf '%s' "$uuid" | grep -q -E '^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$' || {
+    echo "RESULT: clone-import REFUSED — unexpected image identifier '$uuid'"; return 1; }
+  short=${rid##*.}
+  srcdir="$IMAGES/xcv-e20-src"; src="$srcdir/$uuid-source.dmg"
+  devs0=$(devices_on "$rid"); pairs0=$(pairs_now)
+  echo "   runtime: $rid  image: $uuid.dmg  size: $size bytes"
+  echo "   devices on it (default set), udid + available:"; printf '%s\n' "$devs0" | sed 's/^/     /'
+  echo "   pairs:"; printf '%s\n' "$pairs0" | sed 's/^/     /'
+  echo
+
+  vfree0=$(df -k "$IMAGES" | awk 'NR==2{print $4}'); ifree0=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}')
+  echo "## before: volume free ${vfree0} KB, internal free ${ifree0} KB, internal dyld cache for $short $(dyld_cache_kb "$short") KB"
+  ls -la /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime 2>&1 | sed 's/^/   /'
+  echo
+
+  # 1. The source: an APFS clone inside the same volume. It goes in a subdirectory, not next to the
+  #    images; whether simdiskimaged's scan registers it anyway is checked after the add.
+  ci_guard "mkdir" || return 1
+  act "source directory on the volume" sudo mkdir -p "$srcdir"
+  ci_guard "clone" || return 1
+  act "clone the image inside the volume (clonefile)" sudo cp -c "$IMAGES/$uuid.dmg" "$src" || { stop "the clone failed; nothing was deleted"; return 1; }
+  if [ "$DRY" = 0 ]; then
+    [ "$(dev_of "$src")" = "$CI_DEV" ] || { stop "the clone is not on the staged volume; nothing was deleted"; return 1; }
+    sudo cmp -s "$IMAGES/$uuid.dmg" "$src" || { ci_guard "remove bad clone" && act "remove the bad clone" sudo rm -f "$src"; stop "the clone differs from the image; nothing was deleted"; return 1; }
+    vfree1=$(df -k "$IMAGES" | awk 'NR==2{print $4}')
+    echo "   clone cost on the volume: $(( vfree0 - vfree1 )) KB (a clonefile should be ~0)"; echo
+  fi
+
+  # 2. Offload: delete the runtime from the MOUNTED store. --keep-asset keeps the call off the
+  #    MobileAsset store under /System (#2). A rig may have started since the checks above (#5).
+  if [ "$DRY" = 0 ]; then
+    { no_xcodebuild && nothing_booted; } || {
+      ci_guard "remove clone" && act "remove the clone" sudo rm -f "$src"; stop "a rig started; nothing was deleted"; return 1; }
+  fi
+  ci_guard "delete" || return 1
+  act "delete $short from the mounted store (keep the MobileAsset)" xcrun simctl runtime delete "$uuid" --keep-asset || {
+    ci_guard "remove clone" && act "remove the clone" sudo rm -f "$src"; stop "runtime delete failed; the runtime is still installed"; return 1; }
+  if [ "$DRY" = 0 ]; then
+    sleep 5
+    ci_guard "post-delete checks" || return 1
+    if [ -e "$IMAGES/$uuid.dmg" ] || xcrun simctl runtime list -j 2>/dev/null | grep -q "\"$uuid\""; then
+      stop "the delete did not take effect ($uuid is still there); the clone is kept at $src. Run restore."; return 1
+    fi
+    ifree1=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}'); vfree2=$(df -k "$IMAGES" | awk 'NR==2{print $4}')
+    echo "## after delete: volume free ${vfree2} KB, internal free ${ifree1} KB (moved $(( ifree1 - ifree0 )) KB), dyld cache for $short $(dyld_cache_kb "$short") KB"
+    ls -la /System/Library/AssetsV2/com_apple_MobileAsset_*SimulatorRuntime 2>&1 | sed 's/^/   /'
+    echo
+  fi
+
+  # 3. Import from the same volume, timed. A failure leaves the runtime uninstalled while staged:
+  #    keep the clone and say exactly what to do (#5).
+  ci_guard "add" || return 1
+  t0=$(date +%s)
+  if [ "$DRY" = 1 ]; then
+    act "re-add from the clone (timed)" xcrun simctl runtime add "$src"
+    act "remove the source clone" sudo rm -f "$src"; act "remove the source directory" sudo rmdir "$srcdir"
+    trap - INT TERM HUP; return 0
+  fi
+  echo "## re-add from the clone (timed)"; echo "\$ xcrun simctl runtime add $src"
+  out=$(xcrun simctl runtime add "$src" 2>&1); dv=$?
+  t1=$(date +%s)
+  printf '%s\n' "$out"; echo "[exit=$dv]"; echo
+  newuuid=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c '
+import json, sys
+r = [k for k, v in json.load(sys.stdin).items() if v.get("runtimeIdentifier") == sys.argv[1] and v.get("state") == "Ready"]
+print(r[0] if r else "")' "$rid" 2>/dev/null)
+  if [ "$dv" != 0 ] || [ -z "$newuuid" ] || [ "$newuuid" = "$uuid" ]; then
+    echo "!!! $short is NOT installed while staged, and its devices are unavailable. The clone is kept at $src."
+    echo "!!! Run restore now (it uncovers the internal store, which still has $short). Do NOT run 'simctl delete unavailable'."
+    stop "the add failed (exit $dv, new image '${newuuid:-none}')"; return 1
+  fi
+
+  vfree3=$(df -k "$IMAGES" | awk 'NR==2{print $4}'); ifree2=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}')
+  fell=$(( vfree2 - vfree3 )); kb=$(( size / 1024 ))
+  echo "## measurements"
+  echo "   add wall time: $(( t1 - t0 )) s"
+  echo "   volume free: before add ${vfree2} KB, after ${vfree3} KB, fell by $fell KB"
+  echo "   image size: $kb KB  (5% = $(( kb / 20 )) KB, 50% = $(( kb / 2 )) KB)"
+  echo "   internal free, add only: before ${ifree1} KB, after ${ifree2} KB, fell by $(( ifree1 - ifree2 )) KB"
+  echo "   source clone still present after the add: $([ -f "$src" ] && echo yes || echo NO)"
+  local reg rl
+  # Fail closed: an unreadable list is not "0 entries" — keep the clone (final review, low).
+  if rl=$(xcrun simctl runtime list -j 2>/dev/null); then reg=$(printf '%s' "$rl" | grep -c "xcv-e20-src"); else reg="unreadable"; fi
+  echo "   runtime entries pointing at the source clone: $reg (must be 0)"
+  echo "   internal dyld cache for $short after the add: $(dyld_cache_kb "$short") KB"
+  echo
+  if [ "$reg" != 0 ]; then
+    stop "simdiskimaged registered the source clone itself; it is KEPT at $src (removing it could pull a file from under a mounted runtime). Run restore."
+    return 1
+  fi
+  echo "## simdiskimaged's own account of the add (unified log)"
+  log show --style compact --last "$(( t1 - t0 + 120 ))s" --predicate 'process == "simdiskimaged"' 2>/dev/null |
+    grep -i -E 'clone|same volume|inbox|copy|free space|final location|sparse' | tail -20
+  echo
+  devs1=$(devices_on "$rid"); pairs1=$(pairs_now)
+  echo "## devices on $short after the add (udid + available):"; printf '%s\n' "$devs1" | sed 's/^/     /'
+  if printf '%s\n%s\n' "$devs0" "$devs1" | grep -q UNREADABLE; then echo "   !! devices could not be read — NOT verified"
+  elif [ "$(printf '%s\n' "$devs0" | awk '{print $1}')" = "$(printf '%s\n' "$devs1" | awk '{print $1}')" ] && ! printf '%s\n' "$devs1" | grep -q " False$"; then
+    echo "   same devices, all available"
+  else echo "   !! devices changed or unavailable — see above"; fi
+  if printf '%s\n%s\n' "$pairs0" "$pairs1" | grep -q UNREADABLE; then echo "   !! pairs could not be read — NOT verified"
+  elif [ "$pairs0" = "$pairs1" ]; then echo "   pairs unchanged"; else echo "   !! pairs changed:"; diff <(printf '%s\n' "$pairs0") <(printf '%s\n' "$pairs1"); fi
+  echo
+
+  ci_guard "cleanup" || return 1
+  act "remove the source clone" sudo rm -f "$src"
+  act "remove the source directory" sudo rmdir "$srcdir"
+  runtime_table
+  served_from
+
+  # Re-baseline restore's stranded-image check only if the ONLY change is this phase's own: the old
+  # image gone, the new one present, the source gone (#3). Names only — the daemon may resize.
+  snap ci-end "$IMAGES"
+  if [ "$(ci_names ci-start | sed "s#^\./$uuid\.dmg\$#./$newuuid.dmg#" | sort)" = "$(ci_names ci-end | sort)" ]; then
+    cp "$SNAP_DIR/ci-end" "$SNAP_DIR/stage-mounted"
+    echo "## re-baselined 'stage-mounted': the only change on the volume is $uuid.dmg -> $newuuid.dmg"
+  else
+    echo "## NOT re-baselined: the volume changed beyond this phase's own swap — restore will flag it"
+    diff <(ci_names ci-start) <(ci_names ci-end)
+  fi
+  echo
+  trap - INT TERM HUP
+
+  if [ "$fell" -lt $(( kb / 20 )) ]; then echo "RESULT: clone-import CLONE — $short back as $newuuid in $(( t1 - t0 )) s; the volume lost $fell KB of a $kb KB image."
+  elif [ "$fell" -ge $(( kb / 2 )) ]; then echo "RESULT: clone-import COPY — $short back as $newuuid in $(( t1 - t0 )) s; the volume lost $fell KB, a full copy."
+  else echo "RESULT: clone-import NEITHER — $short back as $newuuid in $(( t1 - t0 )) s; the volume lost $fell KB of a $kb KB image. Read the log above."; fi
+  echo "        Confirm 'served from' above shows $newuuid.dmg on device $CI_DEV."
+  echo "        The volume now differs from the internal store (new image UUID): a later stage needs a fresh copy, not --reuse-copy."
+}
+
 # Detach, unmount (never forced), snapshot the uncovered store at once, then rescan. Returns 1 and
 # leaves Images mounted if anything refuses.
 phase_restore_body() {
@@ -536,9 +754,9 @@ phase_restore() {
   act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
   rm -f "$STATE_FILE"
   if [ "$stranded" = 1 ]; then
-    echo "!!! RESULT: restore done, BUT the volume's image set changed while staged (diff above). Something was"
-    echo "!!! installed, imported or deleted there and is NOT in the internal store. Do not erase the volume until"
-    echo "!!! that is understood."
+    echo "!!! RESULT: restore done, BUT the volume's image set changed while staged (diff above): something was"
+    echo "!!! installed, imported or deleted there. A deletion loses nothing (the internal store still has it); an"
+    echo "!!! installed or imported image is NOT in the internal store. Do not erase the volume until that is understood."
   else
     echo "RESULT: restore done. The volume holds a copy of the store; erase it yourself when finished."
   fi
@@ -568,6 +786,6 @@ echo "evidence: $OUT"
   xcv_header "E20 images-store mount — phase $PHASE$([ "$DRY" = 1 ] && echo ' (dry run)')"
   echo "# Hypothesis: H20"
   echo
-  "phase_$PHASE"
+  "phase_${PHASE//-/_}"
 } 2>&1 | (trap '' INT TERM HUP; xcv_redact | tee "$OUT")
 exit "${PIPESTATUS[0]}"
