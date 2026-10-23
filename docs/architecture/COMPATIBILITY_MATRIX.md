@@ -1295,7 +1295,7 @@ substitution may not be waved through. Issue #29 stays open.
   shut down and was deleted with the images still on 1,25. Restore: the volume's image set unchanged while
   staged; the internal store **unchanged** between the pre-mount snapshot and the moment it was uncovered (rule 6
   reading); after the rescan only `images.plist`'s mtime moved (content identical); runtimes back on 1,4.
-- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-exercise-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence (this run's files were rotated aside when arm 3 re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T190044.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T191148.txt`, `../research/evidence/e20-exercise-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T191659.txt`.
   The first stage attempt is kept: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T190520.txt`
   — it stopped correctly in verification on `com.apple.provenance`, which macOS stamps on files `ditto` creates.
 - Functional checks: simulator boot ✓ (scratch set); xcodebuild test — not run while staged; physical device N/A
@@ -1307,3 +1307,27 @@ substitution may not be waved through. Issue #29 stays open.
   or forced unmount with runtimes attached (arm 4b), mounting at boot (arm 5), import as a clone (arm 3), a real
   rig run while staged, Apple Silicon, Thunderbolt, Xcode 27. The internal store was never deleted, so this says
   nothing yet about a layout without it.
+
+### E20 arm 3 — import as a clone from the same volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: `stage --reuse-copy` (the copy already on the volume, re-verified byte for byte), then
+  `clone-import`: `cp -c` of the watchOS 26.5 image (5.2 GB) into `Images/xcv-e20-src/` on the mounted volume,
+  `simctl runtime delete <uuid> --keep-asset` from the mounted store, `simctl runtime add <clone>`; then `restore`.
+- Result: **FAIL — the add was refused.** `SimDiskImageError` 14, "Cannot copy the image because the disk is
+  almost full", exit 14, with 19.2 GB free on the volume (container ~98% used: it also holds the operator's other
+  volumes) and 23.8 GB free internally (~95% used). The clone itself cost 0 KB. The delete took effect, and also
+  removed the runtime's 2.8 GB dyld cache on the internal disk (regenerable) despite `--keep-asset`, which kept
+  the MobileAsset catalogue. The script kept the clone, said to restore, and restore brought the machine back:
+  internal store unchanged at uncovering (rule 6), both runtimes Ready + Verified from the internal disk, the
+  watch device back to Shutdown.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: arm 3 **not shown**. The daemon decided to **copy**, not clone, and refused on free space. Which disk
+  it measured is not recorded: its free-space messages are info-level and were not in `log show` afterwards. The
+  installed images' `sourceURL`s all point at `Cryptex/Images/Inbox`, on the internal disk, which suggests the add
+  stages there — and a stage outside the mounted volume can never be a clone. Not established.
+- Notes: the deleted image left a `<uuid>.dmg.sb-*` directory (mode 700) on the volume. Next: re-run with
+  `log stream --level info --predicate 'process == "simdiskimaged"'` capturing the add, to read the inbox path and
+  the "A < B minimum required" numbers. Experimental (rule 10).

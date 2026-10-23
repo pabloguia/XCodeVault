@@ -2279,9 +2279,17 @@ Both runtime images moved from being held open on the internal data volume (devi
 volume (1,25), `Ready` + `Verified`; a scratch iPhone booted from them; on restore the internal store was
 byte-for-byte as left at the mount, and nothing was stranded on the volume. The F16 barrier and the symlink
 refusal were never in play: no pointer was changed, no symlink existed. Matrix entry "E20"; evidence
-`../research/evidence/e20-{preflight,stage,exercise,restore}-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+the four phase files of the first run, rotated to `…-superseded-…` names when arm 3 re-ran them (paths in the matrix entry).
 
 What this does not establish, and what gates any product use: a **physical disconnect** with runtimes attached
 (arm 4b — the rule-6 case that matters), **mounting at boot** before simdiskimaged scans (arm 5), **import as a
 clone** (arm 3, the speed win), a real test run while staged, and a layout where the internal copy is gone. Until
 then it is a measured mechanism, not a strategy: experimental everywhere, and the internal store stays.
+
+**E20 arm 3, 2026-10-23: import as a clone NOT shown.** With the store mounted, `simctl runtime add` of an APFS
+clone sitting on the same volume was refused — `SimDiskImageError 14`, "Cannot copy the image because the disk is
+almost full" — with 19 GB free on the volume and 24 GB internally. The daemon chose to copy. Which disk it measured
+is unrecorded (info-level log), but every installed image's `sourceURL` is under `Cryptex/Images/Inbox`, on the
+internal disk: if the add stages there, a clone is impossible while only `Images` is on the drive, and every
+import costs a full internal copy plus that disk's free-space floor. Restore brought the machine back cleanly.
+Matrix entry "E20 arm 3". The speed win that motivated arm 3 is therefore unproven, and on this machine blocked.

@@ -1,17 +1,17 @@
 # Experiment: E20 images-store mount — phase stage
-# Date: 2026-10-23T22:09:17Z
+# Date: 2026-10-23T22:32:41Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
 # xcode-select: /Applications/Xcode.app/Contents/Developer
-# Runner: <user> (uid 501); sudo available: yes
+# Runner: <user> (uid 501); sudo available: no
 
 # Hypothesis: H20
 
 ## checks
    this terminal holds Full Disk Access
    device location: External; protocol: USB; removable: Fixed
-   store 15468140 KB; volume free 34619864 KB; needed 17565292 KB
+   store 15468140 KB; volume free 19151000 KB; needed 2097152 KB
 ## simctl runtime list (summary)
 com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
 com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
@@ -25,14 +25,12 @@ com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/De
 
 ## keep Spotlight off the volume
 $ sudo mdutil -i off /Volumes/<vault>
-2026-10-23 19:09:22.157 mdutil[22210:661110] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
+2026-10-23 19:32:51.560 mdutil[48971:775923] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
 /System/Volumes/Data/Volumes/<vault>:
 	Indexing disabled.
 [exit=0]
 
-## copy the store to the volume (copy, never move)
-$ sudo ditto /Library/Developer/CoreSimulator/Images/ /Volumes/<vault>/
-[exit=0]
+## --reuse-copy: the volume's existing copy is kept and verified below; ditto is not run
 
 ## volume root owned like the store (root:admin)
 $ sudo chown root:admin /Volumes/<vault>
@@ -48,7 +46,6 @@ $ sudo chmod 755 /Volumes/<vault>
    provenance stamps on the copy (expected, not compared):
      -rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
      -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
-     -rw-r--r--@ 1 root  wheel  -        1669 Oct 23 19:03 images.plist
      drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
      drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
    metadata listing: identical
@@ -77,7 +74,7 @@ $ sudo cp -p /Library/Developer/CoreSimulator/Images/images.plist /Volumes/<vaul
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  wheel  -        1669 Oct 23 19:11 images.plist
+-rw-r--r--  1 root  wheel  -        1669 Oct 23 19:34 images.plist
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 Inbox
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
 
@@ -92,7 +89,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 22:11:39 +0000
+      "lastStateChangeAt" => 2026-10-23 22:34:35 +0000
       "lastUsedAt" => 2026-10-23 21:40:59 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -138,7 +135,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 22:11:39 +0000
+      "lastStateChangeAt" => 2026-10-23 22:34:34 +0000
       "lastUsedAt" => 2026-10-23 21:54:19 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -221,7 +218,7 @@ com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/De
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  admin  -        1669 Oct 23 19:11 images.plist
+-rw-r--r--  1 root  admin  -        1669 Oct 23 19:34 images.plist
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
 	com.apple.provenance	         11 
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
@@ -238,53 +235,7 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 22:11:39 +0000
-      "lastUsedAt" => 2026-10-23 21:54:19 +0000
-      "mountingMode" => {
-        "mountAsDMG" => {
-        }
-      }
-      "mountPolicy" => {
-        "automatic" => {
-        }
-      }
-      "path" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
-      }
-      "runtimeInfo" => {
-        "build" => "23F77"
-        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
-        "bundlePath" => {
-          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
-        }
-        "isInternal" => false
-        "platformIdentifier" => "com.apple.platform.iphonesimulator"
-        "supportedArchitectures" => [
-          0 => "x86_64"
-          1 => "arm64"
-        ]
-        "version" => 1705216
-      }
-      "signatureState" => {
-        "verified" => {
-        }
-      }
-      "sourceURL" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
-      }
-      "state" => 5
-      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
-      "writePolicy" => {
-        "readOnly" => {
-        }
-      }
-    }
-    1 => {
-      "format" => {
-        "normal" => {
-        }
-      }
-      "lastStateChangeAt" => 2026-10-23 22:11:39 +0000
+      "lastStateChangeAt" => 2026-10-23 22:34:35 +0000
       "lastUsedAt" => 2026-10-23 21:40:59 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -320,6 +271,52 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
       }
       "state" => 5
       "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:34:34 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
       "writePolicy" => {
         "readOnly" => {
         }
