@@ -8,10 +8,10 @@
 
 # Hypothesis: H20
 
-## scratch device set (internal, temporary): /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e20-set.tMjnUamFto
+## scratch device set (internal, temporary): <tmpdir>/xcv-e20-set.tMjnUamFto
    created F31F4B10-066D-4189-8EBA-9D8552F0B7F8 on com.apple.CoreSimulator.SimRuntime.iOS-26-5
 ## boot
-$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e20-set.tMjnUamFto boot F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto boot F31F4B10-066D-4189-8EBA-9D8552F0B7F8
 [exit=0]
 
    state after boot wait: Booted
@@ -24,11 +24,11 @@ $ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xc
    (no line above = no visible holder; see the ordering argument)
 
 ## shutdown
-$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e20-set.tMjnUamFto shutdown F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto shutdown F31F4B10-066D-4189-8EBA-9D8552F0B7F8
 [exit=0]
 
 ## delete
-$ xcrun simctl --set /private/var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e20-set.tMjnUamFto delete F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto delete F31F4B10-066D-4189-8EBA-9D8552F0B7F8
 [exit=0]
 
 RESULT: exercise PASSED

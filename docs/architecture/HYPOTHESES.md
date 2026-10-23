@@ -2301,3 +2301,11 @@ own log (matrix entry "E20 arm 3 repeat") shows `simctl runtime add` copying the
 are full copies onto the internal disk (no clone, no speed win), and **nothing can be installed or imported while
 the store is mounted** — installs would have to happen with the store internal and be moved afterwards, which is
 the Runtime Library flow with an extra step. H20's using-runtimes result (stage + exercise) stands.
+
+**E20 arm 3 with a DiskArbitration mount, 2026-10-23: installs while staged WORK; the clone does not.** Mounted with
+`diskutil mount -mountPoint` instead of `mount_apfs -o nobrowse`, CacheDelete recognises the volume (21.9 GB
+available) and `simctl runtime add` succeeds in 51 s, landing the image on the drive. The staging path is unchanged:
+a full copy on the internal disk first (a transient ~5.1 GB peak), then a full copy onto the volume. So a product
+built on H20 must mount through DiskArbitration, must budget one image's worth of free internal space per install,
+and gets no speed win on import. Matrix entry "E20 arm 3, DiskArbitration mount". Still open before any product use:
+the physical disconnect (arm 4b) and mounting at boot (arm 5) — now with a DiskArbitration mount, the one that works.

@@ -1347,8 +1347,9 @@ substitution may not be waved through. Issue #29 stays open.
   {Invalid volume=…/Images}`, result **0** — hence "disk is almost full". The internal inbox was empty again
   afterwards. Restore: internal store unchanged at uncovering (rule 6), both runtimes back on 1,4, the watch device
   back; the post-rescan `images.plist` differs from post-umount only by the order of its two entries.
-- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`,
-  `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt` (the unfiltered stream minus Security/prefs/analytics noise), `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence (rotated aside when the DiskArbitration run re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T195613.txt`,
+  `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200324.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200628.txt` (the unfiltered
+  stream minus Security/prefs/analytics noise), `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200459.txt`.
 - Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
 - Verdict: arm 3 **falsified for this layout**, on two independent counts. Staging always goes through the
   internal `Cryptex/Images/Inbox`, so an import from the drive is a full copy onto the internal disk and can never
@@ -1357,3 +1358,33 @@ substitution may not be waved through. Issue #29 stays open.
 - Notes: whether a DiskArbitration-aware mount (`diskutil mount -mountPoint`) or a mount without `nobrowse`
   would satisfy CacheDelete is untested; E6c found DiskArbitration declines a previously mounted volume at a
   chosen mount point. The first staging point is internal regardless. Experimental (rule 10).
+
+### E20 arm 3, DiskArbitration mount — does CacheDelete accept the volume? — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: the volume left by the repeat was repaired by hand, without a new copy: the operator removed the
+  `<uuid>.dmg.sb-*` directory the delete had left, moved the APFS clone back to the original image name and removed
+  the empty source directory (its contents before removal were not recorded). Then `stage --reuse-copy --mount-with
+  diskutil` (the repaired copy re-verified byte for byte and by metadata), `clone-import`, `restore`.
+- Result: **ACCEPTED (pre-registered).** DiskArbitration mounted the previously mounted volume at the chosen mount
+  point without complaint — `diskutil mount -mountPoint …/Images` — as `apfs, local, nodev, nosuid, journaled`
+  (no `nobrowse`). Stage passed as before: both images open on 1,25, Ready + Verified. In `clone-import`, CacheDelete
+  answered for `/Library/Developer/CoreSimulator/Images [/dev/disk7s3 : apfs]`: free 19.61 GB + purgeable 2.33 GB =
+  **21.94 GB**, no "Invalid volume". **The add succeeded**: watchOS 26.5 back as a new image in **51 s**, Ready +
+  Verified, served from 1,25; the watch device and its pair intact. The log shows the path: the source is first copied
+  to the **internal** `Cryptex/Images/Inbox` (opened on dev 0x1000004 = 1,4), inspected, then written to
+  `Images/Inbox` **on the volume** (dev 0x1000019 = 1,25) and moved to `Images/<new-uuid>.dmg`. The volume lost
+  5,119,308 KB — the image's full size, so **COPY, not clone** — and internal free space dipped to 17,517,376 KB
+  during the add (from 22,639,160 KB): a **transient ~5.1 GB internal peak**, returned afterwards.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (devices and pairs checked available); xcodebuild N/A; physical device N/A
+- Verdict: **installing while staged works with a DiskArbitration mount**; the `mount_apfs -o nobrowse` mount was the
+  blocker (which of its two differences — the mounter or `nobrowse` — matters is not separated). **Import as a clone
+  stays falsified**: every add stages a full copy on the internal disk first. Restore: internal store unchanged at
+  uncovering (rule 6); runtimes back on 1,4; the new watchOS image remains on the volume only, a second copy of the
+  same runtime build the internal store still has, so nothing is lost.
+- Notes: E6c's "DiskArbitration declines a previously mounted volume at a chosen mount point" did not reproduce here
+  (different volume, different mount point). The image-set snapshot counted the delete's `.sb-*` directory as an image
+  (a `find` error line), so clone-import did not re-baseline and restore raised its stranded warning; the snapshot now
+  prunes it. Per-user temp paths in three evidence files were rewritten to `<tmpdir>`. Experimental (rule 10).

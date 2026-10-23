@@ -208,7 +208,9 @@ snap() {
   out=$(
     echo "--- listing"; (cd "$dir" && ls -leO@R .) 2>&1 | grep -v '^total '
     echo "--- images.plist"; plutil -p "$dir/images.plist" 2>&1
-    echo "--- image set"; (cd "$dir" && find . -type f ! -name images.plist ! -path './.*' -exec stat -f '%N %z' {} + | sort) 2>&1
+    # Dot-entries (Spotlight, fseventsd) and the 700-mode `<uuid>.dmg.sb-*` directory a runtime delete leaves
+    # are pruned, not walked: their "Permission denied" lines used to land in the image set as if they were images.
+    echo "--- image set"; (cd "$dir" && find . \( -name '.?*' -o -name '*.sb-*' \) -prune -o -type f ! -name images.plist -exec stat -f '%N %z' {} + | sort) 2>&1
   )
   printf '%s\n' "$out"
   if [ "$DRY" = 1 ]; then echo "[dry-run] not saved"; echo; return 0; fi
@@ -598,7 +600,7 @@ ci_log_stop() {
   CI_LOG_PID=""
   echo "## simdiskimaged log during delete + add (info level, filtered)"
   grep -i -E 'inbox|free space|almost full|clone|same volume|minimum|copy|move|stag|final location|purg|sparse|dyld|delet|request' "$CI_LOG" | cut -c1-400 | tail -120
-  echo "   ($(wc -l < "$CI_LOG" | tr -d ' ') lines captured in total; the unfiltered stream is at $CI_LOG until the next reboot)"
+  echo "   ($(wc -l < "$CI_LOG" | tr -d ' ') lines captured in total; the unfiltered stream is in \$TMPDIR as ${CI_LOG##*/} until the next reboot)"
   echo
 }
 
@@ -856,6 +858,7 @@ else
   xcv_rotate_out "$OUT" || exit 2
 fi
 echo "evidence: $OUT"
+# The per-user temp directory (/var/folders/<hash>/<hash>/T) identifies the machine; it is rewritten to <tmpdir>.
 # The consumers ignore INT/TERM/HUP (ignored dispositions survive exec), so an interrupt reaches
 # only the phase, whose trap reports the state left behind into a pipeline that is still there.
 {
@@ -863,5 +866,5 @@ echo "evidence: $OUT"
   echo "# Hypothesis: H20"
   echo
   "phase_${PHASE//-/_}"
-} 2>&1 | (trap '' INT TERM HUP; xcv_redact | tee "$OUT")
+} 2>&1 | (trap '' INT TERM HUP; xcv_redact | sed -l -E 's#/(private/)?var/folders/[^/ ]+/[^/ ]+/T/#<tmpdir>/#g' | tee "$OUT")
 exit "${PIPESTATUS[0]}"

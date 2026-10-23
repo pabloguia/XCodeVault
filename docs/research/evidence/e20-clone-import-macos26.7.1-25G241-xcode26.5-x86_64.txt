@@ -1,15 +1,16 @@
 # Experiment: E20 images-store mount — phase clone-import
-# Date: 2026-10-23T23:02:13Z
+# Date: 2026-10-23T23:20:26Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
 # xcode-select: /Applications/Xcode.app/Contents/Developer
-# Runner: <user> (uid 501); sudo available: no
+# Runner: <user> (uid 501); sudo available: yes
 
 # Hypothesis: H20
 
 ## checks
-   staged volume device at Images: 1,25
+   staged volume device at Images: 1,25; mounted by: diskutil
+   mount line: /dev/disk7s3 on /Library/Developer/CoreSimulator/Images (apfs, local, nodev, nosuid, journaled)
 
 ## snapshot 'ci-start' of /Library/Developer/CoreSimulator/Images
 --- listing
@@ -17,7 +18,7 @@
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  admin  -        1669 Oct 23 19:56 images.plist
+-rw-r--r--  1 root  admin  -        1669 Oct 23 20:19 images.plist
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
 	com.apple.provenance	         11 
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
@@ -34,53 +35,7 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 22:56:04 +0000
-      "lastUsedAt" => 2026-10-23 21:40:59 +0000
-      "mountingMode" => {
-        "mountAsDMG" => {
-        }
-      }
-      "mountPolicy" => {
-        "automatic" => {
-        }
-      }
-      "path" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
-      }
-      "runtimeInfo" => {
-        "build" => "23T570"
-        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
-        "bundlePath" => {
-          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
-        }
-        "isInternal" => false
-        "platformIdentifier" => "com.apple.platform.watchsimulator"
-        "supportedArchitectures" => [
-          0 => "x86_64"
-          1 => "arm64"
-        ]
-        "version" => 1705216
-      }
-      "signatureState" => {
-        "verified" => {
-        }
-      }
-      "sourceURL" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
-      }
-      "state" => 5
-      "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
-      "writePolicy" => {
-        "readOnly" => {
-        }
-      }
-    }
-    1 => {
-      "format" => {
-        "normal" => {
-        }
-      }
-      "lastStateChangeAt" => 2026-10-23 22:56:03 +0000
+      "lastStateChangeAt" => 2026-10-23 23:19:50 +0000
       "lastUsedAt" => 2026-10-23 21:54:19 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -121,6 +76,52 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
         }
       }
     }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 23:19:51 +0000
+      "lastUsedAt" => 2026-10-23 21:40:59 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23T570"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.watchsimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+      }
+      "state" => 5
+      "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
   ]
   "standaloneBundles" => [
   ]
@@ -136,7 +137,7 @@ find: ./.Spotlight-V100/Store-V2/511DE73B-9400-4FAE-99A3-2A8FBC47CE87: Permissio
    pairs:
      EB61B115-3F80-42CE-927A-0B166305D5F3 0F29E552-3BA3-413D-96ED-B810CD690DC4 15EA64C9-8286-40CC-881A-B19C606C7F88
 
-## before: volume free 19152800 KB, internal free 20882768 KB, internal dyld cache for watchOS-26-5 2877356 KB
+## before: volume free 19152796 KB, internal free 20814412 KB, internal dyld cache for watchOS-26-5 2877356 KB
    /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime:
    total 8
    drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
@@ -171,7 +172,7 @@ $ sudo cp -c /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C
 $ xcrun simctl runtime delete 28793F5D-57BF-4847-957A-D2C0AC7AC62B --keep-asset
 [exit=0]
 
-## after delete: volume free 19152784 KB, internal free 23761400 KB (moved 2878632 KB), dyld cache for watchOS-26-5 0 KB
+## after delete: volume free 19152780 KB, internal free 22639160 KB (moved 1824748 KB), dyld cache for watchOS-26-5 0 KB
    /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime:
    total 8
    drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
@@ -192,27 +193,297 @@ $ xcrun simctl runtime delete 28793F5D-57BF-4847-957A-D2C0AC7AC62B --keep-asset
 
 ## re-add from the clone (timed)
 $ xcrun simctl runtime add /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg
-An error was encountered processing the command (domain=com.apple.CoreSimulator.simdiskimaged.SimDiskImageError, code=14):
-Cannot copy the image because the disk is almost full
-[exit=14]
+D: B50700E4-0D55-4C18-AB6A-9FDF52DB19C5 watchOS (26.5 - 23T570) (Ready)
+[exit=0]
+   lowest internal free space during the add: 17517376 KB
 
 ## simdiskimaged log during delete + add (info level, filtered)
-2026-10-23 20:03:03.797 I  simdiskimaged[66379:d6d01] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
-2026-10-23 20:03:04.325 A  simdiskimaged[66379:ddc86] (Security) SecItemDelete
-2026-10-23 20:03:20.159 I  simdiskimaged[66379:de2a4] Attached image /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/24B22E2C-3334-4A65-AD74-57DDCF88A683.dmg, root virtual disk BSD name disk4
-2026-10-23 20:03:20.513 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: /Library/Developer/CoreSimulator/Images
-2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] <private> role: 0
-2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] Not Valid
-2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume failed for volume /Library/Developer/CoreSimulator/Images: Error Domain=CacheDeleteErrorDomain Code=10 "(null)" UserInfo={Invalid volume=/Library/Developer/CoreSimulator/Images}
-2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 0
-   (51 lines captured in total; the unfiltered stream is at /var/folders/0j/s5tdr1vd2bzbb07xskbs9dw40000gn/T/xcv-e20-sdi-log.4a0MBCl6up until the next reboot)
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_SHARED_PURGEABLE : 996151759
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : 996151759
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 380 CDRecentVolumeInfo _recentInfoAtUrgency, volume: /Library/Developer/CoreSimulator/Images, urgency: 3, result:
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP: {
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Library/Developer/CoreSimulator/Images
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <<<Query Result from daemon cache (u: 3, ET: 0.006255431): "/Library/Developer/CoreSimulator/Images : 2.33 GB"
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_FREESPACE : 19612446720
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_ELAPSED_TIME : 0.006255431
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 2326312565
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_FSPURGEABLE : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP : {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    "com.apple.deleted_helper" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    "com.apple.fspurgeable_data" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper"
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_SHARED_PURGEABLE : 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Library/Developer/CoreSimulator/Images
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] Query Result>>> 2326312565 bytes on: "/Library/Developer/CoreSimulator/Images".
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 701 publicClientAvailableSpaceForVolume kCacheDeleteAvailableSpaceClassEssential 21938759285 (21.94 GB) = freespace 19612446720 + purgeableSpace: 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume: <CacheDeleteVolume> at: /Library/Developer/CoreSimulator/Images [/dev/disk7s3 : apfs] freespace: 19612446720 (19.61 GB), initialFreespace: 19612446720 (19.61 GB), used: 15839436800 (15.84 GB), total size: 1024209502208 (1024.21 GB)
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 21938759285
+2026-10-23 20:22:00.326 A  simdiskimaged[97247:f953d] (Security) SecTrustCopyAppleTrustAnchors
+2026-10-23 20:22:00.327 A  simdiskimaged[97247:f953d] (Security) SecTrustCopyAppleTrustAnchors
+2026-10-23 20:22:00.328 A  simdiskimaged[97247:f953d] (Security) SecTrustCopyAppleTrustAnchors
+2026-10-23 20:22:00.328 I  simdiskimaged[97247:f953d] Reset quarantine bit for '/Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg'.
+2026-10-23 20:22:00.463 I  simdiskimaged[97247:f953d] Attached image /Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, root virtual disk BSD name disk4
+2026-10-23 20:22:00.485 I  simdiskimaged[97247:f953d] [com.apple.CarbonCore:FileIDMap] FIDCopyFileIDMapForVolume FIDCopyFileIDMapForVolume: adding FileIDMap for vRefNum (-140)
+2026-10-23 20:22:00.501 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] received CACHE_DELETE_PURGEABLE_UPDATED notification, token: 27
+2026-10-23 20:22:00.502 Df simdiskimaged[97247:fa118] [com.apple.xpc:connection] [0x7fa841004760] activating connection: mach=true listener=false peer=false name=com.apple.cache_delete.public
+2026-10-23 20:22:00.541 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] got a compatible version
+2026-10-23 20:22:00.542 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:22:00.849 Df simdiskimaged[97247:f953d] Success! Found simulator runtime info from image 'ImageInfo { uuid=B50700E4-0D55-4C18-AB6A-9FDF52DB19C5, path=/Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, state=Reading(last update: 2026-10-23 23:22:00 +0000), verification=verified, runtimeInfo=RuntimeInfo { bundle=com.apple.CoreSimulator.SimRuntime.wa
+2026-10-23 20:22:01.136 I  simdiskimaged[97247:f953d] [com.apple.CarbonCore:FileIDMap] FIDCopyFileIDMapForVolume FIDCopyFileIDMapForVolume: adding FileIDMap for vRefNum (-141)
+2026-10-23 20:22:01.203 I  simdiskimaged[97247:f953d] Handling dyld shared cache prep request for <private>
+2026-10-23 20:22:01.203 I  simdiskimaged[97247:fa118] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Updating dyld shared cache for runtime bundle: <private>
+2026-10-23 20:22:01.220 I  simdiskimaged[97247:f953d] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Executing <private> with arguments <private>
+2026-10-23 20:22:01.748 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] received CACHE_DELETE_PURGEABLE_UPDATED notification, token: 27
+2026-10-23 20:22:01.748 Df simdiskimaged[97247:fa112] [com.apple.xpc:connection] [0x7fa841305e00] activating connection: mach=true listener=false peer=false name=com.apple.cache_delete.public
+2026-10-23 20:22:01.802 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] got a compatible version
+2026-10-23 20:22:01.803 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] <private> role: 64
+   (634 lines captured in total; the unfiltered stream is at <tmpdir>/xcv-e20-sdi-log.iAU3g92dRX until the next reboot)
 
-!!! watchOS-26-5 is NOT installed while staged, and its devices are unavailable. The clone is kept at /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg.
-!!! Run restore now (it uncovers the internal store, which still has watchOS-26-5). Do NOT run 'simctl delete unavailable'.
+## measurements
+   add wall time: 51 s
+   volume free: before add 19152780 KB, after 14033472 KB, fell by 5119308 KB
+   image size: 5119307 KB  (5% = 255965 KB, 50% = 2559653 KB)
+   internal free, add only: before 22639160 KB, after 22646712 KB, fell by -7552 KB
+   source clone still present after the add: yes
+   runtime entries pointing at the source clone: 0 (must be 0)
+   internal dyld cache for watchOS-26-5 after the add: 0 KB
 
-RESULT: clone-import STOPPED — the add failed (exit 14, new image 'none')
-== state now ==
-   Images is a mount point: YES (volume <vault-uuid>)
-   runtime volumes mounted: 1 (0 = runtimes detached)
-   to return to normal: scripts/experiments/e20-images-mount.sh --i-understand --volume-uuid <UUID> restore
-   (with Images not mounted, restore only rescans if a runtime is not Ready)
+## devices on watchOS-26-5 after the add (udid + available):
+     0F29E552-3BA3-413D-96ED-B810CD690DC4 True
+   same devices, all available
+   pairs unchanged
+
+## remove the source clone
+$ sudo rm -f /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg
+[exit=0]
+
+## remove the source directory
+$ sudo rmdir /Library/Developer/CoreSimulator/Images/xcv-e20-src
+[exit=0]
+
+## simctl runtime list (summary)
+com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   volume mounted at Images device: 1,25
+   COMMAND DEVICE NAME
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## snapshot 'ci-end' of /Library/Developer/CoreSimulator/Images
+--- listing
+ls: ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg.sb-ce0850f8-jngYJ8: Permission denied
+drwx------  2 root  admin  -          64 Oct 23 20:21 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg.sb-ce0850f8-jngYJ8
+-rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--  1 root  admin  -  5242171072 Oct 23 20:21 B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg
+-rw-r--r--  1 root  admin  -        1656 Oct 23 20:22 images.plist
+drwxr-xr-x@ 2 root  admin  -          64 Oct 23 20:22 Inbox
+	com.apple.provenance	         11 
+drwxr-xr-x@ 2 root  admin  -          64 Oct 23 20:22 mnt
+	com.apple.provenance	         11 
+
+./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg.sb-ce0850f8-jngYJ8:
+
+./Inbox:
+
+./mnt:
+--- images.plist
+{
+  "images" => [
+    0 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 23:19:50 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 23:22:01 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23T570"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.watchsimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/D646141C-F963-47D4-BDA3-91DF44335B6B.dmg"
+      }
+      "state" => 5
+      "uuid" => "B50700E4-0D55-4C18-AB6A-9FDF52DB19C5"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+  ]
+  "standaloneBundles" => [
+  ]
+}
+--- image set
+find: ./.Spotlight-V100/Store-V2/511DE73B-9400-4FAE-99A3-2A8FBC47CE87: Permission denied
+find: ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg.sb-ce0850f8-jngYJ8: Permission denied
+./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg 10597197700
+./B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg 5242171072
+
+## NOT re-baselined: the volume changed beyond this phase's own swap — restore will flag it
+3c3
+< ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+---
+> find:
+4a5
+> ./B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg
+
+RESULT: clone-import COPY — watchOS-26-5 back as B50700E4-0D55-4C18-AB6A-9FDF52DB19C5 in 51 s; the volume lost 5119308 KB, a full copy.
+        Confirm 'served from' above shows B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg on device 1,25.
+        The volume now differs from the internal store (new image UUID): a later stage needs a fresh copy, not --reuse-copy.

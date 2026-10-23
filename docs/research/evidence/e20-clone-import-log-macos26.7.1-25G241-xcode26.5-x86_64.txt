@@ -1,54 +1,629 @@
-# Experiment: E20 arm 3 (repeat) — simdiskimaged info-level log during delete + add, unfiltered except Security/prefs/analytics noise
-# Date: 2026-10-23T23:06:27Z
+# Experiment: E20 arm 3 (DiskArbitration mount) — simdiskimaged info-level log during delete + add, minus Security/prefs/analytics noise
+# Date: 2026-10-23T23:24:39Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
 # xcode-select: /Applications/Xcode.app/Contents/Developer
 # Runner: <user> (uid 501); sudo available: no
 
-# Hypothesis: H20 (arm 3)
-# Captured by clone-import's log stream (as the operator, no sudo), 2026-10-23 20:03 local.
+# Hypothesis: H20 (arm 3, --mount-with diskutil)
+# Captured by clone-import's log stream (as the operator, no sudo), 2026-10-23 20:21 local.
 
 Filtering the log data using "process == "simdiskimaged""
 Timestamp               Ty Process[PID:TID]
-2026-10-23 20:03:03.789 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf3a05690] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71276].0x7faaf3a05690
-2026-10-23 20:03:03.792 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
-2026-10-23 20:03:03.793 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
-2026-10-23 20:03:03.793 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
-2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
-2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
-2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
-2026-10-23 20:03:03.797 I  simdiskimaged[66379:d6d01] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
-2026-10-23 20:03:03.797 I  simdiskimaged[66379:ddc86] Unmounting /Library/Developer/CoreSimulator/Volumes/watchOS_23T570, attempt=0, force=false
-2026-10-23 20:03:03.900 I  simdiskimaged[66379:ddc86] Ejecting disk4
-2026-10-23 20:03:03.901 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf6804280] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
-2026-10-23 20:03:04.127 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf6804280] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
-2026-10-23 20:03:04.273 Df simdiskimaged[66379:d6d01] [com.apple.xpc:connection] [0x7faaf3a05690] invalidated because the client process (pid 71276) either cancelled the connection or exited
-2026-10-23 20:03:04.335 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
-2026-10-23 20:03:04.336 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
-2026-10-23 20:03:04.336 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
-2026-10-23 20:03:09.575 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf2f05130] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71320].0x7faaf2f05130
-2026-10-23 20:03:09.920 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf2f05130] invalidated because the client process (pid 71320) either cancelled the connection or exited
-2026-10-23 20:03:19.908 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf38044a0] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71353].0x7faaf38044a0
-2026-10-23 20:03:19.915 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] +[BackendXPC newFileBackendWithURL:fileOpenFlags:error:]: Image file <private> stat: dev(0x1000004), inode(329998336), mode(100644), uid(0), gid(80), size(5242171072), blocks(10238616)
-2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] +[DiskImageParamsXPC newWithURL:fileOpenFlags:error:]: Image file <private> opened with flags 0
-2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIAttachParams newAttachWithError:]: entry: DIAttachParams[DiskImageParamsUDIF_XPC[FileLocalXPC]]
-2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIBaseXPCHandler createConnection]: Creating connection with com.apple.diskimagescontroller
-2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38054e0] activating connection: mach=false listener=false peer=false name=com.apple.diskimagescontroller
-2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIAttachParams reOpenIfWritableWithError:]: isWritableFormat: NO
-2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIStatFS initWithFileDescriptor:error:]: File system is apfs
-2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIStatFS logWithHeader:]: Input underlying FS: mounted on <private>, 4096 bytes block size, locally mounted from /dev/disk1s1, barriers supported
-2026-10-23 20:03:20.158 Df simdiskimaged[66379:ddf45] [com.apple.DiskImages2:Default] -[DIController2ClientDelegate attachCompletedWithHandle:reply:]: Received: DIDeviceHandle[disk4, unmanaged]
-2026-10-23 20:03:20.159 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38054e0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
-2026-10-23 20:03:20.159 I  simdiskimaged[66379:de2a4] Attached image /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/24B22E2C-3334-4A65-AD74-57DDCF88A683.dmg, root virtual disk BSD name disk4
-2026-10-23 20:03:20.160 I  simdiskimaged[66379:de2a4] calling: /sbin/mount_apfs <private>
-2026-10-23 20:03:20.185 I  simdiskimaged[66379:de2a4] Unmounting /Library/Developer/CoreSimulator/Cryptex/Images/mnt/SimRuntimeBundle-24B22E2C-3334-4A65-AD74-57DDCF88A683, attempt=0, force=false
-2026-10-23 20:03:20.291 I  simdiskimaged[66379:de2a4] Ejecting disk4
-2026-10-23 20:03:20.292 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38052e0] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
-2026-10-23 20:03:20.511 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38052e0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
-2026-10-23 20:03:20.513 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: /Library/Developer/CoreSimulator/Images
-2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] <private> role: 0
-2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] Not Valid
-2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume failed for volume /Library/Developer/CoreSimulator/Images: Error Domain=CacheDeleteErrorDomain Code=10 "(null)" UserInfo={Invalid volume=/Library/Developer/CoreSimulator/Images}
-2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 0
-2026-10-23 20:03:20.868 Df simdiskimaged[66379:de2f7] [com.apple.xpc:connection] [0x7faaf38044a0] invalidated because the client process (pid 71353) either cancelled the connection or exited
+2026-10-23 20:21:04.036 Df simdiskimaged[97247:f7e5c] [com.apple.xpc:connection] [0x7fa841204cf0] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[97894].0x7fa841204cf0
+2026-10-23 20:21:04.040 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:21:04.041 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:21:04.041 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:21:04.043 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:21:04.043 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:21:04.043 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:21:04.044 I  simdiskimaged[97247:f7e5e] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
+2026-10-23 20:21:04.045 I  simdiskimaged[97247:f7e5c] Unmounting /Library/Developer/CoreSimulator/Volumes/watchOS_23T570, attempt=0, force=false
+2026-10-23 20:21:04.148 I  simdiskimaged[97247:f7e5c] Ejecting disk4
+2026-10-23 20:21:04.150 Df simdiskimaged[97247:f7e5c] [com.apple.xpc:connection] [0x7fa841004760] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
+2026-10-23 20:21:04.386 Df simdiskimaged[97247:f7e5c] [com.apple.xpc:connection] [0x7fa841004760] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:21:04.518 Df simdiskimaged[97247:f90a1] [com.apple.xpc:connection] [0x7fa841204cf0] invalidated because the client process (pid 97894) either cancelled the connection or exited
+2026-10-23 20:21:04.697 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:21:04.698 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:21:04.698 E  simdiskimaged[97247:f7e5c] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:21:09.841 Df simdiskimaged[97247:f7e5e] [com.apple.xpc:connection] [0x7fa83d806c10] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[98032].0x7fa83d806c10
+2026-10-23 20:21:10.191 Df simdiskimaged[97247:f7e5e] [com.apple.xpc:connection] [0x7fa83d806c10] invalidated because the client process (pid 98032) either cancelled the connection or exited
+2026-10-23 20:21:19.990 Df simdiskimaged[97247:f7e5e] [com.apple.xpc:connection] [0x7fa841004ca0] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[98067].0x7fa841004ca0
+2026-10-23 20:21:19.997 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] +[BackendXPC newFileBackendWithURL:fileOpenFlags:error:]: Image file <private> stat: dev(0x1000004), inode(330009800), mode(100644), uid(0), gid(80), size(5242171072), blocks(10238616)
+2026-10-23 20:21:19.998 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] +[DiskImageParamsXPC newWithURL:fileOpenFlags:error:]: Image file <private> opened with flags 0
+2026-10-23 20:21:19.998 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIAttachParams newAttachWithError:]: entry: DIAttachParams[DiskImageParamsUDIF_XPC[FileLocalXPC]]
+2026-10-23 20:21:19.998 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIBaseXPCHandler createConnection]: Creating connection with com.apple.diskimagescontroller
+2026-10-23 20:21:19.998 Df simdiskimaged[97247:f94f7] [com.apple.xpc:connection] [0x7fa841004760] activating connection: mach=false listener=false peer=false name=com.apple.diskimagescontroller
+2026-10-23 20:21:19.998 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIAttachParams reOpenIfWritableWithError:]: isWritableFormat: NO
+2026-10-23 20:21:19.999 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIStatFS initWithFileDescriptor:error:]: File system is apfs
+2026-10-23 20:21:19.999 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIStatFS logWithHeader:]: Input underlying FS: mounted on <private>, 4096 bytes block size, locally mounted from /dev/disk1s1, barriers supported
+2026-10-23 20:21:20.186 Df simdiskimaged[97247:f7e5e] [com.apple.DiskImages2:Default] -[DIController2ClientDelegate attachCompletedWithHandle:reply:]: Received: DIDeviceHandle[disk4, unmanaged]
+2026-10-23 20:21:20.186 Df simdiskimaged[97247:f94f7] [com.apple.xpc:connection] [0x7fa841004760] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:21:20.187 I  simdiskimaged[97247:f94f7] Attached image /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/D646141C-F963-47D4-BDA3-91DF44335B6B.dmg, root virtual disk BSD name disk4
+2026-10-23 20:21:20.188 I  simdiskimaged[97247:f94f7] calling: /sbin/mount_apfs <private>
+2026-10-23 20:21:20.212 I  simdiskimaged[97247:f94f7] Unmounting /Library/Developer/CoreSimulator/Cryptex/Images/mnt/SimRuntimeBundle-D646141C-F963-47D4-BDA3-91DF44335B6B, attempt=0, force=false
+2026-10-23 20:21:20.737 I  simdiskimaged[97247:f94f7] Ejecting disk4
+2026-10-23 20:21:20.737 Df simdiskimaged[97247:f94f7] [com.apple.xpc:connection] [0x7fa83d807480] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
+2026-10-23 20:21:20.952 Df simdiskimaged[97247:f94f7] [com.apple.xpc:connection] [0x7fa83d807480] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:21:20.954 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: /Library/Developer/CoreSimulator/Images
+2026-10-23 20:21:20.955 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: <CacheDeleteVolume> at: /Library/Developer/CoreSimulator/Images [/dev/disk7s3 : apfs] freespace: 19612446720 (19.61 GB), initialFreespace: 19612446720 (19.61 GB), used: 15839436800 (15.84 GB), total size: 1024209502208 (1024.21 GB)
+2026-10-23 20:21:20.956 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: finding volumes that belong to <private>
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] GetAPFSVolumeRole error for <private>
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 16
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 8
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 192
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:21:20.957 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] GetAPFSVolumeRole error for <private>
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 0
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.958 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] multi volume:
+2026-10-23 20:21:20.959 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.959 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.959 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.959 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.964 Df simdiskimaged[97247:f7e5e] [com.apple.xpc:connection] [0x7fa83d809d50] activating connection: mach=true listener=false peer=false name=com.apple.cache_delete.public
+2026-10-23 20:21:20.977 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got a compatible version
+2026-10-23 20:21:20.978 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:21:20.979 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: finding volumes that belong to <private>
+2026-10-23 20:21:20.979 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] GetAPFSVolumeRole error for <private>
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 16
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 8
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 192
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] GetAPFSVolumeRole error for <private>
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 0
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.980 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] getSiblings: adding <private> <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] multi volume:
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <private>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 380 CDRecentVolumeInfo _recentInfoAtUrgency, volume: /Volumes/<vault>, urgency: 3, result:
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP: {
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Volumes/<vault>
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 0
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.981 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 380 CDRecentVolumeInfo _recentInfoAtUrgency, volume: /Volumes/<vault>, urgency: 3, result:
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Volumes/<vault>
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 1330160806
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : 0
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP: {
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.quicklook.ThumbnailsAgent.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "com.apple.quicklook.ThumbnailsA";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.quicklook.ThumbnailsAgent";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cloudd.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = cloudd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.cloudd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.triald.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = triald;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.triald";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.TMCacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.backupd-helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.mobileassetd.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.mobileassetd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.mds";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cloudd.system.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.cloudd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.geod.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = geodMachServiceBridge;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.geodMachServiceBridge";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.spotlightknowledged.updater.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "spotlightknowledged.updater";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.spotlightknowledged.updater";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.AssetCache.builtin.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.AssetCache";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.Music.MusicCacheExtension : {
+    "CACHE_DELETE_PROCNAME" = MusicCacheExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.Music.MusicCacheExtension";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cache_delete_orphan_dir_handler : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MailCacheDelete : {
+    "CACHE_DELETE_PROCNAME" = MailCacheDelete;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.MailCacheDelete";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.TV.TVCacheExtension : {
+    "CACHE_DELETE_PROCNAME" = TVCacheExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.TV.TVCacheExtension";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.appstoreagent.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = appstoreagent;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.appstoreagent";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.replayd-cache-delete : {
+    "CACHE_DELETE_PROCNAME" = replayd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.replayd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.triald.system.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.triald.system";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.Safari.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = CacheDeleteExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.Safari.CacheDeleteExtension";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.FileProvider.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = fileproviderd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.fileproviderd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.system_installd.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.system_installd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.installd.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.installd";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.osanalytics.user.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "diagnostics_agent";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.diagnostics_agent";
+}
+2026-10-23 20:21:20.982 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_SHARED_PURGEABLE : 1330160806
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : 1330160806
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 380 CDRecentVolumeInfo _recentInfoAtUrgency, volume: /Volumes/<vault>, urgency: 3, result:
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Volumes/<vault>
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 996151759
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : 0
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP: {
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.quicklook.ThumbnailsAgent.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "com.apple.quicklook.ThumbnailsA";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.quicklook.ThumbnailsAgent";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cloudd.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = cloudd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.cloudd";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.triald.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = triald;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.triald";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.TMCacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.backupd-helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.mobileassetd.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.mobileassetd";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.mds";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cloudd.system.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.cloudd";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.geod.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = geodMachServiceBridge;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.geodMachServiceBridge";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.spotlightknowledged.updater.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "spotlightknowledged.updater";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.spotlightknowledged.updater";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.AssetCache.builtin.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.AssetCache";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.Music.MusicCacheExtension : {
+    "CACHE_DELETE_PROCNAME" = MusicCacheExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.Music.MusicCacheExtension";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.cache_delete_orphan_dir_handler : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MailCacheDelete : {
+    "CACHE_DELETE_PROCNAME" = MailCacheDelete;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.MailCacheDelete";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.TV.TVCacheExtension : {
+    "CACHE_DELETE_PROCNAME" = TVCacheExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.TV.TVCacheExtension";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.appstoreagent.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = appstoreagent;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.appstoreagent";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.replayd-cache-delete : {
+    "CACHE_DELETE_PROCNAME" = replayd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.replayd";
+}
+2026-10-23 20:21:20.983 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.triald.system.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.triald.system";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.logd.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.logd";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.Safari.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = CacheDeleteExtension;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.Safari.CacheDeleteExtension";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.FileProvider.cache-delete : {
+    "CACHE_DELETE_PROCNAME" = fileproviderd;
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.fileproviderd";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.system_installd.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.system_installd";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.installd.CacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.installd";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.osanalytics.user.cachedelete : {
+    "CACHE_DELETE_PROCNAME" = "diagnostics_agent";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.diagnostics_agent";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_SHARED_PURGEABLE : 996151759
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : 996151759
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 380 CDRecentVolumeInfo _recentInfoAtUrgency, volume: /Library/Developer/CoreSimulator/Images, urgency: 3, result:
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : 0
+2026-10-23 20:21:20.984 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP: {
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.deleted_helper : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : {
+    "CACHE_DELETE_PROCNAME" = "";
+    "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+}
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] }
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Library/Developer/CoreSimulator/Images
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] got volinfo for <private>
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] <<<Query Result from daemon cache (u: 3, ET: 0.006255431): "/Library/Developer/CoreSimulator/Images : 2.33 GB"
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.PODCAST : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.photolibraryd.cacheDelete : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_FREESPACE : 19612446720
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.VIDEO : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MUSIC : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_ELAPSED_TIME : 0.006255431
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MOVIE : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.ibooks.CacheDeleteExtension : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_AVAILABLE : 2326312565
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.MAIL : 0
+2026-10-23 20:21:20.985 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_TOTAL_FSPURGEABLE : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NAME_MAP : {
+    "com.apple.MAIL" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.MOVIE" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.MUSIC" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.PODCAST" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.VIDEO" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.deleted_helper" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper";
+    };
+    "com.apple.fspurgeable_data" =     {
+        "CACHE_DELETE_PROCNAME" = "";
+        "CACHE_DELETE_SIGNING_ID" = "com.apple.deleted_helper"
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_document : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.fspurgeable_data : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_SHARED_PURGEABLE : 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_VOLUME : /Library/Developer/CoreSimulator/Images
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.metadata.mds.cachedelete : 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CACHE_DELETE_NONPURGEABLE_AMOUNT : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] com.apple.imagent.cache-delete_fspurgeable : 0
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] Query Result>>> 2326312565 bytes on: "/Library/Developer/CoreSimulator/Images".
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.xpc:connection] [0x7fa83d809d50] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] 701 publicClientAvailableSpaceForVolume kCacheDeleteAvailableSpaceClassEssential 21938759285 (21.94 GB) = freespace 19612446720 + purgeableSpace: 2326312565
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume: <CacheDeleteVolume> at: /Library/Developer/CoreSimulator/Images [/dev/disk7s3 : apfs] freespace: 19612446720 (19.61 GB), initialFreespace: 19612446720 (19.61 GB), used: 15839436800 (15.84 GB), total size: 1024209502208 (1024.21 GB)
+2026-10-23 20:21:20.986 Df simdiskimaged[97247:f7e5e] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 21938759285
+2026-10-23 20:21:20.988 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:21:20.988 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:21:20.988 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:21:36.915 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:21:36.915 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:21:36.915 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:21:36.927 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa83cf06b30] activating connection: mach=true listener=false peer=false name=com.apple.trustd
+2026-10-23 20:22:00.328 I  simdiskimaged[97247:f953d] Reset quarantine bit for '/Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg'.
+2026-10-23 20:22:00.330 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] +[BackendXPC newFileBackendWithURL:fileOpenFlags:error:]: Image file <private> stat: dev(0x1000019), inode(264), mode(100644), uid(0), gid(80), size(5242171072), blocks(10238616)
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] +[DiskImageParamsXPC newWithURL:fileOpenFlags:error:]: Image file <private> opened with flags 0
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIAttachParams newAttachWithError:]: entry: DIAttachParams[DiskImageParamsUDIF_XPC[FileLocalXPC]]
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIBaseXPCHandler createConnection]: Creating connection with com.apple.diskimagescontroller
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa841205910] activating connection: mach=false listener=false peer=false name=com.apple.diskimagescontroller
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIAttachParams reOpenIfWritableWithError:]: isWritableFormat: NO
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIStatFS initWithFileDescriptor:error:]: File system is apfs
+2026-10-23 20:22:00.331 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIStatFS logWithHeader:]: Input underlying FS: mounted on <private>, 4096 bytes block size, locally mounted from /dev/disk7s3, barriers not supported
+2026-10-23 20:22:00.463 Df simdiskimaged[97247:f94f7] [com.apple.DiskImages2:Default] -[DIController2ClientDelegate attachCompletedWithHandle:reply:]: Received: DIDeviceHandle[disk4, unmanaged]
+2026-10-23 20:22:00.463 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa841205910] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:22:00.463 I  simdiskimaged[97247:f953d] Attached image /Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, root virtual disk BSD name disk4
+2026-10-23 20:22:00.464 I  simdiskimaged[97247:f953d] calling: /sbin/mount_apfs <private>
+2026-10-23 20:22:00.485 I  simdiskimaged[97247:f953d] [com.apple.CarbonCore:FileIDMap] FIDCopyFileIDMapForVolume FIDCopyFileIDMapForVolume: adding FileIDMap for vRefNum (-140)
+2026-10-23 20:22:00.501 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] received CACHE_DELETE_PURGEABLE_UPDATED notification, token: 27
+2026-10-23 20:22:00.502 Df simdiskimaged[97247:fa118] [com.apple.xpc:connection] [0x7fa841004760] activating connection: mach=true listener=false peer=false name=com.apple.cache_delete.public
+2026-10-23 20:22:00.520 I  simdiskimaged[97247:f953d] Unmounting /Library/Developer/CoreSimulator/Images/mnt/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5, attempt=0, force=false
+2026-10-23 20:22:00.541 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] got a compatible version
+2026-10-23 20:22:00.542 Df simdiskimaged[97247:fa118] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:22:00.544 Df simdiskimaged[97247:fa118] [com.apple.xpc:connection] [0x7fa841004760] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:22:00.629 I  simdiskimaged[97247:f953d] Ejecting disk4
+2026-10-23 20:22:00.629 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa841004760] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
+2026-10-23 20:22:00.847 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:22:00.847 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:22:00.847 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:22:00.849 Df simdiskimaged[97247:f953d] Success! Found simulator runtime info from image 'ImageInfo { uuid=B50700E4-0D55-4C18-AB6A-9FDF52DB19C5, path=/Library/Developer/CoreSimulator/Images/Inbox/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, state=Reading(last update: 2026-10-23 23:22:00 +0000), verification=verified, runtimeInfo=RuntimeInfo { bundle=com.apple.CoreSimulator.SimRuntime.watchOS-26-5, platform=com.apple.platform.watchsimulator, version=1705216, build=23T570, isInternal=false, supportedArchitectures=x86_64,arm64 }, format=normal, mountPolicy=automatic, writePolicy=readOnly, mountingMode=mountAsDMG shadowURL=(null) }'
+2026-10-23 20:22:00.850 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:22:00.851 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:22:00.851 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:22:00.854 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] +[BackendXPC newFileBackendWithURL:fileOpenFlags:error:]: Image file <private> stat: dev(0x1000019), inode(264), mode(100644), uid(0), gid(80), size(5242171072), blocks(10238616)
+2026-10-23 20:22:00.854 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] +[DiskImageParamsXPC newWithURL:fileOpenFlags:error:]: Image file <private> opened with flags 0
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIAttachParams newAttachWithError:]: entry: DIAttachParams[DiskImageParamsUDIF_XPC[FileLocalXPC]]
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIBaseXPCHandler createConnection]: Creating connection with com.apple.diskimagescontroller
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa83cf071a0] activating connection: mach=false listener=false peer=false name=com.apple.diskimagescontroller
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIAttachParams reOpenIfWritableWithError:]: isWritableFormat: NO
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIStatFS initWithFileDescriptor:error:]: File system is apfs
+2026-10-23 20:22:00.855 Df simdiskimaged[97247:f953d] [com.apple.DiskImages2:Default] -[DIStatFS logWithHeader:]: Input underlying FS: mounted on <private>, 4096 bytes block size, locally mounted from /dev/disk7s3, barriers not supported
+2026-10-23 20:22:01.084 Df simdiskimaged[97247:fa118] [com.apple.DiskImages2:Default] -[DIController2ClientDelegate attachCompletedWithHandle:reply:]: Received: DIDeviceHandle[disk4, unmanaged]
+2026-10-23 20:22:01.085 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa83cf071a0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:22:01.085 I  simdiskimaged[97247:f953d] Attached image /Library/Developer/CoreSimulator/Images/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, root virtual disk BSD name disk4
+2026-10-23 20:22:01.087 I  simdiskimaged[97247:f953d] calling: /sbin/mount_apfs <private>
+2026-10-23 20:22:01.130 I  simdiskimaged[97247:f953d] Successfully mounted image ImageInfo { uuid=B50700E4-0D55-4C18-AB6A-9FDF52DB19C5, path=/Library/Developer/CoreSimulator/Images/B50700E4-0D55-4C18-AB6A-9FDF52DB19C5.dmg, state=Mounting(last update: 2026-10-23 23:22:00 +0000), verification=verified, runtimeInfo=RuntimeInfo { bundle=com.apple.CoreSimulator.SimRuntime.watchOS-26-5, platform=com.apple.platform.watchsimulator, version=1705216, build=23T570, isInternal=false, supportedArchitectures=x86_64,arm64 }, format=normal, mountPolicy=automatic, writePolicy=readOnly, mountingMode=mountAsDMG shadowURL=(null) } at '/Library/Developer/CoreSimulator/Volumes/watchOS_23T570'
+2026-10-23 20:22:01.136 I  simdiskimaged[97247:f953d] [com.apple.CarbonCore:FileIDMap] FIDCopyFileIDMapForVolume FIDCopyFileIDMapForVolume: adding FileIDMap for vRefNum (-141)
+2026-10-23 20:22:01.178 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:22:01.179 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:22:01.179 E  simdiskimaged[97247:f953d] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:22:01.182 Df simdiskimaged[97247:f953d] [com.apple.xpc:connection] [0x7fa841004760] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:22:01.183 Df simdiskimaged[97247:fa118] [com.apple.xpc:connection] [0x7fa841004ca0] invalidated because the client process (pid 98067) either cancelled the connection or exited
+2026-10-23 20:22:01.203 I  simdiskimaged[97247:f953d] Handling dyld shared cache prep request for <private>
+2026-10-23 20:22:01.203 I  simdiskimaged[97247:fa118] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Updating dyld shared cache for runtime bundle: <private>
+2026-10-23 20:22:01.220 I  simdiskimaged[97247:f953d] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Executing <private> with arguments <private>
+2026-10-23 20:22:01.748 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] received CACHE_DELETE_PURGEABLE_UPDATED notification, token: 27
+2026-10-23 20:22:01.748 Df simdiskimaged[97247:fa112] [com.apple.xpc:connection] [0x7fa841305e00] activating connection: mach=true listener=false peer=false name=com.apple.cache_delete.public
+2026-10-23 20:22:01.802 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] got a compatible version
+2026-10-23 20:22:01.803 Df simdiskimaged[97247:fa112] [com.apple.cache_delete:client] <private> role: 64
+2026-10-23 20:22:01.805 Df simdiskimaged[97247:fa112] [com.apple.xpc:connection] [0x7fa841305e00] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
