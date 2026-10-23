@@ -45,6 +45,10 @@ volume, not the path, so a canonical mount would not buy DerivedData anything ei
 mount attempt itself (root required) is **pending — manual**; see ADR-0004 for the
 consequence: canonical mount drops from "gated headline" to "R&D curiosity" for v1.
 
+**2026-10-22: the premise above no longer holds for imported runtimes.** F1's correction puts an
+`-importPlatform` runtime in `CoreSimulator/Images/`, and H15 retracted the mount refusal. The
+`Images/`-only form of this hypothesis is reopened as **H20**.
+
 ## H2 — Whole-`~/Library/Developer` symlink breaks Xcode 15+ DDI discovery
 
 **Status: probable, and treated as true regardless.** FB12363725, reproduced on Xcode
@@ -2229,3 +2233,43 @@ A 2023 forum note says `tccutil reset SystemPolicyRemovableVolumes` then a permi
 from the volume itself. That would mutate the user's TCC database. It was not run. It is a hypothesis, not a result.
 
 Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.
+
+## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **unverified**)*
+
+**Claim:** a dedicated APFS volume on the external disk, mounted (not symlinked) at
+`/Library/Developer/CoreSimulator/Images`, is used by `simdiskimaged` as the runtime store — every
+`-importPlatform`-installed runtime lives on the drive, boots, and survives reboot — and a
+disconnect can be made safe.
+
+**Why it is open, when H1 looked closed.** H1 was reframed as low-value on 2026-09-06 because the
+runtime bytes were in `/System/Library/AssetsV2`. F1's correction (2026-09-08) showed an
+`-importPlatform` runtime — what XCodeVault's own import produces — lives in
+`/Library/Developer/CoreSimulator/Images/`; on 2026-10-22 all 15.8 GB installed here were there and
+the AssetsV2 stores held 4 KB each. H1 was not revisited. H15 then retracted the other blocker:
+with Full Disk Access, root can `mount_apfs` inside the hierarchy.
+
+**Why every other relocation route is dead (read from the binary, not exercised).**
+`simdiskimaged`'s embedded sandbox is `(deny default)` with `file-mount` only under
+`CoreSimulator/{Images,Volumes,Cryptex/Images,Cryptex/Volumes}/`, and its code says
+`Rejecting mount of symlink … for security`. So symlinks and an `images.plist` entry pointing at
+`/Volumes` are both out, independent of F16 (which was itself measured without Full Disk Access and
+should be read as such). A real mount at a path inside those subpaths is the one shape left.
+
+**Expected upside, if it holds:** with the Runtime Library on the same volume, import is a clone
+(the daemon allows a lower free-space limit when "source is on the same volume as inbox and clones
+are supported"), so an offloaded runtime comes back in seconds at no internal cost.
+
+**Gate: E20**, pre-registered, cheapest kill first — every arm needs `sudo` and a terminal or
+helper with Full Disk Access, and none may run with a device booted:
+1. a scratch APFS volume (disk image first, then the USB drive) mounted with `owners` at
+   `Images/` after copying the store across byte-identically; `simctl runtime list` shows both
+   runtimes `Ready`, `signatureState: Verified`, with internal free space unchanged;
+2. create, boot, shut down and delete a device in a scratch set on that runtime;
+3. import an `.exportedBundle` kept on the same volume — measure internal free-space delta and time;
+4. unmount with no device booted, trigger a scan, and record whether anything is written into the
+   internal stub (rule 6 — this is the arm that most likely kills it); remount and re-verify;
+5. reboot with the drive attached, and with it absent.
+
+A pass is still a canonical mount: experimental everywhere, behind the helper's allowlist, until
+the Definition of Done. Detail and the full alternatives map:
+`../research/OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`.

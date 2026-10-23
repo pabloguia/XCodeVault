@@ -739,6 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | pending — not yet written; needs `sudo` + Full Disk Access; pre-registered arms in H20 |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
