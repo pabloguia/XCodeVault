@@ -640,3 +640,16 @@ Three layouts, not a re-run of E2's nine cases: entire DerivedData on the volume
 
 **Locations keys (2026-10-11):** `scripts/experiments/e19-locations-keys.sh`. One-shot `-IDE…` arguments, no
 `defaults write`. CTRL failed; KEYS passed. H19 stays probable. Recorded beside the E19 entry.
+
+## E20 — does simdiskimaged use a runtime store on an external volume mounted at `CoreSimulator/Images`? (gates H20)
+
+`scripts/experiments/e20-images-mount.sh`. **Destructive + root**: `stage` mounts a dedicated external APFS volume
+over `/Library/Developer/CoreSimulator/Images`, so every simulator on the machine runs from the drive until
+`restore`. The internal store is copied, never moved or deleted, and stays intact under the mount. Phases, one at a
+time: `preflight` (read-only), `stage`, `exercise` (scratch `--set` device), `restore`, `status`. `--dry-run`
+rehearses any phase without changing anything. Readings are pre-registered in the script's header; the
+discriminator is which device each open `<UUID>.dmg` is on, not `Ready`. Arms 3 (import as a clone), 4b (physical
+disconnect) and 5 (mount at boot) are deferred until this passes.
+
+**Status: written 2026-10-23, not run.** Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
+Disk Access.
