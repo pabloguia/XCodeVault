@@ -653,7 +653,7 @@ disconnect) and 5 (mount at boot) are deferred until this passes.
 
 **Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry.
 
-**Arm 3, `clone-import` (run 2026-10-23 — FAIL: the add was refused as a copy on a nearly full disk; see the matrix entry "E20 arm 3").** While staged: APFS-clone the smallest runtime's image
+**Arm 3, `clone-import` (run 2026-10-23, twice — FAIL: staging goes through the internal `Cryptex/Images/Inbox`, and CacheDelete rejects the mounted volume as invalid, so any add while staged is refused; matrix entries "E20 arm 3" and "E20 arm 3 repeat").** While staged: APFS-clone the smallest runtime's image
 inside the volume, `simctl runtime delete --keep-asset` it from the mounted store, re-add it from the clone, and
 time it and measure free space. CLONE / COPY thresholds are pre-registered in the script's header. Every step
 re-checks that `Images` is still the staged volume, so a dropped mount cannot turn the delete onto the internal

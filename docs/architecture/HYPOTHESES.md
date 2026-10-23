@@ -2293,3 +2293,11 @@ is unrecorded (info-level log), but every installed image's `sourceURL` is under
 internal disk: if the add stages there, a clone is impossible while only `Images` is on the drive, and every
 import costs a full internal copy plus that disk's free-space floor. Restore brought the machine back cleanly.
 Matrix entry "E20 arm 3". The speed win that motivated arm 3 is therefore unproven, and on this machine blocked.
+
+**E20 arm 3 repeat, 2026-10-23: falsified for this layout, and the mechanism is now on record.** simdiskimaged's
+own log (matrix entry "E20 arm 3 repeat") shows `simctl runtime add` copying the source into the **internal**
+`Cryptex/Images/Inbox` first, and then refusing because CacheDelete reports the mounted `Images` volume as an
+"Invalid volume" with 0 bytes available. Two consequences for any product built on H20: imports from the drive
+are full copies onto the internal disk (no clone, no speed win), and **nothing can be installed or imported while
+the store is mounted** — installs would have to happen with the store internal and be moved afterwards, which is
+the Runtime Library flow with an extra step. H20's using-runtimes result (stage + exercise) stands.

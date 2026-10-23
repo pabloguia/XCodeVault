@@ -1322,7 +1322,7 @@ substitution may not be waved through. Issue #29 stays open.
   the MobileAsset catalogue. The script kept the clone, said to restore, and restore brought the machine back:
   internal store unchanged at uncovering (rule 6), both runtimes Ready + Verified from the internal disk, the
   watch device back to Shutdown.
-- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence (rotated aside when the repeat re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193232.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193443.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193724.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T194026.txt`.
 - Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
 - Verdict: arm 3 **not shown**. The daemon decided to **copy**, not clone, and refused on free space. Which disk
   it measured is not recorded: its free-space messages are info-level and were not in `log show` afterwards. The
@@ -1331,3 +1331,29 @@ substitution may not be waved through. Issue #29 stays open.
 - Notes: the deleted image left a `<uuid>.dmg.sb-*` directory (mode 700) on the volume. Next: re-run with
   `log stream --level info --predicate 'process == "simdiskimaged"'` capturing the add, to read the inbox path and
   the "A < B minimum required" numbers. Experimental (rule 10).
+
+### E20 arm 3 repeat — the add's own log — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: the same sequence on a fresh copy (`stage`, `clone-import`, `restore`), with `clone-import`
+  streaming simdiskimaged's info-level log from just before the delete to just after the add.
+- Result: **FAIL, same error, and now explained — not a space problem.** The log shows the add's sequence:
+  (1) the source is copied into `/Library/Developer/CoreSimulator/Cryptex/Images/Inbox/<new-uuid>.dmg` on the
+  **internal** disk — DiskImages2 reports the opened file on `dev(0x1000004)`, i.e. 1,4, "locally mounted from"
+  the internal data volume; (2) it is attached and its bundle mounted under `Cryptex/Images/mnt/` to inspect it,
+  then ejected; (3) simdiskimaged asks CacheDelete for the free space of the destination,
+  `/Library/Developer/CoreSimulator/Images`, and CacheDelete answers `CacheDeleteErrorDomain Code=10
+  {Invalid volume=…/Images}`, result **0** — hence "disk is almost full". The internal inbox was empty again
+  afterwards. Restore: internal store unchanged at uncovering (rule 6), both runtimes back on 1,4, the watch device
+  back; the post-rescan `images.plist` differs from post-umount only by the order of its two entries.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`,
+  `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt` (the unfiltered stream minus Security/prefs/analytics noise), `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: arm 3 **falsified for this layout**, on two independent counts. Staging always goes through the
+  internal `Cryptex/Images/Inbox`, so an import from the drive is a full copy onto the internal disk and can never
+  be a clone while only `Images` is relocated. And CacheDelete does not accept the manually mounted volume, so
+  simdiskimaged reads its free space as 0 and refuses **any** install or import while staged.
+- Notes: whether a DiskArbitration-aware mount (`diskutil mount -mountPoint`) or a mount without `nobrowse`
+  would satisfy CacheDelete is untested; E6c found DiskArbitration declines a previously mounted volume at a
+  chosen mount point. The first staging point is internal regardless. Experimental (rule 10).
