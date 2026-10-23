@@ -105,6 +105,10 @@ Two properties make it more attractive than H1 ever looked:
 
 ## 5. Recommendation
 
+**Update 2026-10-23: E20 ran and passed** — runtimes were served from the external volume mounted at
+`Images` and a simulator booted from them (H20 probable, one machine). The open arms below still gate any product use.
+
+
 Run **E20** before anything else touches this question. It is the only open route, it is cheap to
 kill, and its first gates need no product code. If it passes, it is still a canonical mount: per
 ADR-0002/0004 and rule 10 it ships, if ever, as **experimental**, behind the helper's allowlist,

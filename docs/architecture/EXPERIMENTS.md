@@ -651,5 +651,5 @@ rehearses any phase without changing anything. Readings are pre-registered in th
 discriminator is which device each open `<UUID>.dmg` is on, not `Ready`. Arms 3 (import as a clone), 4b (physical
 disconnect) and 5 (mount at boot) are deferred until this passes.
 
-**Status: written 2026-10-23, not run.** Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
+**Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
 Disk Access.

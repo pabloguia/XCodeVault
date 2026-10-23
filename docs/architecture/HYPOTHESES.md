@@ -2234,7 +2234,7 @@ from the volume itself. That would mutate the user's TCC database. It was not ru
 
 Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.
 
-## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **unverified**)*
+## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine)*
 
 **Claim:** a dedicated APFS volume on the external disk, mounted (not symlinked) at
 `/Library/Developer/CoreSimulator/Images`, is used by `simdiskimaged` as the runtime store — every
@@ -2273,3 +2273,15 @@ helper with Full Disk Access, and none may run with a device booted:
 A pass is still a canonical mount: experimental everywhere, behind the helper's allowlist, until
 the Definition of Done. Detail and the full alternatives map:
 `../research/OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`.
+
+**E20, 2026-10-23 (macOS 26.7.1 · Xcode 26.5 · Intel · USB): PROBABLE.** Every pre-registered reading passed.
+Both runtime images moved from being held open on the internal data volume (device 1,4) to the mounted external
+volume (1,25), `Ready` + `Verified`; a scratch iPhone booted from them; on restore the internal store was
+byte-for-byte as left at the mount, and nothing was stranded on the volume. The F16 barrier and the symlink
+refusal were never in play: no pointer was changed, no symlink existed. Matrix entry "E20"; evidence
+`../research/evidence/e20-{preflight,stage,exercise,restore}-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+
+What this does not establish, and what gates any product use: a **physical disconnect** with runtimes attached
+(arm 4b — the rule-6 case that matters), **mounting at boot** before simdiskimaged scans (arm 5), **import as a
+clone** (arm 3, the speed win), a real test run while staged, and a layout where the internal copy is gone. Until
+then it is a measured mechanism, not a strategy: experimental everywhere, and the internal store stays.

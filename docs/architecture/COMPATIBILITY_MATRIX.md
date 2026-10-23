@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | pending — not yet written; needs `sudo` + Full Disk Access; pre-registered arms in H20 |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arms 3, 4b and 5 open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1278,3 +1278,32 @@ substitution may not be waved through. Issue #29 stays open.
   volume class as E19. Not Apple Silicon, not the Xcode GUI, not a Simulator destination, not
   Thunderbolt. Scratch removed. No disk image was attached for this probe. The invoking user's Xcode
   defaults were unchanged.
+
+### E20 — runtime store on an external APFS volume mounted at `CoreSimulator/Images` — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20
+- Test performed: `scripts/experiments/e20-images-mount.sh`, phases preflight → stage → exercise → restore, run
+  by the operator from a Terminal holding Full Disk Access, test rigs paused. A dedicated, empty APFS volume
+  (case-insensitive, owners enabled, USB, External/Fixed) in the same container as the operator's other volumes.
+  Stage: `ditto` copy of `/Library/Developer/CoreSimulator/Images` (15.8 GB: iOS 26.5 + watchOS 26.5 images,
+  `images.plist`, `Inbox/`, `mnt/`) with the runtimes attached, byte and metadata verification, `simctl runtime
+  unmount` both, `mount_apfs -o nobrowse` at `Images`, `launchctl kickstart -k` simdiskimaged.
+- Result: **PASS on every pre-registered reading.** Before the mount both `<UUID>.dmg` were held open by
+  `diskimagesiod` on the internal data volume (device 1,4); after the mount and rescan, on the mounted volume
+  (1,25), both runtimes `Ready` + `Verified`. Exercise: a scratch-set iPhone 17 Pro on iOS 26.5 reached `Booted`,
+  shut down and was deleted with the images still on 1,25. Restore: the volume's image set unchanged while
+  staged; the internal store **unchanged** between the pre-mount snapshot and the moment it was uncovered (rule 6
+  reading); after the rescan only `images.plist`'s mtime moved (content identical); runtimes back on 1,4.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-exercise-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+  The first stage attempt is kept: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T190520.txt`
+  — it stopped correctly in verification on `com.apple.provenance`, which macOS stamps on files `ditto` creates.
+- Functional checks: simulator boot ✓ (scratch set); xcodebuild test — not run while staged; physical device N/A
+- Verdict: H20 **probable** for this configuration. One machine, one USB volume, a manual mount. Experimental
+  (rule 10).
+- Notes: while mounted, simdiskimaged rewrote `images.plist` **on the volume** (entries reordered; group became
+  `admin`, inherited from the volume root) — it writes the store it sees. `mdutil -i off` did not remove a
+  `.Spotlight-V100` created when the volume first mounted under `/Volumes`. Not measured: a physical disconnect
+  or forced unmount with runtimes attached (arm 4b), mounting at boot (arm 5), import as a clone (arm 3), a real
+  rig run while staged, Apple Silicon, Thunderbolt, Xcode 27. The internal store was never deleted, so this says
+  nothing yet about a layout without it.
