@@ -550,6 +550,13 @@ create` against the inner bundle path, measure internal free space, delete the s
 Runs entirely outside the default device set. Gate: **E16** (to be written; fold into E14b's harness
 once E14b phase 1 has shown a scratch set works).
 
+**Scope narrowed 2026-10-22 (desk research, status unchanged):** a disk-image runtime is not a valid
+E16 subject — its identifier is already registered, so a path would resolve to the internal copy.
+The path form belongs to the pre-iOS-16 *bundle* format, which under Xcode 26.x means iOS 15 /
+tvOS 15 / watchOS 8 only, and under Xcode 27 (simulators iOS 17+) nothing. Run E16, if at all,
+against an unregistered legacy bundle on the vault. See
+`../research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md`.
+
 ## H7 status update 2026-09-09 — the mechanism is documented; the delivery is the blocker
 
 H7 was deferred as "unverified and deliberately deferred", with the sample's gaps cited as a reason.
