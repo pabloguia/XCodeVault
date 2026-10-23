@@ -104,7 +104,7 @@ SNAP_DIR="$STATE_DIR/snapshots"
 DEVICE_TYPE="${XCV_E20_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
 SELF="scripts/experiments/e20-images-mount.sh"
 
-DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""
+DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""; CI_LOG=""; CI_LOG_PID=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
@@ -350,6 +350,7 @@ phase_preflight() {
 }
 
 on_interrupt() {
+  if [ -n "$CI_LOG_PID" ]; then kill "$CI_LOG_PID" 2>/dev/null; fi
   echo; echo "RESULT: $PHASE INTERRUPTED"; state_report
   { echo "E20 $PHASE interrupted:"; state_report; } >/dev/tty 2>/dev/null
   exit 130
@@ -528,6 +529,34 @@ for k, p in sorted(json.load(sys.stdin)["pairs"].items()): print(k, p["watch"]["
 }
 dyld_cache_kb() { du -sk /Library/Developer/CoreSimulator/Caches/dyld/*/*"$1"* 2>/dev/null | awk '{s+=$1} END {print s+0}'; }
 
+# The daemon's free-space and staging decisions are info-level messages, which macOS does not keep:
+# `log show` afterwards came back empty on the first arm-3 run. So stream them live, from just before
+# the delete to just after the add, into a temp file, and copy the relevant lines into the evidence.
+ci_log_start() {
+  if [ "$DRY" = 1 ]; then echo "[dry-run] would run in the background: log stream --level info --style compact --timeout 30m --predicate 'process == \"simdiskimaged\"'"; echo; return 0; fi
+  CI_LOG=$(mktemp -t xcv-e20-sdi-log) || { echo "!! could not create the log file; continuing without the log"; return 0; }
+  # Not under sudo: an admin user can stream, and a stream we started ourselves is one we can stop with a
+  # plain kill (sudo may drop a signal from its own process group, leaving a root stream and a hung wait).
+  # --timeout is the backstop: the stream can never outlive the run by more than that.
+  log stream --level info --style compact --timeout 30m --predicate 'process == "simdiskimaged"' > "$CI_LOG" 2>&1 &
+  CI_LOG_PID=$!
+  sleep 3
+  echo "## simdiskimaged log stream started (info level)"; echo
+}
+ci_log_stop() {
+  [ -n "$CI_LOG_PID" ] || return 0
+  sleep 3
+  kill "$CI_LOG_PID" 2>/dev/null
+  for _ in $(seq 1 10); do kill -0 "$CI_LOG_PID" 2>/dev/null || break; sleep 1; done
+  if kill -0 "$CI_LOG_PID" 2>/dev/null; then echo "!! the log stream is still running (pid $CI_LOG_PID); it ends by itself within 30 minutes"
+  else wait "$CI_LOG_PID" 2>/dev/null; fi
+  CI_LOG_PID=""
+  echo "## simdiskimaged log during delete + add (info level, filtered)"
+  grep -i -E 'inbox|free space|almost full|clone|same volume|minimum|copy|move|stag|final location|purg|sparse|dyld|delet|request' "$CI_LOG" | cut -c1-400 | tail -120
+  echo "   ($(wc -l < "$CI_LOG" | tr -d ' ') lines captured in total; the unfiltered stream is at $CI_LOG until the next reboot)"
+  echo
+}
+
 phase_clone_import() {
   local pick uuid rid size src srcdir short vfree0 vfree1 vfree2 vfree3 ifree0 ifree1 ifree2 t0 t1 dv out newuuid devs0 devs1 pairs0 pairs1 fell kb
   echo "## checks"
@@ -597,14 +626,15 @@ print("%s %s %s" % (c[0][1], c[0][2], c[0][0]) if c else "")') || pick=""
     { no_xcodebuild && nothing_booted; } || {
       ci_guard "remove clone" && act "remove the clone" sudo rm -f "$src"; stop "a rig started; nothing was deleted"; return 1; }
   fi
-  ci_guard "delete" || return 1
+  ci_log_start
+  ci_guard "delete" || { ci_log_stop; return 1; }
   act "delete $short from the mounted store (keep the MobileAsset)" xcrun simctl runtime delete "$uuid" --keep-asset || {
-    ci_guard "remove clone" && act "remove the clone" sudo rm -f "$src"; stop "runtime delete failed; the runtime is still installed"; return 1; }
+    ci_log_stop; ci_guard "remove clone" && act "remove the clone" sudo rm -f "$src"; stop "runtime delete failed; the runtime is still installed"; return 1; }
   if [ "$DRY" = 0 ]; then
     sleep 5
-    ci_guard "post-delete checks" || return 1
+    ci_guard "post-delete checks" || { ci_log_stop; return 1; }
     if [ -e "$IMAGES/$uuid.dmg" ] || xcrun simctl runtime list -j 2>/dev/null | grep -q "\"$uuid\""; then
-      stop "the delete did not take effect ($uuid is still there); the clone is kept at $src. Run restore."; return 1
+      ci_log_stop; stop "the delete did not take effect ($uuid is still there); the clone is kept at $src. Run restore."; return 1
     fi
     ifree1=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}'); vfree2=$(df -k "$IMAGES" | awk 'NR==2{print $4}')
     echo "## after delete: volume free ${vfree2} KB, internal free ${ifree1} KB (moved $(( ifree1 - ifree0 )) KB), dyld cache for $short $(dyld_cache_kb "$short") KB"
@@ -614,10 +644,11 @@ print("%s %s %s" % (c[0][1], c[0][2], c[0][0]) if c else "")') || pick=""
 
   # 3. Import from the same volume, timed. A failure leaves the runtime uninstalled while staged:
   #    keep the clone and say exactly what to do (#5).
-  ci_guard "add" || return 1
+  ci_guard "add" || { ci_log_stop; return 1; }
   t0=$(date +%s)
   if [ "$DRY" = 1 ]; then
     act "re-add from the clone (timed)" xcrun simctl runtime add "$src"
+    ci_log_stop
     act "remove the source clone" sudo rm -f "$src"; act "remove the source directory" sudo rmdir "$srcdir"
     trap - INT TERM HUP; return 0
   fi
@@ -625,6 +656,7 @@ print("%s %s %s" % (c[0][1], c[0][2], c[0][0]) if c else "")') || pick=""
   out=$(xcrun simctl runtime add "$src" 2>&1); dv=$?
   t1=$(date +%s)
   printf '%s\n' "$out"; echo "[exit=$dv]"; echo
+  ci_log_stop
   newuuid=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c '
 import json, sys
 r = [k for k, v in json.load(sys.stdin).items() if v.get("runtimeIdentifier") == sys.argv[1] and v.get("state") == "Ready"]
@@ -653,10 +685,6 @@ print(r[0] if r else "")' "$rid" 2>/dev/null)
     stop "simdiskimaged registered the source clone itself; it is KEPT at $src (removing it could pull a file from under a mounted runtime). Run restore."
     return 1
   fi
-  echo "## simdiskimaged's own account of the add (unified log)"
-  log show --style compact --last "$(( t1 - t0 + 120 ))s" --predicate 'process == "simdiskimaged"' 2>/dev/null |
-    grep -i -E 'clone|same volume|inbox|copy|free space|final location|sparse' | tail -20
-  echo
   devs1=$(devices_on "$rid"); pairs1=$(pairs_now)
   echo "## devices on $short after the add (udid + available):"; printf '%s\n' "$devs1" | sed 's/^/     /'
   if printf '%s\n%s\n' "$devs0" "$devs1" | grep -q UNREADABLE; then echo "   !! devices could not be read — NOT verified"
