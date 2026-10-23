@@ -83,8 +83,18 @@
 #
 # Usage:
 #   scripts/experiments/e20-images-mount.sh [--dry-run] [--i-understand] \
-#       [--reuse-copy] --volume /Volumes/<name> --volume-uuid <Volume UUID> <phase>
+#       [--reuse-copy] [--mount-with mount_apfs|diskutil] --volume /Volumes/<name> --volume-uuid <Volume UUID> <phase>
 #   --volume is needed for preflight and stage; restore/status read it from the state file.
+#   --mount-with diskutil (stage only) mounts through DiskArbitration — `diskutil mount -mountPoint
+#   Images <UUID>`, no nobrowse — instead of the default `mount_apfs -o nobrowse`. It exists for one
+#   question: the arm-3 repeat showed CacheDelete answering "Invalid volume" (0 bytes free) for the
+#   mount_apfs mount, which blocks every add while staged. Pre-registered (2026-10-23, before its run):
+#     ACCEPTED  clone-import's log shows CacheDeleteCopyAvailableSpaceForVolume for Images WITHOUT
+#               "Invalid volume" and a non-zero result. Two variables changed at once (the mounter and
+#               nobrowse); a follow-up would separate them.
+#     REJECTED  "Invalid volume" again: neither the mounter nor nobrowse is the cause.
+#     NOT RUN   DiskArbitration declines the mount (E6c saw it refuse a previously mounted volume at a
+#               chosen mount point): the volume goes back to /Volumes and nothing is staged.
 #   --reuse-copy lets stage accept a volume that already holds a copy of the store from an earlier
 #   stage (every entry must be a name the store also has); the copy is NOT redone but IS verified
 #   byte for byte before anything is detached.
@@ -104,12 +114,13 @@ SNAP_DIR="$STATE_DIR/snapshots"
 DEVICE_TYPE="${XCV_E20_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
 SELF="scripts/experiments/e20-images-mount.sh"
 
-DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""; CI_LOG=""; CI_LOG_PID=""
+DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""; CI_LOG=""; CI_LOG_PID=""; MOUNTWITH=mount_apfs; CI_SAMPLER=""; CI_MIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --i-understand) OK=1 ;;
     --reuse-copy) REUSE=1 ;;
+    --mount-with) MOUNTWITH="${2:-}"; shift ;;
     --volume) VOLMP="${2:-}"; shift ;;
     --volume-uuid) VOLUUID="${2:-}"; shift ;;
     preflight|stage|exercise|clone-import|restore|status) PHASE="$1" ;;
@@ -117,6 +128,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+case "$MOUNTWITH" in mount_apfs|diskutil) ;; *) echo "REFUSING: --mount-with takes mount_apfs or diskutil" >&2; exit 2 ;; esac
 [ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status" >&2; exit 2; }
 case "$VOLMP" in *[[:space:]]*) echo "REFUSING: the volume's name contains whitespace; this script parses the mount table and needs a name without spaces (rename it in Disk Utility)." >&2; exit 2 ;; esac
 [ -n "$VOLUUID" ] || { echo "REFUSING: --volume-uuid is required. Read it from 'diskutil apfs list' next to the volume's NAME." >&2; exit 2; }
@@ -351,15 +363,24 @@ phase_preflight() {
 
 on_interrupt() {
   if [ -n "$CI_LOG_PID" ]; then kill "$CI_LOG_PID" 2>/dev/null; fi
+  if [ -n "$CI_SAMPLER" ]; then kill "$CI_SAMPLER" 2>/dev/null; fi
   echo; echo "RESULT: $PHASE INTERRUPTED"; state_report
   { echo "E20 $PHASE interrupted:"; state_report; } >/dev/tty 2>/dev/null
   exit 130
 }
 
+# Unmount Images the way it was mounted; never forced either way. A DiskArbitration mount goes back
+# through DiskArbitration; a mount_apfs mount through umount.
+unmount_images() {
+  local how="${1:-$(state_get mounter)}"
+  if [ "$how" = diskutil ]; then act "unmount Images through DiskArbitration (never forced)" sudo diskutil unmount "$IMAGES"
+  else act "unmount Images (never forced)" sudo umount "$IMAGES"; fi
+}
+
 # Right after mount_apfs, before the daemon is restarted, nothing on the volume is open: a plain
 # umount undoes the mount without touching runtimes or simulators (review N2).
 rollback_mount() {
-  act "roll back: unmount Images (never forced)" sudo umount "$IMAGES" || { stop "rollback umount refused — Images is still mounted"; return 1; }
+  unmount_images "$MOUNTWITH" || { stop "rollback unmount refused — Images is still mounted"; return 1; }
   restart_daemon
   act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
   return 0
@@ -381,7 +402,7 @@ phase_stage() {
   trap on_interrupt INT TERM HUP
   if [ "$DRY" = 0 ]; then
     mkdir -p "$STATE_DIR"
-    printf 'uuid=%s\ndevnode=%s\nlabel=%s\nvoldev=%s\nstaged=%s\n' "$VOLUUID" "$devnode" "${VOLMP##*/}" "$VOLDEV" "$(date -u +%FT%TZ)" > "$STATE_FILE"
+    printf 'uuid=%s\ndevnode=%s\nlabel=%s\nvoldev=%s\nmounter=%s\nstaged=%s\n' "$VOLUUID" "$devnode" "${VOLMP##*/}" "$VOLDEV" "$MOUNTWITH" "$(date -u +%FT%TZ)" > "$STATE_FILE"
   fi
   runtime_table
   served_from
@@ -429,8 +450,14 @@ phase_stage() {
   assert_volume || { stop "the volume is no longer the one checked; nothing is mounted"; restart_daemon; return 1; }
   act "release the volume from /Volumes" sudo diskutil unmount "$VOLUUID" || {
     stop "diskutil would not unmount the volume; it is still at $VOLSHOW and nothing is mounted at Images"; restart_daemon; return 1; }
-  act "mount the volume at Images" sudo mount_apfs -o nobrowse "$devnode" "$IMAGES" || {
-    stop "mount_apfs refused; the volume is unmounted (not at /Volumes), Images is the internal store"; restart_daemon; return 1; }
+  if [ "$MOUNTWITH" = diskutil ]; then
+    act "mount the volume at Images through DiskArbitration" sudo diskutil mount -mountPoint "$IMAGES" "$VOLUUID" || {
+      act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
+      stop "DiskArbitration declined to mount the volume at Images (pre-registered NOT RUN); Images is the internal store"; restart_daemon; return 1; }
+  else
+    act "mount the volume at Images" sudo mount_apfs -o nobrowse "$devnode" "$IMAGES" || {
+      stop "mount_apfs refused; the volume is unmounted (not at /Volumes), Images is the internal store"; restart_daemon; return 1; }
+  fi
 
   # 3. Is it really ours, owned, and did nothing slip in during the window?
   if [ "$DRY" = 0 ]; then
@@ -462,7 +489,7 @@ phase_stage() {
   echo
   echo "${pfx}!!! EVERY simulator on this Mac now runs from the external drive — the test rigs included — until"
   echo "${pfx}!!! '$SELF --i-understand --volume-uuid <UUID> restore'. Do not install or delete runtimes, and do"
-  echo "${pfx}!!! not eject the drive, while staged."
+  echo "${pfx}!!! not eject the drive — nor the volume in Finder, where a DiskArbitration mount shows up — while staged."
 }
 
 phase_exercise() {
@@ -543,6 +570,24 @@ ci_log_start() {
   sleep 3
   echo "## simdiskimaged log stream started (info level)"; echo
 }
+# The add stages the whole image on the internal disk before it fails or finishes (arm-3 repeat log), so
+# the free space measured after it hides the peak. Sample it once a second, read-only, bounded at 30 min.
+ci_sampler_start() {
+  [ "$DRY" = 1 ] && return 0
+  CI_MIN=$(mktemp -t xcv-e20-min) || return 0
+  ( m=""; for _ in $(seq 1 1800); do
+      f=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}')
+      if [ -z "$m" ] || [ "$f" -lt "$m" ]; then m=$f; echo "$m" > "$CI_MIN"; fi
+      sleep 1
+    done ) &
+  CI_SAMPLER=$!
+}
+ci_sampler_stop() { # prints the lowest internal free space seen
+  [ -n "$CI_SAMPLER" ] || return 0
+  kill "$CI_SAMPLER" 2>/dev/null; wait "$CI_SAMPLER" 2>/dev/null; CI_SAMPLER=""
+  echo "   lowest internal free space during the add: $(cat "$CI_MIN" 2>/dev/null || echo '?') KB"
+}
+
 ci_log_stop() {
   [ -n "$CI_LOG_PID" ] || return 0
   sleep 3
@@ -571,7 +616,8 @@ phase_clone_import() {
     echo "[dry-run] Images is not staged: a real run would REFUSE here. Every path below would be the internal store — which is exactly why each real step re-checks the mount."
   fi
   CI_DEV=$(dev_of "$IMAGES")
-  echo "   staged volume device at Images: $CI_DEV"; echo
+  echo "   staged volume device at Images: $CI_DEV; mounted by: $(state_get mounter)"
+  echo "   mount line: $(mount | grep " on $IMAGES " || echo none)"; echo
   trap on_interrupt INT TERM HUP
 
   # Nothing may have landed on the volume since stage: otherwise the re-baseline below would absorb it (#3).
@@ -653,9 +699,11 @@ print("%s %s %s" % (c[0][1], c[0][2], c[0][0]) if c else "")') || pick=""
     trap - INT TERM HUP; return 0
   fi
   echo "## re-add from the clone (timed)"; echo "\$ xcrun simctl runtime add $src"
+  ci_sampler_start
   out=$(xcrun simctl runtime add "$src" 2>&1); dv=$?
   t1=$(date +%s)
-  printf '%s\n' "$out"; echo "[exit=$dv]"; echo
+  printf '%s\n' "$out"; echo "[exit=$dv]"
+  ci_sampler_stop; echo
   ci_log_stop
   newuuid=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c '
 import json, sys
@@ -747,7 +795,7 @@ phase_restore_body() {
     n=$(runtime_volume_count)
     [ "$n" = 0 ] || { echo "!! $n runtime volume(s) still attached; Images left mounted"; return 1; }
   fi
-  act "unmount Images (never forced)" sudo umount "$IMAGES" || {
+  unmount_images || {
     echo "!! umount refused (busy). Nothing forced. Find the holder with: sudo lsof +D $IMAGES"; return 1; }
   snap post-umount "$IMAGES"
   restart_daemon
