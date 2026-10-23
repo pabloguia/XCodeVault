@@ -285,6 +285,12 @@ unmount_runtimes() {
   return 0
 }
 
+# ls -leO@R minus block totals, images.plist's line (re-copied and compared before the mount),
+# provenance stamps, and the '@' marker a provenance stamp alone adds (ls pads that column with a space).
+e20_listing_norm() {
+  grep -v -e '^total ' -e ' images\.plist$' -e 'com\.apple\.provenance' | sed 's/^\([-dlbcpsrwxStT]\{10\}\)@/\1 /'
+}
+
 # Every regular file byte-identical, and the trees' metadata listings equal.
 verify_copy() {
   local rel bad=0 a b
@@ -293,8 +299,14 @@ verify_copy() {
   for rel in $(cd "$IMAGES" && find . -type f ! -path './.*' ! -name images.plist | sort); do
     if sudo cmp -s "$IMAGES/$rel" "$VOLMP/$rel"; then echo "   identical: $rel"; else echo "   DIFFERS: $rel"; bad=1; fi
   done
-  a=$( (cd "$IMAGES" && ls -leO@R .) 2>&1 | grep -v -e '^total ' -e ' images\.plist$')
-  b=$( (cd "$VOLMP" && ls -leO@R .) 2>&1 | grep -v -e '^total ' -e ' images\.plist$')
+  # com.apple.provenance is not copied data: macOS stamps it on every file and directory a process
+  # creates (measured 2026-10-23: ditto's new images.plist, Inbox and mnt carried it, the originals
+  # did not). It is dropped, and with it the '@' it adds after the mode; every OTHER xattr still has
+  # its own line in -@ output, so a real xattr difference still shows. The stamps are printed below.
+  echo "   provenance stamps on the copy (expected, not compared):"
+  (cd "$VOLMP" && ls -leO@R .) 2>&1 | grep -B1 'com\.apple\.provenance' | grep -v -e 'com\.apple\.provenance' -e '^--$' | sed 's/^/     /'
+  a=$( (cd "$IMAGES" && ls -leO@R .) 2>&1 | e20_listing_norm)
+  b=$( (cd "$VOLMP" && ls -leO@R .) 2>&1 | e20_listing_norm)
   if [ "$a" = "$b" ]; then echo "   metadata listing: identical"; else echo "   metadata listing DIFFERS:"; diff <(printf '%s\n' "$a") <(printf '%s\n' "$b"); bad=1; fi
   echo
   return "$bad"
