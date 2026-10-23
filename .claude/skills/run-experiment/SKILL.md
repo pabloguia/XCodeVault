@@ -45,6 +45,7 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
      every simulator on the machine — the test rigs' included — runs from the drive until its
      `restore` phase. It copies and never deletes the internal store, refuses with `xcodebuild` or any
      simulator running, and never force-unmounts; it is still the user's whole runtime store.
+     Its arm-5 phases also write `/etc/fstab` — persistent system configuration until `boot-disarm`.
 
    A `--set`-scoped `simctl` call is scratch; a bare one is not. That distinction is the whole
    difference between the second and fourth rows.

@@ -43,6 +43,12 @@
 #               staged volume. Re-baselines the stage-mounted snapshot only if the sole change is its
 #               own image swap. Afterwards the volume differs from the internal store (new image UUID),
 #               so a later stage needs a fresh copy, not --reuse-copy.
+#   boot-arm    (arm 5) sudo; staged with --mount-with diskutil only. Adds two marked lines to /etc/fstab so
+#               DiskArbitration mounts the volume at Images whenever it appears — at boot or on hotplug.
+#               Persistent system configuration: boot-disarm removes exactly those lines.
+#   boot-check  (arm 5) read-only. After a restart (with or without the drive) or a hotplug, classifies
+#               the result: BOOT PASS / SHADOW / ABSENT / NOT MOUNTED, pre-registered in the phase.
+#   boot-disarm (arm 5) sudo. Removes the two lines (or the file, if nothing else was in it). Then restore.
 #   restore     sudo. Compare the mounted store with what stage left (anything written there while
 #               mounted would be stranded); detach the runtimes; unmount Images (never -f); snapshot
 #               the uncovered internal store at once and again after a rescan (rule 6).
@@ -123,17 +129,17 @@ while [ $# -gt 0 ]; do
     --mount-with) MOUNTWITH="${2:-}"; shift ;;
     --volume) VOLMP="${2:-}"; shift ;;
     --volume-uuid) VOLUUID="${2:-}"; shift ;;
-    preflight|stage|exercise|clone-import|restore|status) PHASE="$1" ;;
+    preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm) PHASE="$1" ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$MOUNTWITH" in mount_apfs|diskutil) ;; *) echo "REFUSING: --mount-with takes mount_apfs or diskutil" >&2; exit 2 ;; esac
-[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status" >&2; exit 2; }
+[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm" >&2; exit 2; }
 case "$VOLMP" in *[[:space:]]*) echo "REFUSING: the volume's name contains whitespace; this script parses the mount table and needs a name without spaces (rename it in Disk Utility)." >&2; exit 2 ;; esac
 [ -n "$VOLUUID" ] || { echo "REFUSING: --volume-uuid is required. Read it from 'diskutil apfs list' next to the volume's NAME." >&2; exit 2; }
 case "$PHASE" in
-  stage|exercise|clone-import|restore)
+  stage|exercise|clone-import|restore|boot-arm|boot-disarm)
     if [ "$DRY" = 0 ] && [ "$OK" = 0 ]; then
       echo "REFUSING: '$PHASE' changes this machine's state. Read the header of this script, then pass --i-understand (or --dry-run)." >&2; exit 2
     fi ;;
@@ -353,6 +359,7 @@ verify_copy() {
 }
 
 phase_preflight() {
+  armed_banner
   echo "## checks"
   common_checks
   volume_checks
@@ -390,6 +397,7 @@ rollback_mount() {
 
 phase_stage() {
   local devnode owner mode before after n
+  armed_banner
   echo "## checks"
   common_checks; volume_checks
   is_mountpoint "$IMAGES" && refuse "$IMAGES is already a mount point — run restore first"
@@ -807,6 +815,12 @@ phase_restore_body() {
 
 phase_restore() {
   local staged_uuid stranded=0
+  # An armed fstab would make the final `diskutil mount` put the volume straight back over Images, and
+  # deleting the state file would erase the only record of the arm (review #1).
+  if fstab_armed; then
+    armed_banner
+    echo "RESULT: restore REFUSED — run boot-disarm first; nothing was changed"; return 1
+  fi
   staged_uuid=$(state_get uuid)
   if [ -f "$STATE_FILE" ]; then echo "## state"; cat "$STATE_FILE"; echo; fi
   if [ -n "$staged_uuid" ] && [ "$staged_uuid" != "$VOLUUID" ]; then
@@ -830,7 +844,7 @@ phase_restore() {
   runtime_table
   served_from
   act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
-  rm -f "$STATE_FILE"
+  if [ "$(state_get fstab)" = armed ]; then echo "!! the state file says the fstab arm is still in place — keeping it"; else rm -f "$STATE_FILE"; fi
   if [ "$stranded" = 1 ]; then
     echo "!!! RESULT: restore done, BUT the volume's image set changed while staged (diff above): something was"
     echo "!!! installed, imported or deleted there. A deletion loses nothing (the internal store still has it); an"
@@ -840,7 +854,131 @@ phase_restore() {
   fi
 }
 
+# --- Arm 5: mount at boot through DiskArbitration (/etc/fstab) ---------------------------------
+# DiskArbitration reads /etc/fstab when a volume appears and mounts it at the mount point given there,
+# at boot or on hotplug alike. That is the DiskArbitration-native form of the one mount that works
+# (arm 3, --mount-with diskutil): no nobrowse, so the line carries only `rw`. The entry is the
+# experiment's own: two marked lines, removed exactly by boot-disarm.
+FSTAB=/etc/fstab
+FSTAB_MARK="# xcodevault-e20 arm 5 — remove with: e20-images-mount.sh --volume-uuid <UUID> boot-disarm"
+fstab_line() { printf 'UUID=%s %s apfs rw\n' "$VOLUUID" "$IMAGES"; }
+fstab_armed() { [ -e "$FSTAB" ] && grep -q -i -E "$VOLUUID|xcodevault-e20" "$FSTAB"; }
+# Loud wherever an armed fstab could surprise: it remounts the volume over Images every time the drive appears.
+armed_banner() {
+  fstab_armed || return 0
+  echo "!!! $FSTAB holds the E20 arm-5 entry: DiskArbitration mounts the volume over Images whenever the drive appears."
+  echo "!!! Remove it with: $SELF --i-understand --volume-uuid <UUID> boot-disarm"
+  echo
+}
+# The store's listing without images.plist (it churns on use) plus the image set — what rule 6 is about.
+store_view() { sed -n '1,/^--- images.plist$/p' "$SNAP_DIR/$1" | grep -v -e ' images\.plist$' -e '^--- images.plist$'; imageset_of "$1"; }
+plist_view() { sed -n '/^--- images.plist$/,/^--- image set$/p' "$SNAP_DIR/$1"; }
+DA_MOUNT_OPTS="apfs, local, nodev, nosuid, journaled"   # the working mount, arm 3 DiskArbitration evidence
+
+phase_boot_arm() {
+  local tmp before
+  echo "## checks"
+  if [ "$DRY" = 0 ]; then
+    is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ] || {
+      echo "RESULT: boot-arm REFUSED — Images is not staged with $VOLUUID; stage it first (--mount-with diskutil)"; return 1; }
+    [ "$(state_get mounter)" = diskutil ] || { echo "RESULT: boot-arm REFUSED — the stage was not a DiskArbitration mount; restore and re-stage with --mount-with diskutil"; return 1; }
+    if [ -e "$FSTAB" ] && grep -q -i -E "$VOLUUID|$IMAGES|xcodevault-e20" "$FSTAB"; then
+      echo "RESULT: boot-arm REFUSED — $FSTAB already mentions this volume, Images or the marker:"; cat "$FSTAB"; return 1
+    fi
+  fi
+  before=absent; [ -e "$FSTAB" ] && before=present
+  echo "   $FSTAB before: $([ -e "$FSTAB" ] && echo "present ($(wc -l < "$FSTAB" | tr -d ' ') lines, kept as they are)" || echo absent)"
+  echo "   AutomountDisksWithoutUserLogin: $(defaults read /Library/Preferences/SystemConfiguration/autodiskmount AutomountDisksWithoutUserLogin 2>/dev/null || echo 'unset (external disks mount at login)')"
+  echo "   simdiskimaged: $(launchctl print system/com.apple.CoreSimulator.simdiskimaged 2>/dev/null | sed -n 's/^[[:space:]]*path = //p' | head -1) — submitted on first simulator use, not at boot"
+  echo
+  tmp=$(mktemp -t xcv-e20-fstab) || return 1
+  # A file whose last line has no newline would have our marker glued onto it (review #3).
+  { if [ -e "$FSTAB" ]; then cat "$FSTAB"; [ -n "$(tail -c1 "$FSTAB")" ] && echo; fi; echo "$FSTAB_MARK"; fstab_line; } > "$tmp"
+  echo "## $FSTAB after"; cat "$tmp"; echo
+  act "install $FSTAB (root:wheel 644)" sudo install -m 644 -o root -g wheel "$tmp" "$FSTAB" || { rm -f "$tmp"; echo "RESULT: boot-arm FAILED — $FSTAB not written"; return 1; }
+  rm -f "$tmp"
+  [ "$DRY" = 1 ] || printf 'fstab=armed\nfstab_before=%s\n' "$before" >> "$STATE_FILE"
+  echo "RESULT: boot-arm done. Images stays mounted now. Next: restart with the drive connected, log in, and run boot-check"
+  echo "        BEFORE opening Xcode or a simulator. Leave the arm in place only for the test; boot-disarm removes it."
+}
+
+# Read-only. Classifies what the last boot (or a hotplug) did, against readings pre-registered here:
+#   BOOT PASS    Images is the volume, mounted with the same options as the working DiskArbitration mount, and
+#                every open <UUID>.dmg is on its device — the store came up on the drive.
+#   DIFFERENT MOUNT  as BOOT PASS but with other mount options: a reading of its own, not a pass.
+#   NO OWNERS    mounted without ownership (H20 requires owners).
+#   SHADOW       Images is the volume but a runtime is held open on the INTERNAL disk: it attached before the
+#                mount (or the drive was hot-plugged under a live store). This is the rule-6 failure. Run restore.
+#   ABSENT       the drive is not connected and Images is the internal store — the safe fallback, expected.
+#   NOT MOUNTED  the drive is connected but Images is not mounted — DiskArbitration did not honour fstab.
+#   (In every case, no runtime attached yet means it cannot be classified: run `xcrun simctl runtime list`
+#   once to let simdiskimaged scan, then boot-check again.)
+phase_boot_check() {
+  local present mounted internal ext n_int n_ext
+  echo "## boot: $(sysctl -n kern.boottime | sed 's/^{ sec = \([0-9]*\).*/\1/' | xargs -I{} date -r {} '+%Y-%m-%d %H:%M:%S %z') (uptime:$(uptime | sed 's/.*up \([^,]*\),.*/ \1/'))"
+  echo "## $FSTAB:"; if [ -e "$FSTAB" ]; then sed 's/^/   /' "$FSTAB"; else echo "   absent"; fi
+  present=no; diskutil info "$VOLUUID" >/dev/null 2>&1 && present=yes
+  mounted=no; is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ] && mounted=yes
+  echo "## drive connected: $present; Images is the volume: $mounted"
+  mount | grep " on $IMAGES " || echo "   (Images is not a mount point)"
+  echo "## runtime volumes attached: $(runtime_volume_count)"
+  nothing_booted && echo "## no simulator booted"
+  echo
+  runtime_table
+  served_from
+  [ "$DRY" = 1 ] && return 0
+  local opts; opts=$(mount | grep " on $IMAGES " | sed 's/.*(\(.*\))$/\1/')
+  [ -n "$opts" ] && echo "## mount options: '$opts' (the working DiskArbitration mount had '$DA_MOUNT_OPTS')"
+  internal=$(dev_of /System/Volumes/Data); ext=$(dev_of "$IMAGES")
+  n_int=$(sudo lsof -nP +c0 2>/dev/null | grep -E '/CoreSimulator/Images/[0-9A-F-]+\.dmg' | awk -v d="$internal" '$(NF-3) == d' | wc -l | tr -d ' ')
+  n_ext=$(sudo lsof -nP +c0 2>/dev/null | grep -E '/CoreSimulator/Images/[0-9A-F-]+\.dmg' | awk -v d="$ext" '$(NF-3) == d' | wc -l | tr -d ' ')
+  if [ "$mounted" = no ] && is_mountpoint "$IMAGES"; then echo "RESULT: boot-check UNEXPECTED — Images holds some other volume"
+  elif [ "$mounted" = yes ] && [ "$n_int" != 0 ]; then echo "RESULT: boot-check SHADOW — $n_int runtime image(s) held open on the internal disk under the mounted volume. Disarm, then restore."
+    if printf '%s' "$opts" | grep -q noowners; then echo "        and NO OWNERS — the volume is also mounted without ownership"; fi
+  elif [ "$mounted" = yes ] && printf '%s' "$opts" | grep -q noowners; then echo "RESULT: boot-check NO OWNERS — mounted without ownership; H20 requires owners. Disarm and restore."
+  elif [ "$mounted" = yes ] && [ "$n_ext" != 0 ] && [ "$opts" != "$DA_MOUNT_OPTS" ]; then echo "RESULT: boot-check DIFFERENT MOUNT — the store came up on the drive ($n_ext image(s) on $ext) but with options '$opts', not the working mount's"
+  elif [ "$mounted" = yes ] && [ "$n_ext" != 0 ]; then echo "RESULT: boot-check BOOT PASS — the store came up on the drive ($n_ext image(s) open on $ext), same options as the working mount"
+  elif [ "$mounted" = yes ]; then echo "RESULT: boot-check UNCLASSIFIED — mounted, no runtime attached yet. Run 'xcrun simctl runtime list' once, then boot-check again."
+  elif [ "$present" = no ]; then
+    echo "RESULT: boot-check ABSENT — no drive, the internal store is in use ($n_int image(s) open internally)"
+    if [ -f "$SNAP_DIR/pre-mount" ]; then
+      snap boot-absent "$IMAGES"
+      echo "## rule 6 — the internal store after a boot without the drive (listing and image set, images.plist apart)"
+      if diff <(store_view pre-mount) <(store_view boot-absent); then echo "   UNCHANGED"; else echo "   CHANGED (diff above)"; fi
+      echo "## images.plist apart (lastUsedAt churn is expected):"; diff <(plist_view pre-mount) <(plist_view boot-absent) && echo "   identical"
+    fi
+  else echo "RESULT: boot-check NOT MOUNTED — the drive is connected but DiskArbitration did not mount it at Images"; fi
+}
+
+phase_boot_disarm() {
+  local tmp
+  [ -e "$FSTAB" ] || { echo "RESULT: boot-disarm — $FSTAB is absent, nothing to remove"; return 0; }
+  tmp=$(mktemp -t xcv-e20-fstab) || return 1
+  local before_n after_n rc
+  grep -v -x -F -e "$FSTAB_MARK" -e "$(fstab_line)" "$FSTAB" > "$tmp"; rc=$?
+  if [ "$rc" -gt 1 ]; then rm -f "$tmp"; echo "RESULT: boot-disarm FAILED — could not read $FSTAB (grep exit $rc); nothing changed"; return 1; fi
+  before_n=$(wc -l < "$FSTAB" | tr -d ' '); after_n=$(wc -l < "$tmp" | tr -d ' ')
+  if [ $(( before_n - after_n )) != 2 ]; then
+    rm -f "$tmp"; echo "RESULT: boot-disarm REFUSED — expected to remove exactly 2 lines, would remove $(( before_n - after_n )). $FSTAB left as it is:"; sed 's/^/   /' "$FSTAB"; return 1
+  fi
+  echo "## $FSTAB now:"; sed 's/^/   /' "$FSTAB"
+  echo "## removing exactly the two E20 lines"
+  # Remove the file only if it did not exist before the arm AND nothing else is in it now.
+  if [ -s "$tmp" ] || [ "$(state_get fstab_before)" = present ]; then
+    echo "## $FSTAB after:"; sed 's/^/   /' "$tmp"
+    act "install the filtered $FSTAB" sudo install -m 644 -o root -g wheel "$tmp" "$FSTAB" || { rm -f "$tmp"; echo "RESULT: boot-disarm FAILED"; return 1; }
+  else
+    echo "   nothing else is in it and there was no $FSTAB before the arm: the file is removed"
+    act "remove $FSTAB" sudo rm -f "$FSTAB" || { rm -f "$tmp"; echo "RESULT: boot-disarm FAILED"; return 1; }
+  fi
+  rm -f "$tmp"
+  if [ "$DRY" = 0 ] && fstab_armed; then echo "RESULT: boot-disarm FAILED — the entry is still there"; return 1; fi
+  [ "$DRY" = 0 ] && [ -f "$STATE_FILE" ] && sed -i '' 's/^fstab=armed$/fstab=disarmed/' "$STATE_FILE"
+  echo "RESULT: boot-disarm done. Images is left as it is: run restore next."
+}
+
 phase_status() {
+  armed_banner
   echo "## Images is a mount point: $(is_mountpoint "$IMAGES" && echo yes || echo no)"
   mount | grep " on $IMAGES " || true
   echo "## runtime volumes mounted: $(runtime_volume_count)"

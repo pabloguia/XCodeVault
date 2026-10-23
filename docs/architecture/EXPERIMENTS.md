@@ -660,3 +660,11 @@ re-checks that `Images` is still the staged volume, so a dropped mount cannot tu
 store. `--reuse-copy` lets `stage` reuse a verified copy already on the volume. Migration-safety review: blocked
 (10 findings), rewritten, ship. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
 Disk Access.
+
+**Arm 5, mount at boot (written 2026-10-23, not run).** `boot-arm` adds two marked lines to `/etc/fstab` so
+DiskArbitration mounts the volume at `Images` whenever it appears (boot or hotplug), with the `rw`-only line that
+reproduces the working DiskArbitration mount; `boot-check` classifies each boot or hotplug as BOOT PASS / DIFFERENT
+MOUNT / NO OWNERS / SHADOW / ABSENT / NOT MOUNTED; `boot-disarm` removes exactly those lines. `restore` refuses while
+the entry is present, so a forgotten arm cannot be erased from the record. Migration-safety review: ship with fixes,
+fixes verified, ship.
+
