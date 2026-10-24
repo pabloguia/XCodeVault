@@ -2309,3 +2309,11 @@ a full copy on the internal disk first (a transient ~5.1 GB peak), then a full c
 built on H20 must mount through DiskArbitration, must budget one image's worth of free internal space per install,
 and gets no speed win on import. Matrix entry "E20 arm 3, DiskArbitration mount". Still open before any product use:
 the physical disconnect (arm 4b) and mounting at boot (arm 5) — now with a DiskArbitration mount, the one that works.
+
+**E20 arm 5, step 3, 2026-10-24: the store mounts at boot.** With a two-line `/etc/fstab` entry, DiskArbitration
+mounted the volume at `Images` on its own after a restart, with the working mount's options and ownership on, and both
+runtimes were served from the drive with nothing attached internally first (matrix entry "E20 arm 5, step 3"). The
+ordering holds here because external disks mount at login and simdiskimaged starts on first simulator use; a machine
+that uses simulators before any login is not covered. Still open: a boot without the drive (does the internal store
+stay untouched, rule 6?), a hotplug after login, and the physical disconnect under a live store (arm 4b).
+

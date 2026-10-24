@@ -1,5 +1,5 @@
 # Experiment: E20 images-store mount — phase stage
-# Date: 2026-10-23T23:17:54Z
+# Date: 2026-10-23T23:59:50Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -11,7 +11,7 @@
 ## checks
    this terminal holds Full Disk Access
    device location: External; protocol: USB; removable: Fixed
-   store 15468140 KB; volume free 19152804 KB; needed 2097152 KB
+   store 15468140 KB; volume free 19152764 KB; needed 2097152 KB
 ## simctl runtime list (summary)
 com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
 com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
@@ -25,7 +25,7 @@ com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/De
 
 ## keep Spotlight off the volume
 $ sudo mdutil -i off /Volumes/<vault>
-2026-10-23 20:17:58.805 mdutil[96536:1007842] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
+2026-10-23 20:59:55.620 mdutil[87366:1359514] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
 /System/Volumes/Data/Volumes/<vault>:
 	Indexing disabled.
 [exit=0]
@@ -74,7 +74,7 @@ $ sudo cp -p /Library/Developer/CoreSimulator/Images/images.plist /Volumes/<vaul
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  wheel  -        1669 Oct 23 20:19 images.plist
+-rw-r--r--  1 root  wheel  -        1669 Oct 23 21:01 images.plist
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 Inbox
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
 
@@ -89,7 +89,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 23:19:50 +0000
+      "lastStateChangeAt" => 2026-10-24 00:01:49 +0000
       "lastUsedAt" => 2026-10-23 21:54:19 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -135,7 +135,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 23:19:51 +0000
+      "lastStateChangeAt" => 2026-10-24 00:01:50 +0000
       "lastUsedAt" => 2026-10-23 21:40:59 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -219,7 +219,7 @@ com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/De
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  admin  -        1669 Oct 23 20:19 images.plist
+-rw-r--r--  1 root  admin  -        1669 Oct 23 21:01 images.plist
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
 	com.apple.provenance	         11 
 drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
@@ -236,53 +236,7 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-23 23:19:50 +0000
-      "lastUsedAt" => 2026-10-23 21:54:19 +0000
-      "mountingMode" => {
-        "mountAsDMG" => {
-        }
-      }
-      "mountPolicy" => {
-        "automatic" => {
-        }
-      }
-      "path" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
-      }
-      "runtimeInfo" => {
-        "build" => "23F77"
-        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
-        "bundlePath" => {
-          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
-        }
-        "isInternal" => false
-        "platformIdentifier" => "com.apple.platform.iphonesimulator"
-        "supportedArchitectures" => [
-          0 => "x86_64"
-          1 => "arm64"
-        ]
-        "version" => 1705216
-      }
-      "signatureState" => {
-        "verified" => {
-        }
-      }
-      "sourceURL" => {
-        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
-      }
-      "state" => 5
-      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
-      "writePolicy" => {
-        "readOnly" => {
-        }
-      }
-    }
-    1 => {
-      "format" => {
-        "normal" => {
-        }
-      }
-      "lastStateChangeAt" => 2026-10-23 23:19:51 +0000
+      "lastStateChangeAt" => 2026-10-24 00:01:50 +0000
       "lastUsedAt" => 2026-10-23 21:40:59 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -323,16 +277,61 @@ drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
         }
       }
     }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-24 00:01:49 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
   ]
   "standaloneBundles" => [
   ]
 }
 --- image set
-find: ./.Spotlight-V100/Store-V2/511DE73B-9400-4FAE-99A3-2A8FBC47CE87: Permission denied
 ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg 5242171072
 ./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg 10597197700
 
-## internal data volume free: 20Gi
+## internal data volume free: 19Gi
 
 RESULT: staged. Read the tables above against the pre-registered readings in this script's header:
         PASS needs every runtime Ready + Verified AND every open <UUID>.dmg on the mounted volume's device.
