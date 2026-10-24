@@ -897,7 +897,7 @@ phase_boot_arm() {
   echo "## $FSTAB after"; cat "$tmp"; echo
   act "install $FSTAB (root:wheel 644)" sudo install -m 644 -o root -g wheel "$tmp" "$FSTAB" || { rm -f "$tmp"; echo "RESULT: boot-arm FAILED — $FSTAB not written"; return 1; }
   rm -f "$tmp"
-  [ "$DRY" = 1 ] || printf 'fstab=armed\nfstab_before=%s\n' "$before" >> "$STATE_FILE"
+  [ "$DRY" = 1 ] || printf 'fstab=armed\nfstab_before=%s\narmed_at=%s\n' "$before" "$(date +%s)" >> "$STATE_FILE"
   echo "RESULT: boot-arm done. Images stays mounted now. Next: restart with the drive connected, log in, and run boot-check"
   echo "        BEFORE opening Xcode or a simulator. Leave the arm in place only for the test; boot-disarm removes it."
 }
@@ -909,12 +909,17 @@ phase_boot_arm() {
 #   NO OWNERS    mounted without ownership (H20 requires owners).
 #   SHADOW       Images is the volume but a runtime is held open on the INTERNAL disk: it attached before the
 #                mount (or the drive was hot-plugged under a live store). This is the rule-6 failure. Run restore.
+#   NOT REBOOTED no restart since boot-arm: the result would describe the stage, so it is not classified.
 #   ABSENT       the drive is not connected and Images is the internal store — the safe fallback, expected.
 #   NOT MOUNTED  the drive is connected but Images is not mounted — DiskArbitration did not honour fstab.
 #   (In every case, no runtime attached yet means it cannot be classified: run `xcrun simctl runtime list`
 #   once to let simdiskimaged scan, then boot-check again.)
 phase_boot_check() {
-  local present mounted internal ext n_int n_ext
+  local present mounted internal ext n_int n_ext boot armed
+  # A check without a restart since the arm measures the stage, not the boot: say so, never BOOT PASS.
+  # The arm time comes from the state file, or failing that from /etc/fstab's own modification time.
+  boot=$(sysctl -n kern.boottime | sed 's/^{ sec = \([0-9]*\).*/\1/')
+  armed=$(state_get armed_at); [ -n "$armed" ] || { [ -e "$FSTAB" ] && armed=$(stat -f %m "$FSTAB"); }
   echo "## boot: $(sysctl -n kern.boottime | sed 's/^{ sec = \([0-9]*\).*/\1/' | xargs -I{} date -r {} '+%Y-%m-%d %H:%M:%S %z') (uptime:$(uptime | sed 's/.*up \([^,]*\),.*/ \1/'))"
   echo "## $FSTAB:"; if [ -e "$FSTAB" ]; then sed 's/^/   /' "$FSTAB"; else echo "   absent"; fi
   present=no; diskutil info "$VOLUUID" >/dev/null 2>&1 && present=yes
@@ -932,7 +937,8 @@ phase_boot_check() {
   internal=$(dev_of /System/Volumes/Data); ext=$(dev_of "$IMAGES")
   n_int=$(sudo lsof -nP +c0 2>/dev/null | grep -E '/CoreSimulator/Images/[0-9A-F-]+\.dmg' | awk -v d="$internal" '$(NF-3) == d' | wc -l | tr -d ' ')
   n_ext=$(sudo lsof -nP +c0 2>/dev/null | grep -E '/CoreSimulator/Images/[0-9A-F-]+\.dmg' | awk -v d="$ext" '$(NF-3) == d' | wc -l | tr -d ' ')
-  if [ "$mounted" = no ] && is_mountpoint "$IMAGES"; then echo "RESULT: boot-check UNEXPECTED — Images holds some other volume"
+  if [ -n "$armed" ] && [ "$boot" -lt "$armed" ]; then echo "RESULT: boot-check NOT REBOOTED — the Mac has not restarted since the arm ($(date -r "$armed" '+%H:%M')); this measures the stage, not a boot. Restart and run boot-check again."
+  elif [ "$mounted" = no ] && is_mountpoint "$IMAGES"; then echo "RESULT: boot-check UNEXPECTED — Images holds some other volume"
   elif [ "$mounted" = yes ] && [ "$n_int" != 0 ]; then echo "RESULT: boot-check SHADOW — $n_int runtime image(s) held open on the internal disk under the mounted volume. Disarm, then restore."
     if printf '%s' "$opts" | grep -q noowners; then echo "        and NO OWNERS — the volume is also mounted without ownership"; fi
   elif [ "$mounted" = yes ] && printf '%s' "$opts" | grep -q noowners; then echo "RESULT: boot-check NO OWNERS — mounted without ownership; H20 requires owners. Disarm and restore."
