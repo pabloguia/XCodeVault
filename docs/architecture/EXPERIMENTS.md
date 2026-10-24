@@ -640,3 +640,31 @@ Three layouts, not a re-run of E2's nine cases: entire DerivedData on the volume
 
 **Locations keys (2026-10-11):** `scripts/experiments/e19-locations-keys.sh`. One-shot `-IDE…` arguments, no
 `defaults write`. CTRL failed; KEYS passed. H19 stays probable. Recorded beside the E19 entry.
+
+## E20 — does simdiskimaged use a runtime store on an external volume mounted at `CoreSimulator/Images`? (gates H20)
+
+`scripts/experiments/e20-images-mount.sh`. **Destructive + root**: `stage` mounts a dedicated external APFS volume
+over `/Library/Developer/CoreSimulator/Images`, so every simulator on the machine runs from the drive until
+`restore`. The internal store is copied, never moved or deleted, and stays intact under the mount. Phases, one at a
+time: `preflight` (read-only), `stage`, `exercise` (scratch `--set` device), `restore`, `status`. `--dry-run`
+rehearses any phase without changing anything. Readings are pre-registered in the script's header; the
+discriminator is which device each open `<UUID>.dmg` is on, not `Ready`. Arms 3 (import as a clone), 4b (physical
+disconnect) and 5 (mount at boot) are deferred until this passes.
+
+**Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry.
+
+**Arm 3, `clone-import` (run 2026-10-23, twice — FAIL: staging goes through the internal `Cryptex/Images/Inbox`, and CacheDelete rejects the mounted volume as invalid, so any add while staged is refused; matrix entries "E20 arm 3" and "E20 arm 3 repeat"). With `--mount-with diskutil` (DiskArbitration) CacheDelete accepts the volume and the add succeeds — as a copy, with a transient internal peak; matrix entry "E20 arm 3, DiskArbitration mount".** While staged: APFS-clone the smallest runtime's image
+inside the volume, `simctl runtime delete --keep-asset` it from the mounted store, re-add it from the clone, and
+time it and measure free space. CLONE / COPY thresholds are pre-registered in the script's header. Every step
+re-checks that `Images` is still the staged volume, so a dropped mount cannot turn the delete onto the internal
+store. `--reuse-copy` lets `stage` reuse a verified copy already on the volume. Migration-safety review: blocked
+(10 findings), rewritten, ship. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
+Disk Access.
+
+**Arm 5, mount at boot (written 2026-10-23; step 3 run 2026-10-24 — BOOT PASS, matrix entry "E20 arm 5, step 3"; steps 4–5, boot without the drive and hotplug, not run).** `boot-arm` adds two marked lines to `/etc/fstab` so
+DiskArbitration mounts the volume at `Images` whenever it appears (boot or hotplug), with the `rw`-only line that
+reproduces the working DiskArbitration mount; `boot-check` classifies each boot or hotplug as BOOT PASS / DIFFERENT
+MOUNT / NO OWNERS / SHADOW / ABSENT / NOT MOUNTED; `boot-disarm` removes exactly those lines. `restore` refuses while
+the entry is present, so a forgotten arm cannot be erased from the record. Migration-safety review: ship with fixes,
+fixes verified, ship.
+

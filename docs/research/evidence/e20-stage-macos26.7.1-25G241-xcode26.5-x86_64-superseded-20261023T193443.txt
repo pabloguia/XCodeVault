@@ -1,0 +1,341 @@
+# Experiment: E20 images-store mount — phase stage
+# Date: 2026-10-23T22:32:41Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Hypothesis: H20
+
+## checks
+   this terminal holds Full Disk Access
+   device location: External; protocol: USB; removable: Fixed
+   store 15468140 KB; volume free 19151000 KB; needed 2097152 KB
+## simctl runtime list (summary)
+com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   COMMAND DEVICE NAME
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## keep Spotlight off the volume
+$ sudo mdutil -i off /Volumes/<vault>
+2026-10-23 19:32:51.560 mdutil[48971:775923] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
+/System/Volumes/Data/Volumes/<vault>:
+	Indexing disabled.
+[exit=0]
+
+## --reuse-copy: the volume's existing copy is kept and verified below; ditto is not run
+
+## volume root owned like the store (root:admin)
+$ sudo chown root:admin /Volumes/<vault>
+[exit=0]
+
+## volume root mode like the store (755)
+$ sudo chmod 755 /Volumes/<vault>
+[exit=0]
+
+## verify the copy: every file byte for byte, then metadata
+   identical: ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   identical: ./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   provenance stamps on the copy (expected, not compared):
+     -rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+     -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+     drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
+     drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
+   metadata listing: identical
+
+## refresh sudo so no password prompt widens the window
+$ sudo -v
+[exit=0]
+
+## unmount runtime 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
+$ xcrun simctl runtime unmount 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
+Successfully unmounted 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
+[exit=0]
+
+## unmount runtime 28793F5D-57BF-4847-957A-D2C0AC7AC62B
+$ xcrun simctl runtime unmount 28793F5D-57BF-4847-957A-D2C0AC7AC62B
+Successfully unmounted 28793F5D-57BF-4847-957A-D2C0AC7AC62B
+[exit=0]
+
+## re-copy images.plist (it changes on use)
+$ sudo cp -p /Library/Developer/CoreSimulator/Images/images.plist /Volumes/<vault>/images.plist
+[exit=0]
+
+## snapshot 'pre-mount' of /Library/Developer/CoreSimulator/Images
+--- listing
+-rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--  1 root  wheel  -        1669 Oct 23 19:34 images.plist
+drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 Inbox
+drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
+
+./Inbox:
+
+./mnt:
+--- images.plist
+{
+  "images" => [
+    0 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:34:35 +0000
+      "lastUsedAt" => 2026-10-23 21:40:59 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23T570"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.watchsimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+      }
+      "state" => 5
+      "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:34:34 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+  ]
+  "standaloneBundles" => [
+  ]
+}
+--- image set
+./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg 5242171072
+./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg 10597197700
+
+## release the volume from /Volumes
+$ sudo diskutil unmount <vault-uuid>
+Volume <vault> on disk7s3 unmounted
+[exit=0]
+
+## mount the volume at Images
+$ sudo mount_apfs -o nobrowse /dev/disk7s3 /Library/Developer/CoreSimulator/Images
+[exit=0]
+
+## mount line
+/dev/disk7s3 on /Library/Developer/CoreSimulator/Images (apfs, local, journaled, nobrowse)
+
+## restart simdiskimaged (scan and mount)
+$ sudo launchctl kickstart -k system/com.apple.CoreSimulator.simdiskimaged
+[exit=0]
+
+## simctl runtime list (summary)
+com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   volume mounted at Images device: 1,25
+   COMMAND DEVICE NAME
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## snapshot 'stage-mounted' of /Library/Developer/CoreSimulator/Images
+--- listing
+-rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--  1 root  admin  -        1669 Oct 23 19:34 images.plist
+drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
+	com.apple.provenance	         11 
+drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
+	com.apple.provenance	         11 
+
+./Inbox:
+
+./mnt:
+--- images.plist
+{
+  "images" => [
+    0 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:34:35 +0000
+      "lastUsedAt" => 2026-10-23 21:40:59 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23T570"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.watchsimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+      }
+      "state" => 5
+      "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:34:34 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+  ]
+  "standaloneBundles" => [
+  ]
+}
+--- image set
+find: ./.Spotlight-V100/Store-V2/511DE73B-9400-4FAE-99A3-2A8FBC47CE87: Permission denied
+./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg 5242171072
+./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg 10597197700
+
+## internal data volume free: 20Gi
+
+RESULT: staged. Read the tables above against the pre-registered readings in this script's header:
+        PASS needs every runtime Ready + Verified AND every open <UUID>.dmg on the mounted volume's device.
+
+!!! EVERY simulator on this Mac now runs from the external drive — the test rigs included — until
+!!! 'scripts/experiments/e20-images-mount.sh --i-understand --volume-uuid <UUID> restore'. Do not install or delete runtimes, and do
+!!! not eject the drive, while staged.

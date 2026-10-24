@@ -1,0 +1,34 @@
+# Experiment: E20 images-store mount — phase exercise
+# Date: 2026-10-23T22:16:00Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## scratch device set (internal, temporary): <tmpdir>/xcv-e20-set.tMjnUamFto
+   created F31F4B10-066D-4189-8EBA-9D8552F0B7F8 on com.apple.CoreSimulator.SimRuntime.iOS-26-5
+## boot
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto boot F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+[exit=0]
+
+   state after boot wait: Booted
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   volume mounted at Images device: 1,25
+   COMMAND DEVICE NAME
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## shutdown
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto shutdown F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+[exit=0]
+
+## delete
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.tMjnUamFto delete F31F4B10-066D-4189-8EBA-9D8552F0B7F8
+[exit=0]
+
+RESULT: exercise PASSED
