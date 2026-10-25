@@ -2317,3 +2317,8 @@ ordering holds here because external disks mount at login and simdiskimaged star
 that uses simulators before any login is not covered. Still open: a boot without the drive (does the internal store
 stay untouched, rule 6?), a hotplug after login, and the physical disconnect under a live store (arm 4b).
 
+**E20 arm 5, step 4, 2026-10-24: a boot without the drive is safe here.** With the fstab entry armed and the drive
+absent, the Mac booted normally, `Images` was the internal directory, and simulators were served from the internal
+store, which was unchanged (rule 6; matrix entry "E20 arm 5, step 4"). The fallback is safe only because staging kept
+the internal copy: with the runtimes moved off the internal disk, the same boot would show an empty store.
+

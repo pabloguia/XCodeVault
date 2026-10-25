@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it and hotplug open; arm 4b open. See the entry at the end of this file |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug open; arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1404,7 +1404,7 @@ substitution may not be waved through. Issue #29 stays open.
   `<UUID>.dmg` files held by `diskimagesiod` on the volume's device (1,15); none on the internal data volume (1,5 after
   this boot; it was 1,4 before). Device numbers renumber across reboots, so the check compares against the devices of
   that boot, never stored ones.
-- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`; the stopped stage, the refused arm and a void check are in the `-superseded-20261023T205834`, `-superseded-20261023T205853` and `-superseded-20261023T210312` files.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T162707.txt`; the stopped stage, the refused arm and a void check are in the `-superseded-20261023T205834`, `-superseded-20261023T205853` and `-superseded-20261023T210312` files.
 - Functional checks: simulator — a booted device and an `xcodebuild test` ran on the store after the boot (not
   independently verified); xcodebuild — see previous; physical device N/A
 - Verdict: **mounting at boot through DiskArbitration works when the drive is connected**: the store came up on the
@@ -1416,3 +1416,25 @@ substitution may not be waved through. Issue #29 stays open.
   void, and `boot-check` now reports NOT REBOOTED when the Mac has not restarted since the arm. Still open in arm 5:
   a boot without the drive (step 4, expected ABSENT with the internal store unchanged) and a hotplug after login
   (step 5). `/etc/fstab` stays armed until `boot-disarm`; `restore` refuses until then. Experimental (rule 10).
+
+### E20 arm 5, step 4 — a boot with `/etc/fstab` armed and the drive absent — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: with the fstab entry still in place, the Mac was shut down, the drive disconnected, the Mac started
+  and logged in; nothing simulator-related was opened. Then `xcrun simctl runtime list` (so simdiskimaged scans) and
+  `boot-check`.
+- Result: **ABSENT (pre-registered).** `Images` was the plain internal directory (not a mount point); boot and login
+  were unaffected by the missing fstab volume. Both runtimes Ready + Verified at the same `Images` paths, both open
+  `<UUID>.dmg` files held by `diskimagesiod` on the internal data volume (1,4). **Rule 6: UNCHANGED** — the internal
+  store's listing and image set match the `pre-mount` snapshot taken before staging (same two images, same sizes and
+  dates, `Inbox`/`mnt` empty). simdiskimaged did rewrite `images.plist` at this boot (new mtime); its content is the
+  same two entries with the same field values, in swapped order — no entry added, removed or repointed.
+- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (runtimes Ready, none booted); xcodebuild N/A; physical device N/A
+- Verdict: **the safe fallback holds**: without the drive the machine boots normally and simulators get the
+  untouched internal store — which exists here only because staging never deleted it. A product that moved the
+  runtimes off the internal disk would have nothing to fall back to; this boot then shows what is left, not what is
+  safe. No shadow data formed on this boot.
+- Notes: `plist_view`'s diff is order-sensitive and reported the swap as a difference; the reading is decided by the
+  listing and image set. Still open in arm 5: a hotplug after login (step 5). `/etc/fstab` stays armed. Experimental (rule 10).
