@@ -14,6 +14,20 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
+**Nothing is on a branch as of 2026-10-25.** Every entry that used to sit here has merged into `main` (`git log
+origin/main` is the record: H20/E20 #56, E6b #57, whole-disk volumes #55, R8 #47, R7 #46, R6 #45, R5 #44, R3 #43, R4
+#42, the savings/i18n/identity series #36–#39; user-first permissions was committed before the PR era). They are kept
+below, verbatim, under "Merged, with open follow-ups", because several still carry items nobody has done — the
+manual real-window checks, the unmeasured whole-disk cases, the R8 real-drive re-test, `createVaultDirectory` live.
+Read those entries for their **Manual check, open**, **Still open** and **Not measured** lines, not for their state.
+
+Waiting on the operator, not on a branch: the H20 decision (an ADR, see "Next three actions") and #30's Part F.
+
+## Merged, with open follow-ups
+
+_Moved here verbatim from "In flight" on 2026-10-25, newest first as they were. Words like "branch", "pending a
+review" or "never run" describe the entry when it was written; the merge is the current state._
+
 - **H20 / E20, runtimes served from an external volume mounted at `CoreSimulator/Images` — every arm run, PR #56 open
   (branch `docs/runtimes-in-place-on-external`, 2026-10-22 → 10-25).** Research notes
   `docs/research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md` and `OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`;
@@ -230,7 +244,7 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## Blocked / pending — manual (ask the user)
 
-- **Follow-up: the release build hangs on this Intel Mac (2026-10-05, R8).** `scripts/bundle-app.sh --release …` spun
+- **RESOLVED 2026-10-18 (ADR-0018): the release build hung on this Intel Mac (2026-10-05, R8).** `scripts/bundle-app.sh --release …` spun
   at 100% CPU for about 2 hours in the whole-module compile of `XCodeVaultCore` and never finished (twice; stopped by
   hand). R8's signed build was made without `--release`. Not investigated yet: a release DMG cannot be cut on this
   machine until it is. Candidates to measure first: the generated `L10nCatalog.core` table (S4 follow-up 4 above) and
@@ -298,6 +312,24 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   passphrase). Left here rather than deleted because the line above it is the reason it was blocked.
 
 ## Next three actions
+
+**2026-10-25** (items 3–5 of `docs/process/SESSION-HANDOFF.md` "What to do, in priority order"; its items 1–2 —
+merge #57, this cleanup — are done):
+
+1. **What rebuilds `Caches/dyld`** — the trigger is still unidentified (H11, H14), but there is now a lead: the watchOS
+   26.5 cache was rebuilt within minutes of E20 arm 3's `simctl runtime add` (H14, E6b pre-registration). A
+   pre-registered test on the internal disk is cheap; it costs one runtime's cache rebuild and touches the runtime
+   store, so it is the operator's to approve.
+2. **H20 → an ADR.** Record E20's result and the decision: "not now", or only an explicit mount that detaches every
+   runtime first, internal copy kept and verified, labeled experimental. A second machine (Apple Silicon) is the next
+   gate either way. The decision is the operator's.
+3. **#30, Part F** — the helper live from the runbook on a clean start with a CI-signed build: `createVaultDirectory`
+   (probably refused by TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out
+   of a published release until both pass. Needs the operator at the Mac.
+
+Done on 2026-10-25 and so off the list: E6b (#57, issue #29 closed) and the SESSION-HANDOFF refresh (#58).
+
+_Superseded 2026-10-25 by the list above; kept as written:_
 
 **2026-10-25:** PR #56 (H20/E20) is ready for the user's review and merge. The operator now has a **disposable USB
 pendrive** (256 GB, reports `Removable`), which unblocks item 1 below (E6b variant B); E20 arm 4b already measured a
