@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug open; arm 4b open. See the entry at the end of this file |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1430,7 +1430,7 @@ substitution may not be waved through. Issue #29 stays open.
   store's listing and image set match the `pre-mount` snapshot taken before staging (same two images, same sizes and
   dates, `Inbox`/`mnt` empty). simdiskimaged did rewrite `images.plist` at this boot (new mtime); its content is the
   same two entries with the same field values, in swapped order — no entry added, removed or repointed.
-- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T223332.txt`.
 - Functional checks: simulator N/A (runtimes Ready, none booted); xcodebuild N/A; physical device N/A
 - Verdict: **the safe fallback holds**: without the drive the machine boots normally and simulators get the
   untouched internal store — which exists here only because staging never deleted it. A product that moved the
@@ -1438,3 +1438,25 @@ substitution may not be waved through. Issue #29 stays open.
   safe. No shadow data formed on this boot.
 - Notes: `plist_view`'s diff is order-sensitive and reported the swap as a difference; the reading is decided by the
   listing and image set. Still open in arm 5: a hotplug after login (step 5). `/etc/fstab` stays armed. Experimental (rule 10).
+
+### E20 arm 5, step 5 — the drive plugged in after login, with `/etc/fstab` armed — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: straight after step 4 (runtimes attached from the internal store, no simulator booted, no
+  `xcodebuild`), the drive was plugged in; about ten seconds later, `boot-check`.
+- Result: **SHADOW (pre-registered).** DiskArbitration honoured the fstab entry on hotplug and mounted the volume over
+  `Images` (`/dev/disk7s3`, the working mount's options) while both runtime images stayed open by `diskimagesiod` on
+  the **internal** data volume (1,4), none on the volume (1,22). simctl still listed both runtimes Ready at the
+  `Images` paths — paths that now name the volume's copies, not the files actually attached. Nothing tells the user;
+  CoreSimulator did not detach, re-attach or rescan on its own.
+- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (none booted, by design); xcodebuild N/A; physical device N/A
+- Verdict: **an fstab arm is unsafe on hotplug**: a drive connected after the store is in use silently splits it —
+  runtimes run from the hidden internal files while the paths, and anything newly installed, point at the volume. This
+  is the rule-6 failure H20 has to rule out, and here it happens with no fault at all, just the order of plugging in.
+  A product cannot use a standing fstab entry (or any automatic mount at `Images`) without first detaching every runtime
+  before the mount lands — DiskArbitration does not offer that. The mount must be an explicit operation that detaches
+  first (as `stage` does), and a hotplug must be left unmounted or refused.
+- Notes: recovery is `boot-disarm` then `restore`, which detaches the runtimes, unmounts the volume and compares the
+  internal store with the pre-mount snapshot. Experimental (rule 10).

@@ -2322,3 +2322,10 @@ absent, the Mac booted normally, `Images` was the internal directory, and simula
 store, which was unchanged (rule 6; matrix entry "E20 arm 5, step 4"). The fallback is safe only because staging kept
 the internal copy: with the runtimes moved off the internal disk, the same boot would show an empty store.
 
+**E20 arm 5, step 5, 2026-10-24: a hotplug with the fstab entry armed splits the store (SHADOW).** Plugging the drive
+in after login mounted the volume over `Images` while both runtimes stayed attached from the now-hidden internal files
+(matrix entry "E20 arm 5, step 5"). So mounting at boot works only if the drive is there at boot; a standing fstab entry
+turns an ordinary late plug-in into the rule-6 failure. Any product mount at `Images` has to be an explicit operation
+that detaches every runtime first, and a late-arriving drive must be left unmounted. Remaining for H20: arm 4b, the
+physical disconnect under a live store.
+
