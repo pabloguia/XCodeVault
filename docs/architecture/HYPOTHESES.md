@@ -2329,3 +2329,9 @@ turns an ordinary late plug-in into the rule-6 failure. Any product mount at `Im
 that detaches every runtime first, and a late-arriving drive must be left unmounted. Remaining for H20: arm 4b, the
 physical disconnect under a live store.
 
+**E20 arm 4b, idle round, 2026-10-24: pulling the drive with runtimes attached is survivable.** On a disposable flash
+drive, `diskimagesiod` force-unmounted both runtime volumes within milliseconds, nothing hung or panicked, the
+internal store was untouched (rule 6), and detach + rescan brought the internal runtimes back (matrix entry "E20 arm
+4b, idle"). CoreSimulator kept reporting the runtimes Ready with nothing attached, so a product would have to detect
+the pull and rescan itself. Still open: the same pull under a booted simulator (the live round).
+

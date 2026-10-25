@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b open. See the entry at the end of this file |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b idle pull SURVIVED (runtimes detached, internal store unchanged), live pull open; arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1347,7 +1347,7 @@ substitution may not be waved through. Issue #29 stays open.
   {Invalid volume=…/Images}`, result **0** — hence "disk is almost full". The internal inbox was empty again
   afterwards. Restore: internal store unchanged at uncovering (rule 6), both runtimes back on 1,4, the watch device
   back; the post-rescan `images.plist` differs from post-umount only by the order of its two entries.
-- Evidence (rotated aside when the DiskArbitration run re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T195613.txt`,
+- Evidence (rotated aside when the DiskArbitration run re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T194813.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T195613.txt`,
   `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200324.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200628.txt` (the unfiltered
   stream minus Security/prefs/analytics noise), `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200459.txt`.
 - Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
@@ -1404,7 +1404,7 @@ substitution may not be waved through. Issue #29 stays open.
   `<UUID>.dmg` files held by `diskimagesiod` on the volume's device (1,15); none on the internal data volume (1,5 after
   this boot; it was 1,4 before). Device numbers renumber across reboots, so the check compares against the devices of
   that boot, never stored ones.
-- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T162707.txt`; the stopped stage, the refused arm and a void check are in the `-superseded-20261023T205834`, `-superseded-20261023T205853` and `-superseded-20261023T210312` files.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T210200.txt`, `../research/evidence/e20-boot-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T162707.txt`; the stopped stage, the refused arm and a void check are in the `-superseded-20261023T205834`, `-superseded-20261023T205853` and `-superseded-20261023T210312` files.
 - Functional checks: simulator — a booted device and an `xcodebuild test` ran on the store after the boot (not
   independently verified); xcodebuild — see previous; physical device N/A
 - Verdict: **mounting at boot through DiskArbitration works when the drive is connected**: the store came up on the
@@ -1475,10 +1475,37 @@ substitution may not be waved through. Issue #29 stays open.
   (22:32, written at step 4's boot, when the internal store was the live store) and the same two entries in swapped
   order. Listing and image set otherwise identical. The mtime also shows that **nothing wrote to the hidden internal
   store during SHADOW** (the hotplug came after 22:33).
-- Evidence: `../research/evidence/e20-boot-disarm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence: `../research/evidence/e20-boot-disarm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T223755.txt`.
 - Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
 - Verdict: **the SHADOW state is recoverable without loss** when no simulator is booted on it: detach, unmount, rescan.
   The recovery needed a tool that knew to detach first; DiskArbitration's own eject would have left the runtimes
   attached to files it had just uncovered, which is benign only because they were the internal ones all along.
 - Notes: restore's rule-6 compare includes the plist and is order-sensitive, so a legitimate rewrite reads as CHANGED;
   boot-check's `store_view` compare (listing and image set) is the one to read. Arm 5 is complete. Experimental (rule 10).
+
+### E20 arm 4b, idle — the drive pulled with the store mounted and runtimes attached — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 4b)
+- Test performed: a disposable USB flash drive (256 GB, reports `Removable Media: Removable`), erased as APFS with
+  the E20 volume as its only volume, ownership on. `preflight`, `stage --mount-with diskutil` (fresh copy, verified
+  byte for byte; both images then open on the drive, 1,29), `pull-arm` (no simulator booted), the cable pulled
+  without ejecting, about two minutes, `pull-check`, `restore`. Between preflight and the first stage the drive
+  dropped off the bus once with nobody touching it; stage refused (not mounted) and was re-run after reseating it.
+- Result: **SURVIVED, DETACHED (pre-registered).** Within 17 ms of the disappearance `diskimagesiod` logged the mount
+  point gone, failed two in-flight reads with EIO (errno 5), **force-unmounted both runtime volumes itself**
+  (`unmountAll: Forcing unmount of … (disk3s1)` / `(disk5s1)`) and exited. The `Images` mount was gone too, so the
+  internal store was uncovered. No panic, no crash report, no process in uninterruptible wait across three samples,
+  simctl answered at once. **Rule 6: UNCHANGED** — listing, image set and even `images.plist` identical to pre-mount.
+  One misleading reading: simctl still listed both runtimes **Ready + Verified** at the `Images` paths while no
+  runtime volume was attached at all. `restore` detached both (simctl reported success), rescanned, and both came
+  back Ready and attached from the internal disk (1,4); rule 6 unchanged again.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt` (the refused attempt: `-superseded-20261024T231445`), `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (none booted, by design of this round); xcodebuild N/A; physical device N/A
+- Verdict: **an idle pull is survivable**: the system tears the runtime volumes down cleanly, nothing is written to
+  the uncovered internal store, and a detach + rescan brings the internal runtimes back. Two cautions for a product:
+  CoreSimulator does not notice on its own (runtimes keep reading Ready with nothing attached — a product must
+  detect the pull itself and rescan), and the uncovered store is safe only because staging kept the internal copy.
+  The case that matters most, a pull under a booted simulator, is the live round, still open.
+- Notes: the evidence labels the volume `<vault>P`: the redactor masks every mounted vault label, and the SSD's
+  `XCV-E20` was still mounted, so it matched first. Experimental (rule 10).
