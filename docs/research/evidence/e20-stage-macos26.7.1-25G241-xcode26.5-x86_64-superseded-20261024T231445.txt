@@ -1,0 +1,14 @@
+# Experiment: E20 images-store mount — phase stage
+# Date: 2026-10-25T02:14:43Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## checks
+   this terminal holds Full Disk Access
+!! /Volumes/<vault>P is not mounted (connect the drive)
+RESULT: stage REFUSED (1) — nothing was changed

@@ -1,0 +1,25 @@
+# Experiment: E20 images-store mount — phase boot-arm
+# Date: 2026-10-24T00:02:51Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## checks
+   /etc/fstab before: absent
+   AutomountDisksWithoutUserLogin: unset (external disks mount at login)
+   simdiskimaged: (submitted by com.apple.CoreS.19326) — submitted on first simulator use, not at boot
+
+## /etc/fstab after
+# xcodevault-e20 arm 5 — remove with: e20-images-mount.sh --volume-uuid <UUID> boot-disarm
+UUID=<vault-uuid> /Library/Developer/CoreSimulator/Images apfs rw
+
+## install /etc/fstab (root:wheel 644)
+$ sudo install -m 644 -o root -g wheel <tmpdir>/xcv-e20-fstab.zQj0NWS7HP /etc/fstab
+[exit=0]
+
+RESULT: boot-arm done. Images stays mounted now. Next: restart with the drive connected, log in, and run boot-check
+        BEFORE opening Xcode or a simulator. Leave the arm in place only for the test; boot-disarm removes it.

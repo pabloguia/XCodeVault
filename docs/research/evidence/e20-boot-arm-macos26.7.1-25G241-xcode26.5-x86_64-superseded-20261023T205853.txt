@@ -1,0 +1,12 @@
+# Experiment: E20 images-store mount — phase boot-arm
+# Date: 2026-10-23T23:58:52Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## checks
+RESULT: boot-arm REFUSED — Images is not staged with <vault-uuid>; stage it first (--mount-with diskutil)

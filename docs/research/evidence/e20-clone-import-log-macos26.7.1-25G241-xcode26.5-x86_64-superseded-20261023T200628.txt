@@ -1,0 +1,54 @@
+# Experiment: E20 arm 3 (repeat) — simdiskimaged info-level log during delete + add, unfiltered except Security/prefs/analytics noise
+# Date: 2026-10-23T23:06:27Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Hypothesis: H20 (arm 3)
+# Captured by clone-import's log stream (as the operator, no sudo), 2026-10-23 20:03 local.
+
+Filtering the log data using "process == "simdiskimaged""
+Timestamp               Ty Process[PID:TID]
+2026-10-23 20:03:03.789 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf3a05690] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71276].0x7faaf3a05690
+2026-10-23 20:03:03.792 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:03:03.793 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:03:03.793 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:03:03.795 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:03:03.797 I  simdiskimaged[66379:d6d01] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
+2026-10-23 20:03:03.797 I  simdiskimaged[66379:ddc86] Unmounting /Library/Developer/CoreSimulator/Volumes/watchOS_23T570, attempt=0, force=false
+2026-10-23 20:03:03.900 I  simdiskimaged[66379:ddc86] Ejecting disk4
+2026-10-23 20:03:03.901 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf6804280] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
+2026-10-23 20:03:04.127 Df simdiskimaged[66379:ddc86] [com.apple.xpc:connection] [0x7faaf6804280] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:03:04.273 Df simdiskimaged[66379:d6d01] [com.apple.xpc:connection] [0x7faaf3a05690] invalidated because the client process (pid 71276) either cancelled the connection or exited
+2026-10-23 20:03:04.335 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [20: Not a directory]
+2026-10-23 20:03:04.336 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] __create_or_fix_relative_directory: __dirhelper_create_relative_with_error: error [1: Operation not permitted]
+2026-10-23 20:03:04.336 E  simdiskimaged[66379:ddc86] [com.apple.libcoreservices:] _dirhelper_relative_internal: error for path <private>: [1: Operation not permitted]
+2026-10-23 20:03:09.575 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf2f05130] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71320].0x7faaf2f05130
+2026-10-23 20:03:09.920 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf2f05130] invalidated because the client process (pid 71320) either cancelled the connection or exited
+2026-10-23 20:03:19.908 Df simdiskimaged[66379:ddf45] [com.apple.xpc:connection] [0x7faaf38044a0] activating connection: mach=false listener=false peer=true name=com.apple.CoreSimulator.simdiskimaged.peer[71353].0x7faaf38044a0
+2026-10-23 20:03:19.915 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] +[BackendXPC newFileBackendWithURL:fileOpenFlags:error:]: Image file <private> stat: dev(0x1000004), inode(329998336), mode(100644), uid(0), gid(80), size(5242171072), blocks(10238616)
+2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] +[DiskImageParamsXPC newWithURL:fileOpenFlags:error:]: Image file <private> opened with flags 0
+2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIAttachParams newAttachWithError:]: entry: DIAttachParams[DiskImageParamsUDIF_XPC[FileLocalXPC]]
+2026-10-23 20:03:19.917 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIBaseXPCHandler createConnection]: Creating connection with com.apple.diskimagescontroller
+2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38054e0] activating connection: mach=false listener=false peer=false name=com.apple.diskimagescontroller
+2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIAttachParams reOpenIfWritableWithError:]: isWritableFormat: NO
+2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIStatFS initWithFileDescriptor:error:]: File system is apfs
+2026-10-23 20:03:19.918 Df simdiskimaged[66379:de2a4] [com.apple.DiskImages2:Default] -[DIStatFS logWithHeader:]: Input underlying FS: mounted on <private>, 4096 bytes block size, locally mounted from /dev/disk1s1, barriers supported
+2026-10-23 20:03:20.158 Df simdiskimaged[66379:ddf45] [com.apple.DiskImages2:Default] -[DIController2ClientDelegate attachCompletedWithHandle:reply:]: Received: DIDeviceHandle[disk4, unmanaged]
+2026-10-23 20:03:20.159 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38054e0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:03:20.159 I  simdiskimaged[66379:de2a4] Attached image /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/24B22E2C-3334-4A65-AD74-57DDCF88A683.dmg, root virtual disk BSD name disk4
+2026-10-23 20:03:20.160 I  simdiskimaged[66379:de2a4] calling: /sbin/mount_apfs <private>
+2026-10-23 20:03:20.185 I  simdiskimaged[66379:de2a4] Unmounting /Library/Developer/CoreSimulator/Cryptex/Images/mnt/SimRuntimeBundle-24B22E2C-3334-4A65-AD74-57DDCF88A683, attempt=0, force=false
+2026-10-23 20:03:20.291 I  simdiskimaged[66379:de2a4] Ejecting disk4
+2026-10-23 20:03:20.292 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38052e0] activating connection: mach=true listener=false peer=false name=com.apple.storagekitd.dm
+2026-10-23 20:03:20.511 Df simdiskimaged[66379:de2a4] [com.apple.xpc:connection] [0x7faaf38052e0] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+2026-10-23 20:03:20.513 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: /Library/Developer/CoreSimulator/Images
+2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] <private> role: 0
+2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] Not Valid
+2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume failed for volume /Library/Developer/CoreSimulator/Images: Error Domain=CacheDeleteErrorDomain Code=10 "(null)" UserInfo={Invalid volume=/Library/Developer/CoreSimulator/Images}
+2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 0
+2026-10-23 20:03:20.868 Df simdiskimaged[66379:de2f7] [com.apple.xpc:connection] [0x7faaf38044a0] invalidated because the client process (pid 71353) either cancelled the connection or exited

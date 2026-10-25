@@ -1,0 +1,66 @@
+# Experiment: E20 images-store mount — phase stage
+# Date: 2026-10-23T23:56:54Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## checks
+   this terminal holds Full Disk Access
+   device location: External; protocol: USB; removable: Fixed
+   store 15468140 KB; volume free 19152780 KB; needed 2097152 KB
+## simctl runtime list (summary)
+com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   COMMAND DEVICE NAME
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## keep Spotlight off the volume
+$ sudo mdutil -i off /Volumes/<vault>
+2026-10-23 20:56:58.690 mdutil[84872:1345341] mdutil disabling Spotlight: /System/Volumes/Data/Volumes/<vault> -> kMDConfigSearchLevelFSSearchOnly
+/System/Volumes/Data/Volumes/<vault>:
+	Indexing disabled.
+[exit=0]
+
+## --reuse-copy: the volume's existing copy is kept and verified below; ditto is not run
+
+## volume root owned like the store (root:admin)
+$ sudo chown root:admin /Volumes/<vault>
+[exit=0]
+
+## volume root mode like the store (755)
+$ sudo chmod 755 /Volumes/<vault>
+[exit=0]
+
+## verify the copy: every file byte for byte, then metadata
+   identical: ./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   identical: ./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   provenance stamps on the copy (expected, not compared):
+     -rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+     -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+     drwxr-xr-x@ 2 root  admin  -          64 Oct 23 20:22 Inbox
+     drwxr-xr-x@ 2 root  admin  -          64 Oct 23 20:22 mnt
+   metadata listing DIFFERS:
+3,4c3,4
+< drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 Inbox
+< drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
+---
+> drwxr-xr-x  2 root  admin  -          64 Oct 23 20:22 Inbox
+> drwxr-xr-x  2 root  admin  -          64 Oct 23 20:22 mnt
+
+
+RESULT: stage STOPPED — the copy differs from the store; nothing was detached or mounted
+== state now ==
+   Images is a mount point: no
+   runtime volumes mounted: 2 (0 = runtimes detached)
+   /Volumes/<vault> is a mount point: yes
+   to return to normal: scripts/experiments/e20-images-mount.sh --i-understand --volume-uuid <UUID> restore
+   (with Images not mounted, restore only rescans if a runtime is not Ready)

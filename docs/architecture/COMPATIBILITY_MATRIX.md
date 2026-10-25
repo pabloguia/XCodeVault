@@ -739,6 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b: idle pull SURVIVED (runtimes detached), live pull under a booted simulator SURVIVED (FALLBACK to the internal copy); internal store unchanged in both; arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1277,3 +1278,266 @@ substitution may not be waved through. Issue #29 stays open.
   volume class as E19. Not Apple Silicon, not the Xcode GUI, not a Simulator destination, not
   Thunderbolt. Scratch removed. No disk image was attached for this probe. The invoking user's Xcode
   defaults were unchanged.
+
+### E20 — runtime store on an external APFS volume mounted at `CoreSimulator/Images` — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20
+- Test performed: `scripts/experiments/e20-images-mount.sh`, phases preflight → stage → exercise → restore, run
+  by the operator from a Terminal holding Full Disk Access, test rigs paused. A dedicated, empty APFS volume
+  (case-insensitive, owners enabled, USB, External/Fixed) in the same container as the operator's other volumes.
+  Stage: `ditto` copy of `/Library/Developer/CoreSimulator/Images` (15.8 GB: iOS 26.5 + watchOS 26.5 images,
+  `images.plist`, `Inbox/`, `mnt/`) with the runtimes attached, byte and metadata verification, `simctl runtime
+  unmount` both, `mount_apfs -o nobrowse` at `Images`, `launchctl kickstart -k` simdiskimaged.
+- Result: **PASS on every pre-registered reading.** Before the mount both `<UUID>.dmg` were held open by
+  `diskimagesiod` on the internal data volume (device 1,4); after the mount and rescan, on the mounted volume
+  (1,25), both runtimes `Ready` + `Verified`. Exercise: a scratch-set iPhone 17 Pro on iOS 26.5 reached `Booted`,
+  shut down and was deleted with the images still on 1,25. Restore: the volume's image set unchanged while
+  staged; the internal store **unchanged** between the pre-mount snapshot and the moment it was uncovered (rule 6
+  reading); after the rescan only `images.plist`'s mtime moved (content identical); runtimes back on 1,4.
+- Evidence (this run's files were rotated aside when arm 3 re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T190044.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T191148.txt`, `../research/evidence/e20-exercise-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T191659.txt`.
+  The first stage attempt is kept: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T190520.txt`
+  — it stopped correctly in verification on `com.apple.provenance`, which macOS stamps on files `ditto` creates.
+- Functional checks: simulator boot ✓ (scratch set); xcodebuild test — not run while staged; physical device N/A
+- Verdict: H20 **probable** for this configuration. One machine, one USB volume, a manual mount. Experimental
+  (rule 10).
+- Notes: while mounted, simdiskimaged rewrote `images.plist` **on the volume** (entries reordered; group became
+  `admin`, inherited from the volume root) — it writes the store it sees. `mdutil -i off` did not remove a
+  `.Spotlight-V100` created when the volume first mounted under `/Volumes`. Not measured: a physical disconnect
+  or forced unmount with runtimes attached (arm 4b), mounting at boot (arm 5), import as a clone (arm 3), a real
+  rig run while staged, Apple Silicon, Thunderbolt, Xcode 27. The internal store was never deleted, so this says
+  nothing yet about a layout without it.
+
+### E20 arm 3 — import as a clone from the same volume — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: `stage --reuse-copy` (the copy already on the volume, re-verified byte for byte), then
+  `clone-import`: `cp -c` of the watchOS 26.5 image (5.2 GB) into `Images/xcv-e20-src/` on the mounted volume,
+  `simctl runtime delete <uuid> --keep-asset` from the mounted store, `simctl runtime add <clone>`; then `restore`.
+- Result: **FAIL — the add was refused.** `SimDiskImageError` 14, "Cannot copy the image because the disk is
+  almost full", exit 14, with 19.2 GB free on the volume (container ~98% used: it also holds the operator's other
+  volumes) and 23.8 GB free internally (~95% used). The clone itself cost 0 KB. The delete took effect, and also
+  removed the runtime's 2.8 GB dyld cache on the internal disk (regenerable) despite `--keep-asset`, which kept
+  the MobileAsset catalogue. The script kept the clone, said to restore, and restore brought the machine back:
+  internal store unchanged at uncovering (rule 6), both runtimes Ready + Verified from the internal disk, the
+  watch device back to Shutdown.
+- Evidence (rotated aside when the repeat re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193232.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193443.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T193724.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T194026.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: arm 3 **not shown**. The daemon decided to **copy**, not clone, and refused on free space. Which disk
+  it measured is not recorded: its free-space messages are info-level and were not in `log show` afterwards. The
+  installed images' `sourceURL`s all point at `Cryptex/Images/Inbox`, on the internal disk, which suggests the add
+  stages there — and a stage outside the mounted volume can never be a clone. Not established.
+- Notes: the deleted image left a `<uuid>.dmg.sb-*` directory (mode 700) on the volume. Next: re-run with
+  `log stream --level info --predicate 'process == "simdiskimaged"'` capturing the add, to read the inbox path and
+  the "A < B minimum required" numbers. Experimental (rule 10).
+
+### E20 arm 3 repeat — the add's own log — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: the same sequence on a fresh copy (`stage`, `clone-import`, `restore`), with `clone-import`
+  streaming simdiskimaged's info-level log from just before the delete to just after the add.
+- Result: **FAIL, same error, and now explained — not a space problem.** The log shows the add's sequence:
+  (1) the source is copied into `/Library/Developer/CoreSimulator/Cryptex/Images/Inbox/<new-uuid>.dmg` on the
+  **internal** disk — DiskImages2 reports the opened file on `dev(0x1000004)`, i.e. 1,4, "locally mounted from"
+  the internal data volume; (2) it is attached and its bundle mounted under `Cryptex/Images/mnt/` to inspect it,
+  then ejected; (3) simdiskimaged asks CacheDelete for the free space of the destination,
+  `/Library/Developer/CoreSimulator/Images`, and CacheDelete answers `CacheDeleteErrorDomain Code=10
+  {Invalid volume=…/Images}`, result **0** — hence "disk is almost full". The internal inbox was empty again
+  afterwards. Restore: internal store unchanged at uncovering (rule 6), both runtimes back on 1,4, the watch device
+  back; the post-rescan `images.plist` differs from post-umount only by the order of its two entries.
+- Evidence (rotated aside when the DiskArbitration run re-ran the phases): `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T194813.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T195613.txt`,
+  `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200324.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200628.txt` (the unfiltered
+  stream minus Security/prefs/analytics noise), `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T200459.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: arm 3 **falsified for this layout**, on two independent counts. Staging always goes through the
+  internal `Cryptex/Images/Inbox`, so an import from the drive is a full copy onto the internal disk and can never
+  be a clone while only `Images` is relocated. And CacheDelete does not accept the manually mounted volume, so
+  simdiskimaged reads its free space as 0 and refuses **any** install or import while staged.
+- Notes: whether a DiskArbitration-aware mount (`diskutil mount -mountPoint`) or a mount without `nobrowse`
+  would satisfy CacheDelete is untested; E6c found DiskArbitration declines a previously mounted volume at a
+  chosen mount point. The first staging point is internal regardless. Experimental (rule 10).
+
+### E20 arm 3, DiskArbitration mount — does CacheDelete accept the volume? — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23
+- Hypothesis reference: H20 (arm 3)
+- Test performed: the volume left by the repeat was repaired by hand, without a new copy: the operator removed the
+  `<uuid>.dmg.sb-*` directory the delete had left, moved the APFS clone back to the original image name and removed
+  the empty source directory (its contents before removal were not recorded). Then `stage --reuse-copy --mount-with
+  diskutil` (the repaired copy re-verified byte for byte and by metadata), `clone-import`, `restore`.
+- Result: **ACCEPTED (pre-registered).** DiskArbitration mounted the previously mounted volume at the chosen mount
+  point without complaint — `diskutil mount -mountPoint …/Images` — as `apfs, local, nodev, nosuid, journaled`
+  (no `nobrowse`). Stage passed as before: both images open on 1,25, Ready + Verified. In `clone-import`, CacheDelete
+  answered for `/Library/Developer/CoreSimulator/Images [/dev/disk7s3 : apfs]`: free 19.61 GB + purgeable 2.33 GB =
+  **21.94 GB**, no "Invalid volume". **The add succeeded**: watchOS 26.5 back as a new image in **51 s**, Ready +
+  Verified, served from 1,25; the watch device and its pair intact. The log shows the path: the source is first copied
+  to the **internal** `Cryptex/Images/Inbox` (opened on dev 0x1000004 = 1,4), inspected, then written to
+  `Images/Inbox` **on the volume** (dev 0x1000019 = 1,25) and moved to `Images/<new-uuid>.dmg`. The volume lost
+  5,119,308 KB — the image's full size, so **COPY, not clone** — and internal free space dipped to 17,517,376 KB
+  during the add (from 22,639,160 KB): a **transient ~5.1 GB internal peak**, returned afterwards.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T202000.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T202249.txt`.
+- Functional checks: simulator N/A (devices and pairs checked available); xcodebuild N/A; physical device N/A
+- Verdict: **installing while staged works with a DiskArbitration mount**; the `mount_apfs -o nobrowse` mount was the
+  blocker (which of its two differences — the mounter or `nobrowse` — matters is not separated). **Import as a clone
+  stays falsified**: every add stages a full copy on the internal disk first. Restore: internal store unchanged at
+  uncovering (rule 6); runtimes back on 1,4; the new watchOS image remains on the volume only, a second copy of the
+  same runtime build the internal store still has, so nothing is lost.
+- Notes: E6c's "DiskArbitration declines a previously mounted volume at a chosen mount point" did not reproduce here
+  (different volume, different mount point). The image-set snapshot counted the delete's `.sb-*` directory as an image
+  (a `find` error line), so clone-import did not re-baseline and restore raised its stranded warning; the snapshot now
+  prunes it. Per-user temp paths in three evidence files were rewritten to `<tmpdir>`. Experimental (rule 10).
+
+### E20 arm 5, step 3 — the store mounted by `/etc/fstab` at boot — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-23 (arm) / 2026-10-24 (boot and check)
+- Hypothesis reference: H20 (arm 5)
+- Test performed: `stage --reuse-copy --mount-with diskutil` (one earlier attempt stopped: the daemon had touched
+  `Inbox`/`mnt` mtimes since the copy, and the operator copied the internal mtimes onto the volume with `touch -r`),
+  `boot-arm` (one earlier attempt refused correctly: not staged), a restart with the drive connected, a login, and
+  `boot-check`. Between login and the check the operator's own work ran on the store: an `xcodebuild test` of a
+  smoke app with an iPhone 17 Pro Max simulator booted (its outcome was not recorded here).
+- Result: **BOOT PASS (pre-registered).** After the restart DiskArbitration mounted the volume at `Images` on its own
+  from the two-line `/etc/fstab` entry, as `apfs, local, nodev, nosuid, journaled` — the same options as the working
+  DiskArbitration mount — with ownership on. Both runtimes Ready + Verified at the `Images` paths, and both open
+  `<UUID>.dmg` files held by `diskimagesiod` on the volume's device (1,15); none on the internal data volume (1,5 after
+  this boot; it was 1,4 before). Device numbers renumber across reboots, so the check compares against the devices of
+  that boot, never stored ones.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T210200.txt`, `../research/evidence/e20-boot-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T162707.txt`; the stopped stage, the refused arm and a void check are in the `-superseded-20261023T205834`, `-superseded-20261023T205853` and `-superseded-20261023T210312` files.
+- Functional checks: simulator — a booted device and an `xcodebuild test` ran on the store after the boot (not
+  independently verified); xcodebuild — see previous; physical device N/A
+- Verdict: **mounting at boot through DiskArbitration works when the drive is connected**: the store came up on the
+  drive and nothing attached internally first. The ordering is favourable on this setup for a reason worth stating:
+  with `AutomountDisksWithoutUserLogin` unset, external disks mount at login, and simdiskimaged is started on first
+  simulator use, which also needs a logged-in user. A machine that uses simulators before any login (a headless CI
+  agent, for example) is not covered.
+- Notes: the first `boot-check`, run before any restart, reported BOOT PASS while measuring only the stage. It is
+  void, and `boot-check` now reports NOT REBOOTED when the Mac has not restarted since the arm. Still open in arm 5:
+  a boot without the drive (step 4, expected ABSENT with the internal store unchanged) and a hotplug after login
+  (step 5). `/etc/fstab` stays armed until `boot-disarm`; `restore` refuses until then. Experimental (rule 10).
+
+### E20 arm 5, step 4 — a boot with `/etc/fstab` armed and the drive absent — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: with the fstab entry still in place, the Mac was shut down, the drive disconnected, the Mac started
+  and logged in; nothing simulator-related was opened. Then `xcrun simctl runtime list` (so simdiskimaged scans) and
+  `boot-check`.
+- Result: **ABSENT (pre-registered).** `Images` was the plain internal directory (not a mount point); boot and login
+  were unaffected by the missing fstab volume. Both runtimes Ready + Verified at the same `Images` paths, both open
+  `<UUID>.dmg` files held by `diskimagesiod` on the internal data volume (1,4). **Rule 6: UNCHANGED** — the internal
+  store's listing and image set match the `pre-mount` snapshot taken before staging (same two images, same sizes and
+  dates, `Inbox`/`mnt` empty). simdiskimaged did rewrite `images.plist` at this boot (new mtime); its content is the
+  same two entries with the same field values, in swapped order — no entry added, removed or repointed.
+- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T223332.txt`.
+- Functional checks: simulator N/A (runtimes Ready, none booted); xcodebuild N/A; physical device N/A
+- Verdict: **the safe fallback holds**: without the drive the machine boots normally and simulators get the
+  untouched internal store — which exists here only because staging never deleted it. A product that moved the
+  runtimes off the internal disk would have nothing to fall back to; this boot then shows what is left, not what is
+  safe. No shadow data formed on this boot.
+- Notes: `plist_view`'s diff is order-sensitive and reported the swap as a difference; the reading is decided by the
+  listing and image set. Still open in arm 5: a hotplug after login (step 5). `/etc/fstab` stays armed. Experimental (rule 10).
+
+### E20 arm 5, step 5 — the drive plugged in after login, with `/etc/fstab` armed — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: straight after step 4 (runtimes attached from the internal store, no simulator booted, no
+  `xcodebuild`), the drive was plugged in; about ten seconds later, `boot-check`.
+- Result: **SHADOW (pre-registered).** DiskArbitration honoured the fstab entry on hotplug and mounted the volume over
+  `Images` (`/dev/disk7s3`, the working mount's options) while both runtime images stayed open by `diskimagesiod` on
+  the **internal** data volume (1,4), none on the volume (1,22). simctl still listed both runtimes Ready at the
+  `Images` paths — paths that now name the volume's copies, not the files actually attached. Nothing tells the user;
+  CoreSimulator did not detach, re-attach or rescan on its own.
+- Evidence: `../research/evidence/e20-boot-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (none booted, by design); xcodebuild N/A; physical device N/A
+- Verdict: **an fstab arm is unsafe on hotplug**: a drive connected after the store is in use silently splits it —
+  runtimes run from the hidden internal files while the paths, and anything newly installed, point at the volume. This
+  is the rule-6 failure H20 has to rule out, and here it happens with no fault at all, just the order of plugging in.
+  A product cannot use a standing fstab entry (or any automatic mount at `Images`) without first detaching every runtime
+  before the mount lands — DiskArbitration does not offer that. The mount must be an explicit operation that detaches
+  first (as `stage` does), and a hotplug must be left unmounted or refused.
+- Notes: recovery is `boot-disarm` then `restore`, which detaches the runtimes, unmounts the volume and compares the
+  internal store with the pre-mount snapshot. Experimental (rule 10).
+
+### E20 arm 5, step 6 — disarm and restore from the SHADOW state — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: from step 5's SHADOW state, `boot-disarm` then `restore`.
+- Result: **clean.** `boot-disarm` removed exactly the two E20 lines; nothing else was in `/etc/fstab` and there was
+  none before the arm, so the file was removed. `restore` found the volume's image set unchanged since staging (its
+  `images.plist` carried the operator's later use of the iOS runtime), detached both runtimes — the ones attached from
+  the hidden internal files — with `simctl runtime unmount`, unmounted the volume through DiskArbitration without
+  forcing, rescanned, and gave the volume back to `/Volumes`. Both runtimes Ready + Verified, open on the internal
+  data volume (1,4). The restore's rule-6 compare printed CHANGED, and the diff shows what: `images.plist`'s mtime
+  (22:32, written at step 4's boot, when the internal store was the live store) and the same two entries in swapped
+  order. Listing and image set otherwise identical. The mtime also shows that **nothing wrote to the hidden internal
+  store during SHADOW** (the hotplug came after 22:33).
+- Evidence: `../research/evidence/e20-boot-disarm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T223755.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: **the SHADOW state is recoverable without loss** when no simulator is booted on it: detach, unmount, rescan.
+  The recovery needed a tool that knew to detach first; DiskArbitration's own eject would have left the runtimes
+  attached to files it had just uncovered, which is benign only because they were the internal ones all along.
+- Notes: restore's rule-6 compare includes the plist and is order-sensitive, so a legitimate rewrite reads as CHANGED;
+  boot-check's `store_view` compare (listing and image set) is the one to read. Arm 5 is complete. Experimental (rule 10).
+
+### E20 arm 4b, idle — the drive pulled with the store mounted and runtimes attached — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 4b)
+- Test performed: a disposable USB flash drive (256 GB, reports `Removable Media: Removable`), erased as APFS with
+  the E20 volume as its only volume, ownership on. `preflight`, `stage --mount-with diskutil` (fresh copy, verified
+  byte for byte; both images then open on the drive, 1,29), `pull-arm` (no simulator booted), the cable pulled
+  without ejecting, about two minutes, `pull-check`, `restore`. Between preflight and the first stage the drive
+  dropped off the bus once with nobody touching it; stage refused (not mounted) and was re-run after reseating it.
+- Result: **SURVIVED, DETACHED (pre-registered).** Within 17 ms of the disappearance `diskimagesiod` logged the mount
+  point gone, failed two in-flight reads with EIO (errno 5), **force-unmounted both runtime volumes itself**
+  (`unmountAll: Forcing unmount of … (disk3s1)` / `(disk5s1)`) and exited. The `Images` mount was gone too, so the
+  internal store was uncovered. No panic, no crash report, no process in uninterruptible wait across three samples,
+  simctl answered at once. **Rule 6: UNCHANGED** — listing, image set and even `images.plist` identical to pre-mount.
+  One misleading reading: simctl still listed both runtimes **Ready + Verified** at the `Images` paths while no
+  runtime volume was attached at all. `restore` detached both (simctl reported success), rescanned, and both came
+  back Ready and attached from the internal disk (1,4); rule 6 unchanged again.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T232415.txt` (the refused attempt: `-superseded-20261024T231445`), `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233101.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233259.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233354.txt`.
+- Functional checks: simulator N/A (none booted, by design of this round); xcodebuild N/A; physical device N/A
+- Verdict: **an idle pull is survivable**: the system tears the runtime volumes down cleanly, nothing is written to
+  the uncovered internal store, and a detach + rescan brings the internal runtimes back. Two cautions for a product:
+  CoreSimulator does not notice on its own (runtimes keep reading Ready with nothing attached — a product must
+  detect the pull itself and rescan), and the uncovered store is safe only because staging kept the internal copy.
+  The case that matters most, a pull under a booted simulator, is the live round, still open.
+- Notes: the evidence labels the volume `<vault>P`: the redactor masks every mounted vault label, and the SSD's
+  `XCV-E20` was still mounted, so it matched first. Experimental (rule 10).
+
+### E20 arm 4b, live — the drive pulled under a booted simulator — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 4b)
+- Test performed: the same disposable flash drive, right after the idle round. `diskutil verifyVolume` on it first
+  (the idle pull had left it unclean): **appears to be OK**, fsck exit 0. `stage --reuse-copy --mount-with diskutil`
+  (copy re-verified byte for byte; both images open on the drive, 1,29), `pull-arm --live` (an iPhone 17 Pro scratch
+  device in a temp `--set`, Booted on iOS 26.5 from the drive), then — by mistake — a `pull-check` with the drive
+  still in (NOT PULLED, kept as `-superseded-20261024T234732`), which also stopped pull-arm's log stream. The cable was
+  then pulled without ejecting, and `pull-check` and `restore` followed.
+- Result: **SURVIVED, FALLBACK (pre-registered).** No panic, no crash report, no process in uninterruptible wait
+  across three samples, simctl answered at once. The `Images` mount and both runtime volumes were gone, and by the
+  check **both runtime images were open again on the internal disk** (1,4): CoreSimulator re-attached them from the
+  uncovered internal copy on its own (`mountPolicy: automatic`). The booted device read
+  `(Booted) (unavailable, liblaunch_sim.dylib could not be opened)` with `launchd_sim` still running — alive, but with
+  its runtime pulled from under it. **Rule 6: UNCHANGED** for listing and image set; `images.plist` was rewritten
+  with the same entries in swapped order, consistent with the automatic re-attach. `restore` shut the device down and
+  deleted it without hanging, detached and rescanned; both runtimes Ready and attached from 1,4.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator — booted on the drive, then left unavailable by the pull (not exercised further);
+  xcodebuild N/A; physical device N/A
+- Verdict: **a pull under a booted simulator is survivable on this machine**: the system did not hang, the simulator
+  could be shut down normally, and nothing shadowed the internal store. The fallback is the important and double-
+  edged finding: CoreSimulator silently switches to whatever sits at `Images` underneath. Here that was the intact
+  internal copy, so the switch was harmless. In a product that removed the internal copy it would find an empty
+  store, and in one whose internal copy had drifted it would silently run a different runtime. So H20 can only ever
+  ship with the internal copy kept and verified, or with the product detecting the pull and reacting first.
+- Notes: the log of the pull itself was not captured — the mistaken first check had stopped the stream and it was
+  not restarted (the stream file has 6 lines, all from before the pull); `pull-check` should not stop the stream on a
+  NOT PULLED reading. The verification after the idle pull also shows the unclean removal left the APFS volume
+  consistent. Experimental (rule 10).

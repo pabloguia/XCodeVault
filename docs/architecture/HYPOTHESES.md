@@ -45,6 +45,10 @@ volume, not the path, so a canonical mount would not buy DerivedData anything ei
 mount attempt itself (root required) is **pending — manual**; see ADR-0004 for the
 consequence: canonical mount drops from "gated headline" to "R&D curiosity" for v1.
 
+**2026-10-22: the premise above no longer holds for imported runtimes.** F1's correction puts an
+`-importPlatform` runtime in `CoreSimulator/Images/`, and H15 retracted the mount refusal. The
+`Images/`-only form of this hypothesis is reopened as **H20**.
+
 ## H2 — Whole-`~/Library/Developer` symlink breaks Xcode 15+ DDI discovery
 
 **Status: probable, and treated as true regardless.** FB12363725, reproduced on Xcode
@@ -549,6 +553,13 @@ Cheap, unprivileged, non-destructive: attach the vault image read-only, `simctl 
 create` against the inner bundle path, measure internal free space, delete the scratch set, detach.
 Runs entirely outside the default device set. Gate: **E16** (to be written; fold into E14b's harness
 once E14b phase 1 has shown a scratch set works).
+
+**Scope narrowed 2026-10-22 (desk research, status unchanged):** a disk-image runtime is not a valid
+E16 subject — its identifier is already registered, so a path would resolve to the internal copy.
+The path form belongs to the pre-iOS-16 *bundle* format, which under Xcode 26.x means iOS 15 /
+tvOS 15 / watchOS 8 only, and under Xcode 27 (simulators iOS 17+) nothing. Run E16, if at all,
+against an unregistered legacy bundle on the vault. See
+`../research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md`.
 
 ## H7 status update 2026-09-09 — the mechanism is documented; the delivery is the blocker
 
@@ -2222,3 +2233,114 @@ A 2023 forum note says `tccutil reset SystemPolicyRemovableVolumes` then a permi
 from the volume itself. That would mutate the user's TCC database. It was not run. It is a hypothesis, not a result.
 
 Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.
+
+## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine)*
+
+**Claim:** a dedicated APFS volume on the external disk, mounted (not symlinked) at
+`/Library/Developer/CoreSimulator/Images`, is used by `simdiskimaged` as the runtime store — every
+`-importPlatform`-installed runtime lives on the drive, boots, and survives reboot — and a
+disconnect can be made safe.
+
+**Why it is open, when H1 looked closed.** H1 was reframed as low-value on 2026-09-06 because the
+runtime bytes were in `/System/Library/AssetsV2`. F1's correction (2026-09-08) showed an
+`-importPlatform` runtime — what XCodeVault's own import produces — lives in
+`/Library/Developer/CoreSimulator/Images/`; on 2026-10-22 all 15.8 GB installed here were there and
+the AssetsV2 stores held 4 KB each. H1 was not revisited. H15 then retracted the other blocker:
+with Full Disk Access, root can `mount_apfs` inside the hierarchy.
+
+**Why every other relocation route is dead (read from the binary, not exercised).**
+`simdiskimaged`'s embedded sandbox is `(deny default)` with `file-mount` only under
+`CoreSimulator/{Images,Volumes,Cryptex/Images,Cryptex/Volumes}/`, and its code says
+`Rejecting mount of symlink … for security`. So symlinks and an `images.plist` entry pointing at
+`/Volumes` are both out, independent of F16 (which was itself measured without Full Disk Access and
+should be read as such). A real mount at a path inside those subpaths is the one shape left.
+
+**Expected upside, if it holds:** with the Runtime Library on the same volume, import is a clone
+(the daemon allows a lower free-space limit when "source is on the same volume as inbox and clones
+are supported"), so an offloaded runtime comes back in seconds at no internal cost.
+
+**Gate: E20**, pre-registered, cheapest kill first — every arm needs `sudo` and a terminal or
+helper with Full Disk Access, and none may run with a device booted:
+1. a scratch APFS volume (disk image first, then the USB drive) mounted with `owners` at
+   `Images/` after copying the store across byte-identically; `simctl runtime list` shows both
+   runtimes `Ready`, `signatureState: Verified`, with internal free space unchanged;
+2. create, boot, shut down and delete a device in a scratch set on that runtime;
+3. import an `.exportedBundle` kept on the same volume — measure internal free-space delta and time;
+4. unmount with no device booted, trigger a scan, and record whether anything is written into the
+   internal stub (rule 6 — this is the arm that most likely kills it); remount and re-verify;
+5. reboot with the drive attached, and with it absent.
+
+A pass is still a canonical mount: experimental everywhere, behind the helper's allowlist, until
+the Definition of Done. Detail and the full alternatives map:
+`../research/OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`.
+
+**E20, 2026-10-23 (macOS 26.7.1 · Xcode 26.5 · Intel · USB): PROBABLE.** Every pre-registered reading passed.
+Both runtime images moved from being held open on the internal data volume (device 1,4) to the mounted external
+volume (1,25), `Ready` + `Verified`; a scratch iPhone booted from them; on restore the internal store was
+byte-for-byte as left at the mount, and nothing was stranded on the volume. The F16 barrier and the symlink
+refusal were never in play: no pointer was changed, no symlink existed. Matrix entry "E20"; evidence
+the four phase files of the first run, rotated to `…-superseded-…` names when arm 3 re-ran them (paths in the matrix entry).
+
+What this does not establish, and what gates any product use: a **physical disconnect** with runtimes attached
+(arm 4b — the rule-6 case that matters), **mounting at boot** before simdiskimaged scans (arm 5), **import as a
+clone** (arm 3, the speed win), a real test run while staged, and a layout where the internal copy is gone. Until
+then it is a measured mechanism, not a strategy: experimental everywhere, and the internal store stays.
+
+**E20 arm 3, 2026-10-23: import as a clone NOT shown.** With the store mounted, `simctl runtime add` of an APFS
+clone sitting on the same volume was refused — `SimDiskImageError 14`, "Cannot copy the image because the disk is
+almost full" — with 19 GB free on the volume and 24 GB internally. The daemon chose to copy. Which disk it measured
+is unrecorded (info-level log), but every installed image's `sourceURL` is under `Cryptex/Images/Inbox`, on the
+internal disk: if the add stages there, a clone is impossible while only `Images` is on the drive, and every
+import costs a full internal copy plus that disk's free-space floor. Restore brought the machine back cleanly.
+Matrix entry "E20 arm 3". The speed win that motivated arm 3 is therefore unproven, and on this machine blocked.
+
+**E20 arm 3 repeat, 2026-10-23: falsified for this layout, and the mechanism is now on record.** simdiskimaged's
+own log (matrix entry "E20 arm 3 repeat") shows `simctl runtime add` copying the source into the **internal**
+`Cryptex/Images/Inbox` first, and then refusing because CacheDelete reports the mounted `Images` volume as an
+"Invalid volume" with 0 bytes available. Two consequences for any product built on H20: imports from the drive
+are full copies onto the internal disk (no clone, no speed win), and **nothing can be installed or imported while
+the store is mounted** — installs would have to happen with the store internal and be moved afterwards, which is
+the Runtime Library flow with an extra step. H20's using-runtimes result (stage + exercise) stands.
+
+**E20 arm 3 with a DiskArbitration mount, 2026-10-23: installs while staged WORK; the clone does not.** Mounted with
+`diskutil mount -mountPoint` instead of `mount_apfs -o nobrowse`, CacheDelete recognises the volume (21.9 GB
+available) and `simctl runtime add` succeeds in 51 s, landing the image on the drive. The staging path is unchanged:
+a full copy on the internal disk first (a transient ~5.1 GB peak), then a full copy onto the volume. So a product
+built on H20 must mount through DiskArbitration, must budget one image's worth of free internal space per install,
+and gets no speed win on import. Matrix entry "E20 arm 3, DiskArbitration mount". Still open before any product use:
+the physical disconnect (arm 4b) and mounting at boot (arm 5) — now with a DiskArbitration mount, the one that works.
+
+**E20 arm 5, step 3, 2026-10-24: the store mounts at boot.** With a two-line `/etc/fstab` entry, DiskArbitration
+mounted the volume at `Images` on its own after a restart, with the working mount's options and ownership on, and both
+runtimes were served from the drive with nothing attached internally first (matrix entry "E20 arm 5, step 3"). The
+ordering holds here because external disks mount at login and simdiskimaged starts on first simulator use; a machine
+that uses simulators before any login is not covered. Still open: a boot without the drive (does the internal store
+stay untouched, rule 6?), a hotplug after login, and the physical disconnect under a live store (arm 4b).
+
+**E20 arm 5, step 4, 2026-10-24: a boot without the drive is safe here.** With the fstab entry armed and the drive
+absent, the Mac booted normally, `Images` was the internal directory, and simulators were served from the internal
+store, which was unchanged (rule 6; matrix entry "E20 arm 5, step 4"). The fallback is safe only because staging kept
+the internal copy: with the runtimes moved off the internal disk, the same boot would show an empty store.
+
+**E20 arm 5, step 5, 2026-10-24: a hotplug with the fstab entry armed splits the store (SHADOW).** Plugging the drive
+in after login mounted the volume over `Images` while both runtimes stayed attached from the now-hidden internal files
+(matrix entry "E20 arm 5, step 5"). So mounting at boot works only if the drive is there at boot; a standing fstab entry
+turns an ordinary late plug-in into the rule-6 failure. Any product mount at `Images` has to be an explicit operation
+that detaches every runtime first, and a late-arriving drive must be left unmounted. Remaining for H20: arm 4b, the
+physical disconnect under a live store.
+
+**E20 arm 4b, idle round, 2026-10-24: pulling the drive with runtimes attached is survivable.** On a disposable flash
+drive, `diskimagesiod` force-unmounted both runtime volumes within milliseconds, nothing hung or panicked, the
+internal store was untouched (rule 6), and detach + rescan brought the internal runtimes back (matrix entry "E20 arm
+4b, idle"). CoreSimulator kept reporting the runtimes Ready with nothing attached, so a product would have to detect
+the pull and rescan itself. Still open: the same pull under a booted simulator (the live round).
+
+**E20 arm 4b, live round, 2026-10-24: a pull under a booted simulator is survivable — and CoreSimulator falls back
+silently.** Nothing hung or panicked, the simulator could be shut down, the internal store was not shadowed, and the
+runtimes were re-attached automatically from the internal copy underneath (matrix entry "E20 arm 4b, live"). **Every
+E20 arm has now run on one machine.** What H20 has shown: runtimes can be served from an external APFS volume mounted
+at `Images` through DiskArbitration; installs work while mounted, as copies via the internal disk; a boot with or
+without the drive is safe; a pull is survivable. What it rules out: any standing automatic mount (a late plug-in
+shadows the store), import as a clone, and any layout that deletes the internal copy — both the boot without the
+drive and the pull fall back to it. H20 stays **probable**, experimental, one machine (Intel, macOS 26.7.1, Xcode 26.5).
+

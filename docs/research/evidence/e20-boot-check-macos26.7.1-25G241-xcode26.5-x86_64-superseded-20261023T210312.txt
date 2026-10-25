@@ -1,0 +1,33 @@
+# Experiment: E20 images-store mount — phase boot-check
+# Date: 2026-10-24T00:03:06Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## boot: 2026-10-23 16:44:55 -0300 (uptime:  4:18)
+## /etc/fstab:
+   # xcodevault-e20 arm 5 — remove with: e20-images-mount.sh --volume-uuid <UUID> boot-disarm
+   UUID=<vault-uuid> /Library/Developer/CoreSimulator/Images apfs rw
+## drive connected: yes; Images is the volume: yes
+/dev/disk7s3 on /Library/Developer/CoreSimulator/Images (apfs, local, nodev, nosuid, journaled)
+## runtime volumes attached: 2
+## no simulator booted
+
+## simctl runtime list (summary)
+com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg | /Library/Developer/CoreSimulator/Volumes/iOS_23F77
+com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg | /Library/Developer/CoreSimulator/Volumes/watchOS_23T570
+
+## open runtime images (lsof, root)
+   internal data volume device: 1,4
+   volume mounted at Images device: 1,25
+   COMMAND DEVICE NAME
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   diskimagesiod 1,25 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   (no line above = no visible holder; see the ordering argument)
+
+## mount options: 'apfs, local, nodev, nosuid, journaled' (the working DiskArbitration mount had 'apfs, local, nodev, nosuid, journaled')
+RESULT: boot-check BOOT PASS — the store came up on the drive (2 image(s) open on 1,25), same options as the working mount

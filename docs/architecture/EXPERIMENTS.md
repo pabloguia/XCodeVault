@@ -640,3 +640,41 @@ Three layouts, not a re-run of E2's nine cases: entire DerivedData on the volume
 
 **Locations keys (2026-10-11):** `scripts/experiments/e19-locations-keys.sh`. One-shot `-IDE…` arguments, no
 `defaults write`. CTRL failed; KEYS passed. H19 stays probable. Recorded beside the E19 entry.
+
+## E20 — does simdiskimaged use a runtime store on an external volume mounted at `CoreSimulator/Images`? (gates H20)
+
+`scripts/experiments/e20-images-mount.sh`. **Destructive + root**: `stage` mounts a dedicated external APFS volume
+over `/Library/Developer/CoreSimulator/Images`, so every simulator on the machine runs from the drive until
+`restore`. The internal store is copied, never moved or deleted, and stays intact under the mount. Phases, one at a
+time: `preflight` (read-only), `stage`, `exercise` (scratch `--set` device), `restore`, `status`. `--dry-run`
+rehearses any phase without changing anything. Readings are pre-registered in the script's header; the
+discriminator is which device each open `<UUID>.dmg` is on, not `Ready`. Arms 3 (import as a clone), 4b (physical
+disconnect) and 5 (mount at boot) are deferred until this passes.
+
+**Status: run 2026-10-23 — PASS on every pre-registered reading; H20 probable.** See the matrix entry.
+
+**Arm 3, `clone-import` (run 2026-10-23, twice — FAIL: staging goes through the internal `Cryptex/Images/Inbox`, and CacheDelete rejects the mounted volume as invalid, so any add while staged is refused; matrix entries "E20 arm 3" and "E20 arm 3 repeat"). With `--mount-with diskutil` (DiskArbitration) CacheDelete accepts the volume and the add succeeds — as a copy, with a transient internal peak; matrix entry "E20 arm 3, DiskArbitration mount".** While staged: APFS-clone the smallest runtime's image
+inside the volume, `simctl runtime delete --keep-asset` it from the mounted store, re-add it from the clone, and
+time it and measure free space. CLONE / COPY thresholds are pre-registered in the script's header. Every step
+re-checks that `Images` is still the staged volume, so a dropped mount cannot turn the delete onto the internal
+store. `--reuse-copy` lets `stage` reuse a verified copy already on the volume. Migration-safety review: blocked
+(10 findings), rewritten, ship. Migration-safety review: blocked (13 findings), rewritten, ship-with-fixes (N1–N7), fixed, ship. Needs the drive, `sudo` and a terminal with Full
+Disk Access.
+
+**Arm 5, mount at boot (written 2026-10-23; steps 3–4 run 2026-10-24 — BOOT PASS with the drive, ABSENT and rule 6 unchanged without it, matrix entries "E20 arm 5, step 3" and "step 4"; step 5 run 2026-10-24 — hotplug after login gives SHADOW, matrix entry "step 5"; disarmed and restored cleanly, "step 6". Arm 5 complete).** `boot-arm` adds two marked lines to `/etc/fstab` so
+DiskArbitration mounts the volume at `Images` whenever it appears (boot or hotplug), with the `rw`-only line that
+reproduces the working DiskArbitration mount; `boot-check` classifies each boot or hotplug as BOOT PASS / DIFFERENT
+MOUNT / NO OWNERS / SHADOW / ABSENT / NOT MOUNTED; `boot-disarm` removes exactly those lines. `restore` refuses while
+the entry is present, so a forgotten arm cannot be erased from the record. Migration-safety review: ship with fixes,
+fixes verified, ship.
+
+**Arm 4b, pull the drive with the store in use (written 2026-10-24; idle round run 2026-10-24 — SURVIVED, DETACHED, matrix entry "E20 arm 4b, idle"; live round run 2026-10-24 — SURVIVED, FALLBACK, "E20 arm 4b, live". Arm 4b complete).** `pull-arm` (staged, fstab disarmed,
+runtimes open on the volume, and the E20 volume the **only** volume on its physical drive, mounted or not — volumes
+in one APFS container share its metadata, so the operator's SSD is refused and a disposable drive is needed) records
+a baseline, starts a bounded log stream, and with `--live` boots a scratch device on the volume's runtime; the
+operator then pulls the cable without ejecting. `pull-check` classifies the result as NOT PULLED / PANIC / HUNG /
+SHADOW / STALE MOUNT / SURVIVED (FALLBACK or DETACHED), pre-registered in the script's header, with every probe that
+can touch the drive run in the background under a deadline. `restore` deletes the scratch device, refuses to touch
+a stale mount, detaches every runtime, rescans, compares the internal store with pre-mount, and keeps the state file
+when the outcome is bad. Migration-safety review: ship with fixes (10), fixes verified, ship.
+

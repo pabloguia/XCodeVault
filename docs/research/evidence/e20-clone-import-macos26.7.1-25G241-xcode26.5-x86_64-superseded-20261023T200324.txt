@@ -1,0 +1,218 @@
+# Experiment: E20 images-store mount — phase clone-import
+# Date: 2026-10-23T23:02:13Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Hypothesis: H20
+
+## checks
+   staged volume device at Images: 1,25
+
+## snapshot 'ci-start' of /Library/Developer/CoreSimulator/Images
+--- listing
+-rw-r--r--@ 1 root  admin  -  5242171072 Aug  6 18:33 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+	com.apple.provenance	         11 
+-rw-r--r--  1 root  admin  -        1669 Oct 23 19:56 images.plist
+drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 Inbox
+	com.apple.provenance	         11 
+drwxr-xr-x@ 2 root  admin  -          64 Sep  9 11:00 mnt
+	com.apple.provenance	         11 
+
+./Inbox:
+
+./mnt:
+--- images.plist
+{
+  "images" => [
+    0 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:56:04 +0000
+      "lastUsedAt" => 2026-10-23 21:40:59 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23T570"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.watchsimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+      }
+      "state" => 5
+      "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+    1 => {
+      "format" => {
+        "normal" => {
+        }
+      }
+      "lastStateChangeAt" => 2026-10-23 22:56:03 +0000
+      "lastUsedAt" => 2026-10-23 21:54:19 +0000
+      "mountingMode" => {
+        "mountAsDMG" => {
+        }
+      }
+      "mountPolicy" => {
+        "automatic" => {
+        }
+      }
+      "path" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+      }
+      "runtimeInfo" => {
+        "build" => "23F77"
+        "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+        "bundlePath" => {
+          "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+        }
+        "isInternal" => false
+        "platformIdentifier" => "com.apple.platform.iphonesimulator"
+        "supportedArchitectures" => [
+          0 => "x86_64"
+          1 => "arm64"
+        ]
+        "version" => 1705216
+      }
+      "signatureState" => {
+        "verified" => {
+        }
+      }
+      "sourceURL" => {
+        "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+      }
+      "state" => 5
+      "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+      "writePolicy" => {
+        "readOnly" => {
+        }
+      }
+    }
+  ]
+  "standaloneBundles" => [
+  ]
+}
+--- image set
+find: ./.Spotlight-V100/Store-V2/511DE73B-9400-4FAE-99A3-2A8FBC47CE87: Permission denied
+./28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg 5242171072
+./99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg 10597197700
+
+   runtime: com.apple.CoreSimulator.SimRuntime.watchOS-26-5  image: 28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg  size: 5242171072 bytes
+   devices on it (default set), udid + available:
+     0F29E552-3BA3-413D-96ED-B810CD690DC4 True
+   pairs:
+     EB61B115-3F80-42CE-927A-0B166305D5F3 0F29E552-3BA3-413D-96ED-B810CD690DC4 15EA64C9-8286-40CC-881A-B19C606C7F88
+
+## before: volume free 19152800 KB, internal free 20882768 KB, internal dyld cache for watchOS-26-5 2877356 KB
+   /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3690 Sep  7 18:14 com_apple_MobileAsset_appleTVOSSimulatorRuntime.xml
+   
+   /System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3652 Aug  6 18:22 com_apple_MobileAsset_iOSSimulatorRuntime.xml
+   
+   /System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3676 Aug  6 18:28 com_apple_MobileAsset_watchOSSimulatorRuntime.xml
+
+## source directory on the volume
+$ sudo mkdir -p /Library/Developer/CoreSimulator/Images/xcv-e20-src
+[exit=0]
+
+## clone the image inside the volume (clonefile)
+$ sudo cp -c /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg
+[exit=0]
+
+   clone cost on the volume: 0 KB (a clonefile should be ~0)
+
+## simdiskimaged log stream started (info level)
+
+## delete watchOS-26-5 from the mounted store (keep the MobileAsset)
+$ xcrun simctl runtime delete 28793F5D-57BF-4847-957A-D2C0AC7AC62B --keep-asset
+[exit=0]
+
+## after delete: volume free 19152784 KB, internal free 23761400 KB (moved 2878632 KB), dyld cache for watchOS-26-5 0 KB
+   /System/Library/AssetsV2/com_apple_MobileAsset_appleTVOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3690 Sep  7 18:14 com_apple_MobileAsset_appleTVOSSimulatorRuntime.xml
+   
+   /System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3652 Aug  6 18:22 com_apple_MobileAsset_iOSSimulatorRuntime.xml
+   
+   /System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime:
+   total 8
+   drwxr-xr-x   3 root  wheel    96 Sep 30 09:23 .
+   drwxr-xr-x@ 98 root  wheel  3136 Oct 23 16:45 ..
+   -rw-r--r--   1 root  wheel  3676 Aug  6 18:28 com_apple_MobileAsset_watchOSSimulatorRuntime.xml
+
+## re-add from the clone (timed)
+$ xcrun simctl runtime add /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg
+An error was encountered processing the command (domain=com.apple.CoreSimulator.simdiskimaged.SimDiskImageError, code=14):
+Cannot copy the image because the disk is almost full
+[exit=14]
+
+## simdiskimaged log during delete + add (info level, filtered)
+2026-10-23 20:03:03.797 I  simdiskimaged[66379:d6d01] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
+2026-10-23 20:03:04.325 A  simdiskimaged[66379:ddc86] (Security) SecItemDelete
+2026-10-23 20:03:20.159 I  simdiskimaged[66379:de2a4] Attached image /Library/Developer/CoreSimulator/Cryptex/Images/Inbox/24B22E2C-3334-4A65-AD74-57DDCF88A683.dmg, root virtual disk BSD name disk4
+2026-10-23 20:03:20.513 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume ENTRY, volume: /Library/Developer/CoreSimulator/Images
+2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] <private> role: 0
+2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] Not Valid
+2026-10-23 20:03:20.514 E  simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume failed for volume /Library/Developer/CoreSimulator/Images: Error Domain=CacheDeleteErrorDomain Code=10 "(null)" UserInfo={Invalid volume=/Library/Developer/CoreSimulator/Images}
+2026-10-23 20:03:20.514 Df simdiskimaged[66379:de2f6] [com.apple.cache_delete:client] CacheDeleteCopyAvailableSpaceForVolume result: 0
+   (51 lines captured in total; the unfiltered stream is at <tmpdir>/xcv-e20-sdi-log.4a0MBCl6up until the next reboot)
+
+!!! watchOS-26-5 is NOT installed while staged, and its devices are unavailable. The clone is kept at /Library/Developer/CoreSimulator/Images/xcv-e20-src/28793F5D-57BF-4847-957A-D2C0AC7AC62B-source.dmg.
+!!! Run restore now (it uncovers the internal store, which still has watchOS-26-5). Do NOT run 'simctl delete unavailable'.
+
+RESULT: clone-import STOPPED — the add failed (exit 14, new image 'none')
+== state now ==
+   Images is a mount point: YES (volume <vault-uuid>)
+   runtime volumes mounted: 1 (0 = runtimes detached)
+   to return to normal: scripts/experiments/e20-images-mount.sh --i-understand --volume-uuid <UUID> restore
+   (with Images not mounted, restore only rescans if a runtime is not Ready)

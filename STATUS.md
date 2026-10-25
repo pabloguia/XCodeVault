@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-05. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-25. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -13,6 +13,18 @@ rehoused — more fully than here — in `docs/architecture/EXPERIMENTS.md` § "
 classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
+
+- **H20 / E20, runtimes served from an external volume mounted at `CoreSimulator/Images` — every arm run, PR #56 open
+  (branch `docs/runtimes-in-place-on-external`, 2026-10-22 → 10-25).** Research notes
+  `docs/research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md` and `OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`;
+  script `scripts/experiments/e20-images-mount.sh`; one matrix entry per run ("E20" … "E20 arm 4b, live"). Result,
+  one machine (Intel, macOS 26.7.1, Xcode 26.5): stage/exercise PASS; installs work while mounted only through
+  DiskArbitration, as copies via the internal disk (no clone); boot with the drive PASS, without it ABSENT and safe;
+  hotplug with a standing `/etc/fstab` mount → SHADOW (so no automatic mount, ever); pulling the drive survivable,
+  idle and under a booted simulator, but CoreSimulator then silently falls back to the internal copy (so it must be
+  kept). H20 **probable, experimental**. Migration-safety reviewed every script round. Not done: merge, a product
+  design (an ADR would be the next step if this is pursued), a second machine. All E20 volumes and the scratch state
+  were deleted afterwards; the operator's disposable pendrive is back to exFAT.
 
 - **Whole-disk file systems are seen (2026-10-18, branch `fix/whole-disk-volumes`).** Measured on `-layout NONE` disk
   images (`docs/research/evidence/e-wholedisk-volumes-macos26.7.1-25G241-x86_64.txt`): a file system written on a whole
@@ -281,6 +293,10 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   passphrase). Left here rather than deleted because the line above it is the reason it was blocked.
 
 ## Next three actions
+
+**2026-10-25:** PR #56 (H20/E20) is ready for the user's review and merge. The operator now has a **disposable USB
+pendrive** (256 GB, reports `Removable`), which unblocks item 1 below (E6b variant B); E20 arm 4b already measured a
+physical pull of a runtime store from it.
 
 **R8 first (2026-10-05):** the two mandatory reviews of the R8 branch, then the user's real-window run of **Turn On
 Ownership** with the signed build (H18; procedure in HYPOTHESES), which is also the helper's first live run (#30).
@@ -3613,3 +3629,16 @@ piped into `grep -q` under pipefail and failed on correct code, the R8 trap agai
 `HelperAudit.decide`, and a test shows a verb that ran is recorded inside a flood (the mutant that throttled it failed).
 
 **Not measured:** the helper in a CI-notarized build. That is Part F of the runbook, on `v0.3.0-rc.1`, by the operator.
+
+## 2026-10-22 → 10-25 — H20: the runtime store on an external volume, every arm run
+
+The question "can older runtimes run from the drive?" turned out to be about packaging, not version (disk-image
+runtimes are owned by simdiskimaged). Reading simdiskimaged's embedded sandbox left one shape open: a real mount at
+`CoreSimulator/Images`, which H1 had dismissed on two premises both later corrected (F1, H15). E20 tested it in
+arms: stage/exercise, import as a clone (falsified; installs need a DiskArbitration mount), mount at boot via
+`/etc/fstab` (works only if the drive is there at boot; a late plug-in shadows the store), and a physical pull on a
+disposable pendrive (survivable; CoreSimulator falls back silently to the internal copy). Two process lessons: a
+boot-check run before any restart reported BOOT PASS — the script now refuses to classify without a reboot; and the
+reviewer's insistence that a pull needs a drive with no other volume (shared APFS metadata) is the E6b rule, which
+the first draft had relaxed. Details in the matrix entries and H20.
+

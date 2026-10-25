@@ -1,0 +1,36 @@
+# Experiment: E20 images-store mount — phase pull-check
+# Date: 2026-10-25T02:47:03Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## pull-arm at 2026-10-24 23:46:49 -0300 (live); boot 2026-10-24 22:30:36 -0300
+## drive present: yes; Images is a mount point: yes (volume <vault-uuid>)
+   /dev/disk9s1 on /Library/Developer/CoreSimulator/Images (apfs, local, nodev, nosuid, journaled)
+   /dev/disk3s1 on /Library/Developer/CoreSimulator/Volumes/iOS_23F77 (apfs, sealed, local, nodev, nosuid, read-only, journaled, noatime, nobrowse)
+   /dev/disk5s1 on /Library/Developer/CoreSimulator/Volumes/watchOS_23T570 (apfs, sealed, local, nodev, nosuid, read-only, journaled, noatime, nobrowse)
+## runtime volumes in the mount table: 2
+## CoreSimulator processes in uninterruptible wait in three samples over 10 s:
+   none
+   com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+## simctl runtime list answered within 60 s: yes
+## scratch device (live arm):
+   xcv-e20-pull (009AACAE-94C2-479A-8986-50114EB10626) (Booted) 
+   launchd_sim is still running
+## open runtime images (lsof -b, root) — internal data volume is 1,4
+   diskimagesiod 1,29 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   diskimagesiod 1,29 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   on the internal disk: 0
+
+## crash/panic reports newer than pull-arm:
+   none
+## log around the pull (info level, filtered)
+   (6 lines captured; the unfiltered stream is in $TMPDIR as xcv-e20-pull-log.SxfrLMTYoX until the next reboot)
+
+RESULT: pull-check NOT PULLED — the drive is still present and mounted at Images
+        Next: restore (it deletes the scratch device, detaches every runtime and rescans). Keep the drive out until then.
