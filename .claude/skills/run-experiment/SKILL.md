@@ -46,6 +46,8 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
      `restore` phase. It copies and never deletes the internal store, refuses with `xcodebuild` or any
      simulator running, and never force-unmounts; it is still the user's whole runtime store.
      Its arm-5 phases also write `/etc/fstab` — persistent system configuration until `boot-disarm`.
+     Its arm-4b phases end with the operator pulling the drive's cable with the store in use; they
+     refuse unless the E20 volume is the only volume on its physical drive (a disposable drive).
 
    A `--set`-scoped `simctl` call is scratch; a bare one is not. That distinction is the whole
    difference between the second and fourth rows.

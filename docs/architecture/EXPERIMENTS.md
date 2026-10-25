@@ -668,3 +668,13 @@ MOUNT / NO OWNERS / SHADOW / ABSENT / NOT MOUNTED; `boot-disarm` removes exactly
 the entry is present, so a forgotten arm cannot be erased from the record. Migration-safety review: ship with fixes,
 fixes verified, ship.
 
+**Arm 4b, pull the drive with the store in use (written 2026-10-24, not run).** `pull-arm` (staged, fstab disarmed,
+runtimes open on the volume, and the E20 volume the **only** volume on its physical drive, mounted or not — volumes
+in one APFS container share its metadata, so the operator's SSD is refused and a disposable drive is needed) records
+a baseline, starts a bounded log stream, and with `--live` boots a scratch device on the volume's runtime; the
+operator then pulls the cable without ejecting. `pull-check` classifies the result as NOT PULLED / PANIC / HUNG /
+SHADOW / STALE MOUNT / SURVIVED (FALLBACK or DETACHED), pre-registered in the script's header, with every probe that
+can touch the drive run in the background under a deadline. `restore` deletes the scratch device, refuses to touch
+a stale mount, detaches every runtime, rescans, compares the internal store with pre-mount, and keeps the state file
+when the outcome is bad. Migration-safety review: ship with fixes (10), fixes verified, ship.
+

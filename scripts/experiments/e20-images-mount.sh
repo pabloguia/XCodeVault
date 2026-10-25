@@ -49,6 +49,11 @@
 #   boot-check  (arm 5) read-only. After a restart (with or without the drive) or a hotplug, classifies
 #               the result: BOOT PASS / SHADOW / ABSENT / NOT MOUNTED, pre-registered in the phase.
 #   boot-disarm (arm 5) sudo. Removes the two lines (or the file, if nothing else was in it). Then restore.
+#   pull-arm    (arm 4b) staged only, fstab disarmed, every OTHER volume of the drive unmounted. Records the
+#               baseline and starts a background log stream; with --live it also boots a scratch device
+#               (temp --set) on the volume's runtime. Then the operator PULLS THE CABLE — no eject.
+#   pull-check  (arm 4b) read-only (sudo lsof only), every probe under a timeout because a dead mount can
+#               hang a command. Classifies what the pull did; readings pre-registered below.
 #   restore     sudo. Compare the mounted store with what stage left (anything written there while
 #               mounted would be stranded); detach the runtimes; unmount Images (never -f); snapshot
 #               the uncovered internal store at once and again after a rescan (rule 6).
@@ -70,11 +75,25 @@
 #   restore       records, does not judge: the internal store at the mount (pre-mount) vs. the moment
 #                 it is uncovered (post-umount) vs. after a rescan (post-rescan). lastUsedAt churn in
 #                 images.plist is expected after the rescan; any other change is a rule-6 finding.
+#   pull-check    (arm 4b, pre-registered 2026-10-24, before its first run). One of, first match wins:
+#                 NOT PULLED  the drive is still present and mounted at Images: nothing to classify.
+#                 PANIC       the Mac restarted since pull-arm, or a panic report is newer than it — KILLS H20.
+#                 HUNG        a CoreSimulator process sits in uninterruptible wait, or simctl does not answer
+#                             within 60 s — needs a reboot to clear — KILLS H20 for a product.
+#                 SHADOW      Images is uncovered and the internal store's listing or image set differs from
+#                             pre-mount — the rule-6 failure — KILLS H20.
+#                 STALE MOUNT Images is still a mount point with the drive gone: the store is neither the
+#                             drive nor the internal copy until a reboot. Recorded as a finding.
+#                 SURVIVED    Images uncovered, internal store unchanged, nothing hung. Sub-reading from lsof:
+#                             FALLBACK if runtimes are open on the internal disk again, DETACHED if not.
+#                 With --live, the scratch device's state is recorded alongside (it is expected to die).
+#                 Crash reports (simdiskimaged, diskimagesiod, launchd_sim, CoreSimulatorService) newer
+#                 than pull-arm are listed by name in every case.
 #
 # WHAT THIS DOES NOT TEST (deliberately deferred, see H20):
 #   arm 3 import of an .exportedBundle (clone-import uses a raw image clone, the cheaper shape —
-#   the .exportedBundle form is what the product's Runtime Library holds); arm 4b a physical
-#   disconnect or a forced unmount with runtimes attached; arm 5 mounting at boot (LaunchDaemon); and
+#   the .exportedBundle form is what the product's Runtime Library holds); a FORCED unmount (arm 4b
+#   tests the physical pull only); a pull during an install or a test run; and
 #   a layout with the internal store deleted — that turns "uncovered store" into an empty stub, the
 #   shadow-data case rule 6 forbids. Not before every other arm passes and an ADR says so.
 #   No fault-injection harness exists for this script (unlike e6c's); its failure paths are
@@ -120,26 +139,28 @@ SNAP_DIR="$STATE_DIR/snapshots"
 DEVICE_TYPE="${XCV_E20_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro}"
 SELF="scripts/experiments/e20-images-mount.sh"
 
-DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""; CI_LOG=""; CI_LOG_PID=""; MOUNTWITH=mount_apfs; CI_SAMPLER=""; CI_MIN=""
+DRY=0; OK=0; VOLMP=""; VOLUUID=""; PHASE=""; VOLDEV=""; REUSE=0; CI_DEV=""; CI_LOG=""; CI_LOG_PID=""; MOUNTWITH=mount_apfs; CI_SAMPLER=""; CI_MIN=""; LIVE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
     --i-understand) OK=1 ;;
     --reuse-copy) REUSE=1 ;;
+    --live) LIVE=1 ;;
     --mount-with) MOUNTWITH="${2:-}"; shift ;;
     --volume) VOLMP="${2:-}"; shift ;;
     --volume-uuid) VOLUUID="${2:-}"; shift ;;
-    preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm) PHASE="$1" ;;
+    preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm|pull-arm|pull-check) PHASE="$1" ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
+[ "$LIVE" = 0 ] || [ "${PHASE:-}" = pull-arm ] || { echo "REFUSING: --live belongs to pull-arm" >&2; exit 2; }
 case "$MOUNTWITH" in mount_apfs|diskutil) ;; *) echo "REFUSING: --mount-with takes mount_apfs or diskutil" >&2; exit 2 ;; esac
-[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm" >&2; exit 2; }
+[ -n "$PHASE" ] || { echo "usage: $0 [--dry-run] [--i-understand] --volume /Volumes/<name> --volume-uuid <UUID> preflight|stage|exercise|clone-import|restore|status|boot-arm|boot-check|boot-disarm|pull-arm|pull-check [--live]" >&2; exit 2; }
 case "$VOLMP" in *[[:space:]]*) echo "REFUSING: the volume's name contains whitespace; this script parses the mount table and needs a name without spaces (rename it in Disk Utility)." >&2; exit 2 ;; esac
 [ -n "$VOLUUID" ] || { echo "REFUSING: --volume-uuid is required. Read it from 'diskutil apfs list' next to the volume's NAME." >&2; exit 2; }
 case "$PHASE" in
-  stage|exercise|clone-import|restore|boot-arm|boot-disarm)
+  stage|exercise|clone-import|restore|boot-arm|boot-disarm|pull-arm)
     if [ "$DRY" = 0 ] && [ "$OK" = 0 ]; then
       echo "REFUSING: '$PHASE' changes this machine's state. Read the header of this script, then pass --i-understand (or --dry-run)." >&2; exit 2
     fi ;;
@@ -783,17 +804,31 @@ print(r[0] if r else "")' "$rid" 2>/dev/null)
 # leaves Images mounted if anything refuses.
 phase_restore_body() {
   local cur n
+  # The arm-4b scratch device first: it is this script's own, and nothing_booted below would refuse on it.
+  pull_cleanup || return 1
   if [ "$DRY" = 0 ]; then
     no_xcodebuild || return 1
     nothing_booted || return 1
+  fi
+  if ! is_mountpoint "$IMAGES" && [ -n "$(state_get pulled_at)" ]; then
+    # After arm 4b the runtime volumes may still be attached with their backing file gone, so "every runtime
+    # is attached" below would be wrong. Detach whatever is attached (any state), then rescan.
+    echo "   $IMAGES is not a mount point and arm 4b pulled the drive: detaching every runtime, then rescanning"
+    unmount_all_runtimes || { echo "!! a runtime would not detach after the pull — reboot to clear it, then restore again"; return 1; }
+    restart_daemon; snap post-rescan "$IMAGES"; return 0
   fi
   if ! is_mountpoint "$IMAGES"; then
     echo "   $IMAGES is not a mount point — nothing to unmount"
     # A stage that stopped after detaching the runtimes leaves them detached; only then rescan.
     local total
     total=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
-    if [ -n "$total" ] && [ "$(runtime_volume_count)" -ge "$total" ]; then echo "   every runtime is attached — nothing to do"
-    else echo "   $(runtime_volume_count) of ${total:-?} runtimes attached — rescanning"; restart_daemon; fi
+    # A volume count alone would count dead attachments too (review 4b #5): every runtime must also be Ready.
+    if all_runtimes_back; then echo "   every runtime is Ready and attached — nothing to do"
+    else
+      echo "   $(runtime_volume_count) of ${total:-?} runtimes attached — rescanning"; restart_daemon
+      # A pull nobody armed would otherwise read as done (note d).
+      all_runtimes_back || { echo "!! not every runtime is Ready and attached after the rescan — reboot, then restore again"; return 1; }
+    fi
     runtime_table; return 0
   fi
   cur=$(vol_field "$IMAGES" "Volume UUID")
@@ -826,6 +861,12 @@ phase_restore() {
   if [ -n "$staged_uuid" ] && [ "$staged_uuid" != "$VOLUUID" ]; then
     echo "RESULT: restore REFUSED — the state file says stage used $staged_uuid, not $VOLUUID"; return 1
   fi
+  # After a pull, Images may be a dead mount: listing or unmounting it can block in the kernel until a reboot
+  # (review 4b #1). With the drive gone, touch nothing; with it present, it is the NOT PULLED case.
+  if [ -n "$(state_get pulled_at)" ] && is_mountpoint "$IMAGES" && [ "$(drive_present)" != yes ]; then
+    echo "RESULT: restore REFUSED — STALE MOUNT: Images is still mounted with the drive gone. Shut down with the drive out,"
+    echo "        start up, then run restore again. Nothing was changed."; return 1
+  fi
   if is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ]; then
     snap restore-mounted "$IMAGES"
     if [ "$DRY" = 0 ] && [ -f "$SNAP_DIR/stage-mounted" ]; then
@@ -839,13 +880,33 @@ phase_restore() {
   phase_restore_body || { stop "restore refused (see the state below)"; return 1; }
   trap - INT TERM HUP
   [ "$DRY" = 1 ] && return 0
-  compare pre-mount post-umount "rule 6 — the internal store at the moment it is uncovered"
-  compare post-umount post-rescan "after simdiskimaged rescans (lastUsedAt churn expected)"
+  local pulled=0 shadow=0 incomplete=0
+  if [ -n "$(state_get pulled_at)" ]; then
+    pulled=1
+    echo "## rule 6 after the pull — internal store, listing and image set (images.plist apart), pre-mount -> post-rescan"
+    if diff <(store_view pre-mount) <(store_view post-rescan); then echo "   UNCHANGED"; else echo "   CHANGED (diff above)"; shadow=1; fi
+    echo
+    echo "## did every runtime come back?"
+    all_runtimes_back || incomplete=1
+    echo
+  else
+    compare pre-mount post-umount "rule 6 — the internal store at the moment it is uncovered"
+    compare post-umount post-rescan "after simdiskimaged rescans (lastUsedAt churn expected)"
+  fi
   runtime_table
   served_from
-  act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
-  if [ "$(state_get fstab)" = armed ]; then echo "!! the state file says the fstab arm is still in place — keeping it"; else rm -f "$STATE_FILE"; fi
-  if [ "$stranded" = 1 ]; then
+  if diskutil info "$VOLUUID" >/dev/null 2>&1; then act "give the volume back to /Volumes" sudo diskutil mount "$VOLUUID"
+  else echo "## the drive is not connected: reconnect it and it mounts in /Volumes (fstab is not armed)"; fi
+  # The pull's record outlives the state file (review 4b #2), and a bad outcome keeps the state file too.
+  [ "$pulled" = 1 ] && cp "$STATE_FILE" "$SNAP_DIR/pull-state-$(state_get pulled_at)" 2>/dev/null
+  if [ "$(state_get fstab)" = armed ]; then echo "!! the state file says the fstab arm is still in place — keeping it"
+  elif [ "$shadow" = 1 ] || [ "$incomplete" = 1 ]; then echo "!! keeping the state file: the pull's outcome needs reading first"
+  else rm -f "$STATE_FILE"; fi
+  if [ "$shadow" = 1 ]; then
+    echo "!!! RESULT: restore done, BUT the internal store changed after the pull (rule 6, diff above). Record it before anything else."
+  elif [ "$incomplete" = 1 ]; then
+    echo "!!! RESULT: restore INCOMPLETE — not every runtime is Ready and attached after the rescan. A reboot may clear it; then restore again."
+  elif [ "$stranded" = 1 ]; then
     echo "!!! RESULT: restore done, BUT the volume's image set changed while staged (diff above): something was"
     echo "!!! installed, imported or deleted there. A deletion loses nothing (the internal store still has it); an"
     echo "!!! installed or imported image is NOT in the internal store. Do not erase the volume until that is understood."
@@ -992,6 +1053,273 @@ phase_status() {
   echo
   runtime_table
   nothing_booted && echo "## no simulator booted"
+}
+
+# --- Arm 4b: pull the drive with the store in use ----------------------------------------------
+# A dead mount can block a probe in the kernel, where no signal reaches it (review 4b #3). So every probe
+# that can touch the drive runs in the background into a file; the caller polls it and, if it is still
+# running after N seconds, records it as stuck and moves on without waiting. A stuck probe counts as HUNG.
+PROBE_STUCK=""
+probe() { # probe <seconds> <name> <cmd...>  — output in $PROBE_OUT; returns 0 done, 124 stuck
+  local secs="$1" name="$2" pid; shift 2
+  # Each probe's file is removed when the next one starts (a stuck writer keeps its unlinked file); the last
+  # one is removed by the caller. It can hold a system-wide lsof listing (review 4b note c).
+  [ -n "${PROBE_OUT:-}" ] && rm -f "$PROBE_OUT"
+  PROBE_OUT=$(mktemp -t xcv-e20-probe) || return 124
+  "$@" > "$PROBE_OUT" 2>/dev/null < /dev/null &
+  pid=$!
+  for _ in $(seq 1 "$secs"); do
+    if ! kill -0 "$pid" 2>/dev/null; then wait "$pid" 2>/dev/null; return 0; fi
+    sleep 1
+  done
+  PROBE_STUCK="$PROBE_STUCK $name(pid $pid)"
+  return 124
+}
+tmo() { perl -e 'alarm shift; exec @ARGV or exit 127' "$@"; }   # bounds interruptible waits only
+drive_present() { # yes / no / stuck
+  probe 30 "diskutil-info" diskutil info "$VOLUUID" || { echo stuck; return; }
+  if grep -q "Volume UUID: *$VOLUUID" "$PROBE_OUT"; then echo yes; else echo no; fi
+  rm -f "$PROBE_OUT"
+}
+
+# Every OTHER volume on the staged volume's PHYSICAL drive, mounted or not: volumes in one APFS container
+# share its metadata, so a pull can damage a sibling that is not even mounted (mount-staging.sh, STATUS
+# E6b variant B; review 4b #6). Prints OK, OTHERS <list> or ERR <why>; fails closed.
+drive_verdict() {
+  local dev store phys
+  dev=$(vol_field "$IMAGES" "Device Identifier"); store=$(vol_field "$IMAGES" "APFS Physical Store")
+  phys=$(vol_field "${store:-/nonexistent}" "Part of Whole")
+  [ -n "$dev" ] && [ -n "$phys" ] || { echo "ERR cannot resolve the physical disk under Images"; return; }
+  diskutil list -plist 2>/dev/null | plutil -convert json -o - - 2>/dev/null | python3 -I -c '
+import json, sys
+phys, donor = sys.argv[1], sys.argv[2]
+try: d = json.load(sys.stdin)
+except Exception: print("ERR unreadable listing"); raise SystemExit
+ents = d.get("AllDisksAndPartitions", [])
+drive = [e for e in ents if e.get("DeviceIdentifier") == phys]
+if len(drive) != 1: print("ERR drive %s not listed" % phys); raise SystemExit
+others, stores, found = [], set(), False
+for p in drive[0].get("Partitions", []):
+    c = p.get("Content", "")
+    if c == "EFI": continue
+    if c == "Apple_APFS": stores.add(p.get("DeviceIdentifier")); continue
+    others.append("%s(%s)" % (p.get("DeviceIdentifier"), c or "no content"))
+for e in ents:
+    ps = {s.get("DeviceIdentifier") for s in e.get("APFSPhysicalStores", [])}
+    if not ps & stores: continue
+    for v in e.get("APFSVolumes", []):
+        if v.get("DeviceIdentifier") == donor: found = True
+        else: others.append(v.get("DeviceIdentifier"))
+if not found: print("ERR the staged volume %s is not among the volumes on %s" % (donor, phys)); raise SystemExit
+print("OK" if not others else "OTHERS " + " ".join(others))' "$phys" "$dev" || echo "ERR listing failed"
+}
+lsof_images() { # the open runtime-image lines, or UNREADABLE when lsof gave no listing at all (review 4b #4)
+  # Called in $(...), so PROBE_STUCK would be lost: a stuck lsof says STUCK instead, and the caller counts it.
+  probe 60 "lsof" sudo -n lsof -b -nP +c0 || { echo STUCK; return; }
+  # lsof may exit non-zero on -b warnings while still listing; judge by the output, not the exit code.
+  [ -s "$PROBE_OUT" ] || { rm -f "$PROBE_OUT"; echo UNREADABLE; return; }
+  grep -E '/CoreSimulator/Images/[0-9A-F-]+\.dmg' "$PROBE_OUT" || true
+  rm -f "$PROBE_OUT"
+}
+count_on() { # <lines> <device> — count, or UNREADABLE
+  case "$1" in UNREADABLE|STUCK) echo "$1"; return ;; esac
+  printf '%s\n' "$1" | awk -v d="$2" 'NF && $(NF-3) == d' | wc -l | tr -d ' '
+}
+# The scratch device pull-arm --live booted: shut down and deleted, its set removed. Only a set this script
+# recorded, directly under this user's temp directory or /private/tmp, holding nothing but a device set
+# (review 4b #7).
+pull_cleanup() {
+  local set parent tmpd f
+  set=$(state_get pull_set)
+  [ -n "$set" ] || return 0
+  tmpd=$(cd "${TMPDIR:-/private/tmp}" 2>/dev/null && pwd -P); parent=$(dirname "$set")
+  case "$set" in *..*) echo "!! the recorded scratch set '$set' contains '..' — not touching it"; return 1 ;; esac
+  case "${set##*/}" in xcv-e20-set.*) ;; *) echo "!! '$set' is not a set this script made — not touching it"; return 1 ;; esac
+  [ "$parent" = "$tmpd" ] || [ "$parent" = /private/tmp ] || { echo "!! '$set' is not in the temp directory — not touching it"; return 1; }
+  if [ -d "$set" ]; then
+    for f in "$set"/* "$set"/.[!.]*; do
+      [ -e "$f" ] || continue
+      case "${f##*/}" in device_set.plist|.lock) ;; *) [ -d "$f" ] && [ -f "$f/device.plist" ] && continue
+        echo "!! '$set' holds '${f##*/}', which is not part of a device set — not touching it"; return 1 ;; esac
+    done
+    act "shut down the arm-4b scratch device" tmo 120 xcrun simctl --set "$set" shutdown all
+    act "delete the arm-4b scratch device" tmo 120 xcrun simctl --set "$set" delete all || { echo "!! the scratch device would not delete — reboot, then restore again"; return 1; }
+    act "remove the scratch set" rm -rf "$set"
+  fi
+  [ "$DRY" = 1 ] || sed -i '' '/^pull_set=/d' "$STATE_FILE"
+}
+unmount_all_runtimes() { # any state, not just Ready: after a pull the runtimes are not Ready
+  local ids id
+  if [ "$DRY" = 1 ]; then act "unmount every runtime" xcrun simctl runtime unmount "<each runtime>"; return 0; fi
+  probe 60 "simctl-runtime-list" xcrun simctl runtime list -j || { echo "!! simctl does not answer"; return 1; }
+  ids=$(python3 -I -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))))' "$PROBE_OUT") || { echo "!! could not read the runtime list"; return 1; }
+  for id in $ids; do act "unmount runtime $id" tmo 120 xcrun simctl runtime unmount "$id" || true; done
+  [ "$(runtime_volume_count)" = 0 ] || { echo "!! $(runtime_volume_count) runtime volume(s) still attached"; return 1; }
+}
+all_runtimes_back() { # every runtime Ready and attached; prints the count
+  local total ready
+  total=$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
+  ready=$(runtime_ids 2>/dev/null | grep -c .)
+  echo "   runtimes: ${total:-?} total, ${ready:-?} Ready, $(runtime_volume_count) attached"
+  [ -n "$total" ] && [ "$total" -gt 0 ] && [ "$ready" = "$total" ] && [ "$(runtime_volume_count)" -ge "$total" ]
+}
+
+phase_pull_arm() {
+  local verdict lines n_ext set udid rt state
+  echo "## checks"
+  if [ "$DRY" = 0 ]; then
+    is_mountpoint "$IMAGES" && [ "$(vol_field "$IMAGES" "Volume UUID")" = "$VOLUUID" ] || { echo "RESULT: pull-arm REFUSED — Images is not staged with $VOLUUID; stage first"; return 1; }
+    if fstab_armed; then armed_banner; echo "RESULT: pull-arm REFUSED — disarm first, or a reconnect would remount over Images"; return 1; fi
+    [ -z "$(state_get pulled_at)" ] || { echo "RESULT: pull-arm REFUSED — a previous pull is not restored yet; run restore"; return 1; }
+    no_xcodebuild || { echo "RESULT: pull-arm REFUSED"; return 1; }
+    nothing_booted || { echo "RESULT: pull-arm REFUSED"; return 1; }
+  fi
+  verdict=$(drive_verdict)
+  echo "   other volumes on the staged volume's physical drive: $verdict"
+  case "$verdict" in
+    OK) ;;
+    OTHERS*) [ "$DRY" = 1 ] && echo "   [dry-run] a real run REFUSES here" || {
+      echo "RESULT: pull-arm REFUSED — the drive carries other volumes (${verdict#OTHERS }). Mounted or not, a pull can damage them:"
+      echo "        volumes in one APFS container share its metadata. Use a drive with nothing on it but the E20 volume."; return 1; } ;;
+    *) [ "$DRY" = 1 ] && echo "   [dry-run] a real run REFUSES here" || { echo "RESULT: pull-arm REFUSED — cannot establish what else is on the drive"; return 1; } ;;
+  esac
+  if [ "$DRY" = 0 ]; then
+    act "refresh sudo" sudo -v || return 1
+    lines=$(lsof_images); n_ext=$(count_on "$lines" "$(dev_of "$IMAGES")")
+    case "$n_ext" in UNREADABLE|STUCK|0) served_from; echo "RESULT: pull-arm REFUSED — no runtime image is seen open on the volume ($n_ext); the pull would test nothing"; return 1 ;; esac
+    echo "   $n_ext runtime image(s) open on the volume"
+  fi
+  served_from
+  if [ "$LIVE" = 1 ]; then
+    rt=$(xcrun simctl list runtimes -j 2>/dev/null | python3 -I -c '
+import json, sys
+r = [x["identifier"] for x in json.load(sys.stdin)["runtimes"] if x.get("isAvailable") and ".iOS-" in x["identifier"]]
+print(r[0] if r else "")')
+    [ -n "$rt" ] || { echo "RESULT: pull-arm FAILED — no available iOS runtime"; return 1; }
+    if [ "$DRY" = 1 ]; then
+      act "create a scratch device in a temp set" xcrun simctl --set "<temp set>" create xcv-e20-pull "$DEVICE_TYPE" "$rt"
+      act "boot it" xcrun simctl --set "<temp set>" boot "<udid>"
+    else
+      set=$(mktemp -d -t xcv-e20-set) || return 1; set=$(cd "$set" && pwd -P)
+      case "$set" in /private/var/folders/*|/private/tmp/*) ;; *) echo "REFUSING: unexpected temp location $set"; rmdir "$set"; return 1 ;; esac
+      printf 'pull_set=%s\n' "$set" >> "$STATE_FILE"
+      udid=$(xcrun simctl --set "$set" create xcv-e20-pull "$DEVICE_TYPE" "$rt" 2>&1) || { echo "!! create failed: $udid"; pull_cleanup; echo "RESULT: pull-arm FAILED at create"; return 1; }
+      xcv_run "boot" xcrun simctl --set "$set" boot "$udid"
+      state=""
+      for _ in $(seq 1 60); do
+        state=$(xcrun simctl --set "$set" list devices 2>/dev/null | grep "$udid" | sed -n 's/.*(\([A-Za-z ]*\)) *$/\1/p')
+        [ "$state" = "Booted" ] && break
+        sleep 5
+      done
+      [ "$state" = "Booted" ] || { pull_cleanup; echo "RESULT: pull-arm FAILED — the scratch device never booted"; return 1; }
+      echo "   scratch device $udid Booted on $rt (temp set, deleted by restore)"
+    fi
+  fi
+  if [ "$DRY" = 1 ]; then
+    echo
+    echo "RESULT: [dry-run] pull-arm rehearsed. Nothing was armed — do NOT pull the cable."
+    return 0
+  fi
+  CI_LOG=$(mktemp -t xcv-e20-pull-log) || CI_LOG=""
+  if [ -n "$CI_LOG" ]; then
+    # Not under sudo, detached, bounded: it outlives this script and ends by itself within 30 minutes.
+    # diskarbitrationd is left out: its lines name the drive's model and volumes, which the redactor cannot see.
+    nohup log stream --level info --style compact --timeout 30m \
+      --predicate 'process == "simdiskimaged" OR process == "diskimagesiod" OR process == "CoreSimulatorService"' \
+      > "$CI_LOG" 2>&1 < /dev/null &
+    printf 'pull_log=%s\npull_log_pid=%s\n' "$CI_LOG" "$!" >> "$STATE_FILE"
+    sleep 3
+  fi
+  printf 'pulled_at=%s\npull_mode=%s\n' "$(date +%s)" "$([ "$LIVE" = 1 ] && echo live || echo idle)" >> "$STATE_FILE"
+  echo
+  echo "RESULT: pull-arm done ($([ "$LIVE" = 1 ] && echo 'live: a simulator is booted on the volume' || echo 'idle: runtimes attached, nothing booted'))."
+  echo "        Save your work first: a reboot may be needed to clear what the pull leaves behind."
+  echo "        Then PULL THE DRIVE'S CABLE — do not eject. Wait 60 seconds, then run pull-check (within 30 minutes)."
+}
+
+phase_pull_check() {
+  local armed boot present mounted cur internal lines n_int hung_ps s1 s2 s3 simctl_ok crashes set host plog ppid rule6=""
+  armed=$(state_get pulled_at)
+  [ -n "$armed" ] || { echo "RESULT: pull-check — no pull-arm recorded; nothing to classify"; return 1; }
+  boot=$(sysctl -n kern.boottime | sed 's/^{ sec = \([0-9]*\).*/\1/')
+  echo "## pull-arm at $(date -r "$armed" '+%Y-%m-%d %H:%M:%S %z') ($(state_get pull_mode)); boot $(date -r "$boot" '+%Y-%m-%d %H:%M:%S %z')"
+  present=$(drive_present)
+  mounted=no; is_mountpoint "$IMAGES" && mounted=yes
+  cur=""
+  if [ "$mounted" = yes ]; then
+    if probe 30 "diskutil-info-images" diskutil info "$IMAGES"; then cur=$(sed -n 's/^ *Volume UUID: *//p' "$PROBE_OUT" | head -1); else cur="(no answer)"; fi
+  fi
+  echo "## drive present: $present; Images is a mount point: $mounted${cur:+ (volume $cur)}"
+  mount | grep -E " on ($IMAGES|$RTVOLUMES/)" | sed 's/^/   /' || echo "   (no Images or runtime-volume mount)"
+  echo "## runtime volumes in the mount table: $(runtime_volume_count)"
+  # Three samples ~5 s apart; only a process in uninterruptible wait in all three counts (review 4b #9).
+  sample() { ps -axo pid=,stat=,comm= | awk '$2 ~ /U/ && $3 ~ /simdiskimaged|diskimagesiod|launchd_sim|CoreSimulatorService|simctl/ {print $1, $3}' | sort; }
+  s1=$(sample); sleep 5; s2=$(sample); sleep 5; s3=$(sample)
+  hung_ps=$(comm -12 <(printf '%s\n' "$s1") <(printf '%s\n' "$s2") | comm -12 - <(printf '%s\n' "$s3") | grep . | sed 's/^/   /')
+  echo "## CoreSimulator processes in uninterruptible wait in three samples over 10 s:"; echo "${hung_ps:-   none}"
+  simctl_ok=yes
+  if probe 60 "simctl-runtime-list" xcrun simctl runtime list -j; then
+    python3 -I -c '
+import json, sys
+for k, v in json.load(open(sys.argv[1])).items():
+    print("  ", v.get("runtimeIdentifier"), "|", v.get("state"), "|", v.get("signatureState"), "|", v.get("path"))' "$PROBE_OUT" 2>/dev/null || echo "   (unparsable)"
+  else simctl_ok=no; fi
+  echo "## simctl runtime list answered within 60 s: $simctl_ok"
+  set=$(state_get pull_set)
+  if [ -n "$set" ]; then
+    echo "## scratch device (live arm):"
+    if probe 60 "simctl-list-devices" xcrun simctl --set "$set" list devices; then grep xcv-e20-pull "$PROBE_OUT" | sed 's/^ */   /' || echo "   (not listed)"
+    else echo "   (no answer)"; fi
+    if pgrep -f launchd_sim >/dev/null; then echo "   launchd_sim is still running"; else echo "   no launchd_sim running"; fi
+  fi
+  internal=$(dev_of /System/Volumes/Data)
+  sudo -v
+  lines=$(lsof_images); n_int=$(count_on "$lines" "$internal")
+  echo "## open runtime images (lsof -b, root) — internal data volume is $internal"
+  if [ "$lines" = UNREADABLE ] || [ "$lines" = STUCK ]; then echo "   $lines (no listing within 60 s)"; else printf '%s\n' "$lines" | awk 'NF {print "   " $1, $(NF-3), $NF}'; fi
+  echo "   on the internal disk: $n_int"
+  echo
+  # Crash-report names carry the host name; it is replaced (review 4b #8).
+  host=$(scutil --get LocalHostName 2>/dev/null)
+  crashes=$(find /Library/Logs/DiagnosticReports "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f -newermt "@$armed" 2>/dev/null |
+    grep -i -E 'panic|simdiskimaged|diskimagesiod|launchd_sim|CoreSimulator' | sed 's#.*/#   #')
+  [ -n "$host" ] && crashes=$(printf '%s' "$crashes" | sed "s/$host/<host>/g")
+  crashes=$(printf '%s' "$crashes" | sed -E 's/_[A-Za-z0-9-]+(\.(diag|panic|ips))$/_<host>\1/')
+  echo "## crash/panic reports newer than pull-arm:"; echo "${crashes:-   none}"
+  plog=$(state_get pull_log); ppid=$(state_get pull_log_pid)
+  if [ -n "$plog" ] && [ -f "$plog" ]; then
+    if [ -n "$ppid" ] && ps -p "$ppid" -o comm= 2>/dev/null | grep -q '^log$'; then kill "$ppid" 2>/dev/null; fi
+    echo "## log around the pull (info level, filtered)"
+    grep -i -E 'disappear|eject|unmount|remov|terminat|detach|error|fail|lost|not found|missing|stale|mount|scan|images\.plist|orphan' "$plog" | cut -c1-300 | tail -150
+    echo "   ($(wc -l < "$plog" | tr -d ' ') lines captured; the unfiltered stream is in \$TMPDIR as ${plog##*/} until the next reboot)"
+    echo
+  fi
+  # Only an uncovered Images is listed: a stale mount could block the listing in the kernel.
+  if [ "$mounted" = no ] && [ -f "$SNAP_DIR/pre-mount" ]; then
+    snap pull-after "$IMAGES" >/dev/null
+    echo "## rule 6 — the uncovered internal store after the pull (listing and image set, images.plist apart)"
+    if diff <(store_view pre-mount) <(store_view pull-after); then rule6=UNCHANGED; echo "   UNCHANGED"; else rule6=CHANGED; echo "   CHANGED (diff above)"; fi
+    echo "## images.plist apart:"; diff <(plist_view pre-mount) <(plist_view pull-after) && echo "   identical"
+    echo
+  fi
+  # drive_present and lsof_images run in $(...); their stuck probes come back as words, not in PROBE_STUCK.
+  [ "$present" = stuck ] && PROBE_STUCK="$PROBE_STUCK diskutil-info"
+  [ "$lines" = STUCK ] && PROBE_STUCK="$PROBE_STUCK lsof"
+  [ -n "$PROBE_STUCK" ] && echo "## probes still running (stuck, left behind):$PROBE_STUCK"
+  if [ "$present" = yes ] && [ "$mounted" = yes ] && [ "$cur" = "$VOLUUID" ]; then echo "RESULT: pull-check NOT PULLED — the drive is still present and mounted at Images"
+  elif [ "$boot" -gt "$armed" ] || printf '%s' "$crashes" | grep -q -i panic; then echo "RESULT: pull-check PANIC — the Mac restarted or panicked after the pull. This kills H20."
+  elif [ "$mounted" = yes ] && [ -z "$hung_ps" ] && [ "$simctl_ok" = yes ] && [ "$(printf '%s' "$PROBE_STUCK" | sed 's/(pid [0-9]*)//g' | xargs)" = diskutil-info-images ]; then
+    # The only thing that hung is asking diskutil about Images itself: that is the stale mount, not CoreSimulator (note a).
+    echo "RESULT: pull-check STALE MOUNT — Images is still a mount point and diskutil cannot describe it; shut down with the drive out, then restore"
+  elif [ -n "$hung_ps" ] || [ -n "$PROBE_STUCK" ] || [ "$simctl_ok" = no ]; then echo "RESULT: pull-check HUNG — CoreSimulator does not answer or a process is stuck in the kernel; a reboot is needed. This kills H20 for a product."
+  elif [ "$rule6" = CHANGED ]; then echo "RESULT: pull-check SHADOW — the internal store changed after the pull (rule 6). This kills H20."
+  elif [ "$mounted" = yes ]; then echo "RESULT: pull-check STALE MOUNT — Images is still a mount point (volume: ${cur:-unidentifiable}) with the drive gone; shut down with the drive out, then restore"
+  elif [ "$rule6" = UNCHANGED ] && [ "$n_int" != UNREADABLE ] && [ "$n_int" != STUCK ]; then
+    if [ "$n_int" -gt 0 ]; then echo "RESULT: pull-check SURVIVED, FALLBACK — internal store unchanged, nothing hung, $n_int runtime image(s) open on the internal disk again"
+    else echo "RESULT: pull-check SURVIVED, DETACHED — internal store unchanged, nothing hung, no runtime image open (they come back on restore's rescan)"; fi
+  else echo "RESULT: pull-check UNCLASSIFIED — read the sections above"; fi
+  echo "        Next: restore (it deletes the scratch device, detaches every runtime and rescans). Keep the drive out until then."
+  [ -n "${PROBE_OUT:-}" ] && rm -f "$PROBE_OUT"
 }
 
 # A dry run is a rehearsal, not evidence: it goes to a temp file, never into docs/research/evidence.
