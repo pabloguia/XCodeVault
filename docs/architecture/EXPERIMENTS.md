@@ -595,10 +595,14 @@ unmount (`scripts/experiments/e6b-mount-stub-reappearance.sh`) and a physical ca
 as a surprise removal. Procedure in `docs/process/RUNBOOK-E6b-disconnect.md`. Needs root, a
 disposable donor volume and, for the second variant, hands at the machine.
 
-**Status: blocked upstream, 2026-09-21.** Neither variant has produced a finding, because staging
-the mount fails: `mount_apfs` returns `Operation not permitted` to root at the cache path. See
-H14 in `HYPOTHESES.md` for the measurement and the reading rule, and E6c below for the experiment
-that separates the two explanations.
+**Status: run 2026-10-25 at `cryptex`, both variants, on a disposable USB flash drive.** Both left the
+pre-existing directory, empty, not a mount point; the yank behaved like the clean unmount. Recorded in
+H14 and `COMPATIBILITY_MATRIX.md` ("E6b variants A and B"). `dyld` was not run: it held a rebuilt
+cache, and the target must be empty.
+
+_Before that, 2026-09-21: blocked upstream._ Staging failed — `mount_apfs` returned `Operation not
+permitted` to root at the cache path. That was the caller's TCC posture (H15): with Full Disk Access
+the mount works (E6c below).
 
 ## E6c — is it the path or the mechanism? (unblocks E6b)
 

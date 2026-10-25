@@ -260,6 +260,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
   `scan` prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table)
   needing the evidence and review of a catalog decision.
 
+- **E6b — DONE 2026-10-25, both variants, at `Cryptex/Caches`** (branch `exp/e6b-variant-b`). On the operator's
+  disposable USB flash drive (`Removable`), the clean unmount and the physical yank left the same thing: the
+  pre-existing directory, empty, not a mount point, nothing written within a minute or after `simctl`. Issue #24's
+  premise is observed after a surprise removal; #29 can be closed with that result (the operator's call). `Caches/dyld`
+  was not run (it held a rebuilt cache). Matrix entry "E6b variants A and B", H14. The history of the block:
 - **E6b variant B, the physical yank — PENDING a disposable USB drive (operator, 2026-09-27).** The
   operator's USB SSD cannot be used: pulling its cable disconnects the whole drive, and it holds
   their data volume. A pendrive is preferred because it will likely report `Removable Media:
@@ -296,7 +301,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 **2026-10-25:** PR #56 (H20/E20) is ready for the user's review and merge. The operator now has a **disposable USB
 pendrive** (256 GB, reports `Removable`), which unblocks item 1 below (E6b variant B); E20 arm 4b already measured a
-physical pull of a runtime store from it.
+physical pull of a runtime store from it. **Later the same day: item 1 is done** (E6b, both variants, at
+`Cryptex/Caches`; branch `exp/e6b-variant-b`). Item 2 has a lead: `Caches/dyld`'s watchOS cache was
+rebuilt within minutes of E20 arm 3's `simctl runtime add` (H14, E6b pre-registration).
 
 **R8 first (2026-10-05):** the two mandatory reviews of the R8 branch, then the user's real-window run of **Turn On
 Ownership** with the signed build (H18; procedure in HYPOTHESES), which is also the helper's first live run (#30).
@@ -3642,3 +3649,12 @@ boot-check run before any restart reported BOOT PASS — the script now refuses 
 reviewer's insistence that a pull needs a drive with no other volume (shared APFS metadata) is the E6b rule, which
 the first draft had relaxed. Details in the matrix entries and H20.
 
+
+## 2026-10-25 — E6b: the physical yank at a cache path, and a lead on what rebuilds `Caches/dyld`
+
+The disposable flash drive unblocked the last hardware item of #29. `Caches/dyld` was not empty any more — 7.1 GB
+rebuilt for 25G241 — so the run targeted `Cryptex/Caches`, which the #24 guard also covers; the reading was
+pre-registered and committed first. Both variants on the same donor: the clean unmount and the pulled cable left the
+same empty `root:admin` directory, not a mount point, nothing written. A surprise removal behaved like a clean one.
+Found on the way, read-only: the watchOS cache was born within minutes of E20 arm 3's `simctl runtime add`, after a
+`runtime delete` had removed it — a candidate trigger for the rebuild (a runtime install), not yet a finding.
