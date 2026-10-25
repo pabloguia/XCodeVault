@@ -1,0 +1,308 @@
+# Experiment: E21 — does simctl runtime add rebuild the runtime's dyld shared cache? (phase run)
+# Date: 2026-10-25T15:31:16Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Target runtime: 28793F5D-57BF-4847-957A-D2C0AC7AC62B; control 5 min; watch 30 min
+
+## runtime list
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## busy check
+   idle (no xcodebuild, launchd_sim, Simulator)
+
+## cache tree before
+     0B  25G241/inc/  born=2026-09-30T09:46:41  mtime=2026-10-23T20:24:05  newest=
+   2.7G  25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570/  born=2026-10-23T20:22:43  mtime=2026-10-23T20:24:04  newest=2026-10-23T20:24:04
+   4.4G  25G241/com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77/  born=2026-09-30T09:48:19  mtime=2026-09-30T09:51:36  newest=2026-09-30T09:51:36
+   7.1G  25G241/  born=2026-09-30T09:46:41  mtime=2026-10-23T20:24:05  newest=2026-10-23T20:24:04
+
+## free on data volume: 16125 MB
+
+## target: watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B (Ready)
+   cache slug: watchOS-26-5.23T570; cache dir now: /Library/Developer/CoreSimulator/Caches/dyld/25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570
+
+## clone the image (APFS clonefile, read-only on the source)
+$ cp -c /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg ~/.xcodevault-e21-scratch/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+[exit=0]
+
+   free-space delta for the clone: -4 MB (a copy would be ~4999 MB)
+
+## delete at 2026-10-25T15:31:25Z
+## runtime delete
+$ xcrun simctl runtime delete 28793F5D-57BF-4847-957A-D2C0AC7AC62B
+[exit=0]
+
+   listed after delete: 0
+## cache tree after delete
+     0B  25G241/inc/  born=2026-09-30T09:46:41  mtime=2026-10-23T20:24:05  newest=
+   4.4G  25G241/  born=2026-09-30T09:46:41  mtime=2026-10-25T12:31:27  newest=2026-09-30T09:51:36
+   4.4G  25G241/com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77/  born=2026-09-30T09:48:19  mtime=2026-09-30T09:51:36  newest=2026-09-30T09:51:36
+
+## control window: 5 min, no request
+   2026-10-25T15:31:47Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:32:19Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:32:59Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:34:01Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:34:32Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:35:03Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:35:34Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:36:05Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:36:36Z  cache=absent  size_kb=  busy=none
+   2026-10-25T15:37:07Z  cache=absent  size_kb=  busy=none
+
+## add at 2026-10-25T15:37:40Z
+## runtime add (from the clone, not --move)
+$ xcrun simctl runtime add ~/.xcodevault-e21-scratch/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+D: 1B6C2113-1D3D-408D-9E94-E79647FF17CC watchOS (26.5 - 23T570) (Ready)
+
+[exit=0]
+
+   add took 65 s
+   back: watchOS 26.5 (23T570) - 1B6C2113-1D3D-408D-9E94-E79647FF17CC (Ready)
+
+## watch: every 30 s up to 30 min, stop after 3 equal non-zero sizes
+   2026-10-25T15:38:54Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:39:27Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:39:59Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:40:33Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:41:05Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:41:40Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:42:13Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/inc/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=0  busy=none
+   2026-10-25T15:42:45Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=2877356  busy=none
+   2026-10-25T15:43:17Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=2877356  busy=none
+   2026-10-25T15:43:48Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=2877356  busy=none
+   2026-10-25T15:44:19Z  cache=/Library/Developer/CoreSimulator/Caches/dyld/25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570  size_kb=2877356  busy=none
+
+## cache tree at end
+     0B  25G241/inc/  born=2026-09-30T09:46:41  mtime=2026-10-25T12:42:32  newest=
+   2.7G  25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570/  born=2026-10-25T12:38:47  mtime=2026-10-25T12:42:31  newest=2026-10-25T12:42:31
+   4.4G  25G241/com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77/  born=2026-09-30T09:48:19  mtime=2026-09-30T09:51:36  newest=2026-09-30T09:51:36
+   7.1G  25G241/  born=2026-09-30T09:46:41  mtime=2026-10-25T12:42:32  newest=2026-10-25T12:42:31
+
+## log stream, shared-cache lines (7958 lines; first 200)
+Filtering the log data using "composedMessage CONTAINS[c] "shared cache" OR composedMessage CONTAINS[c] "dyld_shared_cache" OR composedMessage CONTAINS[c] "DYLDSharedCache""
+Timestamp               Ty Process[PID:TID]
+2026-10-25 12:31:27.348 I  simdiskimaged[73281:47971c] [com.apple.CoreSimulator.simdiskimaged:DYLDCacheManager] Removing dyld shared cache for runtime identifier <private> and version <private>
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+=== Messages dropped during live streaming (use `log show` to see what they were)
+
+## runtime list at end
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - 1B6C2113-1D3D-408D-9E94-E79647FF17CC (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+clone removed (runtime is back and Ready)
+# done 2026-10-25T15:44:30Z

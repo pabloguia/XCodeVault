@@ -1567,3 +1567,25 @@ substitution may not be waved through. Issue #29 stays open.
 - Notes: first physical *removable* donor at a cache path (E6c run 8's SSD reported `Fixed`). Says nothing about
   `Caches/dyld`, where a writer exists, nor about writes later than about a minute. The donor label shows as `<vault>` in
   the evidence (the redactor masks it). Experimental (rule 10).
+
+### E21 — does `simctl runtime add` rebuild the runtime's dyld shared cache? — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-25
+- Hypothesis reference: H14 (the `Caches/dyld` writer; issue #24), H11
+- Test performed: `scripts/experiments/e21-dyld-rebuild-trigger.sh run --runtime <watchOS 26.5 UUID> --i-understand`, as
+  the operator, no sudo, rigs idle (the operator shut the two booted devices down first). APFS clone of the runtime's
+  image, `simctl runtime delete`, 5-minute control window, `simctl runtime add <clone>`, probes every 30 s. Reading
+  pre-registered in HYPOTHESES.md § E21 before the run (5d86b0d).
+- Result: **REBUILT ON ADD (pre-registered).** The cache entry went with the delete and stayed absent through the
+  control window; its build directory was born about 2 s after the add returned and reached its final 2.7G (same size
+  as before) about 4 minutes later. No simulator or `xcodebuild` in any probe. The re-added runtime got a new
+  disk-image UUID; the rig's watchOS device stayed available.
+- Evidence: `../research/evidence/e21-dyld-rebuild-run-macos26.7.1-25G241-xcode26.5-x86_64.txt` (and the `inspect` file
+  beside it).
+- Functional checks: simulator N/A (none booted, by the guard); runtime back `Ready`, existing device available;
+  xcodebuild N/A; physical device N/A
+- Verdict: a runtime install writes that runtime's shared cache into `Caches/dyld` unprompted, within seconds, about
+  2.7 GB for watchOS. A volume mounted at `Caches/dyld` that has gone away will receive a shadow cache on the internal
+  disk at the next runtime install. Issue #24's guard defends a state that ordinary use reaches.
+- Notes: watchOS only; iOS (4.4G) and an Xcode Components-pane install not run; first-boot rebuild not tested; Apple
+  Silicon unmeasured. Experimental (rule 10).

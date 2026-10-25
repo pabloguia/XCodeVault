@@ -28,8 +28,8 @@ Waiting on the operator, not on a branch: the H20 decision (an ADR, see "Next th
 _Moved here verbatim from "In flight" on 2026-10-25, newest first as they were. Words like "branch", "pending a
 review" or "never run" describe the entry when it was written; the merge is the current state._
 
-- **H20 / E20, runtimes served from an external volume mounted at `CoreSimulator/Images` — every arm run, PR #56 open
-  (branch `docs/runtimes-in-place-on-external`, 2026-10-22 → 10-25).** Research notes
+- **H20 / E20, runtimes served from an external volume mounted at `CoreSimulator/Images` — every arm run, MERGED (#56,
+  2026-10-25; branch `docs/runtimes-in-place-on-external`, 2026-10-22 → 10-25).** Research notes
   `docs/research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md` and `OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`;
   script `scripts/experiments/e20-images-mount.sh`; one matrix entry per run ("E20" … "E20 arm 4b, live"). Result,
   one machine (Intel, macOS 26.7.1, Xcode 26.5): stage/exercise PASS; installs work while mounted only through
@@ -313,21 +313,24 @@ review" or "never run" describe the entry when it was written; the merge is the 
 
 ## Next three actions
 
-**2026-10-25** (items 3–5 of `docs/process/SESSION-HANDOFF.md` "What to do, in priority order"; its items 1–2 —
-merge #57, this cleanup — are done):
+**2026-10-25, after E21:**
 
-1. **What rebuilds `Caches/dyld`** — the trigger is still unidentified (H11, H14), but there is now a lead: the watchOS
-   26.5 cache was rebuilt within minutes of E20 arm 3's `simctl runtime add` (H14, E6b pre-registration). A
-   pre-registered test on the internal disk is cheap; it costs one runtime's cache rebuild and touches the runtime
-   store, so it is the operator's to approve.
-2. **H20 → an ADR.** Record E20's result and the decision: "not now", or only an explicit mount that detaches every
+1. **H20 → an ADR.** Record E20's result and the decision: "not now", or only an explicit mount that detaches every
    runtime first, internal copy kept and verified, labeled experimental. A second machine (Apple Silicon) is the next
    gate either way. The decision is the operator's.
-3. **#30, Part F** — the helper live from the runbook on a clean start with a CI-signed build: `createVaultDirectory`
+2. **#30, Part F** — the helper live from the runbook on a clean start with a CI-signed build: `createVaultDirectory`
    (probably refused by TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out
    of a published release until both pass. Needs the operator at the Mac.
+3. **E21's open edges, optional** — whether a first boot with the `Caches/dyld` entry missing also rebuilds it, and
+   whether an Xcode Components-pane install fires the same `simdiskimaged` path (HYPOTHESES.md § E21 result). Each
+   costs one cache rebuild and an idle rig; neither changes a decision on record.
 
-Done on 2026-10-25 and so off the list: E6b (#57, issue #29 closed) and the SESSION-HANDOFF refresh (#58).
+Done on 2026-10-25 and so off the list: E6b (#57, issue #29 closed), the SESSION-HANDOFF refresh (#58), and **E21 —
+`simctl runtime add` rebuilds that runtime's `Caches/dyld` entry unprompted, ~2 s after the add returns, ~4 min to the
+final 2.7G (watchOS 26.5), nothing booted** (branch `exp/e21-dyld-rebuild-trigger`; H14 § E21 result; matrix "E21").
+
+_Superseded later on 2026-10-25 by the list above; kept as written:_ item 1 was "What rebuilds `Caches/dyld`" (now
+E21), items 2–3 as above.
 
 _Superseded 2026-10-25 by the list above; kept as written:_
 

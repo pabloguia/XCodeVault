@@ -682,3 +682,21 @@ can touch the drive run in the background under a deadline. `restore` deletes th
 a stale mount, detaches every runtime, rescans, compares the internal store with pre-mount, and keeps the state file
 when the outcome is bad. Migration-safety review: ship with fixes (10), fixes verified, ship.
 
+
+## E21 — does `simctl runtime add` rebuild that runtime's dyld shared cache? (H11, H14; issue #24's damage question)
+
+The writer of `Caches/dyld` is known (`simdiskimaged`'s `DYLDSharedCacheUpdater`); what makes it write is not. Two
+rebuilds are on record and neither was watched: after an OS update (H11), and the watchOS 26.5 entry born minutes after
+E20 arm 3 deleted and re-added that runtime. A device boot by the rigs did **not** rebuild an emptied cache in 12 and 17
+minutes (H14, 2026-09-26). E21 isolates the runtime add.
+
+**Procedure.** `scripts/experiments/e21-dyld-rebuild-trigger.sh inspect` (read-only), then
+`… run --runtime <UUID> --i-understand` with the rigs idle. As yourself, never sudo. It clones the runtime's image to
+`~/.xcodevault-e21-scratch` with `cp -c` (the free-space delta shows no copy), runs `simctl runtime delete`, waits a
+5-minute control window, runs `simctl runtime add` from the clone, then probes the runtime's cache entry every 30 s
+for up to 30 minutes, stopping after three equal non-zero sizes. A `log stream` for shared-cache messages runs
+throughout. The clone is removed only once the runtime is listed Ready again; if the add fails, the clone is kept and
+the re-add command printed.
+
+**Classification: destructive** (run-experiment skill table) — the runtime is absent for every rig during the run.
+Readings are pre-registered in HYPOTHESES.md H14 § "E21"; evidence `docs/research/evidence/e21-dyld-rebuild-run-<env>.txt`.

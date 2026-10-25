@@ -80,9 +80,9 @@ The last two pieces of research, in one paragraph each:
 2. **Bring STATUS's live sections in line with the tree**: move the merged R3–R8 entries out of "In
    flight", take the resolved release-build hang out of "Blocked", collapse "Next three actions" to one
    dated list, and retitle #30 to what is actually left (Part F).
-3. **What rebuilds `Caches/dyld`.** The candidate is now a runtime install (`simctl runtime add`),
-   from the timestamps above; first use on a new host build is the older candidate. A pre-registered
-   test on the internal disk is cheap but costs one runtime's cache rebuild. No drive needed.
+3. ~~**What rebuilds `Caches/dyld`.**~~ **Done 2026-10-25 (E21):** a `simctl runtime add` rebuilds that
+   runtime's entry unprompted, starting ~2 s after the add returns, nothing booted (HYPOTHESES.md § E21
+   result). First boot with the entry missing remains untested.
 4. **H20 → an ADR.** Record the result and the decision: either "not now", or only an explicit
    mount that detaches every runtime first, internal copy kept and verified, labeled experimental. A
    second machine (Apple Silicon) is the next gate either way.

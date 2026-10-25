@@ -2080,6 +2080,64 @@ a real state. **What it does not settle:** whether anything writes into the unco
 the rebuild trigger is still open — the cache's rebuild within minutes of a `runtime add`, recorded above, is the lead);
 Apple Silicon; non-USB media. ADR-0004 unchanged.
 
+### E21: does `simctl runtime add` rebuild the runtime's `Caches/dyld` entry? — the reading, fixed BEFORE the run *(written 2026-10-25; **run 2026-10-25: REBUILT ON ADD** — result below)*
+
+**Why.** Every rebuild on record so far was seen after the fact: H11's after an OS update, and the watchOS 26.5 cache
+born 2026-10-23 20:22–20:24 local, minutes after E20 arm 3's `runtime delete` + `runtime add`. Nobody watched either
+one. E21 watches: it deletes one runtime and re-adds it from an APFS clone of its own image, with a control window
+before the add and a watch window after it, no simulator booted and no `xcodebuild` running (the script refuses
+otherwise and records any that start). Script `scripts/experiments/e21-dyld-rebuild-trigger.sh`, protocol in
+EXPERIMENTS.md § E21. Target: watchOS 26.5 (23T570), the smallest runtime and the one with the lead; its cache entry
+was 2.7G, born 2026-10-23T20:22:43, read by `inspect` at 2026-10-25T06:06Z.
+
+**Readings**, from the probes of the runtime's own entry (`Caches/dyld/<hostBuild>/…watchOS-26-5.23T570`):
+
+- **REBUILT ON ADD** — the entry is absent after the delete and through the control window, then appears after the
+  add, within the watch window (30 min), with no simulator or `xcodebuild` seen in any probe ⇒ a runtime install
+  triggers the rebuild, unprompted. Record the delay from the add's end to the entry's birth and to a stable size.
+- **NOT WITHIN THE WINDOW** — absent through all of it ⇒ a runtime add alone does not rebuild within 30 minutes; the
+  2026-10-23 rebuild had another trigger (first use, or something E20 arm 3 did besides the add). The next candidate
+  is the first boot of a device on that runtime, which this run does not test.
+- **SURVIVED DELETE** — the entry is still present after the delete ⇒ E20's observation that a delete removes the
+  cache does not reproduce, and this run cannot see a rebuild except by the entry's birth time moving past the add.
+  Read the birth time; a birth before the add means no rebuild was observed.
+- **DURING CONTROL** — the entry appears before the add ⇒ not pre-registered; recorded with the probe it appeared in.
+- **CONFOUNDED** — any probe records `launchd_sim`, `Simulator` or `xcodebuild` ⇒ the reading is reported with that
+  qualifier, because a boot is the other candidate trigger.
+
+The `log stream` lines (`shared cache`, `DYLDSharedCache`) are descriptive: they may name the mechanism
+(`DYLDSharedCacheUpdater`, or the "Skipping automatic" decline recorded in September), but their absence decides
+nothing, for the persisted-vs-stream reason recorded above.
+
+**What it cannot answer.** iOS (larger, not tried); interactive Xcode or Simulator.app use; a runtime downloaded
+through Xcode's Components pane rather than added from a file; Apple Silicon.
+
+### E21 result — **REBUILT ON ADD** *(run 2026-10-25, macOS 26.7.1 25G241 · Xcode 26.5 · x86_64)*
+
+The pre-registered reading, clean: no probe saw `xcodebuild`, `launchd_sim` or `Simulator` (the operator shut the
+rigs' two booted devices down first). The entry was present before (2.7G, born 2026-10-23T20:22:43), **gone with the
+delete** (15:31:25Z; `simdiskimaged`'s `DYLDCacheManager` logged "Removing dyld shared cache for runtime identifier …"
+2 s later, so E20's observation reproduces) and absent through all ten control probes. The add (from the clone, 65 s)
+returned at about 15:38:45Z; the entry's build directory under `Caches/dyld/25G241/inc/` was **born 15:38:47Z — about
+two seconds after the add returned** — sat at 0 KB in `inc/` for about four minutes, and moved to its final place,
+2,877,356 KB (2.7G, the size it had before), at 15:42:31Z, stable for the next four probes. So: a runtime install
+rebuilds that runtime's shared cache **unprompted and at once**, in about four minutes for watchOS, with no boot and no
+request. This matches the 2026-10-23 rebuild's timing, which now has a measured mechanism rather than a lead.
+
+Side readings: the image `cp -c` cost nothing (−4 MB free-space delta against a 5 GB image); the re-added runtime has a
+**new disk-image UUID** (`1B6C2113…`, was `28793F5D…`), and the rig's existing watchOS device stayed available
+(`Shutdown`, no device went `unavailable`), consistent with devices binding to the runtime identifier rather
+than the image UUID (inferred, not tested further). The 7,958
+log-stream lines were mostly "Messages dropped"; only the removal line named the mechanism.
+
+**What it settles for H14 / issue #24.** At `Caches/dyld` the writer is now known and so is one event that fires it: any
+`simctl runtime add` (and, by the same `simdiskimaged` path, presumably an Xcode-driven runtime install — not tested).
+If a volume mounted at `Caches/dyld` goes away and a runtime is then installed, about 2.7–4.4 GB is written into the
+uncovered internal directory within minutes, with nothing booted. That is rule 6's shadow-data case, measured rather
+than inferred, and it is what issue #24's guard must catch. Evidence:
+`../research/evidence/e21-dyld-rebuild-run-macos26.7.1-25G241-xcode26.5-x86_64.txt`. Not answered: whether a first
+boot with the entry missing also rebuilds (this run never let it be missing at a boot); iOS; Apple Silicon.
+
 ## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **VERIFIED on macOS 26.7.1 · Intel**, 2026-10-04, by the user's manual check; other versions unmeasured)*
 
 **Claim.** One `open(2)` of a directory that TCC guards under Full Disk Access (`SystemPolicyAllFiles`) —

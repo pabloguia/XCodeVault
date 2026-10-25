@@ -1,0 +1,34 @@
+# Experiment: E21 — does simctl runtime add rebuild the runtime's dyld shared cache? (phase inspect)
+# Date: 2026-10-25T06:06:30Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: no
+
+# Target runtime: <none named>; control 5 min; watch 30 min
+
+## runtime list
+$ xcrun simctl runtime list
+== Disk Images ==
+-- iOS --
+iOS 26.5 (23F77) - 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B (Ready)
+-- watchOS --
+watchOS 26.5 (23T570) - 28793F5D-57BF-4847-957A-D2C0AC7AC62B (Ready)
+
+Total Disk Images: 2 (14.8G)
+[exit=0]
+
+## busy check
+   71273 launchd_sim
+   96130 launchd_sim
+   BUSY
+
+## cache tree before
+     0B  25G241/inc/  born=2026-09-30T09:46:41  mtime=2026-10-23T20:24:05  newest=
+   2.7G  25G241/com.apple.CoreSimulator.SimRuntime.watchOS-26-5.23T570/  born=2026-10-23T20:22:43  mtime=2026-10-23T20:24:04  newest=2026-10-23T20:24:04
+   4.4G  25G241/com.apple.CoreSimulator.SimRuntime.iOS-26-5.23F77/  born=2026-09-30T09:48:19  mtime=2026-09-30T09:51:36  newest=2026-09-30T09:51:36
+   7.1G  25G241/  born=2026-09-30T09:46:41  mtime=2026-10-23T20:24:05  newest=2026-10-23T20:24:04
+
+## free on data volume: 15487 MB
+
