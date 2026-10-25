@@ -19,7 +19,7 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
    | **scratch-only** | Creates its own `mktemp` set or `hdiutil` image and destroys only that. | `e1b`, `e2`, `e11`, `e12`, `e14b-control-internal`, `e18`, `e-diskprep` (erases and partitions only disk images it attached, behind a guard; H17), `e19-split-products` (only the pre-existing per-user `.TemporaryItems` on the named external volume, plus `~/.xcodevault-e19-scratch`), `e19-locations-keys` (same containment plus `~/.xcodevault-e19-keys-scratch`; `-IDE` arguments only, restores a key only if a probe changed it) |
    | **guarded, on a volume you name** | Writes to a real external volume the caller passes, behind `--i-understand` and a containment guard that refuses anything under `Library/Developer`, anything not under `/Volumes/<vol>/`, and any parent not on the volume's own device. Safe by construction, not by scratch. | `e14b-device-set-external`, `e14c` |
    | **root-required** | Needs `sudo`. If `sudo -n true` fails, write the exact commands into the evidence file as "pending — manual" and stop. | `e4b`, `e13` |
-   | **destructive** | Mutates the user's real environment. **Ask before running, every time.** | `e6`, `e6c-item4-attach-owner`, `e8b`, `e8c`, `e9`, `e13b`, `e15`, `e20` |
+   | **destructive** | Mutates the user's real environment. **Ask before running, every time.** | `e6`, `e6c-item4-attach-owner`, `e8b`, `e8c`, `e9`, `e13b`, `e15`, `e20`, `e21-dyld-rebuild-trigger` |
 
    Why each destructive one is destructive, so the list can be checked rather than trusted:
 
@@ -48,6 +48,10 @@ description: Run one of the gating experiments from docs/architecture/EXPERIMENT
      Its arm-5 phases also write `/etc/fstab` — persistent system configuration until `boot-disarm`.
      Its arm-4b phases end with the operator pulling the drive's cable with the store in use; they
      refuse unless the E20 volume is the only volume on its physical drive (a disposable drive).
+   - `e21-dyld-rebuild-trigger` (`run` phase) deletes a real runtime from the default runtime store and
+     re-adds it from an APFS clone of its own image, without sudo. It refuses with `xcodebuild` or any
+     simulator running and keeps the clone if the add fails; while it runs, that runtime is gone for
+     every rig on the machine. Its `inspect` phase is read-only.
 
    A `--set`-scoped `simctl` call is scratch; a bare one is not. That distinction is the whole
    difference between the second and fourth rows.
