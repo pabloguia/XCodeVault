@@ -1,0 +1,52 @@
+# Experiment: E20 images-store mount — phase pull-check
+# Date: 2026-10-25T02:32:41Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## pull-arm at 2026-10-24 23:31:01 -0300 (idle); boot 2026-10-24 22:30:36 -0300
+## drive present: no; Images is a mount point: no
+   (no Images or runtime-volume mount)
+## runtime volumes in the mount table: 0
+## CoreSimulator processes in uninterruptible wait in three samples over 10 s:
+   none
+   com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+## simctl runtime list answered within 60 s: yes
+## open runtime images (lsof -b, root) — internal data volume is 1,4
+   on the internal disk: 0
+
+## crash/panic reports newer than pull-arm:
+   none
+## log around the pull (info level, filtered)
+2026-10-24 23:31:18.282 E  diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] -[DIDiskArb onDiskDisappearedWithDisk:]: Mount point <private> disappeared
+2026-10-24 23:31:18.283 E  diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] -[DIDiskArb onDiskDisappearedWithDisk:]: Mount point <private> disappeared
+2026-10-24 23:31:18.290 Df diskimagesiod[68068:98083] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Forcing unmount of <private> (disk3s1)
+2026-10-24 23:31:18.291 Df diskimagesiod[68081:98082] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Forcing unmount of <private> (disk5s1)
+2026-10-24 23:31:18.292 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int FileLocal::_read: <509> Error reading file @ sg: buffer = 0x7fa1d2600000 [0x70000df52b58]  size = 184020 buffer_size = 184020 offset = 0x16d25f1 crypto = 0. returned -1 with errno: 5
+2026-10-24 23:31:18.292 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int CompressedBackend::read: <56> Internal backend read() failed. ret=-5
+2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int FileLocal::_read: <509> Error reading file @ sg: buffer = 0x7fc5b3bc5000 [0x700009fffb58]  size = 168612 buffer_size = 168612 offset = 0xd1d895 crypto = 0. returned -1 with errno: 5
+2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int CompressedBackend::read: <56> Internal backend read() failed. ret=-5
+2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int CommandDispatcherImpl::CommandDispatcherContextImpl::execute: <118> IO returned an error for command -5
+2026-10-24 23:31:18.293 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int CommandDispatcherImpl::CommandDispatcherContextImpl::execute: <118> IO returned an error for command -5
+2026-10-24 23:31:18.309 Df diskimagesiod[68068:98083] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Unmount done
+2026-10-24 23:31:18.309 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate exitDaemon]: # client connections at time of daemon termination: 0
+2026-10-24 23:31:18.310 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <182> Cancelling mach ports...
+2026-10-24 23:31:18.310 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <185> Waiting for barrier to complete
+2026-10-24 23:31:18.323 Df diskimagesiod[68081:98082] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Unmount done
+2026-10-24 23:31:18.325 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate exitDaemon]: # client connections at time of daemon termination: 0
+2026-10-24 23:31:18.326 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <182> Cancelling mach ports...
+2026-10-24 23:31:18.328 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <185> Waiting for barrier to complete
+   (30 lines captured; the unfiltered stream is in $TMPDIR as xcv-e20-pull-log.4tLx3eZx91 until the next reboot)
+
+## rule 6 — the uncovered internal store after the pull (listing and image set, images.plist apart)
+   UNCHANGED
+## images.plist apart:
+   identical
+
+RESULT: pull-check SURVIVED, DETACHED — internal store unchanged, nothing hung, no runtime image open (they come back on restore's rescan)
+        Next: restore (it deletes the scratch device, detaches every runtime and rescans). Keep the drive out until then.

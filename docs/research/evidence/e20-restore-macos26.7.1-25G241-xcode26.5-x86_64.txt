@@ -1,5 +1,5 @@
 # Experiment: E20 images-store mount — phase restore
-# Date: 2026-10-25T02:33:11Z
+# Date: 2026-10-25T02:54:06Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -14,11 +14,24 @@ devnode=/dev/disk9s1
 label=<vault>
 voldev=1,29
 mounter=diskutil
-staged=2026-10-25T02:17:47Z
-pull_log=<tmpdir>/xcv-e20-pull-log.4tLx3eZx91
-pull_log_pid=1225
-pulled_at=1792895461
-pull_mode=idle
+staged=2026-10-25T02:37:41Z
+pull_set=<tmpdir>/xcv-e20-set.kbCxQILTZ2
+pull_log=<tmpdir>/xcv-e20-pull-log.SxfrLMTYoX
+pull_log_pid=54047
+pulled_at=1792896409
+pull_mode=live
+
+## shut down the arm-4b scratch device
+$ tmo 120 xcrun simctl --set <tmpdir>/xcv-e20-set.kbCxQILTZ2 shutdown all
+[exit=0]
+
+## delete the arm-4b scratch device
+$ tmo 120 xcrun simctl --set <tmpdir>/xcv-e20-set.kbCxQILTZ2 delete all
+[exit=0]
+
+## remove the scratch set
+$ rm -rf <tmpdir>/xcv-e20-set.kbCxQILTZ2
+[exit=0]
 
    /Library/Developer/CoreSimulator/Images is not a mount point and arm 4b pulled the drive: detaching every runtime, then rescanning
 ## unmount runtime 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B
@@ -41,7 +54,7 @@ $ sudo launchctl kickstart -k system/com.apple.CoreSimulator.simdiskimaged
 	com.apple.provenance	         11 
 -rw-r--r--@ 1 root  admin  - 10597197700 Aug  6 15:05 99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
 	com.apple.provenance	         11 
--rw-r--r--  1 root  wheel  -        1669 Oct 24 23:33 images.plist
+-rw-r--r--  1 root  wheel  -        1669 Oct 24 23:54 images.plist
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 Inbox
 drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
 
@@ -56,7 +69,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-25 02:33:26 +0000
+      "lastStateChangeAt" => 2026-10-25 02:54:12 +0000
       "lastUsedAt" => 2026-10-23 21:54:19 +0000
       "mountingMode" => {
         "mountAsDMG" => {
@@ -102,7 +115,7 @@ drwxr-xr-x  2 root  admin  -          64 Sep  9 11:00 mnt
         "normal" => {
         }
       }
-      "lastStateChangeAt" => 2026-10-25 02:33:39 +0000
+      "lastStateChangeAt" => 2026-10-25 02:54:13 +0000
       "lastUsedAt" => 2026-10-23 21:40:59 +0000
       "mountingMode" => {
         "mountAsDMG" => {

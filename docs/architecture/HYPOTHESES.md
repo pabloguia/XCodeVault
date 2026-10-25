@@ -2335,3 +2335,12 @@ internal store was untouched (rule 6), and detach + rescan brought the internal 
 4b, idle"). CoreSimulator kept reporting the runtimes Ready with nothing attached, so a product would have to detect
 the pull and rescan itself. Still open: the same pull under a booted simulator (the live round).
 
+**E20 arm 4b, live round, 2026-10-24: a pull under a booted simulator is survivable — and CoreSimulator falls back
+silently.** Nothing hung or panicked, the simulator could be shut down, the internal store was not shadowed, and the
+runtimes were re-attached automatically from the internal copy underneath (matrix entry "E20 arm 4b, live"). **Every
+E20 arm has now run on one machine.** What H20 has shown: runtimes can be served from an external APFS volume mounted
+at `Images` through DiskArbitration; installs work while mounted, as copies via the internal disk; a boot with or
+without the drive is safe; a pull is survivable. What it rules out: any standing automatic mount (a late plug-in
+shadows the store), import as a clone, and any layout that deletes the internal copy — both the boot without the
+drive and the pull fall back to it. H20 stays **probable**, experimental, one machine (Intel, macOS 26.7.1, Xcode 26.5).
+

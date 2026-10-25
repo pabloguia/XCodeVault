@@ -1,5 +1,5 @@
 # Experiment: E20 images-store mount — phase pull-check
-# Date: 2026-10-25T02:32:41Z
+# Date: 2026-10-25T02:51:59Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -8,7 +8,7 @@
 
 # Hypothesis: H20
 
-## pull-arm at 2026-10-24 23:31:01 -0300 (idle); boot 2026-10-24 22:30:36 -0300
+## pull-arm at 2026-10-24 23:46:49 -0300 (live); boot 2026-10-24 22:30:36 -0300
 ## drive present: no; Images is a mount point: no
    (no Images or runtime-volume mount)
 ## runtime volumes in the mount table: 0
@@ -17,36 +17,86 @@
    com.apple.CoreSimulator.SimRuntime.iOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
    com.apple.CoreSimulator.SimRuntime.watchOS-26-5 | Ready | Verified | /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
 ## simctl runtime list answered within 60 s: yes
+## scratch device (live arm):
+   xcv-e20-pull (009AACAE-94C2-479A-8986-50114EB10626) (Booted) (unavailable, liblaunch_sim.dylib could not be opened)
+   launchd_sim is still running
 ## open runtime images (lsof -b, root) — internal data volume is 1,4
-   on the internal disk: 0
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg
+   diskimagesiod 1,4 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
+   on the internal disk: 2
 
 ## crash/panic reports newer than pull-arm:
    none
 ## log around the pull (info level, filtered)
-2026-10-24 23:31:18.282 E  diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] -[DIDiskArb onDiskDisappearedWithDisk:]: Mount point <private> disappeared
-2026-10-24 23:31:18.283 E  diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] -[DIDiskArb onDiskDisappearedWithDisk:]: Mount point <private> disappeared
-2026-10-24 23:31:18.290 Df diskimagesiod[68068:98083] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Forcing unmount of <private> (disk3s1)
-2026-10-24 23:31:18.291 Df diskimagesiod[68081:98082] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Forcing unmount of <private> (disk5s1)
-2026-10-24 23:31:18.292 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int FileLocal::_read: <509> Error reading file @ sg: buffer = 0x7fa1d2600000 [0x70000df52b58]  size = 184020 buffer_size = 184020 offset = 0x16d25f1 crypto = 0. returned -1 with errno: 5
-2026-10-24 23:31:18.292 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int CompressedBackend::read: <56> Internal backend read() failed. ret=-5
-2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int FileLocal::_read: <509> Error reading file @ sg: buffer = 0x7fc5b3bc5000 [0x700009fffb58]  size = 168612 buffer_size = 168612 offset = 0xd1d895 crypto = 0. returned -1 with errno: 5
-2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int CompressedBackend::read: <56> Internal backend read() failed. ret=-5
-2026-10-24 23:31:18.293 E  diskimagesiod[68081:99a0c] [com.apple.DiskImages2:Default] int CommandDispatcherImpl::CommandDispatcherContextImpl::execute: <118> IO returned an error for command -5
-2026-10-24 23:31:18.293 E  diskimagesiod[68068:99a0b] [com.apple.DiskImages2:Default] int CommandDispatcherImpl::CommandDispatcherContextImpl::execute: <118> IO returned an error for command -5
-2026-10-24 23:31:18.309 Df diskimagesiod[68068:98083] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Unmount done
-2026-10-24 23:31:18.309 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate exitDaemon]: # client connections at time of daemon termination: 0
-2026-10-24 23:31:18.310 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <182> Cancelling mach ports...
-2026-10-24 23:31:18.310 Df diskimagesiod[68068:81f53] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <185> Waiting for barrier to complete
-2026-10-24 23:31:18.323 Df diskimagesiod[68081:98082] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate unmountAll]: Unmount done
-2026-10-24 23:31:18.325 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] -[DIIODaemonDelegate exitDaemon]: # client connections at time of daemon termination: 0
-2026-10-24 23:31:18.326 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <182> Cancelling mach ports...
-2026-10-24 23:31:18.328 Df diskimagesiod[68081:81fa9] [com.apple.DiskImages2:Default] void ExecutionEngineCommand<CommandQueue, MachPort>::signal_terminate: <185> Waiting for barrier to complete
-   (30 lines captured; the unfiltered stream is in $TMPDIR as xcv-e20-pull-log.4tLx3eZx91 until the next reboot)
+   (6 lines captured; the unfiltered stream is in $TMPDIR as xcv-e20-pull-log.SxfrLMTYoX until the next reboot)
 
 ## rule 6 — the uncovered internal store after the pull (listing and image set, images.plist apart)
    UNCHANGED
 ## images.plist apart:
-   identical
+9,10c9,10
+<       "lastStateChangeAt" => 2026-10-25 02:40:09 +0000
+<       "lastUsedAt" => 2026-10-23 21:54:19 +0000
+---
+>       "lastStateChangeAt" => 2026-10-25 02:40:10 +0000
+>       "lastUsedAt" => 2026-10-23 21:40:59 +0000
+20c20
+<         "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+---
+>         "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+23,24c23,24
+<         "build" => "23F77"
+<         "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+---
+>         "build" => "23T570"
+>         "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+26c26
+<           "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+---
+>           "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+29c29
+<         "platformIdentifier" => "com.apple.platform.iphonesimulator"
+---
+>         "platformIdentifier" => "com.apple.platform.watchsimulator"
+41c41
+<         "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+---
+>         "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+44c44
+<       "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
+---
+>       "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+55,56c55,56
+<       "lastStateChangeAt" => 2026-10-25 02:40:10 +0000
+<       "lastUsedAt" => 2026-10-23 21:40:59 +0000
+---
+>       "lastStateChangeAt" => 2026-10-25 02:40:09 +0000
+>       "lastUsedAt" => 2026-10-23 21:54:19 +0000
+66c66
+<         "relative" => "file:///Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg"
+---
+>         "relative" => "file:///Library/Developer/CoreSimulator/Images/99ABCCEF-23E0-461E-BE5B-CC7E85F8542B.dmg"
+69,70c69,70
+<         "build" => "23T570"
+<         "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.watchOS-26-5"
+---
+>         "build" => "23F77"
+>         "bundleIdentifier" => "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+72c72
+<           "relative" => "file:///Library/Developer/CoreSimulator/Volumes/watchOS_23T570/Library/Developer/CoreSimulator/Profiles/Runtimes/watchOS%2026.5.simruntime/"
+---
+>           "relative" => "file:///Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.5.simruntime/"
+75c75
+<         "platformIdentifier" => "com.apple.platform.watchsimulator"
+---
+>         "platformIdentifier" => "com.apple.platform.iphonesimulator"
+87c87
+<         "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/BE58C4EF-37F4-4DA3-8107-5E6E19B1063F.dmg"
+---
+>         "relative" => "file:///Library/Developer/CoreSimulator/Cryptex/Images/Inbox/8DF0375B-3B53-47A5-AFBF-0B4409C9B25E.dmg"
+90c90
+<       "uuid" => "28793F5D-57BF-4847-957A-D2C0AC7AC62B"
+---
+>       "uuid" => "99ABCCEF-23E0-461E-BE5B-CC7E85F8542B"
 
-RESULT: pull-check SURVIVED, DETACHED — internal store unchanged, nothing hung, no runtime image open (they come back on restore's rescan)
+RESULT: pull-check SURVIVED, FALLBACK — internal store unchanged, nothing hung, 2 runtime image(s) open on the internal disk again
         Next: restore (it deletes the scratch device, detaches every runtime and rescans). Keep the drive out until then.

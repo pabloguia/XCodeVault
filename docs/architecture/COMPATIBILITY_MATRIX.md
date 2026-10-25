@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b idle pull SURVIVED (runtimes detached, internal store unchanged), live pull open; arm 4b open. See the entry at the end of this file |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b: idle pull SURVIVED (runtimes detached), live pull under a booted simulator SURVIVED (FALLBACK to the internal copy); internal store unchanged in both; arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1500,7 +1500,7 @@ substitution may not be waved through. Issue #29 stays open.
   One misleading reading: simctl still listed both runtimes **Ready + Verified** at the `Images` paths while no
   runtime volume was attached at all. `restore` detached both (simctl reported success), rescanned, and both came
   back Ready and attached from the internal disk (1,4); rule 6 unchanged again.
-- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt` (the refused attempt: `-superseded-20261024T231445`), `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence: `../research/evidence/e20-preflight-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T232415.txt` (the refused attempt: `-superseded-20261024T231445`), `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233101.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233259.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261024T233354.txt`.
 - Functional checks: simulator N/A (none booted, by design of this round); xcodebuild N/A; physical device N/A
 - Verdict: **an idle pull is survivable**: the system tears the runtime volumes down cleanly, nothing is written to
   the uncovered internal store, and a detach + rescan brings the internal runtimes back. Two cautions for a product:
@@ -1509,3 +1509,35 @@ substitution may not be waved through. Issue #29 stays open.
   The case that matters most, a pull under a booted simulator, is the live round, still open.
 - Notes: the evidence labels the volume `<vault>P`: the redactor masks every mounted vault label, and the SSD's
   `XCV-E20` was still mounted, so it matched first. Experimental (rule 10).
+
+### E20 arm 4b, live — the drive pulled under a booted simulator — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 4b)
+- Test performed: the same disposable flash drive, right after the idle round. `diskutil verifyVolume` on it first
+  (the idle pull had left it unclean): **appears to be OK**, fsck exit 0. `stage --reuse-copy --mount-with diskutil`
+  (copy re-verified byte for byte; both images open on the drive, 1,29), `pull-arm --live` (an iPhone 17 Pro scratch
+  device in a temp `--set`, Booted on iOS 26.5 from the drive), then — by mistake — a `pull-check` with the drive
+  still in (NOT PULLED, kept as `-superseded-20261024T234732`), which also stopped pull-arm's log stream. The cable was
+  then pulled without ejecting, and `pull-check` and `restore` followed.
+- Result: **SURVIVED, FALLBACK (pre-registered).** No panic, no crash report, no process in uninterruptible wait
+  across three samples, simctl answered at once. The `Images` mount and both runtime volumes were gone, and by the
+  check **both runtime images were open again on the internal disk** (1,4): CoreSimulator re-attached them from the
+  uncovered internal copy on its own (`mountPolicy: automatic`). The booted device read
+  `(Booted) (unavailable, liblaunch_sim.dylib could not be opened)` with `launchd_sim` still running — alive, but with
+  its runtime pulled from under it. **Rule 6: UNCHANGED** for listing and image set; `images.plist` was rewritten
+  with the same entries in swapped order, consistent with the automatic re-attach. `restore` shut the device down and
+  deleted it without hanging, detached and rescanned; both runtimes Ready and attached from 1,4.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-arm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-pull-check-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator — booted on the drive, then left unavailable by the pull (not exercised further);
+  xcodebuild N/A; physical device N/A
+- Verdict: **a pull under a booted simulator is survivable on this machine**: the system did not hang, the simulator
+  could be shut down normally, and nothing shadowed the internal store. The fallback is the important and double-
+  edged finding: CoreSimulator silently switches to whatever sits at `Images` underneath. Here that was the intact
+  internal copy, so the switch was harmless. In a product that removed the internal copy it would find an empty
+  store, and in one whose internal copy had drifted it would silently run a different runtime. So H20 can only ever
+  ship with the internal copy kept and verified, or with the product detecting the pull and reacting first.
+- Notes: the log of the pull itself was not captured — the mistaken first check had stopped the stream and it was
+  not restarted (the stream file has 6 lines, all from before the pull); `pull-check` should not stop the stream on a
+  NOT PULLED reading. The verification after the idle pull also shows the unclean removal left the APFS volume
+  consistent. Experimental (rule 10).

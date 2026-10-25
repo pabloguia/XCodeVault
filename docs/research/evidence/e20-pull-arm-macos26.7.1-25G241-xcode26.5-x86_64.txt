@@ -1,5 +1,5 @@
 # Experiment: E20 images-store mount — phase pull-arm
-# Date: 2026-10-25T02:30:43Z
+# Date: 2026-10-25T02:46:25Z
 # macOS: 26.7.1 (25G241)
 # Arch: x86_64
 # Xcode: Xcode 26.5 Build version 17F42 
@@ -23,7 +23,12 @@ $ sudo -v
    diskimagesiod 1,29 /Library/Developer/CoreSimulator/Images/28793F5D-57BF-4847-957A-D2C0AC7AC62B.dmg
    (no line above = no visible holder; see the ordering argument)
 
+## boot
+$ xcrun simctl --set <tmpdir>/xcv-e20-set.kbCxQILTZ2 boot 009AACAE-94C2-479A-8986-50114EB10626
+[exit=0]
 
-RESULT: pull-arm done (idle: runtimes attached, nothing booted).
+   scratch device 009AACAE-94C2-479A-8986-50114EB10626 Booted on com.apple.CoreSimulator.SimRuntime.iOS-26-5 (temp set, deleted by restore)
+
+RESULT: pull-arm done (live: a simulator is booted on the volume).
         Save your work first: a reboot may be needed to clear what the pull leaves behind.
         Then PULL THE DRIVE'S CABLE — do not eject. Wait 60 seconds, then run pull-check (within 30 minutes).

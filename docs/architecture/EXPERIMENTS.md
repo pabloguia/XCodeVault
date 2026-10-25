@@ -668,7 +668,7 @@ MOUNT / NO OWNERS / SHADOW / ABSENT / NOT MOUNTED; `boot-disarm` removes exactly
 the entry is present, so a forgotten arm cannot be erased from the record. Migration-safety review: ship with fixes,
 fixes verified, ship.
 
-**Arm 4b, pull the drive with the store in use (written 2026-10-24; idle round run 2026-10-24 — SURVIVED, DETACHED, matrix entry "E20 arm 4b, idle"; live round not run).** `pull-arm` (staged, fstab disarmed,
+**Arm 4b, pull the drive with the store in use (written 2026-10-24; idle round run 2026-10-24 — SURVIVED, DETACHED, matrix entry "E20 arm 4b, idle"; live round run 2026-10-24 — SURVIVED, FALLBACK, "E20 arm 4b, live". Arm 4b complete).** `pull-arm` (staged, fstab disarmed,
 runtimes open on the volume, and the E20 volume the **only** volume on its physical drive, mounted or not — volumes
 in one APFS container share its metadata, so the operator's SSD is refused and a disposable drive is needed) records
 a baseline, starts a bounded log stream, and with `--live` boots a scratch device on the volume's runtime; the

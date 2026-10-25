@@ -1288,7 +1288,8 @@ for k, v in json.load(open(sys.argv[1])).items():
   echo "## crash/panic reports newer than pull-arm:"; echo "${crashes:-   none}"
   plog=$(state_get pull_log); ppid=$(state_get pull_log_pid)
   if [ -n "$plog" ] && [ -f "$plog" ]; then
-    if [ -n "$ppid" ] && ps -p "$ppid" -o comm= 2>/dev/null | grep -q '^log$'; then kill "$ppid" 2>/dev/null; fi
+    # A check before the pull (NOT PULLED) must leave the stream running, or the pull itself goes unlogged.
+    if [ "$present" != yes ] && [ -n "$ppid" ] && ps -p "$ppid" -o comm= 2>/dev/null | grep -q '^log$'; then kill "$ppid" 2>/dev/null; fi
     echo "## log around the pull (info level, filtered)"
     grep -i -E 'disappear|eject|unmount|remov|terminat|detach|error|fail|lost|not found|missing|stale|mount|scan|images\.plist|orphan' "$plog" | cut -c1-300 | tail -150
     echo "   ($(wc -l < "$plog" | tr -d ' ') lines captured; the unfiltered stream is in \$TMPDIR as ${plog##*/} until the next reboot)"
