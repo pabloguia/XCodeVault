@@ -1984,6 +1984,70 @@ still 0 entries with its mtime at 2026-09-25 19:19. Two instruments, read separa
 Limits: the tracker says a runtime was used, not by whom or how, so this cannot be counted as
 interactive use. These are the agent's own commands and are not in an evidence file.
 
+### E6b variant B, the physical yank at `Cryptex/Caches` — the reading, fixed BEFORE the run *(written 2026-10-25; run pending)*
+
+**Why now, and why this target.** The disposable flash drive variant B was waiting for is here (256 GB, `Protocol:
+USB`, `Removable Media: Removable`, read 2026-10-25; the same drive E20 arm 4b pulled). The target is `cryptex`
+(`/Library/Developer/CoreSimulator/Cryptex/Caches`), not `dyld`, because `xcv_stage_guard_target` refuses a
+non-empty target and `Caches/dyld` is no longer empty: read-only on 2026-10-25 it held `25G241/` (7.1 GB), the iOS
+26.5 cache born 2026-09-30 09:46–09:51 local and the watchOS 26.5 cache born 2026-10-23 20:22–20:24 local — within
+minutes of E20 arm 3's `simctl runtime add` of watchOS 26.5 (its evidence file is dated 2026-10-23T23:20:26Z, the
+add took 51 s), the add that followed a `runtime delete` which had removed that runtime's cache. That timing is a lead for the
+rebuild trigger (a runtime install), recorded here as an observation, not a reading. Clearing a 7.1 GB cache to
+test the other target is not worth it: issue #24's guard covers both targets, so a `cryptex` run is evidence for
+the guard; it is **not** evidence about `dyld`, whose directory has a known writer (`simdiskimaged`'s
+`DYLDSharedCacheUpdater`). `Cryptex/Caches` has been empty with an unchanged mtime (2025-07-23) through every
+reading on record, so no writer is known for it, and an empty `entries` line there says less than it would at
+`dyld`.
+
+**What is new against what is recorded.** E6c run 8 mounted a physical volume at a cache path, but a `Fixed` one,
+and tore it down cleanly. H14 (2026-09-26) observed the mount point back as a plain directory after a clean
+DiskArbitration unmount of a disk image. E20 arm 4b pulled this drive while it was mounted at `CoreSimulator/Images`
+— a different path, with `diskimagesiod` holding files on it. This run is the first surprise removal at a cache
+path, and the first physical *removable* donor at one.
+
+**Setup (operator).** The drive erased as APFS (GUID) with one volume, so the drive holds an EFI partition and one
+container with the donor as its only volume — what `xcv_stage_refuse_other_volumes_on_drive` requires. Run from the
+Terminal holding Full Disk Access, rigs idle, nothing booted. Variant A on the same donor first, so the clean
+unmount and the yank can be read side by side (the runbook asks for both before either is the answer).
+
+**Admissibility.** The header reads `TCC indicator: TCC.db opened by this process`. Probe 0: a directory,
+`root:admin`, `drwxr-xr-x`, `entries: 0`, `is a mount point per mount(8): 0`, and no `NOTE: … created by this run`
+line (a created target makes a plain-directory reading ambiguous; it pre-exists here). Probe 1: the containing
+filesystem is the donor's node and the mount count is 1. `disconnect observed at …` is present. No `!!` line. A run
+that fails any of these records nothing to read.
+
+**The reading, probes 2–5** (immediately, +10 s, +1 min, after `simctl` as the operator):
+
+- **PLAIN DIRECTORY** — every probe exists as a directory, mount count 0, containing filesystem the internal data
+  volume, `entries: 0`, owner and mode as probe 0 ⇒ a surprise removal leaves what a clean unmount leaves: the mount
+  point, empty. Issue #24's guarded state is reachable by a yank, by mount semantics, and nothing wrote into it in
+  that window at this target. This is the expected outcome; it is a confirmation, not a discovery.
+- **WRITTEN** — as above but `entries` > 0 in any probe ⇒ something wrote into the uncovered local directory: shadow
+  data at a cache path, the rule-6 case. Record the first probe at which it appears and what the entries are. This is
+  the reading that would make #24's split brain observed rather than inferred.
+- **STALE MOUNT** — mount count ≥ 1, or the containing filesystem still names the donor's node, in any probe after
+  the disconnect was observed ⇒ the kernel lists a mount for a vanished device. Record which probes; the helper's
+  mount-status check would see a mount point there.
+- **ABSENT** — the target does not exist ⇒ something removed the mount point, contrary to mount semantics. New.
+- **CHANGED** — owner or mode differs from probe 0 ⇒ recorded as found, not interpreted.
+
+**Probe 6, after reconnect** (descriptive, for issue #26): where the donor came back (`/Volumes/<label>` or
+`/Volumes/<label> 1`). If the target is a mount point again after reconnect ⇒ something re-mounted the donor at the
+cache path on its own; not expected (no `/etc/fstab` exists) and not pre-registered beyond being recorded as
+the most serious finding of the run.
+
+**Variant A, same donor, before B** (probes after a bare `umount`): the same five readings apply to its probes 2–4.
+Only a difference between A and B is new information; agreement is the expected result.
+
+**Also recorded, in either variant:** a probe that blocks (more than two minutes without output), a panic, or a
+crash report is a survivability failure and is recorded as such. Any pattern not listed above is recorded as not
+pre-registered.
+
+**What it cannot answer.** `Caches/dyld` itself; whether a writer appears later than one minute or on a runtime
+install (no simulator is booted, by the guard); Apple Silicon; non-USB media; the product's own teardown (this is a
+bare `mount_apfs`, and the product does not mount at cache paths — ADR-0004).
+
 ## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **VERIFIED on macOS 26.7.1 · Intel**, 2026-10-04, by the user's manual check; other versions unmeasured)*
 
 **Claim.** One `open(2)` of a directory that TCC guards under Full Disk Access (`SystemPolicyAllFiles`) —
