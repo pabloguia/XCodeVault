@@ -2048,6 +2048,38 @@ pre-registered.
 install (no simulator is booted, by the guard); Apple Silicon; non-USB media; the product's own teardown (this is a
 bare `mount_apfs`, and the product does not mount at cache paths — ADR-0004).
 
+### E6b variants A and B at `Cryptex/Caches`: RESULT *(run 2026-10-25T03:26Z and 03:28Z; read against the rules above, unedited)*
+
+Evidence: `docs/research/evidence/e6b-mount-stub-cryptex-macos26.7.1-25G241-xcode26.5-x86_64.txt` (A) and
+`docs/research/evidence/e6b-physical-cryptex-macos26.7.1-25G241-xcode26.5-x86_64.txt` (B). The pre-registration was
+committed before either run (5539e68).
+
+**Admissibility, both files.** `TCC indicator: TCC.db opened by this process`; probe 0 a directory, `root:admin`,
+`drwxr-xr-x`, mount count 0, `entries: 0`, on the internal data volume; no `NOTE: … created by this run`; probe 1 the
+donor's node (`/dev/disk9s1`) mounted at the target, mount count 1; no `!!` line. B also has `disconnect observed at
+2026-10-25T03:29:26Z: device node and UUID are both gone`. The donor was the only volume on its drive (an EFI
+partition and one APFS container holding only it, read by the agent before A), `Protocol: USB`, `Removable Media:
+Removable`, named by `--donor-uuid`.
+
+**Reading: PLAIN DIRECTORY, in both variants, at every probe.** A's probes 2–4 (after a bare `umount`, +10 s, after
+`simctl`) and B's probes 2–5 (after the pull, +10 s, +1 min, after `simctl`) are the same four lines as probe 0:
+`type=Directory mode=drwxr-xr-x owner=root:admin links=2`, the internal data volume's device, mount count 0,
+`entries: 0`. A and B do not differ, so the surprise removal adds no new state at this path: no stale mount, nothing
+written into the uncovered directory, owner and mode unchanged.
+
+**Probe 6, after reconnect:** the donor came back at `/Volumes/<label>` (no ` 1` suffix), and the target stayed a
+plain, empty directory that is not a mount point — nothing re-mounted the donor at the cache path. Afterwards the
+operator ran `diskutil verifyVolume` on the donor: `appears to be OK`, fsck exit 0, so the unclean removal left the
+volume consistent (as in E20 arm 4b).
+
+**What it settles for issue #29.** The premise of issue #24 — "a plain directory where a mount point used to be" — is
+reachable after a surprise removal as well as after a clean unmount, measured now at a cache path with a physical
+removable donor: it is the pre-existing mount point, and nothing reappears or is recreated. The #24 guard is defending
+a real state. **What it does not settle:** whether anything writes into the uncovered directory later or on some event
+(at `Cryptex/Caches` no writer is known, so `entries: 0` here is weak evidence; at `Caches/dyld` a writer exists and
+the rebuild trigger is still open — the cache's rebuild within minutes of a `runtime add`, recorded above, is the lead);
+Apple Silicon; non-USB media. ADR-0004 unchanged.
+
 ## H16 — opening a folder Full Disk Access guards puts the app in the pane's list *(new, 2026-10-04; **VERIFIED on macOS 26.7.1 · Intel**, 2026-10-04, by the user's manual check; other versions unmeasured)*
 
 **Claim.** One `open(2)` of a directory that TCC guards under Full Disk Access (`SystemPolicyAllFiles`) —

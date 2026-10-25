@@ -83,7 +83,7 @@ Two of its answers are worth knowing before you start:
 ### Variant A — software unmount (run this first)
 
 ```
-sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume> <dyld|cryptex>
+sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<your-donor-volume> <dyld|cryptex> --donor-uuid <Volume UUID>
 ```
 
 It mounts the donor at the cache path, probes, unmounts, and probes again — immediately, after ten
@@ -103,7 +103,7 @@ succeeded — which would have made every probe read `absent`, the headline find
 ### Variant B — physical yank (this is the case the issue describes)
 
 ```
-sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<your-donor-volume> <dyld|cryptex>
+sudo scripts/experiments/e6b-physical-disconnect.sh /Volumes/<your-donor-volume> <dyld|cryptex> --donor-uuid <Volume UUID>
 ```
 
 It shares its staging with variant A, so the same guards apply: donor unmounted first, refusal of

@@ -1,0 +1,87 @@
+# Experiment: E6b variant B: physical disconnect of a volume mounted at /Library/Developer/CoreSimulator/Cryptex/Caches
+# Date: 2026-10-25T03:28:54Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: root (uid 0); sudo available: yes
+
+donor: /Volumes/<vault> (/dev/disk9s1, APFS, whole disk disk9, UUID <vault-uuid>)
+TCC indicator: TCC.db opened by this process — Full Disk Access reaches it
+
+Variant A (clean umount) is in e6b-mount-stub-reappearance.sh; both belong in HYPOTHESES.md
+before either is treated as the answer.
+
+--- 0. before anything ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+
+==================== stage the mount ====================
+## unmount donor from its mount point
+$ diskutil unmount /dev/disk9s1
+Volume <vault> on disk9s1 unmounted
+[exit=0]
+
+## mount /dev/disk9s1 at /Library/Developer/CoreSimulator/Cryptex/Caches
+$ mount_apfs -o nobrowse /dev/disk9s1 /Library/Developer/CoreSimulator/Cryptex/Caches
+[exit=0]
+
+--- 1. while mounted (verified as /dev/disk9s1) ---
+  exists: type=Directory mode=drwxrwxr-x owner=root:wheel links=4 device=16777244
+  containing filesystem: /dev/disk9s1 on /Library/Developer/CoreSimulator/Cryptex/Caches
+  is a mount point per mount(8): 1
+  entries: 2
+
+==================== the physical act ====================
+disconnect observed at 2026-10-25T03:29:26Z: device node and UUID are both gone
+--- 2. immediately after the disconnect ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+--- 3. ten seconds later ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+--- 4. one minute later ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+
+==================== after a simulator service touches the path ====================
+## simctl list runtimes (as <user>)
+$ sudo -u <user> xcrun simctl list runtimes
+== Runtimes ==
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+watchOS 26.5 (26.5 - 23T570) - com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+[exit=0]
+
+--- 5. after simctl touched CoreSimulator ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+
+==================== reconnect ====================
+reconnected at 2026-10-25T03:31:45Z
+where it came back:
+  /dev/disk9s1 on /Volumes/<vault> (apfs, local, nodev, nosuid, journaled, noowners)
+  NOTE: /Volumes/<name> 1 is the shape ADR-0004 and issue #26 care about.
+--- 6. after reconnect ---
+  exists: type=Directory mode=drwxr-xr-x owner=root:admin links=2 device=16777220
+  containing filesystem: /dev/disk1s1 on /System/Volumes/Data
+  is a mount point per mount(8): 0
+  entries: 0
+
+==================== reading this ====================
+Probes 2-5 are the answer, and they exist only because the mount and the disconnect were both
+verified — an unverified run aborts and records nothing rather than reporting 'absent'.
+A target that existed before the run is expected to be a plain directory after the volume goes
+away: it was the mount point, and mount semantics leave it (HYPOTHESES.md H14, 2026-09-26). That
+alone is not a finding. What this run adds is the SURPRISE removal: whether probes 2-5 differ from
+a clean unmount — owner, mode, entries, or a mount point that is still listed — and the 'entries'
+line, which shows whether anything was written into the local directory afterwards.

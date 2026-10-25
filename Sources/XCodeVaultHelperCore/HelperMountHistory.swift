@@ -22,10 +22,12 @@ import XCodeVaultHelperProtocol
 /// DiskArbitration. After the `diskutil` cell (E, a throwaway sparse image) the re-check recorded a
 /// directory, `drwxr-xr-x root:admin`, and the harness's target guard — which requires the path to
 /// be unmounted and empty — passed before the next cell. Nothing was recorded at the target after
-/// the `mount_apfs` cell. One machine, a clean unmount of a disk image; the physical yank is still
-/// unmeasured. So on this machine the state is reachable by construction, because the target
-/// pre-exists; an "absent" path would need something to remove the mount point, and nothing
-/// observed does.
+/// the `mount_apfs` cell. The physical yank was measured on 2026-10-25 (E6b, both variants, at
+/// `Cryptex/Caches`, a USB flash drive reporting `Removable`): after a bare `umount` and after the
+/// cable was pulled, the target was the same empty `root:admin` directory, not a mount point, with
+/// nothing written into it at the probes, up to a minute (`docs/research/evidence/e6b-*-cryptex-macos26.7.1-*.txt`). One machine.
+/// So the state is reachable by construction, because the target pre-exists; an "absent" path
+/// would need something to remove the mount point, and nothing observed does.
 ///
 /// **Still open, and it is what decides the damage:** which event causes a fresh cache to be
 /// written into that local directory while the vault holds the other copy. That it does

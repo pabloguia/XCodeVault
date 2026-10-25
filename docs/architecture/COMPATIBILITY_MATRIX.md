@@ -413,7 +413,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | Experiment | Gates | Status |
 |---|---|---|
 | E6 surprise removal | H3, disconnect safety DoD | software variant done (see entry above); physical yank pending — manual |
-| E6b mount stub at a cache path | H14, issue #24's premise | **pending — manual**, needs `sudo` and a yankable drive. Runbook: `docs/process/RUNBOOK-E6b-disconnect.md`; script: `scripts/experiments/e6b-mount-stub-reappearance.sh`. Distinct from E6 above: that measures a vault volume under `/Volumes`, this measures a mount at `/Library/Developer/CoreSimulator/Caches/dyld` |
+| E6b mount stub at a cache path | H14, issue #24's premise | **done 2026-10-25 at `Cryptex/Caches`, both variants** (entry "E6b variants A and B"): a plain directory, nothing written; `Caches/dyld` not run. Runbook: `docs/process/RUNBOOK-E6b-disconnect.md`; script: `scripts/experiments/e6b-mount-stub-reappearance.sh`. Distinct from E6 above: that measures a vault volume under `/Volumes`, this measures a mount at `/Library/Developer/CoreSimulator/Caches/dyld` |
 | E7 shadow-data defense | H3 | **done (2026-09-07)** — see entry below; does not crash Xcode; low priority after ADR-0004 |
 | E8 export/import round trip | H4 | **done** — export (2026-09-06) + import with functional boot probe (2026-09-07) both pass; see entries above |
 | Stranded Inbox cleanup | F1 | `sudo rm` refused (policy); **a reboot reaps it** (verified 2026-09-07, +5 GB). Doctor's remediation is "restart the Mac". Helper verb for this is pointless — remove it. |
@@ -1541,3 +1541,29 @@ substitution may not be waved through. Issue #29 stays open.
   not restarted (the stream file has 6 lines, all from before the pull); `pull-check` should not stop the stream on a
   NOT PULLED reading. The verification after the idle pull also shows the unclean removal left the APFS volume
   consistent. Experimental (rule 10).
+
+### E6b variants A and B — clean unmount and physical yank at `Cryptex/Caches` — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-25
+- Hypothesis reference: H14 (issue #29, the premise of issue #24)
+- Test performed: a disposable USB flash drive (256 GB, `Protocol: USB`, `Removable Media: Removable`) erased by the
+  operator as APFS (GUID), the donor its only volume. Run from a Terminal holding Full Disk Access, rigs idle, nothing
+  booted. Variant A, `sudo scripts/experiments/e6b-mount-stub-reappearance.sh /Volumes/<donor> cryptex --donor-uuid …`:
+  `mount_apfs -o nobrowse` at `/Library/Developer/CoreSimulator/Cryptex/Caches`, a bare `umount`, probes. Variant B,
+  `sudo scripts/experiments/e6b-physical-disconnect.sh … cryptex --donor-uuid …` on the same donor: the same mount, the
+  cable pulled without ejecting, probes, reconnect. Reading pre-registered in H14 before the runs (5539e68). Target
+  `cryptex` because `Caches/dyld` held a rebuilt 7.1 GB cache and the guard requires an empty target.
+- Result: **PLAIN DIRECTORY (pre-registered), both variants, every probe.** After the unmount (A) and after the pull
+  (B, disconnect observed: node and UUID gone), immediately, at +10 s, at +1 min (B) and after `simctl` as the operator,
+  the target was the same `drwxr-xr-x root:admin` directory on the internal data volume, not a mount point, 0 entries.
+  A and B identical. On reconnect the donor came back at `/Volumes/<label>`, not at the cache path; `diskutil
+  verifyVolume` afterwards: OK, fsck exit 0.
+- Evidence: `../research/evidence/e6b-mount-stub-cryptex-macos26.7.1-25G241-xcode26.5-x86_64.txt`,
+  `../research/evidence/e6b-physical-cryptex-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A (none booted, by the guard); xcodebuild N/A; physical device N/A
+- Verdict: issue #24's premise — a plain directory where a mount point used to be — is **observed** after a surprise
+  removal at a cache path, and it is the pre-existing mount point; nothing appeared, nothing was written, nothing stayed
+  mounted. A surprise removal behaves like a clean unmount here.
+- Notes: first physical *removable* donor at a cache path (E6c run 8's SSD reported `Fixed`). Says nothing about
+  `Caches/dyld`, where a writer exists, nor about writes later than about a minute. The donor label shows as `<vault>` in
+  the evidence (the redactor masks it). Experimental (rule 10).
