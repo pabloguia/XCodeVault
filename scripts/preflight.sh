@@ -1,7 +1,9 @@
 #!/bin/bash
 # Runs the CI gates that can be run here, in CI's order, on this machine.
 #
-# Fifteen of CI's seventeen steps. The two it leaves out are named rather than silently missing:
+# Sixteen of CI's nineteen steps. Of the three it leaves out, one is folded in rather than missing: CI's
+# "TMPDIR baseline" step is the `snapshot` this script takes before its first gate, for the `tmp-leaks`
+# gate it runs last. The other two are named rather than silently missing:
 # "Toolchain" only prints versions, and the read-only gating experiments (E1/E8) **write evidence
 # files into `docs/research/evidence/`** — running them before every push would dirty the working
 # tree as a side effect of checking it, which is a worse habit than the coverage is worth. Run
@@ -40,6 +42,8 @@ GATES=(
     "vault-flow:bash scripts/ci-vault-flow.sh"
     "format:swift-format lint --recursive --strict --configuration .swift-format Sources Tests"
     "cli-smoke:.build/debug/xcodevaultctl status && .build/debug/xcodevaultctl xcode list && .build/debug/xcodevaultctl compatibility && .build/debug/xcodevaultctl permissions --json && .build/debug/xcodevaultctl report --json && .build/debug/xcodevaultctl plan delete --json >/dev/null && .build/debug/xcodevaultctl --lang pt-BR status >/dev/null"
+    # Last on purpose: it compares $TMPDIR's xcv-* entries against the snapshot taken before the first gate.
+    "tmp-leaks:bash scripts/tmp-leak-check.sh --self-test && bash scripts/tmp-leak-check.sh check \"\$base\""
 )
 
 if [ "${1:-}" = "--list" ]; then
@@ -57,7 +61,7 @@ fast=0
 # would make this script's central claim false for one step while this very guard reported
 # everything in order. If it ever becomes runnable locally, move it into ci.yml and bump the count.
 workflow_steps=$(grep -cE '^      - name: ' .github/workflows/ci.yml)
-expected_steps=17
+expected_steps=19
 if [ "$workflow_steps" -ne "$expected_steps" ]; then
     echo "preflight: ci.yml has $workflow_steps steps, this script was written against $expected_steps." >&2
     echo "preflight: compare 'scripts/preflight.sh --list' against the workflow and update both." >&2
@@ -65,7 +69,9 @@ if [ "$workflow_steps" -ne "$expected_steps" ]; then
 fi
 
 log=$(mktemp -t xcv-preflight)
-trap 'rm -f "$log"' EXIT
+base=$(mktemp -t xcv-preflight-base)
+trap 'rm -f "$log" "$base"' EXIT
+bash scripts/tmp-leak-check.sh snapshot "$base"
 failed=()
 ran=0
 for g in "${GATES[@]}"; do
