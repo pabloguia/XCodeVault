@@ -605,7 +605,7 @@ ci_log_start() {
 # the free space measured after it hides the peak. Sample it once a second, read-only, bounded at 30 min.
 ci_sampler_start() {
   [ "$DRY" = 1 ] && return 0
-  CI_MIN=$(mktemp -t xcv-e20-min) || return 0
+  CI_MIN=$(mktemp "$XCV_E20_TMP/min.XXXXXX") || return 0
   ( m=""; for _ in $(seq 1 1800); do
       f=$(df -k /System/Volumes/Data | awk 'NR==2{print $4}')
       if [ -z "$m" ] || [ "$f" -lt "$m" ]; then m=$f; echo "$m" > "$CI_MIN"; fi
@@ -1065,7 +1065,10 @@ probe() { # probe <seconds> <name> <cmd...>  — output in $PROBE_OUT; returns 0
   # Each probe's file is removed when the next one starts (a stuck writer keeps its unlinked file); the last
   # one is removed by the caller. It can hold a system-wide lsof listing (review 4b note c).
   [ -n "${PROBE_OUT:-}" ] && rm -f "$PROBE_OUT"
-  PROBE_OUT=$(mktemp -t xcv-e20-probe) || return 124
+  # $XCV_E20_TMP is removed by the top-level EXIT trap, which on SIGHUP/SIGTERM fires while a phase's interrupt
+  # report is still running: do not call probe() from on_interrupt/state_report, or a missing directory reads as
+  # 124 here and pull-check would count it as HUNG.
+  PROBE_OUT=$(mktemp "$XCV_E20_TMP/probe.XXXXXX") || return 124
   "$@" > "$PROBE_OUT" 2>/dev/null < /dev/null &
   pid=$!
   for _ in $(seq 1 "$secs"); do
@@ -1323,14 +1326,21 @@ for k, v in json.load(open(sys.argv[1])).items():
   [ -n "${PROBE_OUT:-}" ] && rm -f "$PROBE_OUT"
 }
 
-# A dry run is a rehearsal, not evidence: it goes to a temp file, never into docs/research/evidence.
+# Per-run scratch for the probe outputs and the free-space sampler, removed after the phase; the two
+# `log stream` files (sdi-log, pull-log) stay in $TMPDIR on purpose, as their messages say.
+XCV_E20_TMP=$(mktemp -d -t xcv-e20-run) || exit 2
+OUT=""
+trap 'rm -rf "$XCV_E20_TMP"; [ "$DRY" = 1 ] && [ -n "$OUT" ] && rm -f "$OUT"' EXIT
+# A dry run is a rehearsal, not evidence: it goes to a temp file, never into docs/research/evidence, and
+# that file is removed at the end — the same transcript is on the terminal.
 if [ "$DRY" = 1 ]; then
   OUT=$(mktemp -t xcv-e20-dryrun) || exit 2
+  echo "dry run: the transcript is printed below and not kept"
 else
   OUT="$XCV_EVIDENCE_DIR/e20-$PHASE-$(xcv_env_slug).txt"
   xcv_rotate_out "$OUT" || exit 2
+  echo "evidence: $OUT"
 fi
-echo "evidence: $OUT"
 # The per-user temp directory (/var/folders/<hash>/<hash>/T) identifies the machine; it is rewritten to <tmpdir>.
 # The consumers ignore INT/TERM/HUP (ignored dispositions survive exec), so an interrupt reaches
 # only the phase, whose trap reports the state left behind into a pipeline that is still there.

@@ -214,10 +214,17 @@ final class DoctorTests: XCTestCase {
         try XCTSkipIf(getuid() == 0, "root can read a 000 directory, so the failure cannot be simulated")
         let t = TempDir()
         t.dir("Library/Developer")
+        var locked: [String] = []
+        // Restored here, while `t` is still alive: a teardown block runs after `t`'s deinit has already failed to
+        // remove the 000 directories, which left the whole TempDir behind (caught by the tmp-leaks gate).
+        defer {
+            for p in locked { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: p) }
+            withExtendedLifetime(t) {}
+        }
         for meta in [".Spotlight-V100", ".DocumentRevisions-V100", ".TemporaryItems"] {
             let p = t.dir("ext/" + meta)
             try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: p)
-            addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: p) }
+            locked.append(p)
         }
         let vol = Volume(
             deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "u", mountPoint: t.path + "/ext",
@@ -239,7 +246,10 @@ final class DoctorTests: XCTestCase {
         t.dir("ext/locked/CoreSimulator/Devices/15EA64C9-8286-40CC-881A-B19C606C7F88")
         let locked = t.path + "/ext/locked"
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked)
-        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked) }
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked)
+            withExtendedLifetime(t) {}
+        }
         let vol = Volume(
             deviceNode: "/dev/disk9s1", volumeName: "EXT", volumeUUID: "extuuid", mountPoint: t.path + "/ext",
             filesystemPersonality: "APFS", filesystemType: "apfs", isInternal: false, isRemovableMedia: false,
