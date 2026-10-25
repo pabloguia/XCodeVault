@@ -3,7 +3,7 @@
 Starting point for a new session. Project at `~/projects/XCodeVault`, public at
 `github.com/pabloguia/XCodeVault` since 2026-09-18.
 
-> **State verified 2026-09-27 17:44.** Point-in-time — re-verify before acting, including what is
+> **State verified 2026-10-25 01:16 (-03).** Point-in-time — re-verify before acting, including what is
 > written here. When you finish an item, update this page along with `STATUS.md`.
 >
 > **A number measured inside a transient window is not state** (2026-09-16, twice in one day).
@@ -15,12 +15,94 @@ Starting point for a new session. Project at `~/projects/XCodeVault`, public at
 
 1. `CLAUDE.md` — the non-negotiable safety rules (especially 3, 5, 6, 7).
 2. `STATUS.md` — the live sections at the top ("In flight", "Blocked / pending — manual", "Next
-   three actions"). Item 1 of "Next three actions" holds the E6c/H14/H15 series in order.
-3. `docs/architecture/HYPOTHESES.md` — **H15**, then **H14 from its title to the end of the file**:
-   every E6c run's pre-registered reading sits immediately before its RESULT.
-4. `docs/architecture/COMPATIBILITY_MATRIX.md` — the last four E6c entries.
+   three actions"). Several "In flight" entries describe branches that have since merged (R3, R6,
+   R7, R8 — PRs #43, #45, #46, #47); `git log origin/main` is the record of what landed.
+3. `docs/architecture/HYPOTHESES.md` — **H20** (the runtime store on an external volume), then
+   **H14** from "E6b variant B … fixed BEFORE the run" to the end of H14 (the E6b pre-registration
+   and its result).
+4. `docs/architecture/COMPATIBILITY_MATRIX.md` — the entries from "E20" to the end of the file.
 
-## Where the project has got to (2026-09-27)
+## Where the project has got to (2026-10-25)
+
+What the product does today: accounting (`scan`/`doctor`), cleanup of regenerable data, the Runtime
+Library flow (export → `runtime offload` → `runtime import`), and a SwiftUI app with a guided Plan,
+a design system (`scripts/ui-invariants.sh` is a CI gate), the Drives screen and **Turn On
+Ownership** through the privileged helper (R3–R8, all merged). Releases are universal, signed,
+notarized and stapled, and come from CI (ADR-0017); `v0.3.0-rc.2` is a draft, unpublished.
+
+**The helper has run live once**: `enableOwnership` on the operator's drive (H18 PASS, 2026-10-07).
+What #30 still holds is Part F of the runbook — `createVaultDirectory` live (it probably fails under
+TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out of a
+published release until those pass. #30's title ("nothing opens an XPC connection") predates R8 and
+no longer describes the gap.
+
+The last two pieces of research, in one paragraph each:
+
+- **H20 / E20 — runtimes served from an external APFS volume mounted at `CoreSimulator/Images`
+  (PR #56, merged as aa8e1e2). Probable, experimental, one machine.** It works through a
+  DiskArbitration mount; installs while mounted are full copies through the internal disk (no
+  clone); a boot with or without the drive is safe; a pull is survivable. It rules out any standing
+  automatic mount (a late plug-in with `/etc/fstab` armed gives SHADOW), import as a clone, and any
+  layout that deletes the internal copy — CoreSimulator falls back to it silently. With the internal
+  copy kept, it saves no space. Whether it becomes product is an ADR and a product decision, not
+  taken.
+- **E6b — the physical yank at a cache path (PR #57; issue #29 closed).** On a disposable USB flash
+  drive reporting `Removable`, at `Cryptex/Caches`: the clean unmount and the cable pull left the
+  same empty, pre-existing directory, not a mount point, nothing written. `Caches/dyld` was not run
+  (it held a rebuilt cache). The pre-registration also records a lead: the watchOS 26.5 cache was
+  rebuilt within minutes of E20 arm 3's `simctl runtime add`.
+
+## Machine state (measured 2026-10-25 01:16 -03, by the agent, read-only)
+
+- macOS **26.7.1 (25G241)**, Xcode **26.5 (17F42)**. Intel, `x86_64`.
+- **Internal free: 15 GiB** — it read 19 GiB two hours earlier the same night, so it is moving;
+  quote neither as state.
+- Runtimes: iOS 26.5 (23F77) and watchOS 26.5 (23T570), Ready + Verified, attached from
+  `/Library/Developer/CoreSimulator/Images` on the internal disk (15 GB). `Images` is a plain
+  directory, not a mount point; **`/etc/fstab` does not exist** (E20's arm was removed).
+- `/Library/Developer/CoreSimulator/Caches/dyld`: **7.1 GB** in `25G241/` — rebuilt since
+  E6c cleared it (iOS 2026-09-30, watchOS 2026-10-23). `Cryptex/Caches`: empty.
+- `~/Library/Developer/CoreSimulator/Devices` 5.0 GB.
+- Attached: the operator's USB SSD (one APFS container: their data volume and the `XCodeVault`
+  vault; **never pull or unmount it**), and the operator's disposable 256 GB flash drive
+  `PabloPenDRV`, back to exFAT and empty — free to erase as APFS again for a test that needs a
+  drive to pull. No disk images other than the two runtimes are attached.
+- `~/projects/XCodeVault-pre-rewrite-2026-09-17.bundle` exists outside the tree: the only copy of the
+  history before the 2026-09-17 redaction rewrite. It is unredacted — never move it inside the tree,
+  never push it; restore with `git fetch <bundle> master:pre-rewrite` (the bundle's branch is `master`).
+- The operator runs test rigs on the shared simulators: check `pgrep -lx 'xcodebuild|launchd_sim'`
+  before anything that boots or mounts. `test-common.sh`'s "an ordinary directory passes the target
+  guard" fails whenever a device is booted — that is the guard working, not a regression.
+
+## What to do, in priority order
+
+1. **Merge PR #57** (E6b) once CI is green — the operator's call.
+2. **Bring STATUS's live sections in line with the tree**: move the merged R3–R8 entries out of "In
+   flight", take the resolved release-build hang out of "Blocked", collapse "Next three actions" to one
+   dated list, and retitle #30 to what is actually left (Part F).
+3. **What rebuilds `Caches/dyld`.** The candidate is now a runtime install (`simctl runtime add`),
+   from the timestamps above; first use on a new host build is the older candidate. A pre-registered
+   test on the internal disk is cheap but costs one runtime's cache rebuild. No drive needed.
+4. **H20 → an ADR.** Record the result and the decision: either "not now", or only an explicit
+   mount that detaches every runtime first, internal copy kept and verified, labeled experimental. A
+   second machine (Apple Silicon) is the next gate either way.
+5. **#30, Part F** — the helper live from the runbook on a clean start, with a CI-signed build; needs
+   the operator at the Mac.
+
+**Harness facts that cost time to learn:** every E6b/E6c run needs `--donor-uuid`, and a run that
+pulls a drive needs a drive holding nothing but the donor (volumes in one APFS container share its
+metadata); E6b's target must be empty, so check `Caches/dyld` before choosing it; run test suites in
+the foreground or through the `perl` SIGINT reset (an `&` job ignores SIGINT); `scripts/preflight.sh`
+before every push, run while the rig is idle. CI runs on `macos-15`, `macos-26` and
+`macos-26-intel`, plus Sonar.
+
+## History — state and priorities as of 2026-09-27
+
+The section below was the top of this page from 2026-09-27 to 2026-10-25, kept as written; it is a
+record, not instructions. Its machine state and priorities are out of date (M5 has since shipped
+signed releases; the helper has run live once; E6b has run).
+
+### Where the project has got to (2026-09-27)
 
 What the product does today: accounting (`scan`/`doctor`), cleanup of regenerable data, and the
 Runtime Library flow (export → `runtime offload` → `runtime import`). Milestones M1–M3 committed; M4
@@ -47,7 +129,7 @@ The week's series, in one paragraph each — details and evidence in H14/H15:
   pendrive), and what writes into `Caches/dyld` afterwards — twenty hours of the rig's headless use
   requested nothing at info level; H11's one recorded rebuild followed an OS update.
 
-## Machine state (measured 2026-09-27 17:44, by the agent, read-only)
+### Machine state (measured 2026-09-27 17:44, by the agent, read-only)
 
 - macOS **26.7 (25G229)**, Xcode **26.5**. Intel, `x86_64`.
 - **Internal free: 9.3 GiB** — down from 44 GiB on 2026-09-25 after `Caches/dyld` was cleared.
@@ -66,7 +148,7 @@ The week's series, in one paragraph each — details and evidence in H14/H15:
   before anything that boots or mounts. `test-common.sh`'s "an ordinary directory passes the target
   guard" fails whenever a device is booted — that is the guard working, not a regression.
 
-## What to do, in priority order
+### What to do, in priority order
 
 1. **E6b variant B — the physical yank, with a disposable USB pendrive.** Guards are in place
    (`--donor-uuid`; the donor must be the only volume on its drive). Before running: erase the
@@ -278,7 +360,7 @@ SIP flag and no `rootless.conf` entry — OS behavior to report to Apple, not a 
 - Every change that copies/moves/deletes/mounts data goes to `migration-safety-reviewer` before the
   commit. Changes to the privileged helper go to `helper-security-reviewer`.
 - Commit only with `swift build && swift test` green — check the real exit code, not a grep.
-  No push.
+  No push, merge or PR without the operator's OK.
 - Mutation-test what you write, and count crashes as well as assertion failures.
 - The repository owner is Brazilian and prefers conversation in Portuguese; **everything written
   into the repository — code, comments, commits, documentation — is in English.** If you are not
