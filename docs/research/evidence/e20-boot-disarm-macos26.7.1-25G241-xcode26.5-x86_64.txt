@@ -1,0 +1,20 @@
+# Experiment: E20 images-store mount — phase boot-disarm
+# Date: 2026-10-25T01:37:24Z
+# macOS: 26.7.1 (25G241)
+# Arch: x86_64
+# Xcode: Xcode 26.5 Build version 17F42 
+# xcode-select: /Applications/Xcode.app/Contents/Developer
+# Runner: <user> (uid 501); sudo available: yes
+
+# Hypothesis: H20
+
+## /etc/fstab now:
+   # xcodevault-e20 arm 5 — remove with: e20-images-mount.sh --volume-uuid <UUID> boot-disarm
+   UUID=<vault-uuid> /Library/Developer/CoreSimulator/Images apfs rw
+## removing exactly the two E20 lines
+   nothing else is in it and there was no /etc/fstab before the arm: the file is removed
+## remove /etc/fstab
+$ sudo rm -f /etc/fstab
+[exit=0]
+
+RESULT: boot-disarm done. Images is left as it is: run restore next.

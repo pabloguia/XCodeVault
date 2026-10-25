@@ -739,7 +739,7 @@ those entries "pending — manual" until someone actually runs and records the r
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | **moot for v1** — H12 is falsified for external storage, so the transparency question no longer gates a product decision. Keep the script for the R&D tier |
 | E15 does xcodebuild/Xcode honour `DVTSimulatorSetLocation` | H12 (transparency) | pending — `scripts/experiments/e15-ide-honours-device-set.sh`, mutating (one user default), phase E is manual |
 | E16 `simctl create` against an external `.simruntime` | H13 | pending — not yet written; fold into E14b's harness |
-| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); arm 4b open. See the entry at the end of this file |
+| E20 external APFS volume mounted at `CoreSimulator/Images` | H20 | **done 2026-10-23 — probable.** Stage, exercise and restore pass; arm 3 done (no clone; installs work with a DiskArbitration mount); arm 5 boot with the drive passes, boot without it passes (ABSENT, internal store unchanged), hotplug after login gives SHADOW (the rule-6 failure, detected); disarmed and restored; arm 4b open. See the entry at the end of this file |
 | E17 Archives on an external volume | H6 scope, F21 | pending — not yet written; no Archives exist on this machine to test with |
 | E19 products internal, DerivedData bulk on the USB volume | H19 | **done 2026-10-10 — probable.** CTRL (whole DerivedData on the volume) fails; SYM and INV pass. Not a Locations setting. See the entry at the end of this file |
 | E19 Locations keys, one-shot, products internal | H19 | **done 2026-10-11 — probable.** CTRL fails; the five split keys as `-IDE…` arguments pass. Not a persisted `defaults write`. See the entry at the end of this file |
@@ -1377,7 +1377,7 @@ substitution may not be waved through. Issue #29 stays open.
   `Images/Inbox` **on the volume** (dev 0x1000019 = 1,25) and moved to `Images/<new-uuid>.dmg`. The volume lost
   5,119,308 KB — the image's full size, so **COPY, not clone** — and internal free space dipped to 17,517,376 KB
   during the add (from 22,639,160 KB): a **transient ~5.1 GB internal peak**, returned afterwards.
-- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T202000.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Evidence: `../research/evidence/e20-stage-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T202000.txt`, `../research/evidence/e20-clone-import-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-clone-import-log-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64-superseded-20261023T202249.txt`.
 - Functional checks: simulator N/A (devices and pairs checked available); xcodebuild N/A; physical device N/A
 - Verdict: **installing while staged works with a DiskArbitration mount**; the `mount_apfs -o nobrowse` mount was the
   blocker (which of its two differences — the mounter or `nobrowse` — matters is not separated). **Import as a clone
@@ -1460,3 +1460,25 @@ substitution may not be waved through. Issue #29 stays open.
   first (as `stage` does), and a hotplug must be left unmounted or refused.
 - Notes: recovery is `boot-disarm` then `restore`, which detaches the runtimes, unmounts the volume and compares the
   internal store with the pre-mount snapshot. Experimental (rule 10).
+
+### E20 arm 5, step 6 — disarm and restore from the SHADOW state — macOS 26.7.1 (25G241) · Xcode 26.5 (17F42) · x86_64
+
+- Date tested: 2026-10-24
+- Hypothesis reference: H20 (arm 5)
+- Test performed: from step 5's SHADOW state, `boot-disarm` then `restore`.
+- Result: **clean.** `boot-disarm` removed exactly the two E20 lines; nothing else was in `/etc/fstab` and there was
+  none before the arm, so the file was removed. `restore` found the volume's image set unchanged since staging (its
+  `images.plist` carried the operator's later use of the iOS runtime), detached both runtimes — the ones attached from
+  the hidden internal files — with `simctl runtime unmount`, unmounted the volume through DiskArbitration without
+  forcing, rescanned, and gave the volume back to `/Volumes`. Both runtimes Ready + Verified, open on the internal
+  data volume (1,4). The restore's rule-6 compare printed CHANGED, and the diff shows what: `images.plist`'s mtime
+  (22:32, written at step 4's boot, when the internal store was the live store) and the same two entries in swapped
+  order. Listing and image set otherwise identical. The mtime also shows that **nothing wrote to the hidden internal
+  store during SHADOW** (the hotplug came after 22:33).
+- Evidence: `../research/evidence/e20-boot-disarm-macos26.7.1-25G241-xcode26.5-x86_64.txt`, `../research/evidence/e20-restore-macos26.7.1-25G241-xcode26.5-x86_64.txt`.
+- Functional checks: simulator N/A; xcodebuild N/A; physical device N/A
+- Verdict: **the SHADOW state is recoverable without loss** when no simulator is booted on it: detach, unmount, rescan.
+  The recovery needed a tool that knew to detach first; DiskArbitration's own eject would have left the runtimes
+  attached to files it had just uncovered, which is benign only because they were the internal ones all along.
+- Notes: restore's rule-6 compare includes the plist and is order-sensitive, so a legitimate rewrite reads as CHANGED;
+  boot-check's `store_view` compare (listing and image set) is the one to read. Arm 5 is complete. Experimental (rule 10).
