@@ -85,13 +85,13 @@ final class WholeDiskVolumeTests: XCTestCase {
         let unmounted = DriveSnapshot(disks: try Self.disks(unmountedHFS: true), volumes: [])
         let hfs = try XCTUnwrap(unmounted.disks.first { $0.id == "disk11" })
         XCTAssertNil(hfs.wholeDiskVolume?.mountPoint, "measured: info names the file system and no mount point")
-        XCTAssertEqual(DiskSafety.unverifiedHFSPartitions(hfs, in: unmounted), ["disk11"])
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(hfs, in: unmounted), ["disk11"])
         XCTAssertTrue(DiskSafety.eraseRefusals(hfs, in: unmounted, registeredVaultUUIDs: []).contains(.mightBeTimeMachine))
 
         let mountedVolume = Self.volume("disk11", "XCVWDHFS", uuid: "3FF43BEF-85EE-350F-A404-7806C1E025E0", mount: "/Volumes/XCVWDHFS", type: "hfs")
         let mounted = DriveSnapshot(disks: try Self.disks(), volumes: [mountedVolume])
         let disk11 = try XCTUnwrap(mounted.disks.first { $0.id == "disk11" })
-        XCTAssertEqual(DiskSafety.unverifiedHFSPartitions(disk11, in: mounted), [], "the control: mounted, its root can be read")
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(disk11, in: mounted), [], "the control: mounted, its root can be read")
         let marked = DriveSnapshot(disks: mounted.disks, volumes: [mountedVolume], timeMachineMarkedVolumeIDs: ["disk11"])
         XCTAssertTrue(DiskSafety.changeRefusals(disk11, in: marked).contains(.timeMachine), "a marker on the whole-disk volume")
     }
@@ -191,6 +191,15 @@ final class WholeDiskVolumeTests: XCTestCase {
         XCTAssertNil(untyped.wholeDiskVolume?.mountPoint)
         XCTAssertEqual(untyped.volumeIDs, ["disk10"])
         XCTAssertEqual(untyped.wholeDiskVolume?.isHFS, false)
+        // Not HFS+, but nothing says it is not a backup either: unmounted, erasing the disk is refused (2026-10-26).
+        var external = untyped
+        external.isVirtual = false; external.busProtocol = "USB"; external.isInternal = false; external.isWritable = true
+        let unmounted = DriveSnapshot(disks: [external], volumes: [])
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(external, in: unmounted), ["disk10"])
+        XCTAssertTrue(DiskSafety.eraseRefusals(external, in: unmounted, registeredVaultUUIDs: []).contains(.mightBeTimeMachine))
+        let mounted = DriveSnapshot(
+            disks: [external], volumes: [Self.volume("disk10", "XCVWDFAT", uuid: "F-1", mount: "/Volumes/XCVWDFAT", type: "msdos")])
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(external, in: mounted), [], "the control: mounted, its root can be read")
 
         // The blank disk's measured `info`, under disk10's `list` entry, which names XCVWDFAT: the entry's name alone
         // would make a volume, so the control uses an entry without it.

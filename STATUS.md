@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-25. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-26. **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -14,7 +14,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-**Nothing is on a branch as of 2026-10-25.** Every entry that used to sit here has merged into `main` (`git log
+**2026-10-26, branch `fix/wholedisk-followups`:** the whole-disk entry's "Not measured" cases, measured on disk images (`docs/research/evidence/e-wholedisk-followups-macos26.7.1-25G241-x86_64.txt`): an unmounted exFAT whole disk keeps its type; `apfs addVolume` and `eraseVolume` work on a container whose store is the whole disk (H17); an `Apple_CoreStorage` partition shows no type, name or UUID and **was offered for erasing, with its disk** — now refused as `mightBeTimeMachine`, as is an unmounted whole-disk volume typed `unknown`. Not measurable here: a real CoreStorage group (macOS 26 cannot create one) and FAT32 unmounted. Also on the branch: **ADR-0019, proposed** — H20/E20 written up with options A/B/C and a recommendation (A, "not now"); the decision is still the operator's. Migration-safety review dispatched.
+
+**Nothing else is on a branch as of 2026-10-25.** Every entry that used to sit here has merged into `main` (`git log
 origin/main` is the record: H20/E20 #56, E6b #57, whole-disk volumes #55, R8 #47, R7 #46, R6 #45, R5 #44, R3 #43, R4
 #42, the savings/i18n/identity series #36–#39; user-first permissions was committed before the PR era). They are kept
 below, verbatim, under "Merged, with open follow-ups", because several still carry items nobody has done — the
@@ -315,9 +317,9 @@ review" or "never run" describe the entry when it was written; the merge is the 
 
 **2026-10-25, after E21:**
 
-1. **H20 → an ADR.** Record E20's result and the decision: "not now", or only an explicit mount that detaches every
+1. **H20 → an ADR.** Drafted 2026-10-26 as ADR-0019, *proposed*: accept A or B (or reject) and set its Status. Record E20's result and the decision: "not now", or only an explicit mount that detaches every
    runtime first, internal copy kept and verified, labeled experimental. A second machine (Apple Silicon) is the next
-   gate either way. The decision is the operator's.
+   gate if B is chosen (ADR-0019; under A none is scheduled). The decision is the operator's.
 2. **#30, Part F** — the helper live from the runbook on a clean start with a CI-signed build: `createVaultDirectory`
    (probably refused by TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out
    of a published release until both pass. Needs the operator at the Mac.

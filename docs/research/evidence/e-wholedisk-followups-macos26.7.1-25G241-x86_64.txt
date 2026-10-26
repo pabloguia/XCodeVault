@@ -1,0 +1,430 @@
+# Whole-disk follow-ups: the three cases the 2026-10-18 evidence left NOT MEASURED — 2026-10-26
+# Host: macOS 26.7.1 (25G241), x86_64. Disk images only, created under /private/tmp/xcv-wd2; every device acted on was
+# attached by the run and re-checked as BusProtocol "Disk Image" before any unmount, erase or add. All detached and deleted
+# afterwards. Companion to e-wholedisk-volumes-macos26.7.1-25G241-x86_64.txt.
+
+FINDINGS
+1. An UNMOUNTED exFAT whole disk (hdiutil -layout NONE -fs ExFAT): `info` keeps FilesystemType "exfat", FilesystemName,
+   VolumeName and VolumeUUID; only MountPoint becomes "". `list` keeps VolumeName on the disk entry. So DiskTopology keeps
+   it as a whole-disk volume typed `exfat`, not `unknown`. (FAT32 unmounted: not measured — `hdiutil create` failed
+   "Resource busy" right after the previous create; NTFS: macOS cannot write one.)
+2. `diskutil apfs addVolume <container> APFS <name> [-quota 1g]` and `diskutil eraseVolume APFS <name> <volume>` — the
+   product's exact argv shapes (DiskPreparation.arguments) — both SUCCEED on a container whose physical store is the whole
+   disk (2 GB image, -layout NONE): disk8s2 and disk8s3 created, disk8s3 erased and renamed. So the two R6 options the
+   2026-10-18 change newly offers on such a drive behave as H17 measured them on a partition map.
+3. `eraseVolume` on the whole-disk STORE itself is refused by diskutil: "The target disk is in use by APFS as a Physical
+   Store; use diskutil apfs deleteContainer". The product never offers that (eraseVolume targets are partitions and
+   role-less APFS volumes; a whole-disk volume is refused for eraseVolume since 2026-10-18).
+4. A trap worth recording: on small images, `apfs addVolume` fails "-69493: You can't add any more APFS Volumes to its
+   APFS Container". It is a volume ceiling that depends on the container's size (only 256 MB -> one volume and 2 GB -> at least
+   three were measured), NOT the whole-disk store: the control — a 256 MB APFS container on a GPT map — fails identically, and a 2 GB whole-disk container takes
+   three volumes. A real drive is far above this; a test fixture of 256 MB is not.
+5. CoreStorage: `diskutil cs` on macOS 26 lists only list/info/delete/unlockVolume — it can no longer create a logical
+   volume group, and `gpt create`/`gpt add` on an attached image fail "operation not permitted". Measured instead: a GPT
+   image whose partition 1 type GUID was rewritten in the file (both tables, CRCs fixed) to Apple_CoreStorage
+   53746F72-6167-11AA-AA11-00306543ECAC before attaching. `diskutil list` shows it as Content "Apple_CoreStorage"; `info`
+   gives no FilesystemType, VolumeName or VolumeUUID; `cs list` finds no group (the partition holds no CS metadata). What
+   this establishes: a CoreStorage physical volume reaches DiskTopology as a plain partition whose content is
+   "Apple_CoreStorage" and with nothing that says what it holds — which is exactly how the old encrypted Time Machine
+   layout (CoreStorage over HFS+) looks from outside. NOT measured: a real CoreStorage group (cannot be made here).
+
+CONSEQUENCE FOR THE CODE (2026-10-26, branch fix/wholedisk-followups)
+- Before: `DriveEvaluation.options` offered `eraseVolume` on an Apple_CoreStorage partition and `eraseDisk` on its disk;
+  `DiskSafety.unverifiedHFSPartitions` counted only HFS+. Now a partition typed Apple_CoreStorage, and an unmounted
+  whole-disk volume typed `unknown`, are unverified like an unmounted HFS+ one: `mightBeTimeMachine` refuses erasing it
+  and erasing its disk.
+
+RAW TRANSCRIPT (scratchpad path redacted; runs 1-4, including the failed attempts, as they happened)
+# host: 26.7.1 (25G241) x86_64
+$ hdiutil create -size 64m -layout NONE -fs ExFAT -volname XCVWEFAT -type SPARSE /private/tmp/xcv-wd2/wd-EFAT
+created: /private/tmp/xcv-wd2/wd-EFAT.sparseimage
+(exit 0)
+## ExFAT attached as disk5
+-- mounted
+{'WholeDisk': True, 'Content': '', 'FilesystemType': 'exfat', 'FilesystemName': 'ExFAT', 'MountPoint': '/Volumes/XCVWEFAT', 'VolumeName': 'XCVWEFAT', 'VolumeUUID': '8C05E542-E477-341A-92A1-12357D94F66F', 'APFSContainerReference': None, 'BusProtocol': 'Disk Image'}
+{'Content': '', 'DeviceIdentifier': 'disk5', 'MountPoint': '/Volumes/XCVWEFAT', 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWEFAT'}
+$ diskutil unmount /dev/disk5
+Volume XCVWEFAT on disk5 unmounted
+(exit 0)
+-- unmounted
+{'WholeDisk': True, 'Content': '', 'FilesystemType': 'exfat', 'FilesystemName': 'ExFAT', 'MountPoint': '', 'VolumeName': 'XCVWEFAT', 'VolumeUUID': '8C05E542-E477-341A-92A1-12357D94F66F', 'APFSContainerReference': None, 'BusProtocol': 'Disk Image'}
+{'Content': '', 'DeviceIdentifier': 'disk5', 'OSInternal': False, 'Size': 67108864, 'VolumeName': 'XCVWEFAT'}
+$ hdiutil create -size 64m -layout NONE -fs MS-DOS FAT32 -volname XCVWMSDOS -type SPARSE /private/tmp/xcv-wd2/wd-MSDOS
+hdiutil: create failed - Resource busy
+(exit 1)
+## MS-DOS FAT32 attached as 
+NOT AN IMAGE, stop
+# host: 26.7.1 (25G241) x86_64
+$ hdiutil create -size 256m -layout NONE -fs APFS -volname XCVWAPFS -type SPARSE /private/tmp/xcv-wd2/wd-apfs
+created: /private/tmp/xcv-wd2/wd-apfs.sparseimage
+(exit 0)
+## APFS store disk6 container disk7
+$ diskutil apfs addVolume disk7 APFS XCVWADD
+Will export new APFS Volume "XCVWADD" from APFS Container Reference disk7
+Started APFS operation on disk7
+Preparing to add APFS Volume to APFS Container disk7
+Error: -69493: You can't add any more APFS Volumes to its APFS Container
+(exit 1)
+$ diskutil apfs list disk7
+|
++-- Container disk7 472F8E86-AF18-4D96-983D-58AB51E2D81F
+    ====================================================
+    APFS Container Reference:     disk7
+    Size (Capacity Ceiling):      268435456 B (268.4 MB)
+    Capacity In Use By Volumes:   1544192 B (1.5 MB) (0.6% used)
+    Capacity Not Allocated:       266891264 B (266.9 MB) (99.4% free)
+    |
+    +-< Physical Store disk6 (No UUID)
+    |   ------------------------------
+    |   APFS Physical Store Disk:   disk6
+    |   Size:                       268435456 B (268.4 MB)
+    |
+    +-> Volume disk7s1 C6823F8D-E4C7-4479-BCC7-75B2AAE3888D
+        ---------------------------------------------------
+        APFS Volume Disk (Role):   disk7s1 (No specific role)
+        Name:                      XCVWAPFS (Case-insensitive)
+        Mount Point:               /Volumes/XCVWAPFS
+        Capacity Consumed:         28672 B (28.7 KB)
+        Sealed:                    No
+        FileVault:                 No
+(exit 0)
+added volume: 
+$ diskutil apfs list disk7
+|
++-- Container disk7 472F8E86-AF18-4D96-983D-58AB51E2D81F
+    ====================================================
+    APFS Container Reference:     disk7
+    Size (Capacity Ceiling):      268435456 B (268.4 MB)
+    Capacity In Use By Volumes:   1544192 B (1.5 MB) (0.6% used)
+    Capacity Not Allocated:       266891264 B (266.9 MB) (99.4% free)
+    |
+    +-< Physical Store disk6 (No UUID)
+    |   ------------------------------
+    |   APFS Physical Store Disk:   disk6
+    |   Size:                       268435456 B (268.4 MB)
+    |
+    +-> Volume disk7s1 C6823F8D-E4C7-4479-BCC7-75B2AAE3888D
+        ---------------------------------------------------
+        APFS Volume Disk (Role):   disk7s1 (No specific role)
+        Name:                      XCVWAPFS (Case-insensitive)
+        Mount Point:               /Volumes/XCVWAPFS
+        Capacity Consumed:         28672 B (28.7 KB)
+        Sealed:                    No
+        FileVault:                 No
+(exit 0)
+-- eraseVolume on the whole-disk store itself (disk6)
+$ diskutil eraseVolume APFS XCVWSTORE disk6
+The target disk is in use by APFS as a Physical Store; use diskutil apfs deleteContainer
+(exit 1)
+{'WholeDisk': True, 'Content': '', 'FilesystemType': None, 'FilesystemName': None, 'MountPoint': '', 'VolumeName': '', 'VolumeUUID': None, 'APFSContainerReference': 'disk7', 'BusProtocol': 'Disk Image'}
+{'Content': '', 'DeviceIdentifier': 'disk6', 'OSInternal': False, 'Size': 268435456}
+$ hdiutil create -size 64m -layout NONE -type SPARSE /private/tmp/xcv-wd2/wd-cs
+created: /private/tmp/xcv-wd2/wd-cs.sparseimage
+(exit 0)
+$ gpt create /dev/disk8
+gpt create: operation not permitted: create
+(exit 1)
+$ gpt show /dev/disk8
+   start    size  index  contents
+       0  131072         
+(exit 0)
+$ gpt add -t 53746F72-6167-11AA-AA11-00306543ECAC -s 40000 /dev/disk8
+gpt add: operation not permitted: add
+(exit 1)
+$ diskutil list disk8
+/dev/disk8 (disk image):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:                                                   +67.1 MB    disk8
+(exit 0)
+{'Content': '', 'DeviceIdentifier': 'disk8', 'OSInternal': False, 'Size': 67108864}
+$ diskutil cs list
+No CoreStorage logical volume groups found
+(exit 0)
+## done; attached: disk5 disk6 disk8 
+
+######## run 2 (2026-10-26T22:08:42Z)
+## B1 eraseVolume on a volume of the whole-disk-store container
+$ diskutil eraseVolume APFS XCVWERASED disk7s1
+Started erase
+Preparing to erase APFS Volume content
+Checking mount state
+Erasing APFS Volume disk7s1 by deleting and re-adding
+Deleting APFS Volume from its APFS Container
+Unmounting disk7s1
+Erasing any xART session referenced by C6823F8D-E4C7-4479-BCC7-75B2AAE3888D
+Deleting Volume
+Removing any Preboot and Recovery Directories
+Preparing to add APFS Volume to APFS Container disk7
+Creating APFS Volume
+Created new APFS Volume disk7s1
+Setting mount state
+Setting volume permissions
+Finished erase
+(exit 0)
+$ diskutil apfs list disk7
+|
++-- Container disk7 472F8E86-AF18-4D96-983D-58AB51E2D81F
+    ====================================================
+    APFS Container Reference:     disk7
+    Size (Capacity Ceiling):      268435456 B (268.4 MB)
+    Capacity In Use By Volumes:   1544192 B (1.5 MB) (0.6% used)
+    Capacity Not Allocated:       266891264 B (266.9 MB) (99.4% free)
+    |
+    +-< Physical Store disk6 (No UUID)
+    |   ------------------------------
+    |   APFS Physical Store Disk:   disk6
+    |   Size:                       268435456 B (268.4 MB)
+    |
+    +-> Volume disk7s1 2E5B80CD-8596-4498-A632-9E8913600031
+        ---------------------------------------------------
+        APFS Volume Disk (Role):   disk7s1 (No specific role)
+        Name:                      XCVWERASED (Case-insensitive)
+        Mount Point:               /Volumes/XCVWERASED
+        Capacity Consumed:         28672 B (28.7 KB)
+        Sealed:                    No
+        FileVault:                 No
+(exit 0)
+## B2 control: hdiutil APFS on GPT
+$ hdiutil create -size 256m -layout GPTSPUD -fs APFS -volname XCVWGPT -type SPARSE /private/tmp/xcv-wd2/wd-apfsgpt
+created: /private/tmp/xcv-wd2/wd-apfsgpt.sparseimage
+(exit 0)
+GPT disk disk10 store  container 
+## B3 whole-disk container made by diskutil apfs createContainer
+$ hdiutil create -size 256m -layout NONE -type SPARSE /private/tmp/xcv-wd2/wd-blank
+created: /private/tmp/xcv-wd2/wd-blank.sparseimage
+(exit 0)
+$ diskutil apfs createContainer disk11
+Creating container with disk11
+Started APFS operation on disk11
+Creating a new empty APFS Container
+Unmounting Volumes
+Switching disk11 to APFS
+Creating APFS Container
+Created new APFS Container disk12
+Disk from APFS operation: disk12
+Finished APFS operation on disk11
+(exit 0)
+blank disk11 container disk12
+$ diskutil apfs addVolume disk12 APFS XCVWADD1
+Will export new APFS Volume "XCVWADD1" from APFS Container Reference disk12
+Started APFS operation on disk12
+Preparing to add APFS Volume to APFS Container disk12
+Creating APFS Volume
+Created new APFS Volume disk12s1
+Mounting APFS Volume
+Setting volume permissions
+Disk from APFS operation: disk12s1
+Finished APFS operation on disk12
+(exit 0)
+$ diskutil apfs addVolume disk12 APFS XCVWADD2
+Will export new APFS Volume "XCVWADD2" from APFS Container Reference disk12
+Started APFS operation on disk12
+Preparing to add APFS Volume to APFS Container disk12
+Error: -69493: You can't add any more APFS Volumes to its APFS Container
+(exit 1)
+second volume 
+$ diskutil apfs list disk12
+|
++-- Container disk12 3DF021B7-3ED7-421E-9CED-14F6CE9E393D
+    =====================================================
+    APFS Container Reference:     disk12
+    Size (Capacity Ceiling):      268435456 B (268.4 MB)
+    Capacity In Use By Volumes:   1544192 B (1.5 MB) (0.6% used)
+    Capacity Not Allocated:       266891264 B (266.9 MB) (99.4% free)
+    |
+    +-< Physical Store disk11 (No UUID)
+    |   -------------------------------
+    |   APFS Physical Store Disk:   disk11
+    |   Size:                       268435456 B (268.4 MB)
+    |
+    +-> Volume disk12s1 2431F951-DC65-4378-A6CD-400E2FE4F43D
+        ----------------------------------------------------
+        APFS Volume Disk (Role):   disk12s1 (No specific role)
+        Name:                      XCVWADD1 (Case-insensitive)
+        Mount Point:               /Volumes/XCVWADD1
+        Capacity Consumed:         28672 B (28.7 KB)
+        Sealed:                    No
+        FileVault:                 No
+(exit 0)
+## run 2 done; attached: disk5 disk6 disk8 disk10 disk11 
+
+######## run 3 (2026-10-26T22:09:30Z)
+## detach runs 1-2 (only disks this script attached, each re-checked as a disk image)
+$ hdiutil detach -force /dev/disk5
+"disk5" ejected.
+(exit 0)
+$ hdiutil detach -force /dev/disk6
+"disk6" ejected.
+(exit 0)
+$ hdiutil detach -force /dev/disk8
+"disk8" ejected.
+(exit 0)
+$ hdiutil detach -force /dev/disk10
+"disk9" ejected.
+(exit 0)
+$ hdiutil detach -force /dev/disk11
+"disk11" ejected.
+(exit 0)
+## C1 control: 256 MB APFS on GPT (hdiutil), addVolume
+$ hdiutil create -size 256m -layout GPTSPUD -fs APFS -volname XCVWGPT -type SPARSE /private/tmp/xcv-wd2/wd-apfsgpt2
+created: /private/tmp/xcv-wd2/wd-apfsgpt2.sparseimage
+(exit 0)
+GPT disk disk5 store disk5s1 container disk6
+$ diskutil apfs addVolume disk6 APFS XCVWADDG
+Will export new APFS Volume "XCVWADDG" from APFS Container Reference disk6
+Started APFS operation on disk6
+Preparing to add APFS Volume to APFS Container disk6
+Error: -69493: You can't add any more APFS Volumes to its APFS Container
+(exit 1)
+## C2: 2 GB whole-disk APFS (hdiutil -layout NONE): addVolume twice, eraseVolume an added one
+$ hdiutil create -size 2g -layout NONE -fs APFS -volname XCVWBIG -type SPARSE /private/tmp/xcv-wd2/wd-apfsbig
+hdiutil: create failed - Resource busy
+(exit 1)
+whole-disk store  container 
+## run 3 done; attached: disk5  
+
+######## run 3b (2026-10-26T22:10:04Z)
+(run 3b: C1 above stands; disk5 stays attached; C2 retried after a pause — create had failed Resource busy)
+## C2: 2 GB whole-disk APFS (hdiutil -layout NONE): addVolume twice, eraseVolume an added one
+$ hdiutil create -size 2g -layout NONE -fs APFS -volname XCVWBIG -type SPARSE /private/tmp/xcv-wd2/wd-apfsbig
+created: /private/tmp/xcv-wd2/wd-apfsbig.sparseimage
+(exit 0)
+whole-disk store disk7 container disk8
+$ diskutil apfs addVolume disk8 APFS XCVWADD1
+Will export new APFS Volume "XCVWADD1" from APFS Container Reference disk8
+Started APFS operation on disk8
+Preparing to add APFS Volume to APFS Container disk8
+Creating APFS Volume
+Created new APFS Volume disk8s2
+Mounting APFS Volume
+Setting volume permissions
+Disk from APFS operation: disk8s2
+Finished APFS operation on disk8
+(exit 0)
+$ diskutil apfs addVolume disk8 APFS XCVWADD2 -quota 1g
+Will export new APFS Volume "XCVWADD2" from APFS Container Reference disk8 with a 1000000000-byte quota
+Started APFS operation on disk8
+Preparing to add APFS Volume to APFS Container disk8
+Creating APFS Volume
+Created new APFS Volume disk8s3
+Mounting APFS Volume
+Setting volume permissions
+Disk from APFS operation: disk8s3
+Finished APFS operation on disk8
+(exit 0)
+added disk8s3
+$ diskutil eraseVolume APFS XCVWERASE2 disk8s3
+Started erase
+Preparing to erase APFS Volume content
+Checking mount state
+Erasing APFS Volume disk8s3 by deleting and re-adding
+Deleting APFS Volume from its APFS Container
+Unmounting disk8s3
+Erasing any xART session referenced by 78627171-81D3-4837-97B0-BC081F0E7FAE
+Deleting Volume
+Removing any Preboot and Recovery Directories
+Preparing to add APFS Volume to APFS Container disk8
+Creating APFS Volume
+Created new APFS Volume disk8s3
+Setting mount state
+Setting volume permissions
+Finished erase
+(exit 0)
+$ diskutil apfs list disk8
+|
++-- Container disk8 92F1B9A7-2B8E-442E-9A1A-9B7EB4F83740
+    ====================================================
+    APFS Container Reference:     disk8
+    Size (Capacity Ceiling):      2147483648 B (2.1 GB)
+    Capacity In Use By Volumes:   8523776 B (8.5 MB) (0.4% used)
+    Capacity Not Allocated:       2138959872 B (2.1 GB) (99.6% free)
+    |
+    +-< Physical Store disk7 (No UUID)
+    |   ------------------------------
+    |   APFS Physical Store Disk:   disk7
+    |   Size:                       2147483648 B (2.1 GB)
+    |
+    +-> Volume disk8s1 908A364A-AB60-420E-B5B3-D1C933186F34
+    |   ---------------------------------------------------
+    |   APFS Volume Disk (Role):   disk8s1 (No specific role)
+    |   Name:                      XCVWBIG (Case-insensitive)
+    |   Mount Point:               /Volumes/XCVWBIG
+    |   Capacity Consumed:         24576 B (24.6 KB)
+    |   Sealed:                    No
+    |   FileVault:                 No
+    |
+    +-> Volume disk8s2 F4CD9A19-AA56-47A4-92A5-6D1264F49DD9
+    |   ---------------------------------------------------
+    |   APFS Volume Disk (Role):   disk8s2 (No specific role)
+    |   Name:                      XCVWADD1 (Case-insensitive)
+    |   Mount Point:               /Volumes/XCVWADD1
+    |   Capacity Consumed:         24576 B (24.6 KB)
+    |   Sealed:                    No
+    |   FileVault:                 No
+    |
+    +-> Volume disk8s3 017CBD34-FF29-47AB-BA2B-805094F7411B
+        ---------------------------------------------------
+        APFS Volume Disk (Role):   disk8s3 (No specific role)
+        Name:                      XCVWERASE2 (Case-insensitive)
+        Mount Point:               /Volumes/XCVWERASE2
+        Capacity Consumed:         28672 B (28.7 KB)
+        Sealed:                    No
+        FileVault:                 No
+(exit 0)
+$ diskutil list disk7
+/dev/disk7 (disk image):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:                                                   +2.1 GB     disk7
+(exit 0)
+## run 3 done; attached: disk5  disk7 
+
+######## run 4 (2026-10-26T22:10:35Z) — C: a GPT image whose partition 1 is typed Apple_CoreStorage (53746F72-6167-11AA-AA11-00306543ECAC)
+(diskutil cs cannot create one on macOS 26: its verbs are list/info/delete/unlockVolume; gpt create/add on an attached image fail 'operation not permitted'. So: a raw GPT image, partition type rewritten in the file before attach, by scratchpad gptpatch.py)
+$ hdiutil create -size 64m -layout GPTSPUD -type UDIF -format UDRW /private/tmp/xcv-wd2/wd-cs2
+hdiutil: create: -format and -type cannot both be specified
+Usage:	hdiutil create <sizespec> [options] <imagepath>
+	hdiutil create -help
+(exit 1)
+Traceback (most recent call last):
+  File "<scratchpad>/gptpatch.py", line 7, in <module>
+    data = bytearray(open(path, "rb").read())
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/xcv-wd2/wd-cs2.dmg'
+hdiutil: attach failed - No such file or directory
+attached 
+Usage:  diskutil info[rmation] [-plist]
+        MountPoint|DiskIdentifier|DeviceNode|UUID | -all
+Display detailed information about a disk or partition.
+Root or administrator access is not required.
+NOT IMAGE
+(retry: -format alone)
+$ hdiutil create -size 64m -layout GPTSPUD -format UDRW /private/tmp/xcv-wd2/wd-cs2
+hdiutil: create: -format requires -srcfolder or -srcdevice
+Usage:	hdiutil create <sizespec> [options] <imagepath>
+	hdiutil create -help
+(exit 1)
+Traceback (most recent call last):
+  File "<scratchpad>/gptpatch.py", line 7, in <module>
+    data = bytearray(open(path, "rb").read())
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/xcv-wd2/wd-cs2.dmg'
+hdiutil: attach failed - No such file or directory
+attached 
+NOT IMAGE
+(retry: default UDIF read/write)
+$ hdiutil create -size 64m -layout GPTSPUD /private/tmp/xcv-wd2/wd-cs2
+created: /private/tmp/xcv-wd2/wd-cs2.dmg
+(exit 0)
+Format: UDRW
+header LBA 1: entry 1 type 48465300-0000-11aa-aa11-00306543ecac -> 53746f72-6167-11aa-aa11-00306543ecac
+header LBA 131071: entry 1 type 48465300-0000-11aa-aa11-00306543ecac -> 53746f72-6167-11aa-aa11-00306543ecac
+attached disk9
+$ diskutil list disk9
+/dev/disk9 (disk image):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:      GUID_partition_scheme                        +67.1 MB    disk9
+   1:          Apple_CoreStorage                         67.1 MB    disk9s1
+## list -plist entry
+{"AllDisksAndPartitions":[{"Partitions":[{"Size":67067904,"Content":"Apple_CoreStorage","DeviceIdentifier":"disk9s1","DiskUUID":"A5717699-2B44-4A80-A5EB-EA6EF6C1E904"}],"Size":67108864,"Content":"GUID_partition_scheme","DeviceIdentifier":"disk9","OSInternal":false}],"VolumesFromDisks":[],"AllDisks":["disk9","disk9s1"],"WholeDisks":["disk9"]}
+## info -plist disk9s1, selected
+{'Content': 'Apple_CoreStorage', 'FilesystemType': None, 'MountPoint': '', 'VolumeName': '', 'VolumeUUID': None, 'DiskUUID': 'A5717699-2B44-4A80-A5EB-EA6EF6C1E904', 'WholeDisk': False}
+$ diskutil cs list
+No CoreStorage logical volume groups found
