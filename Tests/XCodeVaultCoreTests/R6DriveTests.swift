@@ -573,6 +573,37 @@ final class R6DriveTests: XCTestCase {
         XCTAssertTrue(try assessment("disk9", snap).options.contains(.eraseDisk(disk: "disk9")))
     }
 
+    /// A CoreStorage partition (the old encrypted Time Machine layout) is reported as `Apple_CoreStorage` with no type,
+    /// name or UUID (evidence `e-wholedisk-followups-…`, 2026-10-26). Before, it was offered for erasing, and so was its
+    /// disk. Never mounted itself, so a mounted volume does not lift the refusal.
+    func testACoreStoragePartitionBlocksErasingItAndTheDisk() throws {
+        var snap = try Self.snapshot()
+        snap.disks = snap.disks.map { d in
+            var d = d
+            if d.id == "disk9" { d.partitions.append(DiskPartition(id: "disk9s3", content: "Apple_CoreStorage", sizeBytes: 100_000_000_000)) }
+            return d
+        }
+        let disk = try XCTUnwrap(snap.disks.first { $0.id == "disk9" })
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(disk, in: snap), ["disk9s3"])
+        let a = try assessment("disk9", snap)
+        XCTAssertFalse(a.options.contains(.eraseDisk(disk: "disk9")))
+        XCTAssertFalse(a.options.contains { $0 == .eraseVolume(volume: "disk9s3", name: "") }, "\(a.options)")
+        XCTAssertTrue(a.options.contains(.eraseVolume(volume: "disk9s2", name: "Transfer")), "the other volume is not refused")
+        XCTAssertTrue(a.shownRefusals.contains(.mightBeTimeMachine))
+        XCTAssertTrue(
+            DiskSafety.refusals(for: .eraseVolume, target: "disk9s3", on: disk, in: snap, registeredVaultUUIDs: []).contains(.mightBeTimeMachine))
+        XCTAssertEqual(DiskSafety.refusals(for: .addVolume, target: "disk9s3", on: disk, in: snap, registeredVaultUUIDs: []), [], "adding erases nothing")
+        XCTAssertThrowsError(
+            try DiskPreparation.plan(
+                .eraseVolume(volume: "disk9s3", name: ""), configuration: VolumeConfiguration(), on: a, snapshot: snap,
+                registeredVaultUUIDs: []))
+        // A volume reported at the partition's device does not make it readable: a CoreStorage partition stays refused.
+        snap.volumes.append(Self.volume("disk9s3", "Locked", uuid: Self.u(904), mount: "/Volumes/Locked", fs: "Mac OS Extended (Journaled)", type: "hfs"))
+        let mountedDisk = try XCTUnwrap(snap.disks.first { $0.id == "disk9" })
+        XCTAssertEqual(DiskSafety.unverifiedPartitions(mountedDisk, in: snap), ["disk9s3"])
+        XCTAssertFalse(try assessment("disk9", snap).options.contains(.eraseDisk(disk: "disk9")))
+    }
+
     func testInvisibleAndControlCharactersAreRefusedInAName() {
         for bad in ["a\u{7F}b", "a\u{85}b", "a\u{202E}b", "a\u{200B}b", "a\u{0007}b", "a\nb", "a\u{2028}b", "a\u{2029}b"] {
             XCTAssertFalse(VolumeConfiguration(name: bad).problems(for: .addVolume).isEmpty, bad.unicodeScalars.map { String($0.value, radix: 16) }.joined())

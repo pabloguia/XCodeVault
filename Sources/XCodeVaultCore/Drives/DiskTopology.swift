@@ -31,6 +31,8 @@ public struct DiskPartition: Sendable, Equatable, Codable {
     /// HFS+: a partition typed so, or a file system written on the whole disk (`content` is then `info`'s
     /// `FilesystemType`, `hfs`). Either might be a Time Machine backup.
     public var isHFS: Bool { ["Apple_HFS", "Apple_HFSX", "hfs"].contains(content) }
+    /// A CoreStorage physical volume: what it holds (often an encrypted HFS+ Time Machine backup) is not visible here.
+    public var isCoreStorage: Bool { content == "Apple_CoreStorage" }
     /// Partitions that are not user volumes and are never offered for erasing on their own.
     public var isSystemPartition: Bool {
         ["EFI", "Apple_Boot", "Apple_APFS_Recovery", "Apple_APFS_ISC", "Apple_KernelCoreDump", "Apple_partition_map", "Apple_Free"].contains(content)

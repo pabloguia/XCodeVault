@@ -2236,6 +2236,12 @@ disks: `apfs addVolume` VERIFIED on one USB disk (macOS 26.7.1 · Intel, 2026-10
 need, run **Erase Volume** on a volume you added (and, on a disk with free space, **Add Partition**); record the outcome and the
 log here and in `COMPATIBILITY_MATRIX.md`.
 
+**2026-10-26, disk images: on a container whose store is the whole disk too.** The product's exact `apfs addVolume` (with
+and without `-quota`) and `eraseVolume` argv succeed on a 2 GB `-layout NONE` APFS image, as they did on a partition map;
+`eraseVolume` of the store itself is refused by `diskutil` ("use diskutil apfs deleteContainer") and is never offered.
+A trap for fixtures: a 256 MB container took one volume only (`addVolume` failed `-69493`, on a partition map just the
+same), a 2 GB one took three; the threshold between was not measured. Evidence `evidence/e-wholedisk-followups-macos26.7.1-25G241-x86_64.txt`.
+
 ## H18 — the privileged helper turns ownership on, behind the admin password, on a physical external volume *(new, 2026-10-05; (a)/(b) FAILED with the stock admin rule, 2026-10-05; **(a)/(b) PASS with the right's own rule, 2026-10-06; (c)/(d) PASS 2026-10-07 with fix rounds 6–7**)*
 
 **Claim.** In a build signed with the user's Developer ID team and including the daemon, **Turn On Ownership**:
@@ -2388,7 +2394,7 @@ from the volume itself. That would mutate the user's TCC database. It was not ru
 
 Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.
 
-## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine)*
+## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine; **not pursued** — ADR-0019, option A, 2026-10-27)*
 
 **Claim:** a dedicated APFS volume on the external disk, mounted (not symlinked) at
 `/Library/Developer/CoreSimulator/Images`, is used by `simdiskimaged` as the runtime store — every

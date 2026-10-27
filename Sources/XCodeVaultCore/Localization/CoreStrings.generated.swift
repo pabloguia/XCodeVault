@@ -1067,11 +1067,11 @@ extension L10nCatalog {
       "zh-Hans" : "这是内置磁盘。XCodeVault 绝不会抹掉或分区内置磁盘。"
     },
     "app.drives.refusal.mightBeTimeMachine" : {
-      "en" : "An unmounted HFS+ partition might be a Time Machine backup; mount it so XCodeVault can check.",
-      "es" : "Una partición HFS+ sin montar podría ser una copia de Time Machine; móntala para que XCodeVault pueda comprobarlo.",
-      "ja" : "マウントされていない HFS+ パーティションは Time Machine のバックアップかもしれません。XCodeVault が確認できるようにマウントしてください。",
-      "pt-BR" : "Uma partição HFS+ não montada pode ser um backup do Time Machine; monte-a para o XCodeVault verificar.",
-      "zh-Hans" : "未装载的 HFS+ 分区可能是时间机器备份；请装载它，以便 XCodeVault 检查。"
+      "en" : "Something on this disk that XCodeVault cannot look inside might be a Time Machine backup. If it is an unmounted volume, mount it so XCodeVault can check; a CoreStorage partition can only be erased in Disk Utility, by you.",
+      "es" : "Algo en este disco cuyo contenido XCodeVault no puede ver podría ser una copia de Time Machine. Si es un volumen sin montar, móntalo para que XCodeVault pueda comprobarlo; una partición CoreStorage solo puedes borrarla tú, en Utilidad de Discos.",
+      "ja" : "このディスク上に、XCodeVault が中身を確認できないものがあり、Time Machine のバックアップかもしれません。マウントされていないボリュームなら、XCodeVault が確認できるようにマウントしてください。CoreStorage パーティションは、ディスクユーティリティでご自身が消去する必要があります。",
+      "pt-BR" : "Algo neste disco que o XCodeVault não consegue ver por dentro pode ser um backup do Time Machine. Se for um volume não montado, monte-o para o XCodeVault verificar; uma partição CoreStorage só pode ser apagada por você, no Utilitário de Disco.",
+      "zh-Hans" : "此磁盘上有 XCodeVault 无法查看其内容的部分，可能是时间机器备份。如果是未装载的宗卷，请装载它以便 XCodeVault 检查；CoreStorage 分区只能由你在磁盘工具中抹掉。"
     },
     "app.drives.refusal.readOnlyMedia" : {
       "en" : "The disk is read-only.",

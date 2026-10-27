@@ -22,8 +22,9 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
     case timeMachine
     /// The disk's media is read-only.
     case readOnlyMedia
-    /// An HFS+ partition that is not mounted: it might be a Time Machine backup, and nothing can tell until it is mounted
-    /// (the marker check reads the volume's root).
+    /// A partition whose contents cannot be read — an unmounted HFS+ partition, a CoreStorage partition (the old encrypted
+    /// Time Machine layout), an unmounted whole-disk file system of unknown type: it might be a Time Machine backup, and
+    /// nothing can tell (the marker check reads a mounted volume's root).
     case mightBeTimeMachine
     /// `diskutil` could not read one of its volumes: whatever that volume is, nothing here can tell, so the disk is not
     /// changed until it can be read.
@@ -41,7 +42,9 @@ public enum DiskRefusal: String, Sendable, Codable, CaseIterable {
         case .holdsVault: "This disk holds a registered vault. Erasing or repartitioning it is blocked: it would destroy or remount the vault."
         case .timeMachine: "This disk holds a Time Machine backup."
         case .readOnlyMedia: "This disk's media is read-only."
-        case .mightBeTimeMachine: "An unmounted HFS+ partition on this disk might be a Time Machine backup; mount it so XCodeVault can check."
+        case .mightBeTimeMachine:
+            "Something on this disk that XCodeVault cannot look inside might be a Time Machine backup. If it is an unmounted volume, mount it "
+                + "so XCodeVault can check; a CoreStorage partition can only be erased in Disk Utility, by you."
         case .volumeUnreadable:
             "diskutil could not read a volume on this disk, so XCodeVault cannot tell what it holds and changes nothing on it. Try again in a "
                 + "moment; if it stays, check the disk in Disk Utility."
@@ -77,7 +80,7 @@ public enum DiskSafety {
     public static func eraseRefusals(_ disk: PhysicalDisk, in snapshot: DriveSnapshot, registeredVaultUUIDs: Set<String>) -> [DiskRefusal] {
         var out = changeRefusals(disk, in: snapshot)
         if holdsVault(disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs) { out.append(.holdsVault) }
-        if !unverifiedHFSPartitions(disk, in: snapshot).isEmpty { out.append(.mightBeTimeMachine) }
+        if !unverifiedPartitions(disk, in: snapshot).isEmpty { out.append(.mightBeTimeMachine) }
         return out
     }
 
@@ -85,27 +88,34 @@ public enum DiskSafety {
     ///   - adding a volume: the change refusals (it does not touch the partition map);
     ///   - adding a partition: those and a registered vault on the disk — rewriting the map remounts the disk, a window
     ///     in which the vault is not where it was (rule 6);
-    ///   - erasing a volume: those, and the target being an unmounted HFS+ partition (`mightBeTimeMachine`);
-    ///   - erasing the disk: those, and any unmounted HFS+ partition on it.
+    ///   - erasing a volume: those, and the target being a partition whose contents cannot be read (`mightBeTimeMachine`);
+    ///   - erasing the disk: those, and any such partition on it.
     public static func refusals(
         for action: DiskPreparationAction, target: String, on disk: PhysicalDisk, in snapshot: DriveSnapshot, registeredVaultUUIDs: Set<String>
     ) -> [DiskRefusal] {
         var out = changeRefusals(disk, in: snapshot)
         guard action != .addVolume else { return out }
         if holdsVault(disk, in: snapshot, registeredVaultUUIDs: registeredVaultUUIDs) { out.append(.holdsVault) }
-        let hfs = unverifiedHFSPartitions(disk, in: snapshot)
+        let unverified = unverifiedPartitions(disk, in: snapshot)
         switch action {
-        case .eraseVolume where hfs.contains(target), .eraseDisk where !hfs.isEmpty: out.append(.mightBeTimeMachine)
+        case .eraseVolume where unverified.contains(target), .eraseDisk where !unverified.isEmpty: out.append(.mightBeTimeMachine)
         default: break
         }
         return out
     }
 
-    /// HFS+ partitions of `disk` that are not mounted — and an HFS+ file system on the whole disk: their root, where a
-    /// Time Machine marker would be, cannot be read.
-    public static func unverifiedHFSPartitions(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [String] {
+    /// Partitions of `disk` — and a file system on the whole disk — that might hold a Time Machine backup and whose root,
+    /// where the marker would be, cannot be read:
+    ///   - HFS+, not mounted;
+    ///   - CoreStorage, mounted or not: the partition is a physical volume, never itself mounted, and was the layout of
+    ///     encrypted HFS+ backups. Measured 2026-10-26 (evidence `e-wholedisk-followups-…`): `diskutil` reports it as
+    ///     `Apple_CoreStorage` with no file-system type, name or UUID, so nothing here can tell what it holds;
+    ///   - a whole-disk file system `diskutil` does not type (`unknown`), not mounted.
+    public static func unverifiedPartitions(_ disk: PhysicalDisk, in snapshot: DriveSnapshot) -> [String] {
         let mounted = Set(snapshot.volumes(on: disk).map { DriveSnapshot.deviceID($0.deviceNode) })
-        return (disk.partitions + [disk.wholeDiskVolume].compactMap { $0 }).filter { $0.isHFS && !mounted.contains($0.id) }.map(\.id)
+        return (disk.partitions + [disk.wholeDiskVolume].compactMap { $0 }).filter { p in
+            p.isCoreStorage || ((p.isHFS || p.content == "unknown") && !mounted.contains(p.id))
+        }.map(\.id)
     }
 
     /// Another macOS installation on `disk`: a mounted volume marked so, or — mounted or not — an APFS volume whose role
