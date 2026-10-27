@@ -14,21 +14,71 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-**2026-10-26, branch `fix/wholedisk-followups`:** the whole-disk entry's "Not measured" cases, measured on disk images (`docs/research/evidence/e-wholedisk-followups-macos26.7.1-25G241-x86_64.txt`): an unmounted exFAT whole disk keeps its type; `apfs addVolume` and `eraseVolume` work on a container whose store is the whole disk (H17); an `Apple_CoreStorage` partition shows no type, name or UUID and **was offered for erasing, with its disk** — now refused as `mightBeTimeMachine`, as is an unmounted whole-disk volume typed `unknown`. Not measurable here: a real CoreStorage group (macOS 26 cannot create one) and FAT32 unmounted. Also on the branch: **ADR-0019** — H20/E20 written up with options A/B/C; **accepted 2026-10-27 as A, "not now"** (the operator's decision). Migration-safety review dispatched.
+**Nothing is on a branch (checked 2026-10-27 against `origin/main` at d9474de).** No open pull request, no branch
+besides `main` locally or on GitHub, one open issue (#30). Merged since the last refresh (#59, 2026-10-25), newest first:
 
-**2026-10-27, branch `fix/mbr-untyped-partitions`:** the review's MBR note, measured on images
-(`docs/research/evidence/e-mbr-untyped-partitions-macos26.7.1-25G241-x86_64.txt`): an unrecognised MBR partition reads as
-`Linux` / `0xDA` with no name or UUID. It cannot be a Time Machine backup, so it stays erasable; the erase now names its type
-instead of a bare device id (`DestroyedVolume.unreadableType`). Open: a type-00 entry is invisible to `diskutil` altogether.
+- **#66** — the disk-image runtime store (`CoreSimulator/Images`) is counted: a second path of `simulatorRuntimeAssets`,
+  `Images/Inbox` a breakdown (proposal option 2, approved by the operator). Migration-safety: APPROVE on re-review.
+- **#64** — catalog category names and outcomes in the app's language (S4 follow-up 3); the CLI and records keep English.
+- **#63** — an unrecognised MBR partition (reads as `Linux` / `0xDA`) is named by its type in the erase confirmation.
+  Migration-safety: APPROVE.
+- **#62** — the whole-disk "Not measured" cases measured on images (#55's entry below): exFAT keeps its type unmounted;
+  `apfs addVolume` and `eraseVolume` work on a whole-disk store; an `Apple_CoreStorage` partition and an unmounted
+  whole-disk volume typed `unknown` were offered for erasing and are now refused as `mightBeTimeMachine`. ADR-0019
+  (H20) accepted 2026-10-27 as option A, "not now". Migration-safety: APPROVE.
+- **#61** — no more `xcv-*` scratch left in `$TMPDIR`, with a gate on it.
+- **#60** — E21: `simctl runtime add` rebuilds that runtime's `Caches/dyld` entry unprompted.
+- **#56–#59** — H20/E20, E6b (issue #29 closed), the SESSION-HANDOFF refresh, the previous STATUS refresh.
 
-**Nothing else is on a branch as of 2026-10-25.** Every entry that used to sit here has merged into `main` (`git log
-origin/main` is the record: H20/E20 #56, E6b #57, whole-disk volumes #55, R8 #47, R7 #46, R6 #45, R5 #44, R3 #43, R4
-#42, the savings/i18n/identity series #36–#39; user-first permissions was committed before the PR era). They are kept
-below, verbatim, under "Merged, with open follow-ups", because several still carry items nobody has done — the
-manual real-window checks, the unmeasured whole-disk cases, the R8 real-drive re-test, `createVaultDirectory` live.
-Read those entries for their **Manual check, open**, **Still open** and **Not measured** lines, not for their state.
+**What is left is the list below**, "Open items". The entries under "Merged, with open follow-ups" are kept verbatim as
+the record each item came from; an item in them that is not in "Open items" has been done (where, is said there).
 
-Waiting on the operator, not on a branch: #30's Part F. (The H20 decision was made 2026-10-27: ADR-0019, option A.)
+## Open items (checked against `main`, 2026-10-27)
+
+Every pending thing, in one place. Each line names where it was recorded. Nothing here is on a branch.
+
+**Needs the operator at the Mac**
+
+1. **#30, Part F — the helper live.** From the runbook, on a clean start with a CI-signed build: `createVaultDirectory`
+   (probably refused by TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out of
+   a published release until both pass, so the **0.3.0-rc.2 draft stays unpublished** (Releases entry below).
+2. **Real-window checks** of features tested with fakes only:
+   - **R3:** a real run in the app — Archives to a vault then Remove Original, a DerivedData change then Undo, an offload
+     with Export Installer First; whether `xcodebuild -downloadPlatform -exportPath` grows its folder while downloading;
+     the folder panel as a sheet on the Run sheet.
+   - **R6:** H17 on a physical disk (only `apfs addVolume` has been, in R7-D; the other commands on images only), mount
+     detection on a real plug and unplug, the preparation sheet's form, Finder's Get Info route for ownership.
+   - **R7-A/B:** the charts, sheets and Drives buttons; the design-system gallery and every screen in light, dark and
+     Increase Contrast; a disabled prominent button in dark mode.
+   - **R7-C:** the Plan with a drive plugged in and out.
+   - **R7-D / R8:** the same physical disk after Turn On Ownership — Plan step 3, then Use This Drive, which since
+     2026-10-08 makes the vault folder before ownership is on (`VaultFolderPrecreate`); never re-run on a real drive.
+   - **S4:** table and list rows, which off-screen snapshots cannot draw (Delete's grouped rows, Storage, both
+     Simulators tables, Health's findings).
+3. **Native review of the translations.** Every pt-BR, es, ja and zh-Hans string is a draft marked `needs_review`
+   (`scripts/l10n.sh check` counts them; docs/process/LOCALIZATION.md).
+
+**Optional, no decision rests on them**
+
+4. **E21's open edges** — a first boot with the `Caches/dyld` entry missing; an Xcode Components-pane install. Each
+   costs one cache rebuild and an idle simulator rig.
+5. **A second machine (Apple Silicon)** for the compatibility matrix's single-machine results. Under ADR-0019 none is
+   scheduled for H20.
+
+**Known gaps, recorded, nothing planned**
+
+6. A type-00 MBR entry is invisible to `diskutil`, so erasing such a disk lists nothing (#63).
+7. Not measurable on this Mac: a real CoreStorage group (macOS 26 cannot create one) and an unmounted FAT32 whole disk
+   (#62).
+8. A vault mounted somewhere other than its last path, and missed by `diskutil`, reads as not connected (#51).
+9. The Locations "is external" fallback treats an unreadable volume mounted outside `/Volumes` as on this Mac (Low;
+   review of #54).
+10. The helper's cleanup verb has no in-use check of its own, so the daemon refuses it and the app shows the manual
+    route (#48).
+11. Simulator platforms outside the five known identifiers show their short identifier; ArgumentParser's own help
+    headers stay English (S4 follow-up 6; S3).
+12. H20 (runtimes served from an external volume) is probable and experimental, and nothing is built on it (ADR-0019,
+    option A).
 
 ## Merged, with open follow-ups
 
@@ -61,7 +111,8 @@ review" or "never run" describe the entry when it was written; the merge is the 
   partition map only); CoreStorage — its logical volume is now seen, but the disk holding its `Apple_CoreStorage`
   partition is not refused as possibly Time Machine, the old encrypted-HFS+ backup layout; an unmounted whole-disk
   volume typed `unknown` is not either (HFS+ was measured to keep its type unmounted). Review: migration-safety, two
-  rounds (REQUEST CHANGES, then APPROVE).
+  rounds (REQUEST CHANGES, then APPROVE). **All four measured or fixed by #62 (2026-10-27)**; what is left is Open
+  items 6–7.
 - **Unreadable volumes reach the disk gate and the doctor — MERGED (2026-10-18, PR #54, dba99aa; M1/M2 of the PR #51
   review).** `DriveSnapshot` carries the volumes `diskutil` listed but could not read; a disk holding one —
   or any disk, when no disk claims it — refuses every change (`DiskRefusal.volumeUnreadable`, localized, drafts
@@ -266,7 +317,7 @@ review" or "never run" describe the entry when it was written; the merge is the 
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
   before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
   are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
-  catalog's English in every language (S4 Task 2) — **done 2026-10-27** (branch `feat/localized-category-names`): the app
+  catalog's English in every language (S4 Task 2) — **done 2026-10-27** (#64): the app
   shows them in its language everywhere, the Storage table sorts and searches by what it shows, and the CLI and records
   keep the English; (4) the
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
@@ -282,7 +333,7 @@ review" or "never run" describe the entry when it was written; the merge is the 
   2026-10-03: 15.84 GB here) are not a catalog category, so the savings model does not count them;
   `scan` prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table)
   needing the evidence and review of a catalog decision. **Approved 2026-10-27 (option 2) and implemented**
-  (branch `feat/runtime-disk-images`): `Images` is a second path of `simulatorRuntimeAssets`, `Images/Inbox` a breakdown
+  (#66, merged): `Images` is a second path of `simulatorRuntimeAssets`, `Images/Inbox` a breakdown
   (`runtimeImagesInbox`); see the proposal's "As implemented".
 
 - **E6b — DONE 2026-10-25, both variants, at `Cryptex/Caches`** (branch `exp/e6b-variant-b`). On the operator's
@@ -329,7 +380,7 @@ review" or "never run" describe the entry when it was written; the merge is the 
 1. **#30, Part F** — the helper live from the runbook on a clean start with a CI-signed build: `createVaultDirectory`
    (probably refused by TCC on a removable volume) and an update over an older daemon. ADR-0016 keeps the helper out
    of a published release until both pass. Needs the operator at the Mac.
-2. **The manual real-window checks** of the merged entries above (R7-A/B/C, table and list rows, the R8 Use This Drive
+2. **The manual real-window checks** (Open items, item 2) of the merged entries above (R7-A/B/C, table and list rows, the R8 Use This Drive
    re-test on a real drive, H17 on a physical disk). Needs the operator at the Mac.
 3. **E21's open edges, optional** — a first boot with the `Caches/dyld` entry missing, and an Xcode Components-pane
    install. Each costs one cache rebuild and an idle simulator rig.
@@ -790,6 +841,8 @@ is done. The post-publication issue backlog replaced it._
 
 
 ## Current milestone
+
+_Historical: written in September at M3 and not kept since. The current state is the live sections at the top._
 
 **M3 — disconnect safety: implemented, independently reviewed twice, all findings fixed and committed.**
 M1, M2, M3 committed. M4 GUI first slice builds and launches (read-only + clean flow). M5:
