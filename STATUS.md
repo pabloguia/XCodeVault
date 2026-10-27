@@ -276,7 +276,9 @@ review" or "never run" describe the entry when it was written; the merge is the 
   `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` (Intel / pre-MobileAsset layout, measured
   2026-10-03: 15.84 GB here) are not a catalog category, so the savings model does not count them;
   `scan` prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table)
-  needing the evidence and review of a catalog decision.
+  needing the evidence and review of a catalog decision. **Proposed 2026-10-27, awaiting the operator:**
+  `docs/research/RUNTIME-IMAGES-CATALOG-PROPOSAL-2026-10-27.md` — a `runtimeDiskImages` category with the runtime
+  park/delete actions (today attached to the MobileAsset store, 4 KB here), `Images/Inbox` as a breakdown.
 
 - **E6b — DONE 2026-10-25, both variants, at `Cryptex/Caches`** (branch `exp/e6b-variant-b`). On the operator's
   disposable USB flash drive (`Removable`), the clean unmount and the physical yank left the same thing: the
