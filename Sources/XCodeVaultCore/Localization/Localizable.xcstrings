@@ -11751,6 +11751,40 @@
         }
       }
     },
+    "app.prep.destroys.unreadable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (a “%2$@” partition macOS cannot read: whatever it holds is erased)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@ (una partición “%2$@” que macOS no puede leer: se borra todo lo que contenga)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@（macOS が読み取れない「%2$@」パーティション：中身はすべて消去されます）"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@ (uma partição “%2$@” que o macOS não consegue ler: tudo o que ela contém é apagado)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "%1$@（macOS 无法读取的“%2$@”分区：其中的所有内容都会被抹掉）"
+          }
+        }
+      }
+    },
     "app.prep.identityWeak" : {
       "localizations" : {
         "en" : {

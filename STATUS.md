@@ -16,6 +16,11 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 **2026-10-26, branch `fix/wholedisk-followups`:** the whole-disk entry's "Not measured" cases, measured on disk images (`docs/research/evidence/e-wholedisk-followups-macos26.7.1-25G241-x86_64.txt`): an unmounted exFAT whole disk keeps its type; `apfs addVolume` and `eraseVolume` work on a container whose store is the whole disk (H17); an `Apple_CoreStorage` partition shows no type, name or UUID and **was offered for erasing, with its disk** — now refused as `mightBeTimeMachine`, as is an unmounted whole-disk volume typed `unknown`. Not measurable here: a real CoreStorage group (macOS 26 cannot create one) and FAT32 unmounted. Also on the branch: **ADR-0019** — H20/E20 written up with options A/B/C; **accepted 2026-10-27 as A, "not now"** (the operator's decision). Migration-safety review dispatched.
 
+**2026-10-27, branch `fix/mbr-untyped-partitions`:** the review's MBR note, measured on images
+(`docs/research/evidence/e-mbr-untyped-partitions-macos26.7.1-25G241-x86_64.txt`): an unrecognised MBR partition reads as
+`Linux` / `0xDA` with no name or UUID. It cannot be a Time Machine backup, so it stays erasable; the erase now names its type
+instead of a bare device id (`DestroyedVolume.unreadableType`). Open: a type-00 entry is invisible to `diskutil` altogether.
+
 **Nothing else is on a branch as of 2026-10-25.** Every entry that used to sit here has merged into `main` (`git log
 origin/main` is the record: H20/E20 #56, E6b #57, whole-disk volumes #55, R8 #47, R7 #46, R6 #45, R5 #44, R3 #43, R4
 #42, the savings/i18n/identity series #36–#39; user-first permissions was committed before the PR era). They are kept

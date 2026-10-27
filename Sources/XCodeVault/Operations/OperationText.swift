@@ -223,9 +223,10 @@ enum DriveText {
         }
     }
 
-    /// A volume an erase destroys, with what it holds when known.
+    /// A volume an erase destroys, with what it holds when known — or, for a partition macOS cannot read, its type.
     static func destroyed(_ v: DestroyedVolume) -> String {
         let name = v.name.isEmpty ? v.id : v.name
+        if let type = v.unreadableType { return L10n.tr("app.prep.destroys.unreadable", name, type) }
         return v.usedBytes.map { L10n.tr("app.prep.destroys.row", name, ByteCount.format($0)) } ?? name
     }
 

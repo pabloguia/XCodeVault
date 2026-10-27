@@ -2536,6 +2536,13 @@ extension L10nCatalog {
       "pt-BR" : "Isto apaga tudo em:",
       "zh-Hans" : "这将抹掉以下各项上的所有内容："
     },
+    "app.prep.destroys.unreadable" : {
+      "en" : "%1$@ (a “%2$@” partition macOS cannot read: whatever it holds is erased)",
+      "es" : "%1$@ (una partición “%2$@” que macOS no puede leer: se borra todo lo que contenga)",
+      "ja" : "%1$@（macOS が読み取れない「%2$@」パーティション：中身はすべて消去されます）",
+      "pt-BR" : "%1$@ (uma partição “%2$@” que o macOS não consegue ler: tudo o que ela contém é apagado)",
+      "zh-Hans" : "%1$@（macOS 无法读取的“%2$@”分区：其中的所有内容都会被抹掉）"
+    },
     "app.prep.identityWeak" : {
       "en" : "This disk can't be told apart from another of the same model.",
       "es" : "Este disco no se puede distinguir de otro del mismo modelo.",

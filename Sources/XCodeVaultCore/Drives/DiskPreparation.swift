@@ -103,6 +103,16 @@ public struct DestroyedVolume: Sendable, Equatable, Codable {
     public var name: String
     /// Bytes in use, when known (an APFS volume's `CapacityInUse`, a mounted volume's used space).
     public var usedBytes: UInt64?
+    /// The partition's type, when macOS reads no file system on it (`Linux`, `0xDA`, `Windows_NTFS` with nothing
+    /// readable): what it holds cannot be shown, so the confirmation names the type instead. Measured 2026-10-27 on MBR
+    /// images (evidence `e-mbr-untyped-partitions-…`): such a partition has no volume name and no volume UUID, and macOS
+    /// does not look inside a partition of a type it does not know — a type-0x83 entry hid an intact FAT32. Partitions
+    /// only; a file system on the whole disk is never labelled.
+    public var unreadableType: String?
+
+    public init(id: String, name: String, usedBytes: UInt64?, unreadableType: String? = nil) {
+        self.id = id; self.name = name; self.usedBytes = usedBytes; self.unreadableType = unreadableType
+    }
 }
 
 /// Exactly what the confirmation runs.
@@ -254,14 +264,22 @@ public enum DiskPreparation {
             disk.containers.flatMap(\.volumes).first { $0.id == id }?.name ?? disk.partitions.first { $0.id == id }?.volumeName
                 ?? (disk.wholeDiskVolume?.id == id ? disk.wholeDiskVolume?.volumeName : nil) ?? ""
         }
+        // A partition with neither a volume name nor a volume UUID, and no mounted volume: no file system macOS reads.
+        func unreadableType(_ id: String) -> String? {
+            guard let p = disk.partitions.first(where: { $0.id == id }),
+                p.volumeName?.isEmpty ?? true, p.volumeUUID == nil,
+                !snapshot.volumes.contains(where: { DriveSnapshot.deviceID($0.deviceNode) == id })
+            else { return nil }
+            return p.content.isEmpty ? "unknown" : p.content
+        }
         switch action {
         case .addVolume, .addPartition:
             return []
         case .eraseVolume:
             // Erasing an APFS volume erases that volume; erasing a partition erases the file system on it.
-            return [DestroyedVolume(id: target, name: name(target), usedBytes: used(target))]
+            return [DestroyedVolume(id: target, name: name(target), usedBytes: used(target), unreadableType: unreadableType(target))]
         case .eraseDisk:
-            return disk.volumeIDs.map { DestroyedVolume(id: $0, name: name($0), usedBytes: used($0)) }
+            return disk.volumeIDs.map { DestroyedVolume(id: $0, name: name($0), usedBytes: used($0), unreadableType: unreadableType($0)) }
         }
     }
 
