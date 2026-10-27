@@ -41,6 +41,13 @@ public enum RiskLevel: String, Sendable, Codable, Comparable {
     }
 }
 
+public enum CategoryOutcome: String, Sendable, CaseIterable, Codable {
+    case relocatable
+    case deleteOnlyOfficialTool = "delete-only (official tool)"
+    case deleteOnly = "delete-only"
+    case mustStayLocal = "must stay local"
+    case informational
+}
 public enum PrivilegeLevel: String, Sendable, Codable { case user, root }
 
 /// The owning Apple subsystem, used for grouping and for choosing the right official command.
@@ -119,14 +126,17 @@ public struct StorageCategory: Sendable, Codable, Equatable, Identifiable {
     public var isCleanable: Bool { allowedStrategies.contains(.safeCleanup) || cleanupCommand != nil }
     public var mustStayLocal: Bool { recommendedStrategy == .neverMove || recommendedStrategy == .appleManaged }
 
-    /// Human label of the honest outcome: relocatable / delete-only / neither (UX_AND_CLI.md).
-    public var outcomeLabel: String {
+    /// The honest outcome: relocatable / delete-only / neither (UX_AND_CLI.md). The app shows it in its own language.
+    public var outcome: CategoryOutcome {
         switch (isRelocatable, isCleanable) {
-        case (true, _): return "relocatable"
-        case (false, true): return cleanupCommand != nil ? "delete-only (official tool)" : "delete-only"
-        case (false, false): return mustStayLocal ? "must stay local" : "informational"
+        case (true, _): return .relocatable
+        case (false, true): return cleanupCommand != nil ? .deleteOnlyOfficialTool : .deleteOnly
+        case (false, false): return mustStayLocal ? .mustStayLocal : .informational
         }
     }
+
+    /// Human label of the honest outcome, in English: the CLI's, the report's and the record's.
+    public var outcomeLabel: String { outcome.rawValue }
 
     /// True when `path` **is** this category, or lies inside it.
     ///

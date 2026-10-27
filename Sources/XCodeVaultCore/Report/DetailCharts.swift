@@ -64,12 +64,13 @@ extension StorageTable {
         }
     }
 
-    /// The search (R5, the user's feedback of 2026-10-04): the category's name or the item's path contains the text,
-    /// ignoring case and diacritics, after trimming. An empty search matches every row.
+    /// The search (R5, the user's feedback of 2026-10-04): the category's name — as shown, or the catalog's English — or the
+    /// item's path contains the text, ignoring case and diacritics, after trimming. An empty search matches every row.
     public static func matches(_ row: StorageRow, query: String) -> Bool {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return true }
-        return row.categoryName.localizedStandardContains(text) || row.item.path.localizedStandardContains(text)
+        return row.localizedCategoryName.localizedStandardContains(text) || row.categoryName.localizedStandardContains(text)
+            || row.item.path.localizedStandardContains(text)
     }
 
     /// Whether anything narrows the table: a bucket chosen or a search typed. The view shows **Show All** and the filter's
@@ -109,8 +110,8 @@ extension StorageTable {
             switch self {
             case .size: KeyPathComparator(\StorageRow.item.allocatedBytes, order: order)
             case .bucket: KeyPathComparator(\StorageRow.bucketSortKey, order: order)
-            case .category: KeyPathComparator(\StorageRow.categoryName, order: order)
-            case .outcome: KeyPathComparator(\StorageRow.outcome, order: order)
+            case .category: KeyPathComparator(\StorageRow.localizedCategoryName, order: order)
+            case .outcome: KeyPathComparator(\StorageRow.localizedOutcome, order: order)
             case .strategy: KeyPathComparator(\StorageRow.strategySortKey, order: order)
             case .path: KeyPathComparator(\StorageRow.item.path, order: order)
             }

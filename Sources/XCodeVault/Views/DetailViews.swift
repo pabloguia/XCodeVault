@@ -86,7 +86,7 @@ struct StorageView: View {
 
     private var table: some View {
         Table(model.storageRows(report), selection: $model.storageSelection, sortOrder: $model.storageSortOrder) {
-            // Category names and outcomes are the catalog's English: StorageCategory data, not app text (S4 Task 2).
+            // Category names and outcomes in the chosen language; they sort and search by what they show (`StorageRow`).
             TableColumn(L10n.tr("app.column.size"), sortUsing: StorageTable.Column.size.comparator()) {
                 Text(verbatim: ByteCount.format($0.item.allocatedBytes)).monospacedDigit()
             }
@@ -100,8 +100,10 @@ struct StorageView: View {
                     .help(bucket.localizedTitle)
                 }
             }
-            TableColumn(L10n.tr("app.column.category"), sortUsing: StorageTable.Column.category.comparator()) { Text(verbatim: $0.categoryName) }
-            TableColumn(L10n.tr("app.column.outcome"), sortUsing: StorageTable.Column.outcome.comparator()) { Text(verbatim: $0.outcome).help($0.outcome) }
+            TableColumn(L10n.tr("app.column.category"), sortUsing: StorageTable.Column.category.comparator()) { Text(verbatim: $0.localizedCategoryName) }
+            TableColumn(L10n.tr("app.column.outcome"), sortUsing: StorageTable.Column.outcome.comparator()) {
+                Text(verbatim: $0.localizedOutcome).help($0.localizedOutcome)
+            }
             TableColumn(L10n.tr("app.column.strategy"), sortUsing: StorageTable.Column.strategy.comparator()) { row in
                 // The strategy's name in words, and the experimental badge every experimental row carries (rule 10).
                 HStack(spacing: 4) {

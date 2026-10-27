@@ -91,9 +91,10 @@ The app (S4) takes its language once at launch — its resolved localization, th
 string literal in a view). Localized in the app: the sidebar and every screen's own text — the Overview's bar, cards
 and notes, the bucket views (titles, promises, costs to undo, markers, the Delete table's columns and dialogs, Park's
 vault line, **Copy Command**), the Access checklist, and the Details screens' titles, columns and empty states — with
-bytes formatted in the chosen language. Still English in the app: category names and outcomes (the catalog's
-`StorageCategory` data, a decision of S4 Task 2 — localizing them needs display names in the catalog, a follow-up),
-Core prose shown as given (doctor findings, scan and volume warnings, vault details, skipped-row reasons), and records
+bytes formatted in the chosen language, and catalog category names and outcomes (since 2026-10-27:
+`StorageCatalog.localizedName` and `CategoryOutcome.localizedName` in Core, so the Storage table sorts and searches by
+what it shows; the catalog's `name` and `outcomeLabel` stay English for the CLI, the report and records). Still English
+in the app: Core prose shown as given (doctor findings, scan and volume warnings, vault details, skipped-row reasons), and records
 (journal kind, state and summary; `simctl`'s platform, state and device names; commands and paths). The permission
 texts (`perm.*`) are shared: the app's Access screen and the `permissions` text output show them in the chosen
 language, while `PermissionsReport`, the journal and the clean plan keep the English (`why(in:)`/`title(in:)` take a

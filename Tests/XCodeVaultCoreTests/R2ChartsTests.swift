@@ -114,8 +114,8 @@ final class R2ChartsTests: XCTestCase {
                     switch column {
                     case .size: String(format: "%020llu", row.item.allocatedBytes)
                     case .bucket: String(row.bucketSortKey)
-                    case .category: row.categoryName
-                    case .outcome: row.outcome
+                    case .category: row.localizedCategoryName
+                    case .outcome: row.localizedOutcome
                     case .strategy: row.strategySortKey
                     case .path: row.item.path
                     }
@@ -183,6 +183,41 @@ final class R2ChartsTests: XCTestCase {
         }
         L10n.configure(override: "ja", environment: [:], preferred: [])
         XCTAssertEqual(Strategy.coldStorage.localizedName, "退避先に保管")
+    }
+
+    /// Category names and outcomes are shown in the app's language (S4 follow-up 3); the table sorts by what it shows and
+    /// the search finds a row by the shown name or the catalog's English. The catalog's own `name` and `outcomeLabel`
+    /// stay English: the CLI, the report and records keep them.
+    func testCategoryNamesAndOutcomesAreShownSortedAndSearchedInTheAppsLanguage() {
+        defer { L10n.configure(override: "en", environment: [:], preferred: []) }
+        for locale in ["en", "pt-BR", "es", "ja", "zh-Hans"] {
+            L10n.configure(override: locale, environment: [:], preferred: [])
+            for c in StorageCatalog.all {
+                let name = StorageCatalog.localizedName(c.id)
+                XCTAssertNotNil(name, "\(locale) \(c.id)")
+                XCTAssertFalse(name?.hasPrefix("app.") ?? true, "\(locale) \(c.id): a key, not a name")
+            }
+            for o in CategoryOutcome.allCases { XCTAssertFalse(o.localizedName.hasPrefix("app."), "\(locale) \(o)") }
+            let rows = StorageTable.rows(report: storageReport())
+            for column in [StorageTable.Column.category, .outcome] {
+                let shown = StorageTable.sorted(rows, using: [column.comparator()]).map { column == .category ? $0.localizedCategoryName : $0.localizedOutcome }
+                for (x, y) in zip(shown, shown.dropFirst()) {
+                    XCTAssertNotEqual(x.localizedStandardCompare(y), .orderedDescending, "\(locale) \(column): \(x) then \(y)")
+                }
+            }
+        }
+        L10n.configure(override: "pt-BR", environment: [:], preferred: [])
+        let derived = StorageTable.rows(report: storageReport()).first { $0.item.categoryID == "derivedData" }!
+        XCTAssertNotEqual(derived.localizedOutcome, derived.outcome, "shown translated")
+        XCTAssertEqual(derived.outcome, StorageCatalog.category("derivedData")?.outcomeLabel, "the record stays English")
+        XCTAssertTrue(StorageTable.matches(derived, query: derived.localizedCategoryName), "by the shown name")
+        XCTAssertTrue(StorageTable.matches(derived, query: "deriveddata"), "and still by the English one")
+        // The English labels are unchanged: the CLI's and the report's words.
+        XCTAssertEqual(
+            Set(StorageCatalog.all.map(\.outcomeLabel)).subtracting([
+                "relocatable", "delete-only (official tool)", "delete-only", "must stay local", "informational",
+            ]),
+            [])
     }
 
     func testTheChartsEmphasis() {

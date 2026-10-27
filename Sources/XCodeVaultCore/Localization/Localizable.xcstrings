@@ -6717,6 +6717,40 @@
         }
       }
     },
+    "app.guide.name.runtimeImagesInbox" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runtime images being installed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Imágenes de runtime en instalación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "インストール中のランタイムイメージ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Imagens de runtime sendo instaladas"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "正在安装的运行时映像"
+          }
+        }
+      }
+    },
     "app.guide.name.runtimeInbox" : {
       "localizations" : {
         "en" : {
@@ -9935,6 +9969,176 @@
         }
       }
     },
+    "app.outcome.deleteOnly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete only"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Solo borrar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "削除のみ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Só apagar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "仅可删除"
+          }
+        }
+      }
+    },
+    "app.outcome.deleteOnlyOfficialTool" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete only (official tool)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Solo borrar (herramienta oficial)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "削除のみ（公式ツール）"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Só apagar (ferramenta oficial)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "仅可删除（官方工具）"
+          }
+        }
+      }
+    },
+    "app.outcome.informational" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informational"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Solo informativo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "情報のみ"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Só informativo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "仅供参考"
+          }
+        }
+      }
+    },
+    "app.outcome.mustStayLocal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Must stay local"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Debe quedarse en el disco interno"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "内蔵ディスクに置く必要あり"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Precisa ficar no disco interno"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "必须留在内置磁盘"
+          }
+        }
+      }
+    },
+    "app.outcome.relocatable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can move to the drive"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Puede ir al disco externo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "外部ドライブへ移動可能"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Pode ir para o disco externo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "可移到外置磁盘"
+          }
+        }
+      }
+    },
     "app.overview.bar.a11y" : {
       "localizations" : {
         "en" : {
@@ -10523,40 +10727,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "此报告未测量大小，因此暂时无法汇总。请重新扫描以查看可释放的空间。"
-          }
-        }
-      }
-    },
-    "app.overview.runtimes" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Simulator runtimes: %@, not in these totals yet. See Simulators."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtimes de simulador: %@, aún no incluidos en estos totales. Consulta Simuladores."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "シミュレータランタイム: %@（まだこの合計に含まれていません）。「シミュレータ」を参照してください。"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtimes de simulador: %@, ainda fora destes totais. Veja Simuladores."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "模拟器运行时：%@，尚未计入这些总计。请参阅“模拟器”。"
           }
         }
       }
@@ -22160,31 +22330,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The size shown counts only the MobileAsset store; `xcodevaultctl runtime list` shows each runtime's real size."
+            "value" : "The size counts the runtime images on this Mac; `xcodevaultctl runtime list` shows each runtime's size."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "El tamaño mostrado cuenta solo el almacén MobileAsset; `xcodevaultctl runtime list` muestra el tamaño real de cada runtime."
+            "value" : "El tamaño cuenta las imágenes de runtime de este Mac; `xcodevaultctl runtime list` muestra el tamaño de cada runtime."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "表示されるサイズは MobileAsset ストアの分だけです。各ランタイムの実際のサイズは `xcodevaultctl runtime list` で確認できます。"
+            "value" : "サイズはこの Mac のランタイムイメージの合計です。各ランタイムのサイズは `xcodevaultctl runtime list` で確認できます。"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "O tamanho mostrado conta só o armazenamento MobileAsset; `xcodevaultctl runtime list` mostra o tamanho real de cada runtime."
+            "value" : "O tamanho conta as imagens de runtime deste Mac; `xcodevaultctl runtime list` mostra o tamanho de cada runtime."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "显示的大小只计算 MobileAsset 存储；`xcodevaultctl runtime list` 会显示每个运行时的实际大小。"
+            "value" : "大小计算的是此 Mac 上的运行时映像；`xcodevaultctl runtime list` 会显示每个运行时的大小。"
           }
         }
       }
@@ -22389,40 +22559,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "未测量大小；运行 %@ 查看可回收的空间。"
-          }
-        }
-      }
-    },
-    "cli.savings.runtimesNote" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Simulator runtimes measured by simctl: %@ — not in these totals yet; see %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtimes del simulador medidos por simctl: %@ — aún no incluidos en estos totales; consulta %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "simctl が測定したシミュレータのランタイム: %@ — まだこの合計には含まれていません。%@ を参照してください"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Runtimes do simulador medidos pelo simctl: %@ — ainda fora destes totais; veja %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "simctl 测得的模拟器运行时：%@ — 尚未计入这些总数；请参阅 %@"
           }
         }
       }

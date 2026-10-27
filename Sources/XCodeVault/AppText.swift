@@ -28,6 +28,10 @@ enum AppText {
         return text.prefix(1).uppercased() + text.dropFirst()
     }
 
+    /// A catalog category's name in the chosen language; `fallback` (the catalog's English, as Core carried it) for an id
+    /// the catalog does not have.
+    static func categoryName(_ id: String, fallback: String) -> String { StorageCatalog.localizedName(id) ?? fallback }
+
     /// A strategy's name in words (R5, HIG review ST4, X1): never its identifier. Core's, so the Storage column sorts by
     /// what it shows (`StorageRow.strategySortKey`).
     static func strategy(_ strategy: Strategy) -> String { strategy.localizedName }

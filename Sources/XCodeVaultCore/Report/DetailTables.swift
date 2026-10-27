@@ -12,6 +12,8 @@ public struct StorageRow: Sendable, Equatable, Identifiable {
     public let categoryName: String
     /// `StorageCategory.outcomeLabel`; empty when the catalog does not know the category.
     public let outcome: String
+    /// `StorageCategory.outcome`; nil when the catalog does not know the category.
+    public let outcomeKind: CategoryOutcome?
     /// `StorageCategory.recommendedStrategy`; nil when the catalog does not know the category.
     public let strategy: Strategy?
     public let isExperimental: Bool
@@ -35,7 +37,7 @@ public enum StorageTable {
             .map { item in
                 let category = report.category(for: item)
                 return StorageRow(
-                    item: item, categoryName: category?.name ?? item.categoryID, outcome: category?.outcomeLabel ?? "",
+                    item: item, categoryName: category?.name ?? item.categoryID, outcome: category?.outcomeLabel ?? "", outcomeKind: category?.outcome,
                     strategy: category?.recommendedStrategy, isExperimental: category?.isExperimental ?? false, bucket: category?.primaryBucket,
                     countedBucket: SavingsCalculator.countedOnceBucket(item, category: category))
             }
@@ -81,8 +83,8 @@ public enum SimulatorsTable {
         report.devices.reduce(UInt64(0)) { $0 + ($1.dataPathSize ?? 0) }
     }
 
-    /// The runtimes' measured images: `ScanSummary.runtimeImageBytes`, the one number the scanner stores. The Overview's
-    /// runtime line and the Simulators screen both read it here, so they can never disagree.
+    /// The runtimes' measured images: `ScanSummary.runtimeImageBytes`, the one number the scanner stores, as the Simulators
+    /// screen shows it. (The Overview's separate runtime line went on 2026-10-27: the catalog counts the images now.)
     public static func runtimesBytes(report: ScanReport) -> UInt64 {
         report.summary.runtimeImageBytes
     }

@@ -266,7 +266,9 @@ review" or "never run" describe the entry when it was written; the merge is the 
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
   before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
   are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
-  catalog's English in every language (S4 Task 2) — localizing them needs display names in the catalog; (4) the
+  catalog's English in every language (S4 Task 2) — **done 2026-10-27** (branch `feat/localized-category-names`): the app
+  shows them in its language everywhere, the Storage table sorts and searches by what it shows, and the CLI and records
+  keep the English; (4) the
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
   (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further — **done 2026-10-18,
   another way:** the table is JSON in a raw string literal (ADR-0018); (5) the runtime
@@ -279,7 +281,9 @@ review" or "never run" describe the entry when it was written; the merge is the 
   `/Library/Developer/CoreSimulator/Images/<UUID>.dmg` (Intel / pre-MobileAsset layout, measured
   2026-10-03: 15.84 GB here) are not a catalog category, so the savings model does not count them;
   `scan` prints them separately. Cataloguing them is a catalog change (STORAGE_CATALOG.md, pinned table)
-  needing the evidence and review of a catalog decision.
+  needing the evidence and review of a catalog decision. **Approved 2026-10-27 (option 2) and implemented**
+  (branch `feat/runtime-disk-images`): `Images` is a second path of `simulatorRuntimeAssets`, `Images/Inbox` a breakdown
+  (`runtimeImagesInbox`); see the proposal's "As implemented".
 
 - **E6b — DONE 2026-10-25, both variants, at `Cryptex/Caches`** (branch `exp/e6b-variant-b`). On the operator's
   disposable USB flash drive (`Removable`), the clean unmount and the physical yank left the same thing: the

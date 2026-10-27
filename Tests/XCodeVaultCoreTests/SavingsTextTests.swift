@@ -31,7 +31,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testTheBlockShowsBothHeadlinesEveryBucketAndTheNextStep() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0)
+        let out = TextRenderer.savings(summary())
         var from = out.startIndex
         for needle in [
             "What you can reclaim on this Mac", "Temporary", "Delete — comes back on demand", "Park on an external drive", "Permanent",
@@ -46,7 +46,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testEachHeadlineShowsItsOwnAmountAndVerifiedShare() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0)
+        let out = TextRenderer.savings(summary())
         let temporary = line(out, containing: "Temporary")
         XCTAssertTrue(temporary?.contains(ByteCount.format(UInt64(42_300_000_000))) == true, out)
         XCTAssertTrue(temporary?.contains(ByteCount.format(UInt64(12_100_000_000))) == true, out)
@@ -58,7 +58,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testALowerBoundSaysAtLeastEverywhere() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(lowerBound: true), runtimeImageBytes: 0)
+        let out = TextRenderer.savings(summary(lowerBound: true))
         XCTAssertFalse(out.contains("up to"), out)
         XCTAssertTrue(out.contains("at least"), out)
         for needle in ["Delete — comes back on demand", "Park on an external drive", "Run from an external drive", "Stays on this Mac"] {
@@ -69,31 +69,27 @@ final class SavingsTextTests: XCTestCase {
     /// Simulator devices are in the delete total but do not come back (final S3 review, Important 1).
     func testTheDeleteRowSaysWhatPartLosesUserData() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(losesUserData: 14_000_000_000), runtimeImageBytes: 0)
+        let out = TextRenderer.savings(summary(losesUserData: 14_000_000_000))
         let lines = out.split(separator: "\n").map(String.init)
         guard let delete = lines.firstIndex(where: { $0.contains("Delete — comes back on demand") }) else { return XCTFail(out) }
         let next = lines[delete + 1]
         XCTAssertTrue(next.contains("of which \(ByteCount.format(UInt64(14_000_000_000))) deletes apps' data and does not come back"), out)
         XCTAssertTrue(next.hasPrefix("      "), "indented under the delete row: \(next)")
-        XCTAssertFalse(TextRenderer.savings(summary(), runtimeImageBytes: 0).contains("deletes apps' data"))
+        XCTAssertFalse(TextRenderer.savings(summary()).contains("deletes apps' data"))
     }
 
-    /// Runtimes stored as disk images are measured by simctl, not by the catalog (final S3 review, Important 3).
-    func testRuntimeImagesAreNamedSeparatelyWhenThereAreAny() {
+    /// Runtime images are counted by the catalog since 2026-10-27 (both stores, `simulatorRuntimeAssets`), so the savings
+    /// block has no separate "not in these totals yet" line for them any more (final S3 review, Important 3, closed).
+    func testRuntimeImagesHaveNoSeparateLine() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 15_840_000_000)
-        guard let note = line(out, containing: "Simulator runtimes measured by simctl") else { return XCTFail(out) }
-        XCTAssertTrue(note.contains(ByteCount.format(UInt64(15_840_000_000))), note)
-        XCTAssertTrue(note.contains("xcodevaultctl runtime list"), note)
-        let lines = out.split(separator: "\n").map(String.init)
-        XCTAssertEqual(lines.firstIndex(of: note), (lines.firstIndex { $0.contains("Stays on this Mac") } ?? -2) + 1, out)
-        XCTAssertFalse(TextRenderer.savings(summary(), runtimeImageBytes: 0).contains("measured by simctl"))
+        XCTAssertFalse(TextRenderer.savings(summary()).contains("measured by simctl"))
+        XCTAssertTrue(StorageCatalog.category("simulatorRuntimeAssets")!.pathTemplates.contains("/Library/Developer/CoreSimulator/Images"))
     }
 
     func testEveryLanguageRendersWithoutLeakingKeys() {
         for locale in L10n.supportedLocales {
             L10n.configure(override: locale, environment: [:], preferred: [])
-            let out = TextRenderer.savings(summary(losesUserData: 1_000_000_000), runtimeImageBytes: 2_000_000_000)
+            let out = TextRenderer.savings(summary(losesUserData: 1_000_000_000))
             XCTAssertFalse(out.contains("savings."), "\(locale):\n\(out)")
             XCTAssertFalse(out.contains("cli."), "\(locale):\n\(out)")
             XCTAssertFalse(out.contains("%@"), "\(locale):\n\(out)")
@@ -103,7 +99,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testAmountsAreAlignedInJapanese() {
         L10n.configure(override: "ja", environment: [:], preferred: [])
-        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0).split(separator: "\n").map(String.init)
+        let lines = TextRenderer.savings(summary()).split(separator: "\n").map(String.init)
         // Heading, Temporary, delete, park, Permanent, run, Total, note, Stays, Next.
         let rows = [lines[2], lines[3], lines[5]]
         let widths = rows.map { row -> Int in
@@ -127,13 +123,13 @@ final class SavingsTextTests: XCTestCase {
 
     func testNoColorsMeansNoEscapeByte() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        XCTAssertFalse(TextRenderer.savings(summary(), runtimeImageBytes: 1).contains(esc))
-        XCTAssertEqual(TextRenderer.savings(summary(), runtimeImageBytes: 1), TextRenderer.savings(summary(), runtimeImageBytes: 1, colors: ColorDepth.none))
+        XCTAssertFalse(TextRenderer.savings(summary()).contains(esc))
+        XCTAssertEqual(TextRenderer.savings(summary()), TextRenderer.savings(summary(), colors: ColorDepth.none))
     }
 
     func testColorsWrapEveryBucketTitleInItsOwnColor() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor)
+        let out = TextRenderer.savings(summary(), colors: .trueColor)
         XCTAssertTrue(out.contains(esc))
         for b in [SavingsBucket.deleteAndRegenerate, .parkExternally, .runFromExternal, .keepLocal] {
             let hex = b.colorHex.dropFirst()
@@ -150,14 +146,14 @@ final class SavingsTextTests: XCTestCase {
 
     func testStrippingTheCodesLeavesThePlainBlock() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let colored = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor)
+        let colored = TextRenderer.savings(summary(), colors: .trueColor)
         let stripped = colored.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
-        XCTAssertEqual(stripped, TextRenderer.savings(summary(), runtimeImageBytes: 0))
+        XCTAssertEqual(stripped, TextRenderer.savings(summary()))
     }
 
     func testAmountsAreStillAlignedInJapaneseWithColorsOn() {
         L10n.configure(override: "ja", environment: [:], preferred: [])
-        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .trueColor).split(separator: "\n").map(String.init)
+        let lines = TextRenderer.savings(summary(), colors: .trueColor).split(separator: "\n").map(String.init)
         let rows = [lines[2], lines[3], lines[5]].map { $0.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression) }
         let widths = rows.map { row -> Int in
             let amounts = [30_100_000_000, 12_200_000_000, 8_000_000_000].map { ByteCount.format(UInt64($0)) }
@@ -182,7 +178,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testAnsi256UsesTheNearestCubeIndexForEveryBucket() {
         L10n.configure(override: "en", environment: [:], preferred: [])
-        let out = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .ansi256)
+        let out = TextRenderer.savings(summary(), colors: .ansi256)
         for b in [SavingsBucket.deleteAndRegenerate, .parkExternally, .runFromExternal, .keepLocal] {
             XCTAssertTrue(out.contains("\(esc)[38;5;\(expectedCube(b.colorHex))m\(b.localizedTitle)\(esc)[0m"), "\(b)\n\(out)")
         }
@@ -207,7 +203,7 @@ final class SavingsTextTests: XCTestCase {
 
     func testAmountsAreStillAlignedInJapaneseWithAnsi256() {
         L10n.configure(override: "ja", environment: [:], preferred: [])
-        let lines = TextRenderer.savings(summary(), runtimeImageBytes: 0, colors: .ansi256).split(separator: "\n").map(String.init)
+        let lines = TextRenderer.savings(summary(), colors: .ansi256).split(separator: "\n").map(String.init)
         let rows = [lines[2], lines[3], lines[5]].map { $0.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression) }
         let widths = rows.map { row -> Int in
             let amounts = [30_100_000_000, 12_200_000_000, 8_000_000_000].map { ByteCount.format(UInt64($0)) }

@@ -25,6 +25,7 @@ final class SavingsOptionsTests: XCTestCase {
             "playgroundDevices": [.deleteAndRegenerate],
             "coreSimulatorSystemCaches": [.deleteAndRegenerate],
             "runtimeInbox": [.keepLocal],
+            "runtimeImagesInbox": [.keepLocal],
             "runtimeBundles": [.keepLocal],
             "runtimeMounts": [.keepLocal],
             "simulatorRuntimeAssets": [.parkExternally, .deleteAndRegenerate],

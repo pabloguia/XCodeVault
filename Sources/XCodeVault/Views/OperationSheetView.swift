@@ -59,7 +59,8 @@ struct OperationSheetView: View {
                 if stage == .failed { showsLog = true }
             }
             .confirmationDialog(
-                L10n.tr("app.run.removeOriginal.dialog", s.row?.categoryName ?? ""), isPresented: $confirmsRemoval
+                L10n.tr("app.run.removeOriginal.dialog", s.row.map { AppText.categoryName($0.categoryID, fallback: $0.categoryName) } ?? ""),
+                isPresented: $confirmsRemoval
             ) {
                 Button(L10n.tr("app.run.removeOriginal.action"), role: .destructive) { Task { await model.removeOriginal() } }
             } message: {

@@ -181,37 +181,8 @@ enum GuideText {
         }
     }
 
-    /// A catalog category's plain name; nil for an id the catalog does not have (a test holds every catalog id to one).
-    static func categoryName(_ id: String) -> String? {
-        switch id {
-        case "derivedData": L10n.tr("app.guide.name.derivedData")
-        case "archives": L10n.tr("app.guide.name.archives")
-        case "deviceSupport": L10n.tr("app.guide.name.deviceSupport")
-        case "previews": L10n.tr("app.guide.name.previews")
-        case "xcodePackages": L10n.tr("app.guide.name.xcodePackages")
-        case "xcodeCaches": L10n.tr("app.guide.name.xcodeCaches")
-        case "deviceLogs": L10n.tr("app.guide.name.deviceLogs")
-        case "swiftPMCaches": L10n.tr("app.guide.name.swiftPMCaches")
-        case "simulatorDevices": L10n.tr("app.guide.name.simulatorDevices")
-        case "simulatorDeadContainers": L10n.tr("app.guide.name.simulatorDeadContainers")
-        case "simulatorMobileAssets": L10n.tr("app.guide.name.simulatorMobileAssets")
-        case "simulatorLogStore": L10n.tr("app.guide.name.simulatorLogStore")
-        case "simulatorUserCaches": L10n.tr("app.guide.name.simulatorUserCaches")
-        case "xctestDevices": L10n.tr("app.guide.name.xctestDevices")
-        case "playgroundDevices": L10n.tr("app.guide.name.playgroundDevices")
-        case "coreSimulatorSystemCaches": L10n.tr("app.guide.name.coreSimulatorSystemCaches")
-        case "runtimeInbox": L10n.tr("app.guide.name.runtimeInbox")
-        case "runtimeBundles": L10n.tr("app.guide.name.runtimeBundles")
-        case "runtimeMounts": L10n.tr("app.guide.name.runtimeMounts")
-        case "simulatorRuntimeAssets": L10n.tr("app.guide.name.simulatorRuntimeAssets")
-        case "runtimeLibrary": L10n.tr("app.guide.name.runtimeLibrary")
-        case "developerDiskImages": L10n.tr("app.guide.name.developerDiskImages")
-        case "coreDevice": L10n.tr("app.guide.name.coreDevice")
-        case "toolchains": L10n.tr("app.guide.name.toolchains")
-        case "commandLineTools": L10n.tr("app.guide.name.commandLineTools")
-        default: nil
-        }
-    }
+    /// A catalog category's plain name; nil for an id the catalog does not have (`StorageCatalog.localizedName`).
+    static func categoryName(_ id: String) -> String? { StorageCatalog.localizedName(id) }
 
     /// What the item's line says on the right: done and where, its size, or that it is new data only.
     static func itemStatus(_ item: PlanItem) -> String {
