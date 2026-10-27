@@ -14,9 +14,9 @@ Starting point for a new session. Project at `~/projects/XCodeVault`, public at
 ## Read before acting, in this order
 
 1. `CLAUDE.md` — the non-negotiable safety rules (especially 3, 5, 6, 7).
-2. `STATUS.md` — the live sections at the top ("In flight", "Blocked / pending — manual", "Next
-   three actions"). Several "In flight" entries describe branches that have since merged (R3, R6,
-   R7, R8 — PRs #43, #45, #46, #47); `git log origin/main` is the record of what landed.
+2. `STATUS.md` — the live sections at the top ("In flight", "Open items", "Blocked / pending —
+   manual", "Next three actions"). **"Open items" is the one list of what is pending** (refreshed
+   2026-10-27); `git log origin/main` is the record of what landed.
 3. `docs/architecture/HYPOTHESES.md` — **H20** (the runtime store on an external volume), then
    **H14** from "E6b variant B … fixed BEFORE the run" to the end of H14 (the E6b pre-registration
    and its result).
