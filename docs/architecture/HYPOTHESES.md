@@ -2394,7 +2394,7 @@ from the volume itself. That would mutate the user's TCC database. It was not ru
 
 Not the Definition of Done. Experimental everywhere. The whole-folder warning stays.
 
-## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine)*
+## H20 — an external APFS volume mounted at `CoreSimulator/Images` holds installed runtimes in place *(new, 2026-10-22; **probable** since E20, 2026-10-23, one machine; **not pursued** — ADR-0019, option A, 2026-10-27)*
 
 **Claim:** a dedicated APFS volume on the external disk, mounted (not symlinked) at
 `/Library/Developer/CoreSimulator/Images`, is used by `simdiskimaged` as the runtime store — every

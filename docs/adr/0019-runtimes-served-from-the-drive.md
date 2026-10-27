@@ -1,7 +1,6 @@
 # ADR 0019: Installed simulator runtimes served from the drive (H20) — what, if anything, the product does with E20
 
-- Status: **proposed** (2026-10-26) — the decision is the operator's (STATUS "Next three actions", item 1). Written so
-  it can be accepted as one of the options below, not to pre-empt that choice.
+- Status: **accepted (2026-10-27), option A — not now.** Proposed 2026-10-26; the operator chose A.
 - Date: 2026-10-26
 - Related: H20 and E20 (`docs/architecture/HYPOTHESES.md`, every "E20 …" entry of `COMPATIBILITY_MATRIX.md`),
   `docs/research/RUNTIMES-IN-PLACE-ON-EXTERNAL-2026-10-22.md`, `docs/research/OS-LEVEL-RELOCATION-ALTERNATIVES-2026-10-22.md`,
@@ -44,7 +43,14 @@ after (arm 4b). New helper verb(s) under ADR-0014's rules and a helper-security 
 **C. B plus dropping the internal copy.** The only option that saves space. Contradicts arm 4b's finding and rule 6 as
 measured: a pulled drive would leave CoreSimulator with nothing to fall back to. Not proposable on current evidence.
 
-## Recommendation (for the operator's decision)
+## Decision
+
+**Option A, accepted by the operator on 2026-10-27.** The product builds nothing on H20. E20 stays on record as a measured
+mechanism; H20 is **probable, experimental, not pursued**; no second-machine run is scheduled. The Runtime Library remains
+the product's runtime story, and ADR-0004's demotion of the canonical mount stands for this path too. Reopen with a new ADR
+if Apple changes how `simdiskimaged` handles its store, or if a workflow appears that the Runtime Library cannot serve.
+
+## Recommendation (as written for the decision)
 
 **A.** B costs a new privileged verb, a review cycle and a second machine to deliver something that saves no space,
 which is the product's mission; C is unsafe on the evidence. A keeps E20's result on record (HYPOTHESES, the matrix,
