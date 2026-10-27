@@ -230,7 +230,8 @@ holds, and its button stays disabled until you type the disk's name (or the volu
 is never offered on a disk that holds a registered vault or a Time Machine backup, nor on an internal or boot disk, nor
 while an HFS+ partition or a file system macOS does not name is unmounted on it, nor while it has a CoreStorage
 partition (any of them might be a Time Machine backup: mount an unmounted one so XCodeVault can check; a CoreStorage
-one, the old encrypted backup layout, can only be erased in Disk Utility, by you). No
+one, the old encrypted backup layout, can only be erased in Disk Utility, by you). A partition macOS cannot read at all
+(a Linux one, say) can be erased, and the confirmation names its type, since it cannot show what it holds. No
 change at all is offered on a disk that holds another macOS installation, or on one where `diskutil` could not read a
 volume — whatever that volume is, XCodeVault cannot tell, so try again in a moment; a new
 partition is never added to a disk that holds a vault, because rewriting the partition map remounts the disk. On a USB

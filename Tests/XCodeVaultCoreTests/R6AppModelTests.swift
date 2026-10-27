@@ -103,6 +103,15 @@ final class R6AppModelTests: XCTestCase {
 
     // MARK: - Detection
 
+    /// The erase's danger notice names a partition macOS cannot read by its type, so a bare device id is never all it says.
+    func testAnUnreadablePartitionInTheEraseNamesItsType() {
+        L10n.configure(override: "en", environment: [:], preferred: [])
+        XCTAssertEqual(
+            DriveText.destroyed(DestroyedVolume(id: "disk9s3", name: "", usedBytes: nil, unreadableType: "Linux")),
+            "disk9s3 (a “Linux” partition macOS cannot read: whatever it holds is erased)")
+        XCTAssertEqual(DriveText.destroyed(DestroyedVolume(id: "disk9s3", name: "", usedBytes: nil)), "disk9s3", "the control")
+    }
+
     func testTheInertEnvironmentReadsNoDisks() async {
         let m = AppModel(
             environment: AppEnvironment(

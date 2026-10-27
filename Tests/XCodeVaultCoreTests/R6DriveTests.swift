@@ -573,6 +573,46 @@ final class R6DriveTests: XCTestCase {
         XCTAssertTrue(try assessment("disk9", snap).options.contains(.eraseDisk(disk: "disk9")))
     }
 
+    /// A partition of a type macOS does not read (measured on MBR images, 2026-10-27: `Linux`, `0xDA`, no name, no volume
+    /// UUID — even with an intact FAT32 underneath) is never mounted, so macOS cannot have written a backup to it under that
+    /// type; it stays erasable, and the erase names its type instead of a bare id.
+    func testAnUnreadablePartitionIsNamedByItsTypeInTheErase() throws {
+        var snap = try Self.snapshot()
+        snap.disks = snap.disks.map { d in
+            var d = d
+            if d.id == "disk9" { d.partitions.append(DiskPartition(id: "disk9s3", content: "Linux", sizeBytes: 100_000_000_000)) }
+            return d
+        }
+        let a = try assessment("disk9", snap)
+        XCTAssertTrue(a.options.contains(.eraseVolume(volume: "disk9s3", name: "")), "\(a.options)")
+        XCTAssertFalse(a.shownRefusals.contains(.mightBeTimeMachine), "a Linux partition is not a backup candidate")
+        let one = try DiskPreparation.plan(
+            .eraseVolume(volume: "disk9s3", name: ""), configuration: VolumeConfiguration(), on: a, snapshot: snap, registeredVaultUUIDs: [])
+        XCTAssertEqual(one.destroys, [DestroyedVolume(id: "disk9s3", name: "", usedBytes: nil, unreadableType: "Linux")])
+        XCTAssertEqual(one.confirmationName, "disk9s3", "nameless: the device id is typed")
+        let disk = try DiskPreparation.plan(
+            .eraseDisk(disk: "disk9"), configuration: VolumeConfiguration(), on: a, snapshot: snap, registeredVaultUUIDs: [])
+        XCTAssertEqual(disk.destroys.first { $0.id == "disk9s3" }?.unreadableType, "Linux")
+        XCTAssertEqual(disk.destroys.first { $0.id == "disk9s2" }?.unreadableType, nil, "the control: a named, mounted volume")
+
+        // Each clause on its own: the same nameless partition with a volume UUID, or with a volume mounted at it, is read.
+        func labelled(_ change: (inout DiskPartition) -> Void, mounted: Bool = false) throws -> String? {
+            var s = snap
+            s.disks = s.disks.map { d in
+                var d = d
+                if let i = d.partitions.firstIndex(where: { $0.id == "disk9s3" }) { change(&d.partitions[i]) }
+                return d
+            }
+            if mounted { s.volumes.append(Self.volume("disk9s3", "", uuid: Self.u(905), mount: "/Volumes/Untitled", fs: "MS-DOS (FAT32)", type: "msdos")) }
+            let d = try XCTUnwrap(s.disks.first { $0.id == "disk9" })
+            return DiskPreparation.destroyedVolumes(.eraseVolume, target: "disk9s3", disk: d, snapshot: s).first?.unreadableType
+        }
+        XCTAssertEqual(try labelled { _ in }, "Linux")
+        XCTAssertNil(try labelled { $0.volumeUUID = Self.u(906) }, "a volume UUID: a file system macOS reads")
+        XCTAssertNil(try labelled({ _ in }, mounted: true), "mounted: macOS reads it")
+        XCTAssertEqual(try labelled { $0.content = "" }, "unknown", "no type at all")
+    }
+
     /// A CoreStorage partition (the old encrypted Time Machine layout) is reported as `Apple_CoreStorage` with no type,
     /// name or UUID (evidence `e-wholedisk-followups-…`, 2026-10-26). Before, it was offered for erasing, and so was its
     /// disk. Never mounted itself, so a mounted volume does not lift the refusal.
