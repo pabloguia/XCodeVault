@@ -1,0 +1,57 @@
+# MBR partitions macOS does not recognise: what diskutil reports — 2026-10-27
+# Host: macOS 26.7.1 (25G241), x86_64. Disk images only (/private/tmp/xcv-mbr): `hdiutil create -layout MBRSPUD -fs "MS-DOS FAT32"`,
+# then the partition-type byte (MBR offset 446+4) rewritten in the raw image before attach; in the "zero" variants the first
+# 4 KiB of the partition (its boot sector) zeroed too. Every device re-checked as BusProtocol "Disk Image"; all detached, deleted.
+# Why: migration-safety review of PR #62 noted an MBR partition with an unrecognised Content is still offered for erasing.
+
+FINDINGS
+1. Type 0x83: Content "Linux"; type 0xDA: Content "0xDA". Neither has a VolumeName, VolumeUUID or FilesystemType —
+   although the 0x83 one still held the intact FAT32 it was created with: macOS does not look inside a partition whose
+   type it does not recognise.
+2. A zeroed boot sector under type 0x0B keeps Content "DOS_FAT_32", FilesystemType msdos, no VolumeName, no VolumeUUID;
+   under type 0x07, Content "Windows_NTFS", FilesystemType reported as exfat, no name, no UUID.
+3. Type 0x00 (empty entry): diskutil lists NO partition and the disk has no scheme Content at all (the disk reads as blank).
+   Whatever is in such an entry's sectors is invisible to diskutil, and so to XCodeVault; erasing the disk is then shown as
+   destroying nothing. Not changed here — it is how a blank disk looks too.
+CONSEQUENCE: macOS never mounts a partition under such a type, so it cannot have written a Time Machine backup to it (a backup
+partition retyped afterwards would not be detectable — reasoning, not measured). They stay erasable; but the
+erase listed them by device id alone. Since 2026-10-27 the confirmation names the type of a partition with no volume name, no
+volume UUID and no mounted volume ("disk9s3 (a “Linux” partition macOS cannot read: …)").
+
+RAW TRANSCRIPT
+# host: 26.7.1 (25G241) x86_64  2026-10-27T13:39:00Z
+type 0b -> 0b, fs kept, partition at LBA 1
+## FAT32-control (0b, keep): disk9
+list {'DeviceIdentifier': 'disk9s1', 'Content': 'DOS_FAT_32', 'VolumeName': 'XCVM', 'VolumeUUID': '57035C06-1B95-3DC1-8E6C-C2D896CB2D81', 'DiskUUID': None}
+scheme FDisk_partition_scheme
+info {'Content': 'DOS_FAT_32', 'FilesystemType': 'msdos', 'FilesystemName': 'MS-DOS FAT32', 'VolumeName': 'XCVM', 'VolumeUUID': '57035C06-1B95-3DC1-8E6C-C2D896CB2D81', 'MountPoint': ''}
+detached disk9
+type 0b -> 83, fs kept, partition at LBA 1
+## Linux (83, keep): disk9
+list {'DeviceIdentifier': 'disk9s1', 'Content': 'Linux', 'VolumeName': None, 'VolumeUUID': None, 'DiskUUID': None}
+scheme FDisk_partition_scheme
+info {'Content': 'Linux', 'FilesystemType': None, 'FilesystemName': None, 'VolumeName': '', 'VolumeUUID': None, 'MountPoint': ''}
+detached disk9
+type 0b -> 00, fs kept, partition at LBA 1
+## empty-type (00, keep): disk9
+scheme 
+info {'Content': None, 'FilesystemType': None, 'FilesystemName': None, 'VolumeName': None, 'VolumeUUID': None, 'MountPoint': None}
+detached disk9
+type 0b -> da, fs kept, partition at LBA 1
+## non-fs-data (da, keep): disk9
+list {'DeviceIdentifier': 'disk9s1', 'Content': '0xDA', 'VolumeName': None, 'VolumeUUID': None, 'DiskUUID': None}
+scheme FDisk_partition_scheme
+info {'Content': '0xDA', 'FilesystemType': None, 'FilesystemName': None, 'VolumeName': '', 'VolumeUUID': None, 'MountPoint': ''}
+detached disk9
+type 0b -> 07, fs zeroed, partition at LBA 1
+## NTFS-type-no-fs (07, zero): disk9
+list {'DeviceIdentifier': 'disk9s1', 'Content': 'Windows_NTFS', 'VolumeName': None, 'VolumeUUID': None, 'DiskUUID': None}
+scheme FDisk_partition_scheme
+info {'Content': 'Windows_NTFS', 'FilesystemType': 'exfat', 'FilesystemName': 'ExFAT', 'VolumeName': '', 'VolumeUUID': None, 'MountPoint': ''}
+detached disk9
+type 0b -> 0b, fs zeroed, partition at LBA 1
+## FAT32-type-no-fs (0b, zero): disk9
+list {'DeviceIdentifier': 'disk9s1', 'Content': 'DOS_FAT_32', 'VolumeName': None, 'VolumeUUID': None, 'DiskUUID': None}
+scheme FDisk_partition_scheme
+info {'Content': 'DOS_FAT_32', 'FilesystemType': 'msdos', 'FilesystemName': 'MS-DOS', 'VolumeName': '', 'VolumeUUID': None, 'MountPoint': ''}
+detached disk9
