@@ -61,7 +61,7 @@ struct PlanRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(verbatim: row.categoryName).bold()
+                Text(verbatim: AppText.categoryName(row.categoryID, fallback: row.categoryName)).bold()
                 if row.option.appliesToExistingData {
                     Text(verbatim: ByteCount.format(row.bytes)).monospacedDigit().foregroundStyle(.secondary)
                 }
@@ -77,11 +77,12 @@ struct PlanRowView: View {
                 Spacer()
                 // Secondary to the command beside it (HIG review P4). Several rows, several buttons: VoiceOver hears whose
                 // command each one copies.
-                CopyCommandButton(copy: copy, accessibilityLabel: L10n.tr("app.plan.copyCommand.a11y", row.categoryName))
+                CopyCommandButton(
+                    copy: copy, accessibilityLabel: L10n.tr("app.plan.copyCommand.a11y", AppText.categoryName(row.categoryID, fallback: row.categoryName)))
                 if let run {
                     // Opens the Run sheet: bordered, with an ellipsis (R7-B, audit row 23).
                     Button(action: run) { Label(L10n.tr("app.plan.run"), systemImage: "play") }.actionButton().controlSize(.small)
-                        .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.run.a11y", row.categoryName)))
+                        .accessibilityLabel(Text(verbatim: L10n.tr("app.plan.run.a11y", AppText.categoryName(row.categoryID, fallback: row.categoryName))))
                 }
             }
             ForEach(Array(row.localizedNotes.enumerated()), id: \.offset) { _, note in
@@ -291,8 +292,7 @@ struct DeleteView: View {
     private func table(_ list: DeleteList) -> some View {
         Table(of: CleanAction.self, selection: $selection) {
             TableColumn(L10n.tr("app.column.size")) { Text(verbatim: ByteCount.format($0.bytes)).monospacedDigit() }.width(90)
-            // Category names are the catalog's English: StorageCategory data, not app text (S4 Task 2).
-            TableColumn(L10n.tr("app.column.category")) { Text(verbatim: $0.categoryName) }
+            TableColumn(L10n.tr("app.column.category")) { Text(verbatim: AppText.categoryName($0.categoryID, fallback: $0.categoryName)) }
             TableColumn(L10n.tr("app.delete.column.undo")) { a in Text(verbatim: list.undo(of: a).map(AppText.undoCost) ?? "") }
             TableColumn(L10n.tr("app.delete.column.markers")) { MarkerTags(markers: DeleteList.markers(for: $0)) }
             TableColumn(L10n.tr("app.column.path")) { Text(verbatim: $0.path).font(.system(.body, design: .monospaced)) }
@@ -303,7 +303,7 @@ struct DeleteView: View {
                 } header: {
                     // The name, and the size trailing in secondary (HIG review D8).
                     HStack {
-                        Text(verbatim: group.categoryName)
+                        Text(verbatim: AppText.categoryName(group.categoryID, fallback: group.categoryName))
                         Spacer()
                         Text(verbatim: ByteCount.format(group.bytes)).monospacedDigit().foregroundStyle(.secondary)
                     }
@@ -371,7 +371,7 @@ struct DeleteView: View {
             GroupBox {
                 ForEach(privileged) { a in
                     HStack(alignment: .firstTextBaseline) {
-                        Text(verbatim: a.categoryName).bold()
+                        Text(verbatim: AppText.categoryName(a.categoryID, fallback: a.categoryName)).bold()
                         // The helper's dyld verb is experimental wherever it appears (`app.clean.privileged.message`).
                         Tag.marker(.experimental)
                         Text(verbatim: ByteCount.format(a.bytes)).monospacedDigit().foregroundStyle(.secondary)

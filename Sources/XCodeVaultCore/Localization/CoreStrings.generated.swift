@@ -2179,6 +2179,41 @@ extension L10nCatalog {
       "pt-BR" : "Root com Acesso Total ao Disco",
       "zh-Hans" : "具有完全磁盘访问权限的 root"
     },
+    "app.outcome.deleteOnly" : {
+      "en" : "Delete only",
+      "es" : "Solo borrar",
+      "ja" : "削除のみ",
+      "pt-BR" : "Só apagar",
+      "zh-Hans" : "仅可删除"
+    },
+    "app.outcome.deleteOnlyOfficialTool" : {
+      "en" : "Delete only (official tool)",
+      "es" : "Solo borrar (herramienta oficial)",
+      "ja" : "削除のみ（公式ツール）",
+      "pt-BR" : "Só apagar (ferramenta oficial)",
+      "zh-Hans" : "仅可删除（官方工具）"
+    },
+    "app.outcome.informational" : {
+      "en" : "Informational",
+      "es" : "Solo informativo",
+      "ja" : "情報のみ",
+      "pt-BR" : "Só informativo",
+      "zh-Hans" : "仅供参考"
+    },
+    "app.outcome.mustStayLocal" : {
+      "en" : "Must stay local",
+      "es" : "Debe quedarse en el disco interno",
+      "ja" : "内蔵ディスクに置く必要あり",
+      "pt-BR" : "Precisa ficar no disco interno",
+      "zh-Hans" : "必须留在内置磁盘"
+    },
+    "app.outcome.relocatable" : {
+      "en" : "Can move to the drive",
+      "es" : "Puede ir al disco externo",
+      "ja" : "外部ドライブへ移動可能",
+      "pt-BR" : "Pode ir para o disco externo",
+      "zh-Hans" : "可移到外置磁盘"
+    },
     "app.overview.bar.a11y" : {
       "en" : "Internal disk",
       "es" : "Disco interno",

@@ -261,7 +261,9 @@ review" or "never run" describe the entry when it was written; the merge is the 
   column's cells), both Simulators tables and Health's findings `List` — a manual look at the running app is scheduled
   before the final review; (2) app strings in pt-BR, es, ja and zh-Hans
   are drafts marked `needs_review` until native speakers review them; (3) category names and outcomes stay the
-  catalog's English in every language (S4 Task 2) — localizing them needs display names in the catalog; (4) the
+  catalog's English in every language (S4 Task 2) — **done 2026-10-27** (branch `feat/localized-category-names`): the app
+  shows them in its language everywhere, the Storage table sorts and searches by what it shows, and the CLI and records
+  keep the English; (4) the
   generated `L10nCatalog.core` table type-checks in ~400 ms and an incremental build after touching it took 11.2 s
   (measured in S4 Task 2) — fix with explicit types or a split table before it grows much further — **done 2026-10-18,
   another way:** the table is JSON in a raw string literal (ADR-0018); (5) the runtime
