@@ -26,6 +26,7 @@ extension StorageCatalog {
         case "playgroundDevices": L10n.tr("app.guide.name.playgroundDevices")
         case "coreSimulatorSystemCaches": L10n.tr("app.guide.name.coreSimulatorSystemCaches")
         case "runtimeInbox": L10n.tr("app.guide.name.runtimeInbox")
+        case "runtimeImagesInbox": L10n.tr("app.guide.name.runtimeImagesInbox")
         case "runtimeBundles": L10n.tr("app.guide.name.runtimeBundles")
         case "runtimeMounts": L10n.tr("app.guide.name.runtimeMounts")
         case "simulatorRuntimeAssets": L10n.tr("app.guide.name.simulatorRuntimeAssets")

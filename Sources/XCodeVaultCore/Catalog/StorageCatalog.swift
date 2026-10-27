@@ -233,7 +233,8 @@ public enum StorageCatalog {
             ]),
         StorageCategory(
             id: "runtimeInbox", name: "Runtime download staging (Inbox)", subsystem: .coreSimulator,
-            pathTemplates: ["/Library/Developer/CoreSimulator/Cryptex/Images/Inbox", "/Library/Developer/CoreSimulator/Images/Inbox"],
+            // `Images/Inbox` is `runtimeImagesInbox`, a breakdown of the runtime store that holds it (2026-10-27).
+            pathTemplates: ["/Library/Developer/CoreSimulator/Cryptex/Images/Inbox"],
             description: "In-flight runtime downloads. Anything left here after a failed install is stranded multi-GB garbage (F1).",
             regenerability: .redownloadable, deletionRisk: .low, relocationRisk: .high,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged], privilege: .root,
@@ -241,6 +242,18 @@ public enum StorageCatalog {
             notes: [
                 "`doctor` reports stranded .dmg files here. There is no removal verb: `sudo rm` is refused by policy on macOS 26.5 and simdiskimaged reaps the Inbox at startup, so the remediation is a restart."
             ]),
+        StorageCategory(
+            id: "runtimeImagesInbox", name: "Runtime download staging (disk-image Inbox)", subsystem: .coreSimulator,
+            pathTemplates: ["/Library/Developer/CoreSimulator/Images/Inbox"],
+            description:
+                "Where simctl stages a runtime image before installing it into the disk-image store. Inside that store, so its bytes are counted there and listed here; empty on a healthy install (measured 2026-10-27).",
+            regenerability: .redownloadable, deletionRisk: .low, relocationRisk: .high,
+            recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged], privilege: .root,
+            evidence: "F1; E20 arm 3 (staging path); docs/research/RUNTIME-IMAGES-CATALOG-PROPOSAL-2026-10-27.md", evidenceStatus: .probable,
+            notes: [
+                "A breakdown of `simulatorRuntimeAssets`: a stranded image here is counted in the runtime store's total, which `simctl runtime delete` cannot remove — a restart reaps it, and `doctor` reports it (proposal, option 2)."
+            ],
+            isBreakdownOf: "simulatorRuntimeAssets"),
         StorageCategory(
             id: "runtimeBundles", name: "Runtime bundles (Cryptex store)", subsystem: .coreSimulator,
             pathTemplates: ["/Library/Developer/CoreSimulator/Cryptex/Images/bundle"],
@@ -258,8 +271,13 @@ public enum StorageCatalog {
             recommendedStrategy: .neverMove, allowedStrategies: [.neverMove], privilege: .root,
             evidence: "F1; E1 (two nested mounts observed)", evidenceStatus: .verified, isMountGraft: true),
         StorageCategory(
-            id: "simulatorRuntimeAssets", name: "Simulator runtime images (MobileAsset store)", subsystem: .mobileAsset,
+            // Spans both stores; the subsystem names the MobileAsset one it was first catalogued for. Nothing reads it.
+            id: "simulatorRuntimeAssets", name: "Simulator runtime images", subsystem: .mobileAsset,
             pathTemplates: [
+                // The disk-image store: where a runtime installed with `simctl runtime add` / `-importPlatform` lives
+                // (F1 correction 2026-09-08) — all 15.8 GB of this Intel Mac's runtimes (2026-10-27). Before, no category
+                // counted it, and the park/delete rows below showed the 4 KB the MobileAsset paths held.
+                "/Library/Developer/CoreSimulator/Images",
                 "/System/Library/AssetsV2/com_apple_MobileAsset_iOSSimulatorRuntime",
                 "/System/Library/AssetsV2/com_apple_MobileAsset_watchOSSimulatorRuntime",
                 "/System/Library/AssetsV2/com_apple_MobileAsset_tvOSSimulatorRuntime",
@@ -267,10 +285,12 @@ public enum StorageCatalog {
                 "/System/Library/AssetsV2/com_apple_MobileAsset_visionOSSimulatorRuntime",
             ],
             description:
-                "Where the runtime gigabytes actually live on Xcode 26 (E1: 100% of installed runtime bytes on the test machine). Behind a /System path but on the Data volume. Managed by mobileassetd + simdiskimaged.",
+                "Installed runtime images, in either store: the disk-image store (`CoreSimulator/Images`, runtimes installed with `simctl runtime add` / `-importPlatform`) and the MobileAsset store (`AssetsV2`, behind a /System path but on the Data volume; E1 found every runtime byte there on one machine). Managed by simdiskimaged and mobileassetd.",
             regenerability: .redownloadable, deletionRisk: .medium, relocationRisk: .critical,
             recommendedStrategy: .appleManaged, allowedStrategies: [.appleManaged], privilege: .root,
-            evidence: "E1 evidence file (simctl runtime list -j paths); F1 [COMMUNITY-REPRO]", evidenceStatus: .verified,
+            evidence:
+                "E1 evidence file (simctl runtime list -j paths); F1 [COMMUNITY-REPRO], its 2026-09-08 correction (runtimes in Images); E21 matrix entry (simctl runtime delete and add of a runtime stored in Images, 2026-10-25); docs/research/RUNTIME-IMAGES-CATALOG-PROPOSAL-2026-10-27.md",
+            evidenceStatus: .verified,
             notes: [
                 "Delete runtimes only with `xcrun simctl runtime delete <id>`; never touch the asset files directly (CLAUDE.md rule 2).",
                 "Keep installers on external storage instead (Runtime Library: `-downloadPlatform … -exportPath` + `-importPlatform`).",

@@ -1,7 +1,8 @@
 # Proposal: catalogue the disk-image runtime store (`CoreSimulator/Images`) — 2026-10-27
 
-**Status: proposal, for the operator's approval.** Nothing in the catalog changes until it is approved; this is the
-"catalog change needing the evidence and review of a catalog decision" that STATUS's *Blocked / pending* names.
+**Status: approved by the operator 2026-10-27 (option 2, `Images/Inbox` as a breakdown); implemented 2026-10-27, with one
+change of shape — see "As implemented" at the end.** This was the "catalog change needing the evidence and review of a
+catalog decision" that STATUS's *Blocked / pending* named.
 
 ## The gap, measured (macOS 26.7.1 · Xcode 26.5 · Intel, 2026-10-27, read-only)
 
@@ -67,3 +68,16 @@ scanner code.
 ## Not proposed
 
 Moving the store (E4 refused it; ADR-0019 declined the mount). This is accounting only.
+
+## As implemented (2026-10-27)
+
+The store is counted, `Images/Inbox` is a breakdown (option 2), and the separate "not in these totals yet" lines are gone
+from `scan`/`plan` and the Overview. **One change from the text above:** instead of a new `runtimeDiskImages` category,
+`/Library/Developer/CoreSimulator/Images` became a second path of `simulatorRuntimeAssets`, renamed "Simulator runtime
+images", and the breakdown (`runtimeImagesInbox`) belongs to it. Why: the park and delete actions act on *runtimes*
+through `simctl`, wherever each is stored. With two categories, every listing that shows those actions — the savings rows,
+the guided Plan, the Delete list's "other tools", the clean planner's "managed by Apple's tool" lines — would have needed
+its own rule to fold one into the other, and any listing missed would show one runtime twice, which this proposal said
+must not happen. One category makes that impossible by construction. The category keeps its id, so recorded journal
+entries and the app's operations are unchanged.
+

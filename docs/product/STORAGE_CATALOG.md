@@ -78,6 +78,14 @@ The category list above was written from the original brief. Research
   - `/Library/Developer/CoreSimulator/Volumes/<Platform>_<Build>` — mount points managed
     by `simdiskimaged`, not storage.
   - Directory is `Cryptex` **singular**; there is no `Cryptexes`, no `Images/Bundles`.
+  - **`/Library/Developer/CoreSimulator/Images/<UUID>.dmg`** — the disk-image store, where a runtime installed with
+    `simctl runtime add` / `-importPlatform` lives (F1 correction, 2026-09-08; on an Intel Mac with Xcode 26.5, every
+    installed runtime, 15.8 GB, on 2026-10-27). **Counted since 2026-10-27** as a second path of
+    `simulatorRuntimeAssets` ("Simulator runtime images"), so the runtime park and delete actions — which act on runtimes
+    through `simctl`, wherever they are stored — carry the bytes they free; one category keeps one runtime from being
+    listed twice. Its `Inbox/` staging subfolder is `runtimeImagesInbox`, a breakdown of that category (its bytes are
+    inside the store's), no longer a path of `runtimeInbox`. Decision and evidence:
+    `../research/RUNTIME-IMAGES-CATALOG-PROPOSAL-2026-10-27.md` (approved by the operator, option 2).
 - **Add `~/Library/Developer/Packages/`** — Apple-documented cache populated by
   `xcodebuild -runFirstLaunch -checkForNewerComponents`; essentially no cleanup tool
   knows about it.

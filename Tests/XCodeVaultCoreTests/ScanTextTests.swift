@@ -49,11 +49,12 @@ final class ScanTextTests: XCTestCase {
         XCTAssertTrue(measured.contains("Total reclaimable"), measured)
     }
 
-    func testScanPassesTheRuntimeImageBytesToTheSavingsBlock() {
+    /// The runtime images are catalog bytes since 2026-10-27: `scan` gives them no separate "not in these totals" line,
+    /// even when simctl measured some.
+    func testScanHasNoSeparateRuntimeImageLine() {
         var r = report()
-        XCTAssertFalse(TextRenderer.scan(r).contains("measured by simctl"))
         r.summary.runtimeImageBytes = 15_840_000_000
-        XCTAssertTrue(TextRenderer.scan(r).contains("Simulator runtimes measured by simctl: \(ByteCount.format(UInt64(15_840_000_000)))"))
+        XCTAssertFalse(TextRenderer.scan(r).contains("measured by simctl"))
     }
 
     func testTheItemTableIsOnlyWithDetails() {

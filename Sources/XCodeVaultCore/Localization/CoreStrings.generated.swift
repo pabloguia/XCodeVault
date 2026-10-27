@@ -1584,6 +1584,13 @@ extension L10nCatalog {
       "pt-BR" : "Pacotes de runtimes",
       "zh-Hans" : "运行时包"
     },
+    "app.guide.name.runtimeImagesInbox" : {
+      "en" : "Runtime images being installed",
+      "es" : "Imágenes de runtime en instalación",
+      "ja" : "インストール中のランタイムイメージ",
+      "pt-BR" : "Imagens de runtime sendo instaladas",
+      "zh-Hans" : "正在安装的运行时映像"
+    },
     "app.guide.name.runtimeInbox" : {
       "en" : "Runtime downloads in progress",
       "es" : "Descargas de runtimes en curso",
@@ -2318,13 +2325,6 @@ extension L10nCatalog {
       "ja" : "このレポートではサイズが測定されていないため、まだ合計できません。再スキャンして、解放できる容量を確認してください。",
       "pt-BR" : "Os tamanhos não foram medidos neste relatório, então ainda não há o que somar. Examine de novo para ver o que você pode recuperar.",
       "zh-Hans" : "此报告未测量大小，因此暂时无法汇总。请重新扫描以查看可释放的空间。"
-    },
-    "app.overview.runtimes" : {
-      "en" : "Simulator runtimes: %@, not in these totals yet. See Simulators.",
-      "es" : "Runtimes de simulador: %@, aún no incluidos en estos totales. Consulta Simuladores.",
-      "ja" : "シミュレータランタイム: %@（まだこの合計に含まれていません）。「シミュレータ」を参照してください。",
-      "pt-BR" : "Runtimes de simulador: %@, ainda fora destes totais. Veja Simuladores.",
-      "zh-Hans" : "模拟器运行时：%@，尚未计入这些总计。请参阅“模拟器”。"
     },
     "app.overview.showInHealth" : {
       "en" : "Show in Health",
@@ -4749,11 +4749,11 @@ extension L10nCatalog {
       "zh-Hans" : "`clean` 只为统计列出此项，从不删除；删除需要具有“完全磁盘访问权限”的 root，即应用的特权辅助程序（实验性）。"
     },
     "cli.plan.note.runtimeSizes" : {
-      "en" : "The size shown counts only the MobileAsset store; `xcodevaultctl runtime list` shows each runtime's real size.",
-      "es" : "El tamaño mostrado cuenta solo el almacén MobileAsset; `xcodevaultctl runtime list` muestra el tamaño real de cada runtime.",
-      "ja" : "表示されるサイズは MobileAsset ストアの分だけです。各ランタイムの実際のサイズは `xcodevaultctl runtime list` で確認できます。",
-      "pt-BR" : "O tamanho mostrado conta só o armazenamento MobileAsset; `xcodevaultctl runtime list` mostra o tamanho real de cada runtime.",
-      "zh-Hans" : "显示的大小只计算 MobileAsset 存储；`xcodevaultctl runtime list` 会显示每个运行时的实际大小。"
+      "en" : "The size counts the runtime images on this Mac; `xcodevaultctl runtime list` shows each runtime's size.",
+      "es" : "El tamaño cuenta las imágenes de runtime de este Mac; `xcodevaultctl runtime list` muestra el tamaño de cada runtime.",
+      "ja" : "サイズはこの Mac のランタイムイメージの合計です。各ランタイムのサイズは `xcodevaultctl runtime list` で確認できます。",
+      "pt-BR" : "O tamanho conta as imagens de runtime deste Mac; `xcodevaultctl runtime list` mostra o tamanho de cada runtime.",
+      "zh-Hans" : "大小计算的是此 Mac 上的运行时映像；`xcodevaultctl runtime list` 会显示每个运行时的大小。"
     },
     "cli.plan.note.simctlDelete" : {
       "en" : "Shut the device down first; its apps and their data are deleted.",
@@ -4796,13 +4796,6 @@ extension L10nCatalog {
       "ja" : "サイズは測定されていません。回収できる容量を確認するには %@ を実行してください。",
       "pt-BR" : "Os tamanhos não foram medidos; execute %@ para ver o que você pode recuperar.",
       "zh-Hans" : "未测量大小；运行 %@ 查看可回收的空间。"
-    },
-    "cli.savings.runtimesNote" : {
-      "en" : "Simulator runtimes measured by simctl: %@ — not in these totals yet; see %@",
-      "es" : "Runtimes del simulador medidos por simctl: %@ — aún no incluidos en estos totales; consulta %@",
-      "ja" : "simctl が測定したシミュレータのランタイム: %@ — まだこの合計には含まれていません。%@ を参照してください",
-      "pt-BR" : "Runtimes do simulador medidos pelo simctl: %@ — ainda fora destes totais; veja %@",
-      "zh-Hans" : "simctl 测得的模拟器运行时：%@ — 尚未计入这些总数；请参阅 %@"
     },
     "cli.status.fdaHint" : {
       "en" : "Full Disk Access is not granted to this terminal, so some folders cannot be measured. Details: %@",

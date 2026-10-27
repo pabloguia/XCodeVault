@@ -44,7 +44,7 @@ public enum TextRenderer {
         o +=
             "\n"
             + (measured
-                ? savings(r.savings, runtimeImageBytes: r.summary.runtimeImageBytes, colors: colors) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
+                ? savings(r.savings, colors: colors) : L10n.tr("cli.savings.notMeasured", "xcodevaultctl scan"))
         if details {
             o += "\nStorage categories (sizes are on-disk, not crossing mounts):\n"
             o += "  \(pad("SIZE", 10)) \(pad("CATEGORY", 34)) \(pad("OUTCOME", 15)) \(pad("STRATEGY", 21)) PATH\n"
@@ -119,11 +119,11 @@ public enum TextRenderer {
 
     /// The savings block (spec 2026-10-03 §5): both headlines, each option with its undo cost, the stay-local
     /// remainder and the next command. Every column is padded by display width, so wide scripts stay aligned.
-    /// Under the delete row, the part that does not come back (simulator devices); after the stay-local row, the
-    /// runtime images simctl measured (`runtimeImageBytes`, from `ScanSummary`), which no catalog category counts yet.
+    /// Under the delete row, the part that does not come back (simulator devices). Runtime images are a catalog category's
+    /// bytes since 2026-10-27 (both stores), so they are in the totals and have no line of their own.
     /// With a `colors` depth, each bucket title is wrapped in its color (24-bit or xterm-256) after the row is padded, so the codes never
     /// count toward width. For a terminal only: records (`report`, `--json`) and pipes never pass it.
-    public static func savings(_ s: SavingsSummary, runtimeImageBytes: UInt64, colors: ColorDepth = .none) -> String {
+    public static func savings(_ s: SavingsSummary, colors: ColorDepth = .none) -> String {
         func headline(_ bytes: UInt64) -> String {
             let amount = ByteCount.format(bytes)
             return s.isLowerBound ? L10n.tr("savings.atLeast", amount) : L10n.tr("savings.upTo", amount)
@@ -174,9 +174,6 @@ public enum TextRenderer {
         }
         out.append("  " + L10n.tr("savings.alternativesNote"))
         out.append(render(keep))
-        if runtimeImageBytes > 0 {
-            out.append("  " + L10n.tr("cli.savings.runtimesNote", ByteCount.format(runtimeImageBytes), "xcodevaultctl runtime list"))
-        }
         out.append(L10n.tr("cli.savings.next", "xcodevaultctl plan delete | park | external"))
         return out.joined(separator: "\n")
     }

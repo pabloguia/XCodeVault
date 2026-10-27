@@ -178,7 +178,7 @@ final class SavingsPlannerTests: XCTestCase {
         XCTAssertFalse(text.contains("0 items"), text)
     }
 
-    func testRuntimeRowsSayTheSizeIsTheMobileAssetStoreAndParkSaysExportFirst() {
+    func testRuntimeRowsCarryTheSizeNoteAndParkSaysExportFirst() {
         L10n.configure(override: "en", environment: [:], preferred: [])
         var r = report()
         r.items += [item("simulatorRuntimeAssets", 4000)]
@@ -191,7 +191,7 @@ final class SavingsPlannerTests: XCTestCase {
         guard let row = lines.firstIndex(where: { $0.hasPrefix("  Simulator runtime images") }) else { return XCTFail(text) }
         XCTAssertTrue(lines[row + 1].contains("xcodevaultctl runtime offload"), text)
         XCTAssertEqual(lines[row + 2], "      First export its installer: `xcodevaultctl runtime export <platform> --to <dir>`.")
-        XCTAssertTrue(lines[row + 3].contains("`xcodevaultctl runtime list` shows each runtime's real size"), text)
+        XCTAssertTrue(lines[row + 3].contains("`xcodevaultctl runtime list` shows each runtime's size"), text)
     }
 
     func testRowsWithNothingToReclaimAreHiddenUnlessTheyOnlyRedirectNewData() {
@@ -248,5 +248,32 @@ final class SavingsPlannerTests: XCTestCase {
             XCTAssertEqual(notes(.parkExternally, "archives"), ["archivesPark"], locale)
         }
         L10n.configure(override: "en", environment: [:], preferred: [])
+    }
+
+    /// The disk-image store (`CoreSimulator/Images`) is a path of the runtime category since 2026-10-27 (proposal, option
+    /// 2): its bytes are in the one runtime row of each bucket and in the totals, the staging Inbox is a breakdown counted
+    /// inside it, and no second runtime row appears.
+    func testTheDiskImageStoreIsCountedInTheOneRuntimeRow() {
+        let runtimes = try! XCTUnwrap(StorageCatalog.category("simulatorRuntimeAssets"))
+        XCTAssertTrue(runtimes.pathTemplates.contains("/Library/Developer/CoreSimulator/Images"))
+        let inbox = try! XCTUnwrap(StorageCatalog.category("runtimeImagesInbox"))
+        XCTAssertEqual(inbox.isBreakdownOf, "simulatorRuntimeAssets")
+        XCTAssertEqual(inbox.pathTemplates, ["/Library/Developer/CoreSimulator/Images/Inbox"])
+        XCTAssertFalse(
+            StorageCatalog.category("runtimeInbox")!.pathTemplates.contains("/Library/Developer/CoreSimulator/Images/Inbox"),
+            "one path, one category")
+        XCTAssertTrue(CatalogRules.validate(StorageCatalog.all).isEmpty, "the breakdown lies inside its parent")
+
+        var r = report()
+        // The store (15 GB, its Inbox's 500 B included, as `du` measures it), the MobileAsset store, and the Inbox listed.
+        r.items += [item("simulatorRuntimeAssets", 15_000_000_000), item("simulatorRuntimeAssets", 4096), item("runtimeImagesInbox", 500)]
+        for bucket in [SavingsBucket.parkExternally, .deleteAndRegenerate] {
+            let rows = SavingsPlanner.rows(report: r, bucket: bucket)
+            XCTAssertEqual(rows.filter { $0.categoryID == "simulatorRuntimeAssets" }.map(\.bytes), [15_000_004_096], "\(bucket)")
+            XCTAssertFalse(rows.contains { $0.categoryID == "runtimeImagesInbox" }, "\(bucket): the breakdown has no row")
+        }
+        let summary = SavingsCalculator.summarize(items: r.items) { StorageCatalog.category($0) }
+        let without = SavingsCalculator.summarize(items: report().items) { StorageCatalog.category($0) }
+        XCTAssertEqual(summary[.parkExternally].primaryBytes - without[.parkExternally].primaryBytes, 15_000_004_096, "the Inbox once")
     }
 }

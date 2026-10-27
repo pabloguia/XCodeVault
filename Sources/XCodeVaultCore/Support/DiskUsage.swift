@@ -3,7 +3,8 @@ import Foundation
 /// On-disk usage of a directory tree, computed like `du -x`: allocated blocks (not logical
 /// size), physical traversal (symlinks not followed), and **never crossing a mount point**.
 /// The last property is essential here: `/Library/Developer/CoreSimulator/Volumes/*` are
-/// mounted runtime images, and counting them would attribute gigabytes of read-only sealed
+/// mounted runtime images (and `CoreSimulator/Images/mnt` may hold one, inside the disk-image
+/// store the catalog measures), and counting them would attribute gigabytes of read-only sealed
 /// images to the parent directory (research F1).
 ///
 /// Mount boundaries are detected with `getattrlist(ATTR_DIR_MOUNTSTATUS)` per directory, not
