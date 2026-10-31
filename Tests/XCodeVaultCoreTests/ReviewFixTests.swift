@@ -296,10 +296,16 @@ final class ReReviewTests: XCTestCase {
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
         try enc.encode(sentinel).write(to: URL(fileURLWithPath: elsewhereVault + "/" + VaultVolume.sentinelName))
+        // The old path is kept a mount point, as when another volume took the name: otherwise the verifier sees the copy
+        // left at the old path as shadow data and refuses first, and this guard would be pinned by nothing.
         XCTAssertThrowsError(
-            try f.engine(vaultMountPoint: elsewhere).removeSource(outcome, confirmNonRegenerable: true)
+            try f.engine(vaultMountPoint: elsewhere, alsoMountPoints: [f.vaultMount]).removeSource(outcome, confirmNonRegenerable: true)
         ) { e in
             XCTAssertTrue("\(e)".contains("not on the verified vault volume"), "\(e)")
+        }
+        // With nothing mounted at the old path, the files there are shadow data: refused before the guard, the same way.
+        XCTAssertThrowsError(try f.engine(vaultMountPoint: elsewhere).removeSource(outcome, confirmNonRegenerable: true)) { e in
+            XCTAssertTrue("\(e)".contains("ambiguous"), "\(e)")
         }
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: f.archives),

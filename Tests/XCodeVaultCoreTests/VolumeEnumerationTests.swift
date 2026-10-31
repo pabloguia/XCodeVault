@@ -161,7 +161,9 @@ final class VolumeEnumerationTests: XCTestCase {
     // MARK: - Mounted somewhere else, and not listed (#51)
 
     /// A mount-table entry for `mp`: local and writable unless told otherwise.
-    private static func entry(_ mp: String, device: String = "/dev/disk9s1", type: String = "apfs", flags: UInt32 = UInt32(MNT_LOCAL)) -> MountStatus.FilesystemInfo {
+    private static func entry(_ mp: String, device: String = "/dev/disk9s1", type: String = "apfs", flags: UInt32 = UInt32(MNT_LOCAL))
+        -> MountStatus.FilesystemInfo
+    {
         MountStatus.FilesystemInfo(mountPoint: mp, device: device, typeName: type, flags: flags)
     }
 
@@ -182,7 +184,10 @@ final class VolumeEnumerationTests: XCTestCase {
         let points = mountPoints ?? [now]
         return VaultVerifier(
             registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] },
-            isMountPoint: { points.contains($0) }, volumeUUIDAt: { asked.add($0); return uuids[$0] },
+            isMountPoint: { points.contains($0) },
+            volumeUUIDAt: {
+                asked.add($0); return uuids[$0]
+            },
             filesystemAt: filesystem ?? { path in table.first { $0.mountPoint == path } }, mountTable: { table })
     }
 
@@ -298,7 +303,8 @@ final class VolumeEnumerationTests: XCTestCase {
         let asked = Asked()
         let table = [
             Self.entry("/net", type: "autofs"), Self.entry("/dev", device: "devfs", type: "devfs"), Self.entry("/Volumes/smb", flags: 0),
-            Self.entry("/Volumes/ro", flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY)), Self.entry("/Volumes/snap", device: "x@/dev/disk2s1"), Self.entry(last), Self.entry(now),
+            Self.entry("/Volumes/ro", flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY)), Self.entry("/Volumes/snap", device: "x@/dev/disk2s1"), Self.entry(last),
+            Self.entry(now),
         ]
         let check = elsewhere(t, now: now, table: table, asked: asked).check(vault(at: last))
         XCTAssertEqual(check.state, .movedMountPoint, check.detail)

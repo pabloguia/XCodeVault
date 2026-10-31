@@ -175,7 +175,8 @@ final class VaultTests: XCTestCase {
     /// A volume that is not mounted, with nothing mounted at its last path: only the folder there decides.
     private func unmountedVerifier(_ t: TempDir) -> VaultVerifier {
         VaultVerifier(
-            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] }, isMountPoint: { _ in false }, mountTable: { [] })
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] }, isMountPoint: { _ in false },
+            mountTable: { [] })
     }
 
     /// The whole folder refused. The control is the same folder readable and empty, which is `.absent`.
@@ -435,7 +436,10 @@ final class MigrationEngineTests: XCTestCase {
             /// which is what the containment guards on the deletion paths exist for, and which the
             /// seams being `let` (issue #31) means a test stages by building a second engine rather
             /// than by mutating the first.
-            vaultMountPoint: String? = nil
+            vaultMountPoint: String? = nil,
+            /// Paths the verifier also takes for mount points: the old one, when a test moves the vault but keeps a
+            /// volume mounted where it was, so the verifier's shadow probe at the old path does not answer first.
+            alsoMountPoints: [String] = []
         ) -> MigrationEngine {
             let mp = vaultMountPoint ?? vaultMount
             let vol = Volume(
@@ -446,7 +450,7 @@ final class MigrationEngineTests: XCTestCase {
             // public one cannot install a fault-injection hook, and the two are told apart by these
             // arguments being present rather than defaulted.
             return MigrationEngine(
-                journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp), home: home,
+                journal: journal, verifier: StubVerifier.make(registry: registry, volume: vol, mountPoint: mp, alsoMountPoints: alsoMountPoints), home: home,
                 isXcodeRunning: isXcodeRunning,
                 afterCopy: afterCopy, afterRenameAside: afterRenameAside,
                 // The fixture's "vault" is a directory in /tmp, so the real lookup answers with the
@@ -811,8 +815,10 @@ final class MigrationEngineTests: XCTestCase {
 
 /// A VaultVerifier whose mount-point check treats the fixture directory as a mounted volume.
 enum StubVerifier {
-    static func make(registry: VaultRegistry, volume: Volume, mountPoint: String) -> VaultVerifier {
-        VaultVerifier(registry: registry, mountedVolumes: { [volume] }, isMountPoint: { $0 == mountPoint || MountStatus.isMountPoint($0) }, mountTable: { [] })
+    static func make(registry: VaultRegistry, volume: Volume, mountPoint: String, alsoMountPoints: [String] = []) -> VaultVerifier {
+        VaultVerifier(
+            registry: registry, mountedVolumes: { [volume] },
+            isMountPoint: { $0 == mountPoint || alsoMountPoints.contains($0) || MountStatus.isMountPoint($0) }, mountTable: { [] })
     }
 }
 
