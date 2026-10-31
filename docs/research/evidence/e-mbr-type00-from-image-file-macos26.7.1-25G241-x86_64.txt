@@ -1,0 +1,44 @@
+# Item 6 (type-00 MBR entry) - can the entry be read without root?
+# Date: 2026-10-31 (overnight session). macOS 26.7.1 (25G241), Intel x86_64. Research only; nothing implemented.
+# Method: an 8 MiB raw image written by Python under /private/tmp/xcv-mbr00 (scratch, removed afterwards), with
+# entry 1 = type 0x00 (start LBA 2048, 4096 sectors) and entry 2 = type 0x0C FAT32 LBA (start 6144, 8192 sectors),
+# signature 55AA. Attached with `hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage`, detached after
+# confirming `Protocol: Disk Image`. No physical disk, no sudo. User name redacted to <user>; the other attached
+# images (the CoreSimulator runtime store) are left out of the hdiutil listing.
+
+$ hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage mbr00.img
+/dev/disk9          	FDisk_partition_scheme
+/dev/disk9s2        	Windows_FAT_32
+
+$ diskutil list disk9
+/dev/disk9 (disk image):
+   #:                       TYPE NAME                    SIZE       IDENTIFIER
+   0:     FDisk_partition_scheme                        +8.4 MB     disk9
+   1:             Windows_FAT_32                         4.2 MB     disk9s2
+
+$ diskutil info disk9 (excerpt)
+   Device Identifier:         disk9
+   Content (IOContent):       FDisk_partition_scheme
+   Protocol:                  Disk Image
+   Disk Size:                 8.4 MB (8388608 Bytes) (exactly 16384 512-Byte-Units)
+   Virtual:                   Yes
+
+$ hdiutil info -plist: image-path for disk9
+		<string>/private/tmp/xcv-mbr00/mbr00.img</string>
+
+$ python3: read the MBR from the image file (no root, no /dev/rdisk)
+signature 55aa
+entry 1: type 0x00 start LBA 2048 sectors 4096
+entry 2: type 0x0c start LBA 6144 sectors 8192
+
+$ ls -l /dev/disk9 /dev/rdisk9
+brw-r-----  1 <user>  staff  0x100001b Oct 31 01:33 /dev/disk9
+crw-r-----  1 <user>  staff  0x100001b Oct 31 01:33 /dev/rdisk9
+$ read 512 bytes of /dev/rdisk9 as the user
+ok: entry 1 type 0x00
+
+# Reading:
+# - diskutil hides the type-00 entry: the scheme lists one partition (disk9s2, numbered 2); entry 1 has no node.
+# - The MBR in the image FILE names it (type 0x00, a real extent), read by the user with no privilege.
+# - For an image the user attached, /dev/rdiskN is owned by that user (<user>:staff, crw-r-----) and is readable
+#   too. A physical disk's node is root:operator and is not, so this does not reach the case #63 is about (a USB disk).
