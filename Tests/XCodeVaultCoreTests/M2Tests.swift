@@ -901,6 +901,7 @@ final class XcodeLocationsTests: XCTestCase {
     /// A folder that cannot be looked at is not placed by its parent: unknown, not this Mac's.
     func testAPathThatCannotBeLookedAtIsUnknown() throws {
         let t = TempDir()
+        try XCTSkipIf(getuid() == 0, "root ignores the permissions this test relies on")
         let locked = t.dir("locked")
         try FileManager.default.createDirectory(atPath: locked + "/inner", withIntermediateDirectories: true)
         chmod(locked, 0)
@@ -908,6 +909,35 @@ final class XcodeLocationsTests: XCTestCase {
         XCTAssertEqual(XcodeLocations.placement(resolved: locked + "/inner/DD", volumes: []), .unknown)
         // The control: a missing folder under a readable one is placed by that parent.
         XCTAssertEqual(XcodeLocations.placement(resolved: t.path + "/missing/DD", volumes: []), .thisMac)
+    }
+
+    /// The two call sites that act on an unplaced folder (review of #9, finding 1): the DerivedData preflight treats it
+    /// as external and says it could not tell, and the usual products folder is not created on it.
+    func testAnUnplacedFolderIsTreatedAsExternalAndTheProductsFolderIsNotMade() throws {
+        let t = TempDir()
+        let dd = t.dir("DD")
+        let unlisted = fsAt("/private/tmp/mnt")
+        XCTAssertThrowsError(
+            try XcodeLocations.preflightLocation(
+                path: dd, volumes: [], xcodeRunning: false, acknowledgeExternalTests: false, warnsAboutTests: true, filesystemAt: unlisted)
+        ) { XCTAssertTrue("\($0)".hasPrefix("Cannot tell which volume holds"), "\($0)") }
+        let warnings = try XcodeLocations.preflightLocation(
+            path: dd, volumes: [], xcodeRunning: false, acknowledgeExternalTests: true, warnsAboutTests: true, filesystemAt: unlisted)
+        XCTAssertTrue(warnings.contains { $0.hasPrefix("Cannot tell which volume holds") }, "\(warnings)")
+        // The control: on the boot data volume, no acknowledgement is needed and nothing is said.
+        let onMac = try XcodeLocations.preflightLocation(
+            path: dd, volumes: [], xcodeRunning: false, acknowledgeExternalTests: false, warnsAboutTests: true, filesystemAt: fsAt("/System/Volumes/Data"))
+        XCTAssertFalse(onMac.contains { $0.hasPrefix("Cannot tell") }, "\(onMac)")
+
+        let home = t.path
+        try FileManager.default.createDirectory(atPath: home + "/Library/Developer/Xcode", withIntermediateDirectories: true)
+        let products = XcodeLocations.suggestedProductsDirectory(home: home)
+        XCTAssertThrowsError(try XcodeLocations.ensureProductsDirectory(home: home, filesystemAt: unlisted)) {
+            XCTAssertTrue("\($0)".hasPrefix("Cannot tell which volume holds"), "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: products), "not created")
+        XCTAssertEqual(try XcodeLocations.ensureProductsDirectory(home: home, filesystemAt: fsAt("/System/Volumes/Data")), products, "the control")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: products))
     }
 
     /// Neither folder of the split is guessed: an unknown side refuses, with its own sentence.

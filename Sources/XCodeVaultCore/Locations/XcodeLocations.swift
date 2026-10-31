@@ -136,9 +136,11 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         }
     }
 
-    static func preflightLocation(path: String?, volumes: [Volume], xcodeRunning: Bool, acknowledgeExternalTests: Bool, warnsAboutTests: Bool) throws
-        -> [String]
-    {
+    /// `filesystemAt` stands in for `statfs` in `placement` only, so a test can place the folder on an unlisted volume.
+    static func preflightLocation(
+        path: String?, volumes: [Volume], xcodeRunning: Bool, acknowledgeExternalTests: Bool, warnsAboutTests: Bool,
+        filesystemAt: (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
+    ) throws -> [String] {
         if xcodeRunning { throw RuntimeOperationError("Xcode.app is running; it caches Locations and may overwrite the change. Quit Xcode first.") }
         guard let path else { return [] }
         var isDir: ObjCBool = false
@@ -169,16 +171,18 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         if let fs, fs.typeName != "apfs" { w.append("\(path) is on a \(fs.typeName) filesystem; Xcode expects APFS/HFS+ semantics.") }
         let vol = volumes.first { $0.mountPoint == fs?.mountPoint }
         // A volume that could not be placed is treated as external: the warnings below are the ones to see (#54 review).
-        let where_ = placement(resolved: resolved, volumes: volumes)
-        let external = where_ != .thisMac
-        if where_ == .unknown {
-            w.append("Could not tell whether \(path) is on this Mac or on an external volume (its volume is not listed and is not this Mac's), so it is treated as external.")
-        }
+        let placed = placement(resolved: resolved, volumes: volumes, filesystemAt: filesystemAt)
+        let external = placed != .thisMac
+        let unknown = placed == .unknown ? unplacedSentence(path) + " It is treated as external." : nil
+        if let unknown { w.append(unknown) }
         if external && warnsAboutTests {
             let msg =
                 "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (reproduced here) — unit tests "
                 + "will break for projects built here. Disk images and internal volumes are unaffected."
-            guard acknowledgeExternalTests else { throw RuntimeOperationError(msg + " Re-run with --i-understand-tests-may-fail to proceed anyway.") }
+            // An unplaced folder is said to be unplaced first, not claimed to be on an external disk (review finding 2).
+            guard acknowledgeExternalTests else {
+                throw RuntimeOperationError((unknown.map { $0 + " " } ?? "") + msg + " Re-run with --i-understand-tests-may-fail to proceed anyway.")
+            }
             w.append(msg)
         }
         if external {
@@ -296,19 +300,26 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
     /// Makes the usual products folder when the user did not pass one. Refuses to create it on an external volume
     /// or when `~/Library/Developer/Xcode` is missing: that parent is Xcode's, and this does not invent it.
     public static func ensureProductsDirectory(home: String = FileManager.default.homeDirectoryForCurrentUser.path) throws -> String {
+        try ensureProductsDirectory(home: home, filesystemAt: MountStatus.filesystem(containing:))
+    }
+
+    /// `filesystemAt` stands in for `statfs` when placing the parent, so a test can put it on an unlisted volume.
+    static func ensureProductsDirectory(home: String, filesystemAt: (String) -> MountStatus.FilesystemInfo?) throws -> String {
         let products = suggestedProductsDirectory(home: home)
         var isDir: ObjCBool = false
         if FileManager.default.fileExists(atPath: products, isDirectory: &isDir) {
             guard isDir.boolValue else { throw RuntimeOperationError("\(products) exists and is not a folder.") }
             return products
         }
-        try validateSuggestedProductsParent(home: home)
+        try validateSuggestedProductsParent(home: home, filesystemAt: filesystemAt)
         try FileManager.default.createDirectory(atPath: products, withIntermediateDirectories: false)
         return products
     }
 
     /// The usual products folder may be missing until Run. Its parent has to exist, be writable, and sit on this Mac.
-    private static func validateSuggestedProductsParent(home: String) throws {
+    private static func validateSuggestedProductsParent(
+        home: String, filesystemAt: (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
+    ) throws {
         let products = suggestedProductsDirectory(home: home)
         let parent = (products as NSString).deletingLastPathComponent
         var isDir: ObjCBool = false
@@ -317,13 +328,12 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
                 "Choose a folder on this Mac with --products. \(products) is not there, and \(parent) is missing or not writable.")
         }
         let resolvedParent = resolve(parent)
-        switch placement(resolved: resolvedParent, volumes: []) {
+        switch placement(resolved: resolvedParent, volumes: [], filesystemAt: filesystemAt) {
         case .thisMac: break
         case .external:
             throw RuntimeOperationError("\(products) would be on an external volume. Built test products have to stay on this Mac. Pass --products.")
         case .unknown:
-            throw RuntimeOperationError(
-                "Cannot tell whether \(products) would be on this Mac: its volume is not this Mac's and could not be read. Built test products have to stay on this Mac. Pass --products.")
+            throw RuntimeOperationError(unplacedSentence(products) + " Built test products have to stay on this Mac. Pass --products.")
         }
     }
 
@@ -374,11 +384,12 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
     /// Where the two folders have to sit, when either could not be placed: neither side is guessed (#54 review).
     static func splitPlacementProblem(bulk: Placement, products: Placement, productsInsideBulk: Bool) -> String? {
         if bulk == .unknown {
-            return "Cannot tell whether the bulky build data folder is on the external drive: its volume is not this Mac's and could not be read."
+            return "Cannot tell whether the bulky build data folder is on the external drive: it could not be looked at, or its volume is not listed "
+                + "and is not this Mac's."
         }
         if products == .unknown {
-            return "Cannot tell whether the built test products folder is on this Mac: its volume is not this Mac's and could not be read. "
-                + "Built test products have to stay on this Mac."
+            return "Cannot tell whether the built test products folder is on this Mac: it could not be looked at, or its volume is not listed "
+                + "and is not this Mac's. Built test products have to stay on this Mac."
         }
         return splitPlacementProblem(bulkExternal: bulk == .external, productsExternal: products == .external, productsInsideBulk: productsInsideBulk)
     }
@@ -402,6 +413,11 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         return p == b || p.hasPrefix(b + "/")
     }
 
+    /// The sentence for a path `placement` could not place: what is known, and no more (review finding 3).
+    static func unplacedSentence(_ path: String) -> String {
+        "Cannot tell which volume holds \(path): it could not be looked at, or its volume is not listed and is not this Mac's."
+    }
+
     /// Where a path lives: on this Mac, on an external volume, or unknown.
     enum Placement: Equatable { case thisMac, external, unknown }
 
@@ -410,6 +426,11 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
     /// boot volume (`/`, or its data volume at `/System/Volumes/Data`). Any other unlisted mount — a volume `diskutil`
     /// could not read, mounted outside `/Volumes` — is `.unknown`, never this Mac's (review of #54). A path that does not
     /// exist yet is placed by its nearest existing parent; one that cannot be looked at (not `ENOENT`) is `.unknown`.
+    ///
+    /// Two limits, both stated for whoever reuses this. The walk up means a missing path is placed by its parent, so a
+    /// volume that is absent reads as wherever its mount point's parent is: every caller today passes a folder that exists,
+    /// or the suggested products folder under the home folder. And with no volume list, an unlisted `/` or
+    /// `/System/Volumes/Data` is taken for this Mac's, which a Mac booted from an external disk is not (review of #9, 4).
     static func placement(
         resolved: String, volumes: [Volume], filesystemAt: (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
     ) -> Placement {
