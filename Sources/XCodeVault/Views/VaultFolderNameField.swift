@@ -5,7 +5,7 @@ import XCodeVaultCore
 struct VaultFolderField {
     var name: String = VaultFolderName.suggested
     var message: String?
-    var set: @MainActor (String) -> Void = { _ in }
+    var set: @MainActor (String) -> Void = { _ in /* a no-op until set */ }
 }
 
 /// The words the field uses for a name that cannot be a folder's.

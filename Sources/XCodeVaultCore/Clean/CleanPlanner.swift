@@ -64,7 +64,9 @@ public struct CleanPlanner: Sendable {
     ///   - categories: restrict to these category ids (empty = all eligible).
     ///   - granular: split DerivedData / Device Support into per-child actions so the user can keep some.
     public func plan(report: ScanReport, categories: Set<String> = [], granular: Bool = true) -> CleanPlan {
-        var actions: [CleanAction] = [], skipped: [String] = [], warnings: [String] = []
+        var actions: [CleanAction] = []
+        var skipped: [String] = []
+        var warnings: [String] = []
         var declined: [String: UInt64] = [:]
         for item in report.items {
             guard let c = StorageCatalog.category(item.categoryID) else { continue }
@@ -324,7 +326,8 @@ public struct CleanExecutor: Sendable {
         let opID = UUID().uuidString
         try journal.record(
             id: opID, kind: .clean, state: .planned, summary: "clean \(actions.count) path(s)", paths: actions.map(\.path), bytes: plan.totalBytes)
-        var deleted: [CleanAction] = [], failed: [CleanResult.FailedAction] = []
+        var deleted: [CleanAction] = []
+        var failed: [CleanResult.FailedAction] = []
         for a in actions {
             do {
                 try preflight(a)

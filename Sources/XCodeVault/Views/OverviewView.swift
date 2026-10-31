@@ -11,10 +11,10 @@ struct OverviewView: View {
     let findings: [Finding]
     /// `AppModel.accessBanner`.
     let access: AccessChecklist.Row?
-    var act: @MainActor (AccessChecklist.Action) -> Void = { _ in }
-    var review: @MainActor (SavingsBucket) -> Void = { _ in }
+    var act: @MainActor (AccessChecklist.Action) -> Void = { _ in /* a no-op until set */ }
+    var review: @MainActor (SavingsBucket) -> Void = { _ in /* a no-op until set */ }
     /// **Show in Health** beside the critical findings (R5, HIG review O4).
-    var showHealth: @MainActor () -> Void = {}
+    var showHealth: @MainActor () -> Void = { /* a no-op until set */  }
 
     var body: some View {
         ScrollView {

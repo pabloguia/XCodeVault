@@ -209,7 +209,7 @@ struct GuidedPlanView: View {
     let plan: Plan
     /// ADR-0015: the vault folder's name, in the step that turns ownership on.
     var vaultFolder = VaultFolderField()
-    var act: @MainActor (PlanAction) -> Void = { _ in }
+    var act: @MainActor (PlanAction) -> Void = { _ in /* a no-op until set */ }
 
     var body: some View {
         ScrollView {

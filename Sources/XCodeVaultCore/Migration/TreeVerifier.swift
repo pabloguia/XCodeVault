@@ -164,7 +164,8 @@ public struct TreeVerifier: Sendable {
         // Before any comparison: anything neither side could read is a mismatch, not a match.
         for rel in src.unreadable.sorted() { add(Mismatch(relativePath: rel, reason: "unreadable in source")) }
         for rel in dst.unreadable.sorted() { add(Mismatch(relativePath: rel, reason: "unreadable in destination")) }
-        var sroot = stat(), droot = stat()
+        var sroot = stat()
+        var droot = stat()
         if lstat(source, &sroot) == 0, lstat(destination, &droot) == 0, (sroot.st_mode & 0o7777) != (droot.st_mode & 0o7777) {
             add(Mismatch(relativePath: ".", reason: String(format: "root mode %o vs %o", sroot.st_mode & 0o7777, droot.st_mode & 0o7777)))
         }
@@ -193,7 +194,8 @@ public struct TreeVerifier: Sendable {
                 // user their archive is corrupt when the truth is that it could not be read. On a
                 // multi-hundred-gigabyte non-regenerable migration that is the difference between
                 // "check permissions" and "the drive is failing".
-                let a = try? TreeVerifier.sha256(ofFile: source + "/" + rel), b = try? TreeVerifier.sha256(ofFile: destination + "/" + rel)
+                let a = try? TreeVerifier.sha256(ofFile: source + "/" + rel)
+                let b = try? TreeVerifier.sha256(ofFile: destination + "/" + rel)
                 switch (a, b) {
                 case (nil, nil): add(Mismatch(relativePath: rel, reason: "neither copy could be read"))
                 case (nil, _): add(Mismatch(relativePath: rel, reason: "source could not be read"))
@@ -203,7 +205,8 @@ public struct TreeVerifier: Sendable {
             }
         }
         for rel in dst.entries.keys where src.entries[rel] == nil { add(Mismatch(relativePath: rel, reason: "extra in destination")) }
-        let sf = src.entries.values.filter { !$0.isDir }.count, df = dst.entries.values.filter { !$0.isDir }.count
+        let sf = src.entries.values.filter { !$0.isDir }.count
+        let df = dst.entries.values.filter { !$0.isDir }.count
         return Report(
             sourceFiles: UInt64(sf), destinationFiles: UInt64(df),
             sourceBytes: src.entries.values.reduce(0) { $0 + $1.size }, destinationBytes: dst.entries.values.reduce(0) { $0 + $1.size },

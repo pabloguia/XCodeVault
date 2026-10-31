@@ -573,7 +573,8 @@ public struct MigrationEngine: Sendable {
                 "Migration \(operationID) is \(entries.last?.state.rawValue ?? "?"), not interrupted; there is no cleanup to finish. "
                     + "To remove the original of a completed copy, do it as its own explicit step.")
         }
-        let source = planned.paths[0], destination = planned.paths[1]
+        let source = planned.paths[0]
+        let destination = planned.paths[1]
         // Derived, never read from the journal. `removeSource` computes this same name from the
         // source and the operation id, so there is nothing to recover — and reading it back was the
         // more dangerous half of this function: it is the path that reaches `removeItem`, and a
@@ -882,7 +883,8 @@ public struct MigrationEngine: Sendable {
                     + "`xcodevaultctl migration forget \(operationID) --i-verified-both-copies-myself` closes the entry and records that a copy may remain on it."
             )
         }
-        let source = planned.paths[0], destination = planned.paths[1]
+        let source = planned.paths[0]
+        let destination = planned.paths[1]
 
         var removed = false
         let before = MigrationEngine.presence(of: destination)

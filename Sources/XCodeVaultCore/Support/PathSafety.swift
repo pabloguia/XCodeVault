@@ -61,7 +61,8 @@ public enum PathSafety {
                 defer { free(p) }; return String(cString: p)
             }
             ?? URL(fileURLWithPath: candidate).standardized.path
-        let a = resolvedTarget, b = resolvedCandidate
+        let a = resolvedTarget
+        let b = resolvedCandidate
         return a.caseInsensitiveCompare(b) == .orderedSame
             || a.lowercased().hasPrefix(b.lowercased() + "/")
             || b.lowercased().hasPrefix(a.lowercased() + "/")

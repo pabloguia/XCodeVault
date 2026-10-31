@@ -39,10 +39,8 @@ enum AppText {
     /// Why a root action needs the helper, in the helper sheet: the app's words for the requirement whose shared text
     /// keeps the CLI's evidence references (R5 review m2).
     static func requirementWhy(_ requirement: PrivilegeRequirement) -> String {
-        switch requirement {
-        case .helperWithFullDiskAccess: L10n.tr("app.requirement.helperWithFullDiskAccess.why")
-        default: requirement.why(in: L10n.locale)
-        }
+        if case .helperWithFullDiskAccess = requirement { return L10n.tr("app.requirement.helperWithFullDiskAccess.why") }
+        return requirement.why(in: L10n.locale)
     }
 
     /// A bucket's short name, where its full title does not fit (the Storage chart, chips and column; R5): the name of

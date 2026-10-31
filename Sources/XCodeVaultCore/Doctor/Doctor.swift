@@ -403,12 +403,16 @@ public struct Doctor: Sendable {
                 let devicesIsTrulyEmpty = (deviceEntries ?? []).isEmpty
 
                 enum Shape { case unreadable, holdsDevices, otherContent, pureResidue }
-                let shape: Shape =
-                    deviceEntries == nil || rootEntries == nil
-                    ? .unreadable
-                    : (!udids.isEmpty || hasDeviceSet)
-                        ? .holdsDevices
-                        : (rootIsOnlyDevices && devicesIsTrulyEmpty) ? .pureResidue : .otherContent
+                let shape: Shape
+                if deviceEntries == nil || rootEntries == nil {
+                    shape = .unreadable
+                } else if !udids.isEmpty || hasDeviceSet {
+                    shape = .holdsDevices
+                } else if rootIsOnlyDevices && devicesIsTrulyEmpty {
+                    shape = .pureResidue
+                } else {
+                    shape = .otherContent
+                }
 
                 let severity: Finding.Severity
                 let detail: String

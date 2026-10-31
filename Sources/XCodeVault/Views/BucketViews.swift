@@ -50,7 +50,7 @@ struct PlanRowView: View {
 
     init(
         row: SavingsPlanRow, copy: @escaping @MainActor () -> Void, run: (@MainActor () -> Void)? = nil, suggestion: AppModel.CommandSuggestion = .none,
-        showDrives: @escaping @MainActor () -> Void = {}
+        showDrives: @escaping @MainActor () -> Void = { /* a no-op until set */  }
     ) {
         self.row = row
         self.copy = copy
@@ -130,13 +130,13 @@ struct PlanView: View {
     let copy: @MainActor (SavingsPlanRow) -> Void
     /// The rows **Run…** is offered for, and what it does (`AppModel.canRun`, `AppModel.openRun`).
     var canRun: @MainActor (SavingsPlanRow) -> Bool = { _ in false }
-    var run: @MainActor (SavingsPlanRow) -> Void = { _ in }
+    var run: @MainActor (SavingsPlanRow) -> Void = { _ in /* a no-op until set */ }
     /// The interrupted-migration banner (R3 §10).
     var interrupted: [InterruptedMigration] = []
-    var copyCommand: @MainActor (String) -> Void = { _ in }
+    var copyCommand: @MainActor (String) -> Void = { _ in /* a no-op until set */ }
     /// R7-A: each row's suggested folder (`AppModel.commandSuggestion`), and the hint's **Show Drives**.
     var suggestion: @MainActor (SavingsPlanRow) -> AppModel.CommandSuggestion = { _ in .none }
-    var showDrives: @MainActor () -> Void = {}
+    var showDrives: @MainActor () -> Void = { /* a no-op until set */  }
 
     var body: some View {
         ScrollView {

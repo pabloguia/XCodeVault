@@ -17,23 +17,23 @@ struct AppEnvironment: Sendable {
     var copy: @MainActor @Sendable (String) -> Void
     /// Just before the Full Disk Access pane opens: one attempt at a folder Full Disk Access guards, so macOS lists the
     /// app in the pane (`FullDiskAccessRegistration`, R4). A no-op unless set: a test never touches TCC.
-    var registerForFullDiskAccess: @Sendable () -> Void = {}
+    var registerForFullDiskAccess: @Sendable () -> Void = { /* a no-op until set */  }
     /// **Run…** in Park, Run externally and Delete (R3): previews, runs, the second steps and the folder panel. `.inert`
     /// unless set, so a test that does not supply fakes cannot reach Core's operations.
     var operations: OperationServices = .inert
     /// R6: reading the disks and hearing mounts (`DriveServices`). `.inert` unless set: a test never runs `diskutil`.
     var drives: DriveServices = .inert
     /// **Show in Finder** on the Delete and Storage tables (R5): selects the paths in a Finder window. A no-op unless set.
-    var reveal: @MainActor @Sendable ([String]) -> Void = { _ in }
+    var reveal: @MainActor @Sendable ([String]) -> Void = { _ in /* a no-op until set */ }
     /// Quitting this instance, through `applicationShouldTerminate` (the quit guard). A no-op unless set.
-    var terminate: @MainActor @Sendable () -> Void = {}
+    var terminate: @MainActor @Sendable () -> Void = { /* a no-op until set */  }
     /// **Relaunch XCodeVault** (R5): a new instance of the app's bundle, started from `applicationWillTerminate` once the
     /// quit was approved. A no-op unless set: a test never launches anything.
-    var launchNewInstance: @MainActor @Sendable () -> Void = {}
+    var launchNewInstance: @MainActor @Sendable () -> Void = { /* a no-op until set */  }
     /// The Full Disk Access guide panel (R5): shown when the pane opens, with the closure its Done calls; closed by the
     /// model. No-ops unless set: a test never opens a window.
-    var showAccessGuide: @MainActor @Sendable (@escaping @MainActor () -> Void) -> Void = { _ in }
-    var closeAccessGuide: @MainActor @Sendable () -> Void = {}
+    var showAccessGuide: @MainActor @Sendable (@escaping @MainActor () -> Void) -> Void = { _ in /* a no-op until set */ }
+    var closeAccessGuide: @MainActor @Sendable () -> Void = { /* a no-op until set */  }
     /// Xcode's DerivedData and Archives locations, read with each scan for the Plan (R7-C). Nil unless set: a test never
     /// reads this Mac's Xcode defaults.
     var xcodeLocations: @Sendable () -> XcodeLocations? = { nil }

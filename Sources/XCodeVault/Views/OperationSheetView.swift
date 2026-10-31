@@ -338,7 +338,7 @@ struct OperationSheetView: View {
 
     /// The plan: the exact command (copyable), every volume an erase destroys, and the name to type.
     @ViewBuilder
-    private func drivePlan(_ s: OperationSheetState) -> some View {
+    private func drivePlan(_ _: OperationSheetState) -> some View {
         if let plan = model.pendingDiskPlan {
             HStack(alignment: .firstTextBaseline) {
                 Text(verbatim: plan.command).font(.system(.callout, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)

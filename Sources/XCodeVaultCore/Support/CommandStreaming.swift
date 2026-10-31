@@ -185,7 +185,8 @@ public struct StreamingCommandRunner: CommandRunning {
         if let environment {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
         }
-        let outPipe = Pipe(), errPipe = Pipe()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice
@@ -196,7 +197,8 @@ public struct StreamingCommandRunner: CommandRunning {
             observer(LogLine(.stderr, why))
             throw CommandError(executable: executable, arguments: arguments, result: nil, underlying: why)
         }
-        let out = PipeDrain(), err = PipeDrain()
+        let out = PipeDrain()
+        let err = PipeDrain()
         let group = DispatchGroup()
         let observer = self.observer
         for (pipe, drain, stream) in [(outPipe, out, LogLine.Stream.stdout), (errPipe, err, LogLine.Stream.stderr)] {
