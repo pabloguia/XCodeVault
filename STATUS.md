@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-27. **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-10-31 (overnight session, unattended). **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -14,26 +14,27 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 ## In flight
 
-**Nothing is on a branch (checked 2026-10-27 against `origin/main` at d9474de).** No open pull request, no branch
-besides `main` locally or on GitHub, one open issue (#30). Merged since the last refresh (#59, 2026-10-25), newest first:
+**Overnight 2026-10-30/31, unattended** (report: `.superpowers/sdd/RELATORIO-noite-2026-10-30.md`). Newest first:
 
-- **#66** — the disk-image runtime store (`CoreSimulator/Images`) is counted: a second path of `simulatorRuntimeAssets`,
-  `Images/Inbox` a breakdown (proposal option 2, approved by the operator). Migration-safety: APPROVE on re-review.
-- **#64** — catalog category names and outcomes in the app's language (S4 follow-up 3); the CLI and records keep English.
-- **#63** — an unrecognised MBR partition (reads as `Linux` / `0xDA`) is named by its type in the erase confirmation.
-  Migration-safety: APPROVE.
-- **#62** — the whole-disk "Not measured" cases measured on images (#55's entry below): exFAT keeps its type unmounted;
-  `apfs addVolume` and `eraseVolume` work on a whole-disk store; an `Apple_CoreStorage` partition and an unmounted
-  whole-disk volume typed `unknown` were offered for erasing and are now refused as `mightBeTimeMachine`. ADR-0019
-  (H20) accepted 2026-10-27 as option A, "not now". Migration-safety: APPROVE.
-- **#61** — no more `xcv-*` scratch left in `$TMPDIR`, with a gate on it.
-- **#60** — E21: `simctl runtime add` rebuilds that runtime's `Caches/dyld` entry unprompted.
-- **#56–#59** — H20/E20, E6b (issue #29 closed), the SESSION-HANDOFF refresh, the previous STATUS refresh.
+- **#72 — helper SonarQube smells, open, NOT merged** (helper rule: the operator merges helper changes). Five
+  behaviour-neutral edits in `Sources/XCodeVaultHelper*`; helper-security review in the PR.
+- **#71** — 45 SonarQube code smells in non-helper code, behaviour unchanged. Migration-safety: APPROVE.
+- **#70** — test gap from the review of #54: `revalidate` refuses when an unplaced volume has become unreadable.
+- **#69** — open item 9 closed: Locations placement is three-way; an unlisted volume outside `/Volumes` is unknown and
+  fails closed. Migration-safety: APPROVE (second round).
+- **#68** (merged, 80f42ae) — open item 8 closed: the verifier finds an unlisted vault mounted elsewhere in the kernel
+  mount table (moved at best, never verified), and shadow data at the old path now blocks a moved vault.
+  Migration-safety: four rounds, APPROVE.
+
+Before the night: no branch, no open PR, one open issue (#30). Merged since the previous refresh (#59, 2026-10-25),
+newest first: #66 (the disk-image runtime store counted), #64 (category names in the app's language), #63 (an
+unrecognised MBR partition named in the erase confirmation), #62 (whole-disk "Not measured" cases measured; ADR-0019
+accepted as option A), #61 (no `xcv-*` scratch left in `$TMPDIR`), #60 (E21), #56–#59.
 
 **What is left is the list below**, "Open items". The entries under "Merged, with open follow-ups" are kept verbatim as
 the record each item came from; an item in them that is not in "Open items" has been done (where, is said there).
 
-## Open items (checked against `main`, 2026-10-27)
+## Open items (checked against `main`, 2026-10-31)
 
 Every pending thing, in one place. Each line names where it was recorded. Nothing here is on a branch.
 
@@ -67,18 +68,31 @@ Every pending thing, in one place. Each line names where it was recorded. Nothin
 
 **Known gaps, recorded, nothing planned**
 
-6. A type-00 MBR entry is invisible to `diskutil`, so erasing such a disk lists nothing (#63).
+6. A type-00 MBR entry is invisible to `diskutil`, so erasing such a disk lists nothing (#63). Researched 2026-10-31:
+   readable without root only for disk images (the backing file, or a user-owned `/dev/rdiskN`), which preparation
+   already refuses; a physical disk's node needs root. Proposal: change nothing for now
+   (`docs/research/PROPOSAL-mbr-type00-2026-10-31.md`; evidence `e-mbr-type00-from-image-file-…`).
 7. Not measurable on this Mac: a real CoreStorage group (macOS 26 cannot create one) and an unmounted FAT32 whole disk
    (#62).
-8. A vault mounted somewhere other than its last path, and missed by `diskutil`, reads as not connected (#51).
-9. The Locations "is external" fallback treats an unreadable volume mounted outside `/Volumes` as on this Mac (Low;
-   review of #54).
+8. ~~A vault mounted somewhere other than its last path, and missed by `diskutil`, reads as not connected (#51).~~
+   Done in #68. Left from its review: a read-only mount elsewhere is refused without the shadow probe at the old path
+   (not usable; Doctor still warns), and a block-level clone of the vault (same UUID and sentinel) passes as the moved
+   vault — already true before #68; a KNOWN-ISSUES candidate.
+9. ~~The Locations "is external" fallback treats an unreadable volume mounted outside `/Volumes` as on this Mac.~~
+   Done in #69. Left from its review (Low, not a regression): with no volume list — the suggested products folder's
+   check — an unlisted `/` or `/System/Volumes/Data` is taken for this Mac's, which a Mac booted from an external disk
+   is not.
 10. The helper's cleanup verb has no in-use check of its own, so the daemon refuses it and the app shows the manual
     route (#48).
 11. Simulator platforms outside the five known identifiers show their short identifier; ArgumentParser's own help
-    headers stay English (S4 follow-up 6; S3).
+    headers stay English (S4 follow-up 6; S3). Checked 2026-10-31 with `simctl list runtimes -j` (read only): this Mac
+    has iOS and watchOS runtimes, both mapped, and the JSON carries no `platformIdentifier`; nothing new to map.
 12. H20 (runtimes served from an external volume) is probable and experimental, and nothing is built on it (ADR-0019,
     option A).
+13. A mount point inside `CoreSimulator/Images` counted once (#66's accepted test gap) cannot be pinned by tests alone:
+    it needs a real mount or a seam in `DiskUsage`. The generic nested-mount pruning is pinned by `FilesystemTests`.
+14. SonarQube: after #71 and #72, 15 smells remain by choice — S107 (long initialisers), S3087, four nested ternaries
+    (long interpolations, Doctor+Vault text, DriveEvaluation's erase options) and a ViewBuilder switch.
 
 ## Merged, with open follow-ups
 
