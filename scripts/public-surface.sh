@@ -86,7 +86,7 @@ def declaration(s):
 # reintroduced for one of four types by the change that added the other three.
 seams = {
     "MigrationEngine": {"runner", "journal", "verifier", "home", "isXcodeRunning", "volumeUUIDAt"},
-    "VaultVerifier": {"registry", "mountedVolumes", "isMountPoint", "volumeUUIDAt", "filesystemAt"},
+    "VaultVerifier": {"registry", "mountedVolumes", "isMountPoint", "volumeUUIDAt", "filesystemAt", "mountTable"},
     "CleanPlanner": {"home"},
     "CleanExecutor": {"journal", "home", "useTrash", "isXcodeRunning", "runner"},
 }
@@ -169,6 +169,7 @@ DEFAULTS = [
     ("VaultVerifier", "init", "isMountPoint", "MountStatus.isMountPoint($0)"),
     ("VaultVerifier", "init", "volumeUUIDAt", "MountStatus.volumeUUID(at:)"),
     ("VaultVerifier", "init", "filesystemAt", "MountStatus.filesystem(containing:)"),
+    ("VaultVerifier", "init", "mountTable", "MountStatus.mountedFilesystems"),
     ("VaultRegistry", "register", "isMountPoint", "MountStatus.isMountPoint($0)"),
     ("VaultRegistry", "register", "volumeUUID", "MountStatus.volumeUUID(at: $0)"),
     ("PrivilegedActionRunner", "init", "isXcodeRunning", "CleanExecutor.xcodeIsRunning"),

@@ -270,14 +270,19 @@ public struct VaultVerifier: Sendable {
     /// The filesystem mounted at a path (`statfs`). With `volumeUUIDAt`: a snapshot of the vault's volume (its device
     /// carries `@`) or a read-only mount of it reports the same UUID, and must not pass as the vault (review, L4).
     public let filesystemAt: @Sendable (String) -> MountStatus.FilesystemInfo?
+    /// The kernel's mount table (`getfsstat`). Searched by volume UUID when `mountedVolumes` does not list the vault and
+    /// nothing is mounted at its last path: a vault mounted somewhere else and missed by `diskutil` read as not connected
+    /// (#51). `scripts/public-surface.sh` pins the default.
+    public let mountTable: @Sendable () -> [MountStatus.FilesystemInfo]
     public init(
         registry: VaultRegistry = VaultRegistry(), mountedVolumes: @escaping @Sendable () -> [Volume] = { (try? VolumeDiscovery.mountedVolumes()) ?? [] },
         isMountPoint: @escaping @Sendable (String) -> Bool = { MountStatus.isMountPoint($0) },
         volumeUUIDAt: @escaping @Sendable (String) -> String? = MountStatus.volumeUUID(at:),
-        filesystemAt: @escaping @Sendable (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
+        filesystemAt: @escaping @Sendable (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:),
+        mountTable: @escaping @Sendable () -> [MountStatus.FilesystemInfo] = MountStatus.mountedFilesystems
     ) {
         self.registry = registry; self.mountedVolumes = mountedVolumes; self.isMountPoint = isMountPoint; self.volumeUUIDAt = volumeUUIDAt
-        self.filesystemAt = filesystemAt
+        self.filesystemAt = filesystemAt; self.mountTable = mountTable
     }
 
     public static func readSentinel(at vaultDir: String) -> VaultSentinel? {
@@ -321,7 +326,34 @@ public struct VaultVerifier: Sendable {
                         + "it with. Refusing.")
             }
         }
+        // 3. Nothing at the last path. Look for the vault's UUID in the kernel's mount table: `diskutil` can miss a volume
+        //    mounted somewhere else (#51), which then read as not connected.
+        if let moved = checkMountedElsewhere(v) { return moved }
         return checkUnmounted(v)
+    }
+
+    /// The vault's volume found by UUID in the mount table, at a path other than its last one, under the same demands as
+    /// at the last path: a mount point by `statfs`, the live volume (no `@` in the device: not a snapshot), writable, and
+    /// then the sentinel. Since the path differs, the best this can return is `.movedMountPoint`, never `.verified`.
+    /// `nil` when no mount qualifies — read-only mounts, snapshots, non-local and synthetic filesystems are not asked at
+    /// all, so `getattrlist` never reaches a network or automounted path.
+    private func checkMountedElsewhere(_ v: VaultVolume) -> VaultVolumeCheck? {
+        let skipped: Set<String> = ["autofs", "devfs", "nullfs"]
+        let found = mountTable().filter { fs in
+            fs.mountPoint != v.lastMountPoint && fs.isLocal && !fs.isReadOnly && !fs.device.contains("@") && !skipped.contains(fs.typeName)
+                && MountStatus.compareVolumeIdentity(recorded: v.volumeUUID, found: volumeUUIDAt(fs.mountPoint)) == .matches
+                && isMountPoint(fs.mountPoint)
+                && filesystemAt(fs.mountPoint).map { $0.mountPoint == fs.mountPoint && !$0.device.contains("@") && !$0.isReadOnly } == true
+        }
+        guard let first = found.first else { return nil }
+        // One volume UUID mounted in two places cannot be told apart, so neither is taken for the vault.
+        guard found.count == 1 else {
+            return VaultVolumeCheck(
+                volume: v, state: .foreign, currentMountPoint: nil, shadowBytes: nil,
+                detail: "This vault's UUID (\(v.volumeUUID)) is mounted at more than one place (\(found.map(\.mountPoint).joined(separator: ", "))). "
+                    + "Refusing until only one remains.")
+        }
+        return checkMounted(v, at: first.mountPoint)
     }
 
     /// Our volume, mounted at `mp`: the sentinel decides the rest.
@@ -347,7 +379,7 @@ public struct VaultVerifier: Sendable {
 
     /// Not mounted, and nothing mounted at the last path.
     private func checkUnmounted(_ v: VaultVolume) -> VaultVolumeCheck {
-        // 3. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data. A
+        // 4. Not mounted. Does the last path exist as a plain local directory with content? That is shadow data. A
         //    directory found there that could not be read in full is not known to be empty, so it is ambiguous too, not
         //    "not connected" (rule 6; migration-safety review, 2026-09-28), and what could be read is not given as its
         //    size. Not every "could not tell" reaches this branch: a path that cannot be looked up, a file and a symlink
