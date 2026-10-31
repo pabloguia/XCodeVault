@@ -18,9 +18,9 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 - **#72 — helper SonarQube smells, open, NOT merged** (helper rule: the operator merges helper changes). Five
   behaviour-neutral edits in `Sources/XCodeVaultHelper*`; helper-security review in the PR.
-- **#71** — 45 SonarQube code smells in non-helper code, behaviour unchanged. Migration-safety: APPROVE.
-- **#70** — test gap from the review of #54: `revalidate` refuses when an unplaced volume has become unreadable.
-- **#69** — open item 9 closed: Locations placement is three-way; an unlisted volume outside `/Volumes` is unknown and
+- **#71** (merged, 7e760e6) — 45 SonarQube code smells in non-helper code, behaviour unchanged. Migration-safety: APPROVE.
+- **#70** (merged, 9978462) — test gap from the review of #54: `revalidate` refuses when an unplaced volume has become unreadable.
+- **#69** (merged, 367c21d) — open item 9 closed: Locations placement is three-way; an unlisted volume outside `/Volumes` is unknown and
   fails closed. Migration-safety: APPROVE (second round).
 - **#68** (merged, 80f42ae) — open item 8 closed: the verifier finds an unlisted vault mounted elsewhere in the kernel
   mount table (moved at best, never verified), and shadow data at the old path now blocks a moved vault.
