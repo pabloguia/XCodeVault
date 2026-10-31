@@ -74,7 +74,7 @@ final class VolumeEnumerationTests: XCTestCase {
     ) -> VaultVerifier {
         VaultVerifier(
             registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] },
-            isMountPoint: { $0 == mp && isMountPoint }, volumeUUIDAt: { _ in uuid }, filesystemAt: filesystem ?? live(mp))
+            isMountPoint: { $0 == mp && isMountPoint }, volumeUUIDAt: { _ in uuid }, filesystemAt: filesystem ?? live(mp), mountTable: { [] })
     }
 
     private func writeSentinel(_ mp: String, id: String = "tok") throws {
@@ -156,6 +156,165 @@ final class VolumeEnumerationTests: XCTestCase {
             XCTAssertFalse(check.isUsable, name)
         }
         XCTAssertEqual(verifier(t, mountPoint: mp, uuid: "U-1").check(vault(at: mp)).state, .verified, "the control: the live volume")
+    }
+
+    // MARK: - Mounted somewhere else, and not listed (#51)
+
+    /// A mount-table entry for `mp`: local and writable unless told otherwise.
+    private static func entry(_ mp: String, device: String = "/dev/disk9s1", type: String = "apfs", flags: UInt32 = UInt32(MNT_LOCAL))
+        -> MountStatus.FilesystemInfo
+    {
+        MountStatus.FilesystemInfo(mountPoint: mp, device: device, typeName: type, flags: flags)
+    }
+
+    /// Records which mount points the UUID was asked for.
+    final class Asked: @unchecked Sendable {
+        private let lock = NSLock()
+        private var paths: [String] = []
+        func add(_ p: String) { lock.withLock { paths.append(p) } }
+        var all: [String] { lock.withLock { paths } }
+    }
+
+    /// The vault at `now`, its last path `last` (not a mount point), found only through the mount table `table`.
+    private func elsewhere(
+        _ t: TempDir, now: String, table: [MountStatus.FilesystemInfo], uuidAt: [String: String] = [:], mountPoints: Set<String>? = nil,
+        filesystem: (@Sendable (String) -> MountStatus.FilesystemInfo?)? = nil, asked: Asked = Asked()
+    ) -> VaultVerifier {
+        let uuids = uuidAt.isEmpty ? [now: "U-1"] : uuidAt
+        let points = mountPoints ?? [now]
+        return VaultVerifier(
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] },
+            isMountPoint: { points.contains($0) },
+            volumeUUIDAt: {
+                asked.add($0); return uuids[$0]
+            },
+            filesystemAt: filesystem ?? { path in table.first { $0.mountPoint == path } }, mountTable: { table })
+    }
+
+    /// The case that was wrong: the vault's volume is mounted at another path and `diskutil` did not list it. It read
+    /// "not connected"; the mount table names it, and it is verified there by its sentinel — as moved, never as verified.
+    func testAVaultMountedElsewhereAndUnlistedIsFoundAsMoved() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        try writeSentinel(now)
+        let check = elsewhere(t, now: now, table: [Self.entry("/", device: "/dev/disk1s1"), Self.entry(now)]).check(vault(at: last))
+        XCTAssertEqual(check.state, .movedMountPoint, check.detail)
+        XCTAssertEqual(check.currentMountPoint, now)
+        XCTAssertTrue(check.isUsable)
+        // The control: the same vault with nothing in the table is not connected, as before.
+        XCTAssertEqual(elsewhere(t, now: now, table: []).check(vault(at: last)).state, .absent)
+    }
+
+    /// Found by UUID, the sentinel still decides: missing, or another vault's, is never usable.
+    func testAVaultFoundElsewhereStillNeedsItsSentinel() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        let v = elsewhere(t, now: now, table: [Self.entry(now)])
+        XCTAssertEqual(v.check(vault(at: last)).state, .sentinelMissing)
+        try writeSentinel(now, id: "WRONG")
+        XCTAssertEqual(v.check(vault(at: last)).state, .foreign)
+        XCTAssertFalse(v.check(vault(at: last)).isUsable)
+    }
+
+    /// The demands made at the last path hold here too. Each case would have been found without its flaw (the control
+    /// above); with it, nothing qualifies and the vault is not connected — not usable, and never verified.
+    func testAMountElsewhereThatIsNotTheWritableLiveVolumeIsNotTaken() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        try writeSentinel(now)
+        let cases: [(String, VaultVerifier)] = [
+            ("snapshot", elsewhere(t, now: now, table: [Self.entry(now, device: "com.apple.TimeMachine.x@/dev/disk9s1")])),
+            ("not local", elsewhere(t, now: now, table: [Self.entry(now, flags: 0)])),
+            ("not a vault file system", elsewhere(t, now: now, table: [Self.entry(now, type: "macfuse")])),
+            ("another volume", elsewhere(t, now: now, table: [Self.entry(now)], uuidAt: [now: "U-OTHER"])),
+            ("no identity", elsewhere(t, now: now, table: [Self.entry(now)], uuidAt: ["/elsewhere": "U-1"])),
+            ("not a mount point", elsewhere(t, now: now, table: [Self.entry(now)], mountPoints: [])),
+            ("statfs names another mount", elsewhere(t, now: now, table: [Self.entry(now)], filesystem: { _ in Self.entry("/") })),
+            ("statfs says snapshot", elsewhere(t, now: now, table: [Self.entry(now)], filesystem: { _ in Self.entry(now, device: "s@/dev/disk9s1") })),
+            ("statfs says read-only", elsewhere(t, now: now, table: [Self.entry(now)], filesystem: { _ in Self.entry(now, flags: UInt32(MNT_RDONLY)) })),
+            ("statfs unreadable", elsewhere(t, now: now, table: [Self.entry(now)], filesystem: { _ in nil })),
+        ]
+        for (name, v) in cases {
+            let check = v.check(vault(at: last))
+            XCTAssertEqual(check.state, .absent, name)
+            XCTAssertFalse(check.isUsable, name)
+        }
+    }
+
+    /// Mounted read-only somewhere else: refused and said so, not "not connected" (review finding 2).
+    func testAVaultMountedReadOnlyElsewhereIsRefusedAndSaysSo() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        try writeSentinel(now)
+        let check = elsewhere(t, now: now, table: [Self.entry(now, flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY))]).check(vault(at: last))
+        XCTAssertEqual(check.state, .foreign)
+        XCTAssertFalse(check.isUsable)
+        XCTAssertTrue(check.detail.contains("read-only"), check.detail)
+    }
+
+    /// Found elsewhere, but files were left at the last path: shadow data, and Xcode settings recorded earlier still point
+    /// there. Not usable (review finding 1). The same holds when `diskutil` lists it at the new path.
+    func testAVaultFoundElsewhereWithFilesAtItsLastPathIsAmbiguous() throws {
+        let t = TempDir()
+        let last = t.dir("old")
+        let now = t.dir("new")
+        try writeSentinel(now)
+        // The control: an empty folder at the last path is not shadow data.
+        XCTAssertEqual(elsewhere(t, now: now, table: [Self.entry(now)]).check(vault(at: last)).state, .movedMountPoint)
+        try Data("x".utf8).write(to: URL(fileURLWithPath: last + "/left-behind"))
+        let check = elsewhere(t, now: now, table: [Self.entry(now)]).check(vault(at: last))
+        XCTAssertEqual(check.state, .ambiguous, check.detail)
+        XCTAssertFalse(check.isUsable)
+        let listed = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "Vault", volumeUUID: "U-1", mountPoint: now, filesystemPersonality: "APFS", filesystemType: "apfs",
+            isInternal: false, isRemovableMedia: true, isEjectable: true, busProtocol: "USB", isSolidState: nil, isWritable: true, ownersEnabled: true,
+            totalBytes: 2, freeBytes: 1, isBootVolume: false)
+        let viaDiskutil = VaultVerifier(
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [listed] }, isMountPoint: { $0 == now },
+            volumeUUIDAt: { _ in nil }, filesystemAt: { _ in nil }, mountTable: { [] })
+        XCTAssertEqual(viaDiskutil.check(vault(at: last)).state, .ambiguous)
+    }
+
+    /// One UUID mounted at two places cannot be told apart: refused, and neither is used.
+    func testAVaultUUIDMountedTwiceElsewhereIsRefused() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let a = t.dir("a")
+        let b = t.dir("b")
+        try writeSentinel(a)
+        try writeSentinel(b)
+        let check = elsewhere(t, now: a, table: [Self.entry(a), Self.entry(b)], uuidAt: [a: "U-1", b: "U-1"], mountPoints: [a, b]).check(vault(at: last))
+        XCTAssertEqual(check.state, .foreign)
+        XCTAssertFalse(check.isUsable)
+        XCTAssertTrue(check.detail.contains("more than one place"), check.detail)
+    }
+
+    /// Snapshot, non-local and automount entries are not asked for their UUID at all — `getattrlist` never
+    /// reaches a network or automounted path — and the last path is not asked twice.
+    func testOnlyLocalWritableLiveMountsAreAskedForTheirUUID() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        try writeSentinel(now)
+        let asked = Asked()
+        let table = [
+            Self.entry("/net", type: "autofs"), Self.entry("/dev", device: "devfs", type: "devfs"), Self.entry("/Volumes/smb", flags: 0),
+            Self.entry("/Volumes/ro", flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY)), Self.entry("/Volumes/snap", device: "x@/dev/disk2s1"), Self.entry(last),
+            Self.entry(now),
+        ]
+        let check = elsewhere(t, now: now, table: table, asked: asked).check(vault(at: last))
+        XCTAssertEqual(check.state, .movedMountPoint, check.detail)
+        XCTAssertEqual(asked.all, ["/Volumes/ro", now], "the read-only mount is asked, so that it can be named; nothing else")
+    }
+
+    /// The real mount table, read without `diskutil`: it holds the boot volume. Nothing is opened on any volume.
+    func testTheRealMountTableIsReadAndHoldsTheRoot() {
+        let table = MountStatus.mountedFilesystems()
+        XCTAssertTrue(table.contains { $0.mountPoint == "/" }, "\(table.map(\.mountPoint))")
     }
 
     /// A registry entry without a volume UUID cannot be compared with what is mounted, and says that, not "unreadable".

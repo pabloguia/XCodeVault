@@ -112,7 +112,7 @@ final class CLILanguageTests: XCTestCase {
             volumeUUID: "U-1", volumeName: "Vault", lastMountPoint: dir.path, registeredAt: Date(timeIntervalSince1970: 0), sentinelID: "s")
         let registry = VaultRegistry(url: dir.appendingPathComponent("none/volumes.json"))
         func encoded() throws -> String {
-            let check = VaultVerifier(registry: registry, mountedVolumes: { [] }, isMountPoint: { _ in false }).check(volume)
+            let check = VaultVerifier(registry: registry, mountedVolumes: { [] }, isMountPoint: { _ in false }, mountTable: { [] }).check(volume)
             XCTAssertEqual(check.state, .ambiguous)
             return try JSONOutput.encode(check)
         }

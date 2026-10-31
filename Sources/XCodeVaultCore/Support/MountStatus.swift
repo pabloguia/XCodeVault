@@ -174,6 +174,25 @@ public enum MountStatus {
     public static func filesystem(containing path: String) -> FilesystemInfo? {
         var s = statfs()
         guard statfs(path, &s) == 0 else { return nil }
+        return info(s)
+    }
+
+    /// Every filesystem in the kernel's mount table (`getfsstat`, `MNT_NOWAIT`: the cached entries, so a network mount
+    /// that does not answer cannot block it). No `diskutil`, and nothing is opened on any volume. Empty when the call fails.
+    public static func mountedFilesystems() -> [FilesystemInfo] {
+        let count = getfsstat(nil, 0, MNT_NOWAIT)
+        guard count > 0 else { return [] }
+        // Room for a few mounts that appear between the two calls; `getfsstat` returns how many it filled.
+        var table = Array(repeating: statfs(), count: Int(count) + 8)
+        let filled = table.withUnsafeMutableBufferPointer { buf in
+            getfsstat(buf.baseAddress, Int32(buf.count * MemoryLayout<statfs>.stride), MNT_NOWAIT)
+        }
+        guard filled > 0 else { return [] }
+        return table.prefix(Int(filled)).map(info)
+    }
+
+    private static func info(_ entry: statfs) -> FilesystemInfo {
+        var s = entry
         let mnt = withUnsafePointer(to: &s.f_mntonname) { p in
             p.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
         }
