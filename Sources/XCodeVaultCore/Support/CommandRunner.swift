@@ -58,7 +58,8 @@ public struct ProcessCommandRunner: CommandRunning {
         if let environment {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
         }
-        let outPipe = Pipe(), errPipe = Pipe()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice

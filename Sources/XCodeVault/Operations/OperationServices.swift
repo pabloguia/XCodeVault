@@ -30,7 +30,7 @@ struct OperationServices: Sendable {
     /// Keeps the full log of an operation (the sheet keeps the newest lines only); nil keeps none.
     var logFile: (@Sendable (_ name: String) -> OperationLogFile?)?
     /// An operation finished while the app was not frontmost: the Dock icon asks for attention (HIG review §4).
-    var notifyFinished: @MainActor @Sendable () -> Void = {}
+    var notifyFinished: @MainActor @Sendable () -> Void = { /* a no-op until set */  }
 
     static let inert = OperationServices(
         preview: { _, _ in OperationPreview(blockers: [.core("No operations in this environment.")]) },

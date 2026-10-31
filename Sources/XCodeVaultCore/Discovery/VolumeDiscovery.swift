@@ -43,7 +43,8 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
     public var warnings: [String]
 
     public static func evaluate(_ v: Volume, minimumFreeBytes: UInt64 = 20 * 1_000_000_000) -> VolumeQualification {
-        var blockers: [String] = [], warnings: [String] = []
+        var blockers: [String] = []
+        var warnings: [String] = []
         if v.isBootVolume { blockers.append("This is the boot/system volume — the thing we are trying to free.") }
         if v.belongsToMacOSInstall { blockers.append("This volume belongs to a macOS installation; XCodeVault never uses one as a vault.") }
         if v.mountPoint == nil { blockers.append("Not mounted.") }
@@ -73,7 +74,14 @@ public struct VolumeQualification: Sendable, Codable, Equatable {
                 "Case-sensitive APFS (macOS default is case-insensitive). Build output and SwiftPM checkouts were verified to work on one combination — macOS 26.6.2 / Xcode 26.5 / Intel, E12 — not proven in general. The residual risk is source code that refers to a file by the wrong case: harmless on the internal volume, a build error on this one."
             )
         }
-        let verdict: Verdict = blockers.isEmpty ? (warnings.isEmpty ? .suitable : .suitableWithWarnings) : .unsuitable
+        let verdict: Verdict
+        if !blockers.isEmpty {
+            verdict = .unsuitable
+        } else if warnings.isEmpty {
+            verdict = .suitable
+        } else {
+            verdict = .suitableWithWarnings
+        }
         return VolumeQualification(verdict: verdict, blockers: blockers, warnings: warnings)
     }
 }
@@ -176,7 +184,8 @@ public enum VolumeDiscovery {
         if let listed = apfsVolumes[s("DeviceIdentifier")] {
             // An empty UUID is a missing one (re-review, nit 2).
             let present = { (u: String?) in u.flatMap { $0.isEmpty ? nil : $0.uppercased() } }
-            let infoUUID = present(d["VolumeUUID"] as? String), listedUUID = present(listed.uuid)
+            let infoUUID = present(d["VolumeUUID"] as? String)
+            let listedUUID = present(listed.uuid)
             if listedUUID == nil || infoUUID == nil || listedUUID == infoUUID { role.formUnion(listed.roles) }
         }
         // The running system by where it is mounted; another installation by its role, on any disk — wider than before

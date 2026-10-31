@@ -149,12 +149,12 @@ struct DriveRowView: View {
 
 /// What an external drive's buttons do (R6), supplied by `AppModel`; empty closures by default, for renders.
 struct ExternalDriveActions {
-    var prepare: @MainActor (DriveAssessment, PreparationOption) -> Void = { _, _ in }
-    var useDrive: @MainActor (DriveAssessment) -> Void = { _ in }
-    var showInFinder: @MainActor (String) -> Void = { _ in }
-    var copyOwnershipCommand: @MainActor (String) -> Void = { _ in }
+    var prepare: @MainActor (DriveAssessment, PreparationOption) -> Void = { _, _ in /* a no-op until set */ }
+    var useDrive: @MainActor (DriveAssessment) -> Void = { _ in /* a no-op until set */ }
+    var showInFinder: @MainActor (String) -> Void = { _ in /* a no-op until set */ }
+    var copyOwnershipCommand: @MainActor (String) -> Void = { _ in /* a no-op until set */ }
     /// R8: **Turn On Ownership** for the drive's volume at that mount point, through the helper.
-    var turnOnOwnership: @MainActor (DriveAssessment, String) -> Void = { _, _ in }
+    var turnOnOwnership: @MainActor (DriveAssessment, String) -> Void = { _, _ in /* a no-op until set */ }
     /// R8: one click, progress, or the guided route with its reason (`OwnershipRoute.decide`). Guided by default, for renders.
     var ownershipRoute: OwnershipRoute = .guided(.unavailableInThisBuild)
     /// ADR-0015: the vault folder's name, which the click creates the folder with.

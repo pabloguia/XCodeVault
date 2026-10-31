@@ -110,7 +110,8 @@ extension SavingsBucket {
 /// fill only — the kind's name is `.primary` text, and the symbol and the name always come with the color.
 extension JournalTimeline.Kind {
     var nsColor: NSColor {
-        let light = lightColorHex, dark = darkColorHex
+        let light = lightColorHex
+        let dark = darkColorHex
         return NSColor(name: NSColor.Name("XCodeVault.historyKind." + rawValue)) { appearance in
             NSColor(hex: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
         }

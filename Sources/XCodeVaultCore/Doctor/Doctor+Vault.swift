@@ -143,7 +143,7 @@ extension Doctor {
 
     /// Any directory under /Volumes that is not a mount point but contains files is data written
     /// while a volume was absent — the classic macOS shadow-data trap (backup tools, rsync, Xcode).
-    func checkShadowVolumesDirectories(volumes: [Volume]) -> [Finding] {
+    func checkShadowVolumesDirectories(volumes _: [Volume]) -> [Finding] {
         var out: [Finding] = []
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: "/Volumes") else { return out }
         for n in names where !n.hasPrefix(".") {
@@ -272,7 +272,7 @@ extension Doctor {
             }
     }
 
-    func checkLocationsPointAtPresentVolumes(volumes: [Volume]) -> [Finding] {
+    func checkLocationsPointAtPresentVolumes(volumes _: [Volume]) -> [Finding] {
         let l = XcodeLocations.read(runner: runner)
         var out: [Finding] = []
         for (label, path) in [("DerivedData", l.derivedData), ("Archives", l.archives), ("Compilation cache", l.compilationCache)] {

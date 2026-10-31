@@ -54,9 +54,17 @@ public struct OverviewCards: Sendable, Equatable {
         let cards = buckets.map { bucket in
             let totals = s[bucket]
             let lossy = bucket == .deleteAndRegenerate && s.deleteLosesUserDataBytes > 0 ? s.deleteLosesUserDataBytes : nil
-            let bytes = totals.optionBytes, verifiedBytes = totals.verifiedOptionBytes
+            let bytes = totals.optionBytes
+            let verifiedBytes = totals.verifiedOptionBytes
             let amount: Amount = bytes == 0 && !s.isLowerBound ? .none : .headline(bytes, lowerBound: s.isLowerBound)
-            let verified: Verified = bytes == 0 ? .none : verifiedBytes >= bytes ? .all : .share(verifiedBytes)
+            let verified: Verified
+            if bytes == 0 {
+                verified = .none
+            } else if verifiedBytes >= bytes {
+                verified = .all
+            } else {
+                verified = .share(verifiedBytes)
+            }
             return Card(
                 bucket: bucket, isPermanent: bucket == .runFromExternal, bytes: bytes, verifiedBytes: verifiedBytes, losesUserDataBytes: lossy,
                 amount: amount, verified: verified)

@@ -97,7 +97,8 @@ public enum TextRenderer {
     /// English record (which `--json` encodes).
     public static func permissions(_ r: PermissionsReport) -> String {
         let locale = L10n.locale
-        let why = L10n.tr("cli.permissions.why"), next = L10n.tr("cli.permissions.next")
+        let why = L10n.tr("cli.permissions.why")
+        let next = L10n.tr("cli.permissions.next")
         let width = max(displayWidth(why), displayWidth(next))
         var o = "\(L10n.tr("perm.fda.title")): \(r.fullDiskAccess.state.displayName(in: locale))\n"
         o += "  \(padDisplay(why, width)) \(r.fullDiskAccess.state.why(in: locale))\n"

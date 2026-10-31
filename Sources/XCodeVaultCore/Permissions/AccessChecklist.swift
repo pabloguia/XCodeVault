@@ -228,7 +228,14 @@ public enum AccessChecklist {
                 need: .fullDiskAccess, state: .unknown, whyKey: Key.fdaWhyUnknown, actionKey: Key.fdaActionRecheck, action: .recheckFullDiskAccess,
                 blocksBytes: nil, blocksFolders: nil)
         case .notGranted:
-            let why = refusals > 0 ? Key.fdaWhyUnreadableFolders : savings.isLowerBound ? Key.fdaWhyUnreadable : Key.fdaWhyProtected
+            let why: String
+            if refusals > 0 {
+                why = Key.fdaWhyUnreadableFolders
+            } else if savings.isLowerBound {
+                why = Key.fdaWhyUnreadable
+            } else {
+                why = Key.fdaWhyProtected
+            }
             return Row(
                 need: .fullDiskAccess, state: .missing, whyKey: why, actionKey: Key.fdaActionOpenSettings, action: .openFullDiskAccessSettings,
                 blocksBytes: nil, blocksFolders: refusals > 0 ? refusals : nil)

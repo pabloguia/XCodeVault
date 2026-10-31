@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// **Relaunch XCodeVault** (R5 review I1): the new instance starts only here, once quitting was approved, so two
     /// instances never run side by side.
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationWillTerminate(_ _: Notification) {
         if model.relaunchRequested { model.environment.launchNewInstance() }
     }
 }

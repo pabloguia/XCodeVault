@@ -52,7 +52,8 @@ extension MigrationEngine {
                 "Migration \(operationID) has no readable PLAN line, so its paths, direction and category cannot be established; "
                     + "refusing to act on the strength of the remaining lines.")
         }
-        let source = planned.paths[0], destination = planned.paths[1]
+        let source = planned.paths[0]
+        let destination = planned.paths[1]
         let direction = planned.detail["direction"].flatMap { MigrationPlan.Direction(rawValue: $0) }
         let category = planned.detail["category"].flatMap { StorageCatalog.category($0) }
         // The gate `planExternalize`, `planRestore`, `removeSource` and `resume` all apply, missing
