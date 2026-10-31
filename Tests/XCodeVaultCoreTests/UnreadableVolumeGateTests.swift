@@ -61,6 +61,23 @@ final class UnreadableVolumeGateTests: XCTestCase {
         }
     }
 
+    /// An unreadable volume no disk claims, appearing between the preview and the command, stops the command on any disk:
+    /// the check right before it runs cannot tell the volume is not on this one (test gap left by the review of #54).
+    func testRevalidationRefusesWhenAnUnplacedVolumeHasBecomeUnreadable() throws {
+        let snap = try R6DriveTests.snapshot()
+        let disk6 = try XCTUnwrap(snap.disks.first { $0.id == "disk6" })
+        let plan = try DiskPreparation.plan(
+            .eraseDisk(disk: "disk6"), configuration: VolumeConfiguration(), on: DriveEvaluation.assess(disk6, in: snap, vaults: []),
+            snapshot: snap, registeredVaultUUIDs: [])
+        XCTAssertNoThrow(try DiskPreparation.revalidate(plan, current: snap, registeredVaultUUIDs: []), "the control")
+        var now = snap
+        now.unreadableVolumeIDs = ["disk99s1"]
+        XCTAssertEqual(now.unplacedUnreadableVolumeIDs, ["disk99s1"], "claimed by no disk")
+        XCTAssertThrowsError(try DiskPreparation.revalidate(plan, current: now, registeredVaultUUIDs: [])) {
+            XCTAssertTrue("\($0)".contains("cannot tell which disk it is on"), "\($0)")
+        }
+    }
+
     /// `diskutil` over the R6 fixtures: the whole disks from their fixtures, every listed volume as an unmounted one, and
     /// one volume's `info` failing every time.
     final class OneUnreadable: CommandRunning, @unchecked Sendable {
