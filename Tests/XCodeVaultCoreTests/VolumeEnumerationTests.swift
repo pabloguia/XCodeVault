@@ -222,8 +222,8 @@ final class VolumeEnumerationTests: XCTestCase {
         try writeSentinel(now)
         let cases: [(String, VaultVerifier)] = [
             ("snapshot", elsewhere(t, now: now, table: [Self.entry(now, device: "com.apple.TimeMachine.x@/dev/disk9s1")])),
-            ("read-only", elsewhere(t, now: now, table: [Self.entry(now, flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY))])),
             ("not local", elsewhere(t, now: now, table: [Self.entry(now, flags: 0)])),
+            ("not a vault file system", elsewhere(t, now: now, table: [Self.entry(now, type: "macfuse")])),
             ("another volume", elsewhere(t, now: now, table: [Self.entry(now)], uuidAt: [now: "U-OTHER"])),
             ("no identity", elsewhere(t, now: now, table: [Self.entry(now)], uuidAt: ["/elsewhere": "U-1"])),
             ("not a mount point", elsewhere(t, now: now, table: [Self.entry(now)], mountPoints: [])),
@@ -237,6 +237,41 @@ final class VolumeEnumerationTests: XCTestCase {
             XCTAssertEqual(check.state, .absent, name)
             XCTAssertFalse(check.isUsable, name)
         }
+    }
+
+    /// Mounted read-only somewhere else: refused and said so, not "not connected" (review finding 2).
+    func testAVaultMountedReadOnlyElsewhereIsRefusedAndSaysSo() throws {
+        let t = TempDir()
+        let last = t.path + "/old"
+        let now = t.dir("new")
+        try writeSentinel(now)
+        let check = elsewhere(t, now: now, table: [Self.entry(now, flags: UInt32(MNT_LOCAL) | UInt32(MNT_RDONLY))]).check(vault(at: last))
+        XCTAssertEqual(check.state, .foreign)
+        XCTAssertFalse(check.isUsable)
+        XCTAssertTrue(check.detail.contains("read-only"), check.detail)
+    }
+
+    /// Found elsewhere, but files were left at the last path: shadow data, and Xcode settings recorded earlier still point
+    /// there. Not usable (review finding 1). The same holds when `diskutil` lists it at the new path.
+    func testAVaultFoundElsewhereWithFilesAtItsLastPathIsAmbiguous() throws {
+        let t = TempDir()
+        let last = t.dir("old")
+        let now = t.dir("new")
+        try writeSentinel(now)
+        // The control: an empty folder at the last path is not shadow data.
+        XCTAssertEqual(elsewhere(t, now: now, table: [Self.entry(now)]).check(vault(at: last)).state, .movedMountPoint)
+        try Data("x".utf8).write(to: URL(fileURLWithPath: last + "/left-behind"))
+        let check = elsewhere(t, now: now, table: [Self.entry(now)]).check(vault(at: last))
+        XCTAssertEqual(check.state, .ambiguous, check.detail)
+        XCTAssertFalse(check.isUsable)
+        let listed = Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "Vault", volumeUUID: "U-1", mountPoint: now, filesystemPersonality: "APFS", filesystemType: "apfs",
+            isInternal: false, isRemovableMedia: true, isEjectable: true, busProtocol: "USB", isSolidState: nil, isWritable: true, ownersEnabled: true,
+            totalBytes: 2, freeBytes: 1, isBootVolume: false)
+        let viaDiskutil = VaultVerifier(
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [listed] }, isMountPoint: { $0 == now },
+            volumeUUIDAt: { _ in nil }, filesystemAt: { _ in nil }, mountTable: { [] })
+        XCTAssertEqual(viaDiskutil.check(vault(at: last)).state, .ambiguous)
     }
 
     /// One UUID mounted at two places cannot be told apart: refused, and neither is used.
@@ -253,7 +288,7 @@ final class VolumeEnumerationTests: XCTestCase {
         XCTAssertTrue(check.detail.contains("more than one place"), check.detail)
     }
 
-    /// Read-only, snapshot, non-local and automount entries are not asked for their UUID at all — `getattrlist` never
+    /// Snapshot, non-local and automount entries are not asked for their UUID at all — `getattrlist` never
     /// reaches a network or automounted path — and the last path is not asked twice.
     func testOnlyLocalWritableLiveMountsAreAskedForTheirUUID() throws {
         let t = TempDir()
@@ -267,7 +302,7 @@ final class VolumeEnumerationTests: XCTestCase {
         ]
         let check = elsewhere(t, now: now, table: table, asked: asked).check(vault(at: last))
         XCTAssertEqual(check.state, .movedMountPoint, check.detail)
-        XCTAssertEqual(asked.all, [now])
+        XCTAssertEqual(asked.all, ["/Volumes/ro", now], "the read-only mount is asked, so that it can be named; nothing else")
     }
 
     /// The real mount table, read without `diskutil`: it holds the boot volume. Nothing is opened on any volume.

@@ -133,7 +133,7 @@ final class VaultTests: XCTestCase {
         let ambiguous = VaultVolume(volumeUUID: "U-amb", volumeName: "B", lastMountPoint: shadowMP, registeredAt: Date(), sentinelID: "s")
         let foreign = VaultVolume(volumeUUID: "U-for", volumeName: "C", lastMountPoint: realMount, registeredAt: Date(), sentinelID: "s")
         try reg.save([absent, ambiguous, foreign])
-        let verifier = VaultVerifier(registry: reg, mountedVolumes: { [] })
+        let verifier = VaultVerifier(registry: reg, mountedVolumes: { [] }, mountTable: { [] })
         let checks = try verifier.checkAll()
         XCTAssertEqual(checks.map(\.state), [.absent, .ambiguous, .foreign])
         XCTAssertEqual(checks[1].shadowBytes ?? 0 > 0, true)
@@ -147,7 +147,7 @@ final class VaultTests: XCTestCase {
         let liveVol = fakeVolume(uuid: "U-live", mountPoint: mp)
         let liveReg = VaultVolume(volumeUUID: "U-live", volumeName: "D", lastMountPoint: mp, registeredAt: Date(), sentinelID: "tok")
         try reg.save([liveReg])
-        let v2 = VaultVerifier(registry: reg, mountedVolumes: { [liveVol] }, isMountPoint: { $0 == mp })
+        let v2 = VaultVerifier(registry: reg, mountedVolumes: { [liveVol] }, isMountPoint: { $0 == mp }, mountTable: { [] })
         XCTAssertEqual(v2.check(liveReg).state, .sentinelMissing)
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
         t.dir("livemount/" + VaultVolume.directoryName)
@@ -161,7 +161,7 @@ final class VaultTests: XCTestCase {
         // Same volume mounted elsewhere ("Name 1"): movedMountPoint, still usable.
         let moved = fakeVolume(uuid: "U-live", mountPoint: mp)
         let stale = VaultVolume(volumeUUID: "U-live", volumeName: "D", lastMountPoint: t.path + "/old", registeredAt: Date(), sentinelID: "tok")
-        let v3 = VaultVerifier(registry: reg, mountedVolumes: { [moved] }, isMountPoint: { $0 == mp })
+        let v3 = VaultVerifier(registry: reg, mountedVolumes: { [moved] }, isMountPoint: { $0 == mp }, mountTable: { [] })
         XCTAssertEqual(v3.check(stale).state, .movedMountPoint); XCTAssertTrue(v3.check(stale).isUsable)
         _ = vol
     }
@@ -175,7 +175,7 @@ final class VaultTests: XCTestCase {
     /// A volume that is not mounted, with nothing mounted at its last path: only the folder there decides.
     private func unmountedVerifier(_ t: TempDir) -> VaultVerifier {
         VaultVerifier(
-            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] }, isMountPoint: { _ in false })
+            registry: VaultRegistry(url: URL(fileURLWithPath: t.path + "/volumes.json")), mountedVolumes: { [] }, isMountPoint: { _ in false }, mountTable: { [] })
     }
 
     /// The whole folder refused. The control is the same folder readable and empty, which is `.absent`.
@@ -812,7 +812,7 @@ final class MigrationEngineTests: XCTestCase {
 /// A VaultVerifier whose mount-point check treats the fixture directory as a mounted volume.
 enum StubVerifier {
     static func make(registry: VaultRegistry, volume: Volume, mountPoint: String) -> VaultVerifier {
-        VaultVerifier(registry: registry, mountedVolumes: { [volume] }, isMountPoint: { $0 == mountPoint || MountStatus.isMountPoint($0) })
+        VaultVerifier(registry: registry, mountedVolumes: { [volume] }, isMountPoint: { $0 == mountPoint || MountStatus.isMountPoint($0) }, mountTable: { [] })
     }
 }
 
