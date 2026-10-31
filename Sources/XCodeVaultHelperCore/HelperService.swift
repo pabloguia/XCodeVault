@@ -1227,7 +1227,7 @@ public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         self.requirement = HelperIdentity.clientRequirement(teamID: teamID)
         self.teamID = teamID
     }
-    public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
+    public func listener(_ _: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         // Code-signing requirement is enforced by the kernel/XPC layer for this connection — set
         // BEFORE resume(), never validated by PID (SECURITY_MODEL.md).
         //
@@ -1237,7 +1237,8 @@ public final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
         // SecRequirementCreateWithString so it cannot be malformed by the time we are here.
         connection.setCodeSigningRequirement(requirement)
         // Caller identity comes from the connection's audit credentials, never from request payloads.
-        let uid = connection.effectiveUserIdentifier, gid = connection.effectiveGroupIdentifier
+        let uid = connection.effectiveUserIdentifier
+        let gid = connection.effectiveGroupIdentifier
         connection.exportedInterface = NSXPCInterface(with: XCodeVaultHelperXPC.self)
         connection.exportedObject = HelperService(callerUID: uid, callerGID: gid, teamID: teamID)
         connection.resume()

@@ -110,7 +110,8 @@ struct SpawnedDiskutil: DiskutilRunning {
         let refused = { (why: String) in DiskutilOutput(exitStatus: nil, stdout: Data(), failure: why) }
         var fds: [Int32] = [-1, -1]
         guard pipe(&fds) == 0 else { return refused("pipe failed") }
-        let readEnd = fds[0], writeEnd = fds[1]
+        let readEnd = fds[0]
+        let writeEnd = fds[1]
 
         var actions: posix_spawn_file_actions_t?
         var attributes: posix_spawnattr_t?
@@ -208,7 +209,7 @@ struct SpawnedDiskutil: DiskutilRunning {
             if Date() >= deadline {
                 timedOut = true
                 kill(pid, SIGKILL)
-                while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+                while waitpid(pid, &status, 0) < 0 && errno == EINTR { /* interrupted: wait again */  }
                 break
             }
             usleep(10_000)

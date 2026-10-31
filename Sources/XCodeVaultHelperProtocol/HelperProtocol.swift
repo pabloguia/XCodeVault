@@ -215,7 +215,7 @@ public enum HelperIdentity {
     /// substituted "exactly as" the daemon is. It is not, and the consequence is concrete: the
     /// client M4 writes has no supply of a team ID at all.
     ///
-    /// **Both halves of that TODO are now done** (issue #30), and this paragraph says so rather
+    /// **Both halves of that to-do are now done** (issue #30), and this paragraph says so rather
     /// than being left to be inherited as still-open: `scripts/bundle-app.sh` substitutes the team
     /// ID into `Sources/XCodeVaultHelperClient/HelperClient.swift` as well as the daemon's
     /// `main.swift`, asserting each substitution landed separately; and `HelperClient.connect()`
