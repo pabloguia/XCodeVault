@@ -382,7 +382,13 @@ public struct VaultVerifier: Sendable {
             // Moved, and nothing mounted where it was: what is left at the old path may be shadow data — a folder left there
             // is the usual reason macOS mounts the drive as "Name 1" — and Xcode settings recorded earlier still point at it
             // (migration-safety review of #51's fix, finding 1). The same probe as when the volume is absent.
-            if !isMountPoint(v.lastMountPoint), let shadow = shadowCheck(v) { return shadow }
+            // Written as if/else, not a negation (`MountAnswerTests`): a mount check that cannot answer reads as "not a mount
+            // point" here, so the probe runs — the over-reporting direction.
+            if isMountPoint(v.lastMountPoint) {
+                // Another volume holds the old name; nothing of ours to probe there.
+            } else if let shadow = shadowCheck(v) {
+                return shadow
+            }
             return VaultVolumeCheck(
                 volume: v, state: .movedMountPoint, currentMountPoint: mp, shadowBytes: nil,
                 detail: "Verified, but mounted at \(mp) instead of \(v.lastMountPoint). Absolute paths recorded earlier will not resolve.")
