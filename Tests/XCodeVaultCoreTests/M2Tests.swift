@@ -865,8 +865,58 @@ final class XcodeLocationsTests: XCTestCase {
         XCTAssertTrue(XcodeLocations.splitPlacementProblem(bulkExternal: true, productsExternal: false, productsInsideBulk: true)!.contains("inside"))
         XCTAssertTrue(XcodeLocations.productsSitInsideBulk(products: "/Volumes/Fast/DD/Products", bulk: "/Volumes/Fast/DD"))
         XCTAssertFalse(XcodeLocations.productsSitInsideBulk(products: "/Users/me/Products", bulk: "/Volumes/Fast/DD"))
-        XCTAssertTrue(XcodeLocations.pathIsExternal(resolved: "/Volumes/Fast/DD", volumes: []))
-        XCTAssertFalse(XcodeLocations.pathIsExternal(resolved: "/Users/me/Products", volumes: []))
+        XCTAssertEqual(XcodeLocations.placement(resolved: "/Volumes/Fast/DD", volumes: []), .external)
+        XCTAssertEqual(XcodeLocations.placement(resolved: "/Users/me/Products", volumes: []), .thisMac)
+    }
+
+    // MARK: - A volume that could not be placed (review of #54)
+
+    private func fsAt(_ mp: String) -> (String) -> MountStatus.FilesystemInfo? {
+        { _ in MountStatus.FilesystemInfo(mountPoint: mp, device: "/dev/disk9s1", typeName: "apfs", flags: UInt32(MNT_LOCAL)) }
+    }
+
+    private func listed(_ mp: String, external: Bool) -> Volume {
+        Volume(
+            deviceNode: "/dev/disk9s1", volumeName: "V", volumeUUID: "U", mountPoint: mp, filesystemPersonality: "APFS", filesystemType: "apfs",
+            isInternal: !external, isRemovableMedia: external, isEjectable: external, busProtocol: external ? "USB" : "PCI-Express", isSolidState: nil,
+            isWritable: true, ownersEnabled: true, totalBytes: 2, freeBytes: 1, isBootVolume: false)
+    }
+
+    /// The case that was wrong: an unlisted volume mounted outside `/Volumes` read as this Mac's. It is unknown now; the
+    /// boot volume and a listed volume are still placed by what they are.
+    func testAnUnlistedVolumeOutsideVolumesIsUnknownNotThisMac() throws {
+        let t = TempDir()
+        let p = t.dir("mnt/DD")
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [], filesystemAt: fsAt("/private/tmp/mnt")), .unknown)
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [], filesystemAt: fsAt("/System/Volumes/Data")), .thisMac, "the boot data volume")
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [], filesystemAt: fsAt("/")), .thisMac, "the boot volume")
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [], filesystemAt: { _ in nil }), .unknown, "statfs failed")
+        let mp = "/private/tmp/mnt"
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [listed(mp, external: false)], filesystemAt: fsAt(mp)), .thisMac)
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: [listed(mp, external: true)], filesystemAt: fsAt(mp)), .external)
+        // The real check, on the test's own folder: the boot data volume.
+        XCTAssertEqual(XcodeLocations.placement(resolved: p, volumes: []), .thisMac)
+    }
+
+    /// A folder that cannot be looked at is not placed by its parent: unknown, not this Mac's.
+    func testAPathThatCannotBeLookedAtIsUnknown() throws {
+        let t = TempDir()
+        let locked = t.dir("locked")
+        try FileManager.default.createDirectory(atPath: locked + "/inner", withIntermediateDirectories: true)
+        chmod(locked, 0)
+        defer { chmod(locked, 0o755) }
+        XCTAssertEqual(XcodeLocations.placement(resolved: locked + "/inner/DD", volumes: []), .unknown)
+        // The control: a missing folder under a readable one is placed by that parent.
+        XCTAssertEqual(XcodeLocations.placement(resolved: t.path + "/missing/DD", volumes: []), .thisMac)
+    }
+
+    /// Neither folder of the split is guessed: an unknown side refuses, with its own sentence.
+    func testTheSplitRefusesAFolderItCannotPlace() {
+        XCTAssertTrue(
+            XcodeLocations.splitPlacementProblem(bulk: .unknown, products: .thisMac, productsInsideBulk: false)!.contains("bulky build data folder"))
+        XCTAssertTrue(
+            XcodeLocations.splitPlacementProblem(bulk: .external, products: .unknown, productsInsideBulk: false)!.contains("built test products folder"))
+        XCTAssertNil(XcodeLocations.splitPlacementProblem(bulk: .external, products: .thisMac, productsInsideBulk: false), "the control: the measured layout")
     }
 
     func testTheSplitNamesTheFiveLocationKeysAndNotTheWholeFolderRisk() throws {

@@ -168,7 +168,12 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         let fs = MountStatus.filesystem(containing: path)
         if let fs, fs.typeName != "apfs" { w.append("\(path) is on a \(fs.typeName) filesystem; Xcode expects APFS/HFS+ semantics.") }
         let vol = volumes.first { $0.mountPoint == fs?.mountPoint }
-        let external = (vol?.isExternal ?? false) || resolved.hasPrefix("/Volumes/")
+        // A volume that could not be placed is treated as external: the warnings below are the ones to see (#54 review).
+        let where_ = placement(resolved: resolved, volumes: volumes)
+        let external = where_ != .thisMac
+        if where_ == .unknown {
+            w.append("Could not tell whether \(path) is on this Mac or on an external volume (its volume is not listed and is not this Mac's), so it is treated as external.")
+        }
         if external && warnsAboutTests {
             let msg =
                 "DerivedData on an external physical volume: `xcodebuild test` fails to load test bundles there on macOS 26 (reproduced here) — unit tests "
@@ -312,14 +317,19 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
                 "Choose a folder on this Mac with --products. \(products) is not there, and \(parent) is missing or not writable.")
         }
         let resolvedParent = resolve(parent)
-        if pathIsExternal(resolved: resolvedParent, volumes: []) {
+        switch placement(resolved: resolvedParent, volumes: []) {
+        case .thisMac: break
+        case .external:
             throw RuntimeOperationError("\(products) would be on an external volume. Built test products have to stay on this Mac. Pass --products.")
+        case .unknown:
+            throw RuntimeOperationError(
+                "Cannot tell whether \(products) would be on this Mac: its volume is not this Mac's and could not be read. Built test products have to stay on this Mac. Pass --products.")
         }
     }
 
     /// Preflight for the split. Returns the warnings the user has to see; throws on a blocker.
     ///
-    /// `pathIsExternal` is the real check (`pathIsExternal(resolved:volumes:)`) unless a test passes a literal.
+    /// `pathIsExternal` stands in for the real check (`placement(resolved:volumes:)`) when a test passes a literal.
     /// The placement rule itself is `splitPlacementProblem`, which does not touch the disk.
     public static func preflightDerivedDataSplit(
         bulk: String, products: String, volumes: [Volume], xcodeRunning: Bool, acknowledgeExperimental: Bool,
@@ -332,9 +342,9 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         let productsResolved = resolveForPlacement(products)
         try shadowDataRefusal(resolved: bulkResolved)
         try shadowDataRefusal(resolved: productsResolved)
-        let external = decide ?? { pathIsExternal(resolved: $0, volumes: volumes) }
+        let place: (String) -> Placement = decide.map { d in { d($0) ? .external : .thisMac } } ?? { placement(resolved: $0, volumes: volumes) }
         if let problem = splitPlacementProblem(
-            bulkExternal: external(bulkResolved), productsExternal: external(productsResolved),
+            bulk: place(bulkResolved), products: place(productsResolved),
             productsInsideBulk: productsSitInsideBulk(products: productsResolved, bulk: bulkResolved))
         {
             throw RuntimeOperationError(problem)
@@ -361,6 +371,18 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         return w
     }
 
+    /// Where the two folders have to sit, when either could not be placed: neither side is guessed (#54 review).
+    static func splitPlacementProblem(bulk: Placement, products: Placement, productsInsideBulk: Bool) -> String? {
+        if bulk == .unknown {
+            return "Cannot tell whether the bulky build data folder is on the external drive: its volume is not this Mac's and could not be read."
+        }
+        if products == .unknown {
+            return "Cannot tell whether the built test products folder is on this Mac: its volume is not this Mac's and could not be read. "
+                + "Built test products have to stay on this Mac."
+        }
+        return splitPlacementProblem(bulkExternal: bulk == .external, productsExternal: products == .external, productsInsideBulk: productsInsideBulk)
+    }
+
     /// Where the two folders have to sit. Nil when the layout is the one that was measured.
     static func splitPlacementProblem(bulkExternal: Bool, productsExternal: Bool, productsInsideBulk: Bool) -> String? {
         if !bulkExternal { return "The bulky build data has to be a folder on the external drive. This folder is on this Mac." }
@@ -380,12 +402,28 @@ public struct XcodeLocations: Sendable, Codable, Equatable {
         return p == b || p.hasPrefix(b + "/")
     }
 
-    /// A `/Volumes/` path is external even when the volume list has not caught up. Anything else is external only
-    /// when the volume that contains it says so.
-    static func pathIsExternal(resolved: String, volumes: [Volume]) -> Bool {
-        if resolved.hasPrefix("/Volumes/") { return true }
-        let fs = MountStatus.filesystem(containing: resolved)
-        return volumes.first { $0.mountPoint == fs?.mountPoint }?.isExternal ?? false
+    /// Where a path lives: on this Mac, on an external volume, or unknown.
+    enum Placement: Equatable { case thisMac, external, unknown }
+
+    /// A `/Volumes/` path is external even when the volume list has not caught up. Anything else is placed by the
+    /// filesystem that serves it: the listed volume says which, and an unlisted one is this Mac's only when it is the
+    /// boot volume (`/`, or its data volume at `/System/Volumes/Data`). Any other unlisted mount — a volume `diskutil`
+    /// could not read, mounted outside `/Volumes` — is `.unknown`, never this Mac's (review of #54). A path that does not
+    /// exist yet is placed by its nearest existing parent; one that cannot be looked at (not `ENOENT`) is `.unknown`.
+    static func placement(
+        resolved: String, volumes: [Volume], filesystemAt: (String) -> MountStatus.FilesystemInfo? = MountStatus.filesystem(containing:)
+    ) -> Placement {
+        if resolved.hasPrefix("/Volumes/") { return .external }
+        var path = resolved
+        var st = stat()
+        while lstat(path, &st) != 0 {
+            guard errno == ENOENT, path != "/" else { return .unknown }
+            path = (path as NSString).deletingLastPathComponent
+            if path.isEmpty { return .unknown }
+        }
+        guard let fs = filesystemAt(path) else { return .unknown }
+        if let listed = volumes.first(where: { $0.mountPoint == fs.mountPoint }) { return listed.isExternal ? .external : .thisMac }
+        return fs.mountPoint == "/" || fs.mountPoint == "/System/Volumes/Data" ? .thisMac : .unknown
     }
 
     static let splitExperimentalRefusal =
