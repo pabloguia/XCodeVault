@@ -1,6 +1,6 @@
 # XCodeVault — Status
 
-_Last updated: 2026-10-31 (overnight session, unattended). **The live sections are immediately below**: what is in flight, what is
+_Last updated: 2026-11-19 (#72 recorded as merged). **The live sections are immediately below**: what is in flight, what is
 blocked, and the next actions. Everything after them is an append-only chronological log, newest at
 the end — it is history, not instructions._
 
@@ -16,8 +16,8 @@ classification is in `docs/process/REVIEW-2026-09-17.md` §G12._
 
 **Overnight 2026-10-30/31, unattended** (report: `.superpowers/sdd/RELATORIO-noite-2026-10-30.md`). Newest first:
 
-- **#72 — helper SonarQube smells, open, NOT merged** (helper rule: the operator merges helper changes). Five
-  behaviour-neutral edits in `Sources/XCodeVaultHelper*`; helper-security review in the PR.
+- **#72** (merged by the operator 2026-10-31, 40e05cb) — five helper SonarQube smells, behaviour-neutral edits in
+  `Sources/XCodeVaultHelper*`; helper-security review in the PR.
 - **#71** (merged, 7e760e6) — 45 SonarQube code smells in non-helper code, behaviour unchanged. Migration-safety: APPROVE.
 - **#70** (merged, 9978462) — test gap from the review of #54: `revalidate` refuses when an unplaced volume has become unreadable.
 - **#69** (merged, 367c21d) — open item 9 closed: Locations placement is three-way; an unlisted volume outside `/Volumes` is unknown and
