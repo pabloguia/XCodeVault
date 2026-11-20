@@ -77,11 +77,11 @@ Every pending thing, in one place. Each line names where it was recorded. Nothin
 8. ~~A vault mounted somewhere other than its last path, and missed by `diskutil`, reads as not connected (#51).~~
    Done in #68. Left from its review: a read-only mount elsewhere is refused without the shadow probe at the old path
    (not usable; Doctor still warns), and a block-level clone of the vault (same UUID and sentinel) passes as the moved
-   vault — already true before #68; a KNOWN-ISSUES candidate.
+   vault — already true before #68. Both recorded 2026-11-19 in `docs/process/KNOWN-ISSUES-AT-PUBLICATION.md`.
 9. ~~The Locations "is external" fallback treats an unreadable volume mounted outside `/Volumes` as on this Mac.~~
    Done in #69. Left from its review (Low, not a regression): with no volume list — the suggested products folder's
    check — an unlisted `/` or `/System/Volumes/Data` is taken for this Mac's, which a Mac booted from an external disk
-   is not.
+   is not. Recorded 2026-11-19 in KNOWN-ISSUES-AT-PUBLICATION.md.
 10. The helper's cleanup verb has no in-use check of its own, so the daemon refuses it and the app shows the manual
     route (#48).
 11. Simulator platforms outside the five known identifiers show their short identifier; ArgumentParser's own help

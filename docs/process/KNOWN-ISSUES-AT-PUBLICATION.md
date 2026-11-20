@@ -589,3 +589,27 @@ replaced the stale three-name list with the six-class table now in
 `.claude/skills/run-experiment/SKILL.md` — and `e13b`, `e14b-device-set-external` and `e14c` are
 all classified there. Both mirrored copies are byte-identical, checked by
 `scripts/check-doc-mirror.sh`.
+
+## Recorded 2026-11-19: what the reviews of #68 and #69 accepted and left
+
+Neither is a regression; both were named by `migration-safety-reviewer` and accepted in the PR. They were in `STATUS.md`
+"Open items" 8 and 9 as candidates for this file.
+
+- **Open: a block-level clone of the vault passes as the vault** (#68). Identity is the volume UUID plus the sentinel
+  file, and a block-level copy (`dd`, `asr`, a cloned disk image) carries both. Found mounted somewhere else, it reads
+  as the moved vault (`.movedMountPoint`, never `.verified`); found at the vault's own last mount point it reads as the
+  vault — which was already true before #68, at the diskutil-listed and last-path steps. The one guard that does fire:
+  the same UUID mounted at two places at once is `.foreign`. Non-blocking today because producing the clone takes a
+  deliberate act outside the app, and a moved vault is never `.verified`. It stops being non-blocking if anything starts
+  writing to a vault on `.movedMountPoint` without the user confirming it, or if a supported strategy ever keeps data
+  that exists only on the vault (a clone diverged from the original would then be indistinguishable from it).
+- **Open: a read-only mount elsewhere is refused without the shadow probe at the old path** (#68). The vault found
+  read-only at a new path is `.foreign`, named as read-only, and the probe for shadow data at the old path does not run
+  for it. Non-blocking because the vault is not usable read-only either way and Doctor still warns; the user is told
+  about the shadow data only once the vault is mounted writable.
+- **Open: with no volume list, an unlisted `/` or `/System/Volumes/Data` is taken for this Mac's** (#69, Low). The
+  Locations placement asks the volume list first; the suggested built-products folder's check runs without one, and
+  there the boot volume is taken for this Mac's. On a Mac booted from an external disk, the folder (under the home
+  folder, so on that disk) is placed as this Mac's although it is on an external disk. Non-blocking because that disk
+  is the one the Mac is running from, so treating it as local is what the user experiences; the folder is only
+  suggested, and an empty folder is reversible. The doc comment on `XcodeLocations.placement` states the limit.
