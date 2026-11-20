@@ -25,7 +25,7 @@ Starting point for a new session. Project at `~/projects/XCodeVault`, public at
 ## Overnight 2026-10-30/31 (unattended; report in `.superpowers/sdd/RELATORIO-noite-2026-10-30.md`)
 
 STATUS open items 8 and 9 are closed (#68 merged; #69), a test gap from #54's review is pinned (#70), 45 SonarQube
-smells are resolved (#71), the helper's five are in **#72, open and not merged** (helper rule), item 6 is researched
+smells are resolved (#71), the helper's five are in #72 (merged by the operator 2026-10-31, 40e05cb), item 6 is researched
 (proposal: change nothing; `docs/research/PROPOSAL-mbr-type00-2026-10-31.md`) and item 11 needed nothing. Machine
 facts re-seen that night, read only: macOS 26.7.1 (25G241); `simctl list runtimes` lists iOS 26.5 and watchOS 26.5
 only; no disk image of the session left attached. Everything else under "Machine state" below is from 2026-10-25.
@@ -82,14 +82,12 @@ The last two pieces of research, in one paragraph each:
   before anything that boots or mounts. `test-common.sh`'s "an ordinary directory passes the target
   guard" fails whenever a device is booted — that is the guard working, not a regression.
 
-## What to do, in priority order (2026-10-31)
+## What to do, in priority order (2026-10-31; #72 merged since)
 
-1. **Review and merge #72** (helper SonarQube smells) — helper changes are the operator's to merge; its
-   helper-security verdict is in the PR.
-2. **#30, Part F** — the helper live from the runbook, with the operator at the Mac (unchanged; gates 0.3.0).
-3. **The real-window checks** in STATUS "Open items" 2 (R3, R6, R7, R8, S4), and the native review of the
+1. **#30, Part F** — the helper live from the runbook, with the operator at the Mac (unchanged; gates 0.3.0).
+2. **The real-window checks** in STATUS "Open items" 2 (R3, R6, R7, R8, S4), and the native review of the
    translations (item 3).
-4. Optional: the two follow-ups #68 and #69 recorded (a block-level vault clone; an external boot disk with no volume
+3. Optional: the two follow-ups #68 and #69 recorded (a block-level vault clone; an external boot disk with no volume
    list), and item 13 (a seam in `DiskUsage` to pin the `CoreSimulator/Images` nested mount).
 
 ## What to do, in priority order — as of 2026-10-25 (history)
