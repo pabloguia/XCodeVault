@@ -38,7 +38,14 @@ public struct DiskUsage: Sendable, Equatable, Codable {
     static func isPrivacyRefusal(_ code: Int32) -> Bool { code == EPERM }
 
     /// Measures `path`. Returns nil if the path does not exist.
-    public static func measure(_ path: String) -> DiskUsage? {
+    public static func measure(_ path: String) -> DiskUsage? { measure(path, mountAnswer: MountStatus.mountAnswer) }
+
+    /// The walk with its mount question injectable — a test seam, and only that. No in-process test can mount a
+    /// volume inside a fixture, so the nested-mount branches (recorded and pruned; recorded, pruned and a lower
+    /// bound) could be pinned only against `/System/Volumes/Data` on a machine that has one. With this, a fixture
+    /// directory can be *answered* as a mount point. `FTS_XDEV` still stops a real cross-device descent whatever
+    /// this answers; the answer decides what is recorded and what is skipped, which is what the tests pin.
+    static func measure(_ path: String, mountAnswer: (String) -> MountStatus.MountAnswer) -> DiskUsage? {
         var st = stat()
         guard lstat(path, &st) == 0 else { return nil }
         var usage = DiskUsage.zero
@@ -73,7 +80,7 @@ public struct DiskUsage: Sendable, Equatable, Codable {
                 // the siblings and fail on the mount itself. Recording the unanswerable case is
                 // what keeps the planner's premise true.
                 if ent.pointee.fts_level > 0 {
-                    switch MountStatus.mountAnswer(entPath) {
+                    switch mountAnswer(entPath) {
                     case .isMountPoint:
                         usage.skippedMountPoints.append(entPath)
                         fts_set(fts, ent, FTS_SKIP)

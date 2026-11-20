@@ -89,8 +89,11 @@ Every pending thing, in one place. Each line names where it was recorded. Nothin
     has iOS and watchOS runtimes, both mapped, and the JSON carries no `platformIdentifier`; nothing new to map.
 12. H20 (runtimes served from an external volume) is probable and experimental, and nothing is built on it (ADR-0019,
     option A).
-13. A mount point inside `CoreSimulator/Images` counted once (#66's accepted test gap) cannot be pinned by tests alone:
-    it needs a real mount or a seam in `DiskUsage`. The generic nested-mount pruning is pinned by `FilesystemTests`.
+13. ~~A mount point inside `CoreSimulator/Images` counted once (#66's accepted test gap) cannot be pinned by tests alone:
+    it needs a real mount or a seam in `DiskUsage`.~~ Done 2026-11-19: `DiskUsage.measure(_:mountAnswer:)` is the seam
+    (internal; the public entry point passes `MountStatus.mountAnswer`), and `DiskUsageNestedMountTests` answers an
+    `Images/mnt` fixture as a mount point (recorded, not counted) and as undetermined (recorded, a lower bound). Left: a
+    real mount is still never exercised in tests, only `/System/Volumes/Data` where the machine has one.
 14. SonarQube: after #71 and #72, 15 smells remain by choice — S107 (long initialisers), S3087, four nested ternaries
     (long interpolations, Doctor+Vault text, DriveEvaluation's erase options) and a ViewBuilder switch.
 
